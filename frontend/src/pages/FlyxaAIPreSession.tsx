@@ -245,6 +245,8 @@ export default function FlyxaAIPreSession() {
 
   const storedPreSession = useFlyxaStore(state => state.preSession);
   const setPreSessionAction = useFlyxaStore(state => state.setPreSession);
+  const storedOathItems = useFlyxaStore(state => state.oathItems);
+  const setOathItemsAction = useFlyxaStore(state => state.setOathItems);
 
   const [now, setNow] = useState(() => new Date());
   const [emotion, setEmotion] = useState<string>(() => (storedPreSession?.emotion ?? ''));
@@ -252,6 +254,8 @@ export default function FlyxaAIPreSession() {
   const [bias, setBias] = useState<BiasState>(() => (storedPreSession?.bias as BiasState ?? { ES: 'Neutral', NQ: 'Neutral' }));
   const [checklistState, setChecklistState] = useState<ChecklistState>(() => (storedPreSession?.checklistState as ChecklistState ?? {}));
   const [storedRiskSettings] = useState(() => parseRiskSettingsFromStorage());
+  const [oathEditOpen, setOathEditOpen] = useState(false);
+  const [oathDraft, setOathDraft] = useState<Array<{ id: string; label: string }>>([]);
   const [riskEditOpen, setRiskEditOpen] = useState(false);
   const [riskSaving, setRiskSaving] = useState(false);
   const [riskSaveError, setRiskSaveError] = useState('');
@@ -483,9 +487,10 @@ export default function FlyxaAIPreSession() {
     rthTiming.marketOpenNow ? 'RTH open now' : `RTH opens in ${formatDuration(rthTiming.minutesUntilOpen)}`
   }`;
   const emotionLogged = emotion.trim().length > 0;
+  const activeOathItems: ChecklistItem[] = storedOathItems ?? oathChecklistItems;
 
   const checklistTotals = useMemo(() => {
-    const rows = [...oathChecklistItems, ...mentalChecklistWithAdaptiveItems, ...technicalChecklistItems];
+    const rows = [...activeOathItems, ...mentalChecklistWithAdaptiveItems, ...technicalChecklistItems];
     const completed = rows.filter(item => (
       item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id])
     )).length;
@@ -494,7 +499,7 @@ export default function FlyxaAIPreSession() {
       total: rows.length,
       pct: rows.length > 0 ? Math.round((completed / rows.length) * 100) : 100,
     };
-  }, [checklistState, emotionLogged, mentalChecklistWithAdaptiveItems, technicalChecklistItems]);
+  }, [activeOathItems, checklistState, emotionLogged, mentalChecklistWithAdaptiveItems, technicalChecklistItems]);
 
   const readiness = useMemo(() => {
     let score = 100;
@@ -576,6 +581,17 @@ export default function FlyxaAIPreSession() {
       persistPreSession({ bias: next });
       return next;
     });
+  };
+
+  const openOathEditor = () => {
+    setOathDraft(activeOathItems.map(item => ({ id: item.id, label: item.label })));
+    setOathEditOpen(true);
+  };
+
+  const saveOathItems = () => {
+    const filtered = oathDraft.filter(item => item.label.trim() !== '');
+    setOathItemsAction(filtered.length > 0 ? filtered : null);
+    setOathEditOpen(false);
   };
 
   const toggleChecklist = (item: ChecklistItem) => {
@@ -759,30 +775,88 @@ export default function FlyxaAIPreSession() {
                     <div className="rounded-[8px] border p-4" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
                       <div className="flex items-center justify-between gap-3">
                         <p style={SECTION_LABEL_STYLE}>Trader oath</p>
-                        <span className="rounded-[4px] border px-2.5 py-1.5 font-mono text-[11px]" style={{ borderColor: C.b0, color: C.t1 }}>
-                          {oathChecklistItems.filter(item => Boolean(checklistState[item.id])).length}/{oathChecklistItems.length}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {!oathEditOpen && (
+                            <span className="rounded-[4px] border px-2.5 py-1.5 font-mono text-[11px]" style={{ borderColor: C.b0, color: C.t1 }}>
+                              {activeOathItems.filter(item => Boolean(checklistState[item.id])).length}/{activeOathItems.length}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
+                            className="rounded-[4px] border px-2 py-1 text-[11px]"
+                            style={{ borderColor: C.b1, backgroundColor: C.d3, color: oathEditOpen ? C.t1 : C.acc }}
+                          >
+                            {oathEditOpen ? 'Cancel' : 'Edit'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-4 space-y-3">
-                        {oathChecklistItems.map(item => {
-                          const checked = Boolean(checklistState[item.id]);
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => toggleChecklist(item)}
-                              className="flex w-full items-start gap-3 rounded-[6px] border px-3.5 py-3 text-left"
-                              style={{
-                                borderColor: checked ? 'rgba(245,158,11,0.34)' : C.b0,
-                                backgroundColor: checked ? 'rgba(245,158,11,0.08)' : C.d2,
-                              }}
-                            >
-                              {customCheckbox(checked)}
-                              <p className="text-[13px] leading-[1.55]" style={{ color: checked ? C.t0 : C.t1 }}>{item.label}</p>
-                            </button>
-                          );
-                        })}
-                      </div>
+
+                      {oathEditOpen ? (
+                        <div className="mt-4 space-y-2">
+                          {oathDraft.map((item, idx) => (
+                            <div key={item.id} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={item.label}
+                                onChange={e => {
+                                  const next = [...oathDraft];
+                                  next[idx] = { ...item, label: e.target.value };
+                                  setOathDraft(next);
+                                }}
+                                className="flex-1 rounded-[6px] border px-3 py-2 text-[12px] outline-none"
+                                style={{ borderColor: C.b0, backgroundColor: C.d2, color: C.t0 }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setOathDraft(oathDraft.filter((_, i) => i !== idx))}
+                                className="flex h-7 w-7 items-center justify-center rounded-[4px] border text-[11px]"
+                                style={{ borderColor: C.b1, backgroundColor: C.d2, color: C.t2 }}
+                                aria-label="Remove oath"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setOathDraft([...oathDraft, { id: `oath-custom-${Date.now()}`, label: '' }])}
+                            className="mt-1 w-full rounded-[6px] border py-2 text-[12px]"
+                            style={{ borderColor: C.b1, backgroundColor: 'transparent', color: C.t2 }}
+                          >
+                            + Add oath
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveOathItems}
+                            className="mt-1 w-full rounded-[6px] border py-2 text-[12px] font-medium"
+                            style={{ borderColor: 'rgba(245,158,11,0.4)', backgroundColor: 'rgba(245,158,11,0.1)', color: C.acc }}
+                          >
+                            Save oaths
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-4 space-y-3">
+                          {activeOathItems.map(item => {
+                            const checked = Boolean(checklistState[item.id]);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => toggleChecklist(item)}
+                                className="flex w-full items-start gap-3 rounded-[6px] border px-3.5 py-3 text-left"
+                                style={{
+                                  borderColor: checked ? 'rgba(245,158,11,0.34)' : C.b0,
+                                  backgroundColor: checked ? 'rgba(245,158,11,0.08)' : C.d2,
+                                }}
+                              >
+                                {customCheckbox(checked)}
+                                <p className="text-[13px] leading-[1.55]" style={{ color: checked ? C.t0 : C.t1 }}>{item.label}</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </section>

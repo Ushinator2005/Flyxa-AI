@@ -76,6 +76,7 @@ interface FlyxaStateData {
   preSession: PreSessionData | null;
   chartHistory: ChartHistoryRecord[];
   aiReflections: AiReflection[];
+  oathItems: Array<{ id: string; label: string }> | null;
 }
 
 export interface AiReflection {
@@ -121,6 +122,7 @@ export interface FlyxaStore extends FlyxaStateData {
   setPreSession: (data: PreSessionData | null) => void;
   setChartHistory: (records: ChartHistoryRecord[]) => void;
   addAiReflection: (reflection: AiReflection) => void;
+  setOathItems: (items: Array<{ id: string; label: string }> | null) => void;
 }
 
 function todayIso(): string {
@@ -468,6 +470,7 @@ function getInitialState(): FlyxaStateData {
     preSession: null,
     chartHistory: [],
     aiReflections: [],
+    oathItems: null,
   };
 }
 
@@ -696,6 +699,8 @@ const useFlyxaStore = create<FlyxaStore>()(
 
       setPreSession: (data) => set(() => ({ preSession: data })),
 
+      setOathItems: (items) => set(() => ({ oathItems: items })),
+
       setChartHistory: (records) => set(() => ({ chartHistory: records })),
 
       addAiReflection: (reflection) => set((state) => ({
@@ -895,6 +900,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         preSession: state.preSession,
         chartHistory: state.chartHistory,
         aiReflections: state.aiReflections,
+        oathItems: state.oathItems,
       }),
     }
   )
