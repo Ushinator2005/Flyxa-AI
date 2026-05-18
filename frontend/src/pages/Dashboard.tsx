@@ -480,7 +480,7 @@ export default function Dashboard() {
               <p style={{ fontSize: 11, color: T3, margin: '2px 0 0' }}>Set your mindset, review your plan, and confirm today's targets before the market opens.</p>
             </div>
             <button
-              onClick={() => { dismissPreSession(); navigate('/flyxa-ai/pre-session'); }}
+              onClick={() => { dismissPreSession(); navigate('/pre-session'); }}
               style={{
                 height: 30, padding: '0 14px', flexShrink: 0,
                 background: AMBER, border: 'none', borderRadius: 5,

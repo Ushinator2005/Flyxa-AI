@@ -1501,7 +1501,7 @@ export default function FlyxaAI() {
             {[
               { key: 'weekly', label: 'Debrief', to: '/flyxa-ai', end: true },
               { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
-              { key: 'pre-session', label: 'Pre-session brief', to: '/flyxa-ai/pre-session', end: false },
+              { key: 'pre-session', label: 'Pre-session brief', to: '/pre-session', end: false },
               { key: 'emotional', label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },
               { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai', end: false },
             ].map(item => (
@@ -1774,7 +1774,7 @@ export default function FlyxaAI() {
                               style={{ color: colors.acc }}
                               onClick={() => {
                                 const label = insight.actionLabel.toLowerCase();
-                                if (label.includes('pre-session')) navigate('/flyxa-ai/pre-session');
+                                if (label.includes('pre-session')) navigate('/pre-session');
                                 else if (label.includes('pattern library') || label.includes('confluence')) navigate('/flyxa-ai/patterns');
                                 else if (label.includes('emotional') || label.includes('emotion')) navigate('/flyxa-ai/emotional-fingerprint');
                                 else if (label.includes('keep logging')) navigate('/scanner');

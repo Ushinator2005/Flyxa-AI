@@ -31,7 +31,7 @@ function accountStatusColor(status: string): string {
 
 const navItems = [
   { path: '/',                         icon: LayoutDashboard, label: 'Dashboard'       },
-  { path: '/flyxa-ai/pre-session',     icon: ClipboardCheck,  label: 'Pre-Session'     },
+  { path: '/pre-session',              icon: ClipboardCheck,  label: 'Pre-Session'     },
   { path: '/scanner',                  icon: ScanLine,        label: 'Trade Scanner'   },
   { path: '/journal',                  icon: FileText,        label: 'Daily Journal'   },
   { path: '/market-news',              icon: Newspaper,       label: 'Market News'     },

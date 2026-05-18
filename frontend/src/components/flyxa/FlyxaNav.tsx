@@ -12,7 +12,6 @@ const colors = {
 const NAV_ITEMS = [
   { key: 'weekly',      label: 'Weekly debrief',       to: '/flyxa-ai',                        end: true  },
   { key: 'pattern',     label: 'Pattern library',       to: '/flyxa-ai/patterns',               end: false },
-  { key: 'pre-session', label: 'Pre-session brief',     to: '/flyxa-ai/pre-session',            end: false },
   { key: 'emotional',   label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint',  end: false },
   { key: 'ask',         label: 'Ask Flyxa',             to: '/flyxa-ai',                        end: false },
 ];

@@ -206,7 +206,8 @@ export default function App() {
               <Route path="/market-news" element={<MarketNews />} />
               <Route path="/flyxa-ai" element={<FlyxaAI />} />
               <Route path="/flyxa-ai/patterns" element={<FlyxaAIPatterns />} />
-              <Route path="/flyxa-ai/pre-session" element={<FlyxaAIPreSession />} />
+              <Route path="/pre-session" element={<FlyxaAIPreSession />} />
+              <Route path="/flyxa-ai/pre-session" element={<Navigate to="/pre-session" replace />} />
               <Route path="/flyxa-ai/emotional-fingerprint" element={<FlyxaAIEmotionalFingerprint />} />
               <Route path="/coach" element={<Navigate to="/flyxa-ai" replace />} />
               <Route path="/analytics" element={<Analytics />} />

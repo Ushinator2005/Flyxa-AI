@@ -20,6 +20,7 @@ const pageNames: Record<string, string> = {
   '/coach': 'Flyxa AI',
   '/flyxa-ai': 'Flyxa AI',
   '/flyxa-ai/patterns': 'Pattern library',
+  '/pre-session': 'Pre-session brief',
   '/flyxa-ai/pre-session': 'Pre-session brief',
   '/analytics': 'Analytics',
   '/journal': 'Daily Journal',
