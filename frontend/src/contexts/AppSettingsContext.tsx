@@ -272,21 +272,24 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   useEffect(() => { scheduleSave(); }, [scheduleSave]);
 
   useEffect(() => {
-    const mapped: Account[] = accounts.map(account => ({
-      id: account.id,
-      name: account.name,
-      firm: account.broker || 'Flyxa',
-      size: 50000,
-      type: account.status === 'Live' ? 'live' : account.status === 'Funded' ? 'live' : 'eval',
-      phase: account.status === 'Funded' ? 'funded' : 'eval',
-      balance: 50000,
-      dailyLossLimit: 2500,
-      maxDrawdown: 3000,
-      profitTarget: null,
-      startingBalance: 50000,
-      isActive: true,
-      color: account.color,
-    }));
+    const mapped: Account[] = accounts.map(account => {
+      const sb = account.startingBalance ?? 0;
+      return {
+        id: account.id,
+        name: account.name,
+        firm: account.broker || 'Flyxa',
+        size: sb,
+        type: account.status === 'Live' ? 'live' : account.status === 'Funded' ? 'live' : 'eval',
+        phase: account.status === 'Funded' ? 'funded' : 'eval',
+        balance: sb,
+        dailyLossLimit: 2500,
+        maxDrawdown: 3000,
+        profitTarget: null,
+        startingBalance: sb,
+        isActive: true,
+        color: account.color,
+      };
+    });
     hydrateSharedData({ accounts: mapped });
   }, [accounts, hydrateSharedData]);
 

@@ -10,7 +10,7 @@ const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
 const DEFAULT_TIMEZONE = 'America/New_York';
 const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Blown'];
-const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 170px 150px 90px';
+const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 120px 170px 150px 90px';
 const ACCOUNT_TABLE_COLUMN_GAP = '16px';
 const TIMEZONE_REGION_PRIORITY = ['America', 'Europe', 'Asia', 'Pacific'];
 const SESSION_TIME_FIELDS = [
@@ -504,6 +504,7 @@ export default function Settings() {
     broker: '',
     type: 'Futures' as TradingAccountType,
     status: 'Eval' as TradingAccountStatus,
+    startingBalance: '' as string,
   });
   const [activeSection, setActiveSection] = useState<string>('general');
   const [showSavedToast, setShowSavedToast] = useState(false);
@@ -557,6 +558,7 @@ export default function Settings() {
       broker: '',
       type: 'Futures',
       status: 'Eval',
+      startingBalance: '',
     });
   }
 
@@ -567,12 +569,14 @@ export default function Settings() {
 
   function handleAddAccount() {
     if (!newAccount.name.trim()) return;
+    const parsedBalance = parseFloat(newAccount.startingBalance);
     addAccount({
       name: newAccount.name.trim(),
       broker: newAccount.broker.trim(),
       type: newAccount.type,
       status: newAccount.status,
       color: DEFAULT_ACCOUNT_COLOR,
+      startingBalance: Number.isFinite(parsedBalance) && parsedBalance > 0 ? parsedBalance : undefined,
     });
     closeAddAccountModal();
   }
@@ -1128,7 +1132,7 @@ export default function Settings() {
               marginBottom: '4px',
             }}
           >
-            {['Account name', 'Broker', 'Account type', 'Status', 'Actions'].map(col => (
+            {['Account name', 'Broker', 'Starting balance', 'Account type', 'Status', 'Actions'].map(col => (
               <span
                 key={col}
                 style={{
@@ -1200,6 +1204,22 @@ export default function Settings() {
                     onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
                     onBlur={e => { e.target.style.borderBottom = 'none'; }}
                     placeholder="Broker"
+                  />
+
+                  {/* Starting balance */}
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    style={tableInputStyle}
+                    value={account.startingBalance ?? ''}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value);
+                      updateAccount(account.id, { startingBalance: Number.isFinite(v) && v > 0 ? v : undefined });
+                    }}
+                    onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
+                    onBlur={e => { e.target.style.borderBottom = 'none'; }}
+                    placeholder="e.g. 100000"
                   />
 
                   {/* Account type */}
@@ -1463,6 +1483,25 @@ export default function Settings() {
                 <StatusSelect
                   value={newAccount.status}
                   onChange={status => setNewAccount(current => ({ ...current, status }))}
+                />
+              </label>
+
+              <label style={{ gridColumn: '1 / -1' }}>
+                <FieldLabel>Starting balance ($)</FieldLabel>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  style={{
+                    ...tableInputStyle,
+                    background: S2,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                  }}
+                  placeholder="e.g. 100000"
+                  value={newAccount.startingBalance}
+                  onChange={e => setNewAccount(current => ({ ...current, startingBalance: e.target.value }))}
                 />
               </label>
             </div>

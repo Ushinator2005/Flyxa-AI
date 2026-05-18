@@ -17,6 +17,7 @@ const FlyxaAI = lazy(() => import('./pages/FlyxaAI.js'));
 const FlyxaAIPatterns = lazy(() => import('./pages/FlyxaAIPatterns.js'));
 const FlyxaAIPreSession = lazy(() => import('./pages/FlyxaAIPreSession.js'));
 const FlyxaAIEmotionalFingerprint = lazy(() => import('./pages/FlyxaAIEmotionalFingerprint.js'));
+const FlyxaAIPostSession = lazy(() => import('./pages/FlyxaAIPostSession.js'));
 const Analytics = lazy(() => import('./pages/Analytics.js'));
 const Achievements = lazy(() => import('./pages/Achievements.js'));
 const Backtest = lazy(() => import('./pages/Backtest.js'));
@@ -209,6 +210,7 @@ export default function App() {
               <Route path="/pre-session" element={<FlyxaAIPreSession />} />
               <Route path="/flyxa-ai/pre-session" element={<Navigate to="/pre-session" replace />} />
               <Route path="/flyxa-ai/emotional-fingerprint" element={<FlyxaAIEmotionalFingerprint />} />
+              <Route path="/flyxa-ai/post-session" element={<FlyxaAIPostSession />} />
               <Route path="/coach" element={<Navigate to="/flyxa-ai" replace />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/achievements" element={<Achievements />} />

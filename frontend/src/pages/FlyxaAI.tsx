@@ -115,16 +115,20 @@ function thisWeekMonday(): Date {
 
 type TimeFrame = '1W' | '1M' | '3M' | 'All';
 
-function getPeriodWindow(tf: TimeFrame) {
+function getPeriodWindow(tf: TimeFrame, weekOffset = 0) {
   const now = new Date(); now.setHours(23, 59, 59, 999);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   if (tf === '1W') {
-    const mon = thisWeekMonday();
+    const baseMon = thisWeekMonday();
+    const mon = addDays(baseMon, -weekOffset * 7);
+    const fri = addDays(mon, 4);
+    const periodEnd = weekOffset === 0 ? now : (() => { const e = new Date(fri); e.setHours(23, 59, 59, 999); return e; })();
+    const periodLabel = weekOffset === 0 ? 'this week' : `week of ${mon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
     return {
-      periodStart: mon, periodEnd: now,
-      displayStart: mon, displayEnd: addDays(mon, 4),
+      periodStart: mon, periodEnd,
+      displayStart: mon, displayEnd: fri,
       prevStart: addDays(mon, -7), prevEnd: addDays(mon, -1),
-      periodLabel: 'this week', prevLabel: 'prev week', headerLabel: 'Weekly debrief',
+      periodLabel, prevLabel: 'prev week', headerLabel: 'Weekly debrief',
     };
   }
   if (tf === '1M') {
@@ -526,8 +530,8 @@ function buildAdaptiveTimeBuckets(timedTrades: Trade[]): {
   return { buckets, bucketSize, minTime, maxTime, spread };
 }
 
-function buildData(trades: Trade[], tf: TimeFrame = '1W'): WeeklyDebriefData {
-  const pw = getPeriodWindow(tf);
+function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): WeeklyDebriefData {
+  const pw = getPeriodWindow(tf, weekOffset);
   const { periodLabel, prevLabel } = pw;
 
   if (!trades.length) {
@@ -1215,8 +1219,10 @@ export default function FlyxaAI() {
   const [respondOpen, setRespondOpen] = useState(false);
   const [respondText, setRespondText] = useState('');
   const [timeframe, setTimeframe] = useState<TimeFrame>('1W');
+  const [weekOffset, setWeekOffset] = useState(0);
   const aiReflections = useFlyxaStore(state => state.aiReflections);
   const addAiReflection = useFlyxaStore(state => state.addAiReflection);
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
 
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
@@ -1227,8 +1233,8 @@ export default function FlyxaAI() {
     [accountTrades]
   );
   const weeklyDebriefData = useMemo(
-    () => buildData(safeAccountTrades, timeframe),
-    [safeAccountTrades, timeframe]
+    () => buildData(safeAccountTrades, timeframe, weekOffset),
+    [safeAccountTrades, timeframe, weekOffset]
   );
   const focusedTradeId = searchParams.get('tradeId');
   const focusedTrade = useMemo(
@@ -1271,7 +1277,7 @@ export default function FlyxaAI() {
 
   const weeklyWindow = useMemo(() => {
     const ordered = [...safeAccountTrades].sort((a, b) => (parseTradeDateTime(a)?.getTime() ?? 0) - (parseTradeDateTime(b)?.getTime() ?? 0));
-    const { periodStart, periodEnd, prevStart, prevEnd } = getPeriodWindow(timeframe);
+    const { periodStart, periodEnd, prevStart, prevEnd } = getPeriodWindow(timeframe, weekOffset);
     const inRange = (trade: Trade, start: Date, end: Date) => {
       const date = parseTradeDate(trade);
       return Boolean(date && date.getTime() >= start.getTime() && date.getTime() <= end.getTime());
@@ -1279,7 +1285,7 @@ export default function FlyxaAI() {
     const weeklyTrades = ordered.filter(trade => inRange(trade, periodStart, periodEnd));
     const previousTrades = timeframe !== 'All' ? ordered.filter(trade => inRange(trade, prevStart, prevEnd)) : [];
     return { weeklyTrades, previousTrades };
-  }, [safeAccountTrades, timeframe]);
+  }, [safeAccountTrades, timeframe, weekOffset]);
 
   const previousWeekPnl = useMemo(
     () => summarize(weeklyWindow.previousTrades).netPnl,
@@ -1437,6 +1443,51 @@ export default function FlyxaAI() {
     return rows.map(row => ({ ...row, barWidth: row.trades ? Math.max(8, (Math.abs(row.netPnl) / maxAbs) * 100) : 0 }));
   }, [weeklyWindow.weeklyTrades]);
 
+  const dailyBreakdownRows = useMemo(() => {
+    const { periodStart, periodEnd } = getPeriodWindow(timeframe, weekOffset);
+    const days: Date[] = [];
+    const cur = new Date(periodStart); cur.setHours(0, 0, 0, 0);
+    const end = new Date(periodEnd);   end.setHours(23, 59, 59, 999);
+    while (cur <= end) {
+      const dow = cur.getDay();
+      if (dow >= 1 && dow <= 5) days.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return days.map(day => {
+      const iso = day.toISOString().slice(0, 10);
+      const dayLabel = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const ps = preSessionHistory[iso];
+      const dayTrades = weeklyWindow.weeklyTrades.filter(t => t.trade_date === iso);
+      const netPnl = dayTrades.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      const wins = dayTrades.filter(t => Number(t.pnl ?? 0) > 0).length;
+      const losses = dayTrades.filter(t => Number(t.pnl ?? 0) < 0).length;
+
+      // Bias adherence: for each instrument with a non-Neutral bias, check if trades aligned
+      let biasAligned = 0, biasTotal = 0;
+      if (ps?.bias && typeof ps.bias === 'object') {
+        const biasMap = ps.bias as Record<string, string>;
+        for (const [instrument, direction] of Object.entries(biasMap)) {
+          if (direction === 'Neutral') continue;
+          const instTrades = dayTrades.filter(t =>
+            t.symbol?.toUpperCase().includes(instrument.toUpperCase())
+          );
+          instTrades.forEach(t => {
+            biasTotal++;
+            const tradeDir = t.direction?.toLowerCase();
+            if (direction === 'Bull' && tradeDir === 'long') biasAligned++;
+            if (direction === 'Bear' && tradeDir === 'short') biasAligned++;
+          });
+        }
+      }
+
+      return {
+        iso, dayLabel, ps,
+        trades: dayTrades.length, netPnl, wins, losses,
+        biasAligned, biasTotal,
+      };
+    }).filter(row => row.trades > 0 || row.ps);
+  }, [preSessionHistory, timeframe, weekOffset, weeklyWindow.weeklyTrades]);
+
   const weekGrade = boundedScore >= 90 ? 'A' : boundedScore >= 75 ? 'B' : boundedScore >= 60 ? 'C' : 'D';
   const nextThreshold = weekGrade === 'A' ? null : weekGrade === 'B' ? 90 : weekGrade === 'C' ? 75 : 60;
   const gradeHint = nextThreshold === null
@@ -1501,8 +1552,8 @@ export default function FlyxaAI() {
             {[
               { key: 'weekly', label: 'Debrief', to: '/flyxa-ai', end: true },
               { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
-              { key: 'pre-session', label: 'Pre-session brief', to: '/pre-session', end: false },
               { key: 'emotional', label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },
+              { key: 'post-session', label: 'Post-session', to: '/flyxa-ai/post-session', end: false },
               { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai', end: false },
             ].map(item => (
               <NavLink key={item.key} to={item.to} end={item.end}>
@@ -1530,13 +1581,13 @@ export default function FlyxaAI() {
               <div className="flex items-end justify-between gap-6">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">
-                    <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>{getPeriodWindow(timeframe).headerLabel}</p>
+                    <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>{getPeriodWindow(timeframe, weekOffset).headerLabel}</p>
                     <div className="flex gap-0.5 rounded-[5px] p-0.5" style={{ backgroundColor: colors.d3 }}>
                       {(['1W', '1M', '3M', 'All'] as TimeFrame[]).map(tf => (
                         <button
                           key={tf}
                           type="button"
-                          onClick={() => setTimeframe(tf)}
+                          onClick={() => { setTimeframe(tf); setWeekOffset(0); }}
                           className="rounded-[3px] px-2.5 py-[3px] text-[10px] font-medium transition-colors"
                           style={{
                             backgroundColor: timeframe === tf ? colors.d4 : 'transparent',
@@ -1548,6 +1599,37 @@ export default function FlyxaAI() {
                         </button>
                       ))}
                     </div>
+                    {timeframe === '1W' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setWeekOffset(w => w + 1)}
+                          className="rounded-[3px] px-2 py-[3px] text-[12px] transition-colors hover:bg-white/[0.06]"
+                          style={{ color: colors.t1, border: `1px solid ${colors.b0}` }}
+                          title="Previous week"
+                        >←</button>
+                        {weekOffset > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setWeekOffset(0)}
+                            className="rounded-[3px] px-2 py-[3px] text-[10px] transition-colors hover:bg-white/[0.06]"
+                            style={{ color: colors.acc, border: `1px solid ${colors.b0}`, fontFamily: colors.mono }}
+                          >This week</button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
+                          disabled={weekOffset === 0}
+                          className="rounded-[3px] px-2 py-[3px] text-[12px] transition-colors"
+                          style={{
+                            color: weekOffset === 0 ? colors.t2 : colors.t1,
+                            border: `1px solid ${colors.b0}`,
+                            opacity: weekOffset === 0 ? 0.4 : 1,
+                          }}
+                          title="Next week"
+                        >→</button>
+                      </div>
+                    )}
                   </div>
                   <h1 className="mt-2 text-[24px] font-bold tracking-[-0.02em]" style={{ color: colors.t0 }}>
                     {weeklyDebriefData.weekRange}
@@ -1585,7 +1667,7 @@ export default function FlyxaAI() {
                       {weeklyDebriefData.stats.netR.value}
                     </p>
                     <p className="mt-1 text-[10.5px]" style={{ color: colors.t2 }}>
-                      {timeframe !== 'All' ? `vs ${formatSignedCurrency(previousWeekPnl)} ${getPeriodWindow(timeframe).prevLabel}` : `${weeklyWindow.weeklyTrades.length} trades total`}
+                      {timeframe !== 'All' ? `vs ${formatSignedCurrency(previousWeekPnl)} ${getPeriodWindow(timeframe, weekOffset).prevLabel}` : `${weeklyWindow.weeklyTrades.length} trades total`}
                     </p>
                   </div>
                 </div>
@@ -1883,6 +1965,48 @@ export default function FlyxaAI() {
               ))}
             </div>
           </section>
+
+          {dailyBreakdownRows.length > 0 && (
+            <section className="mt-4 rounded-[8px] px-[14px] py-3" style={{ backgroundColor: colors.d2, border: cardBorder }}>
+              <p style={tinyMetaLabelStyle}>Daily pre-session</p>
+              <div className="mt-2.5 space-y-3">
+                {dailyBreakdownRows.map(row => {
+                  const readinessColor = row.ps?.readiness?.status === 'Ready' ? colors.grn : row.ps?.readiness?.status === 'Stand Down' ? colors.red : colors.acc;
+                  return (
+                    <div key={row.iso}>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[10.5px] font-medium" style={{ color: colors.t1 }}>{row.dayLabel}</span>
+                        <span className="text-[11px] font-medium" style={{ color: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2, fontFamily: colors.mono }}>
+                          {row.trades > 0 ? formatSignedCompactCurrency(row.netPnl) : '--'}
+                        </span>
+                      </div>
+                      {row.ps ? (
+                        <div className="flex flex-wrap gap-1">
+                          {row.ps.emotion && (
+                            <span className="rounded-[3px] px-1.5 py-0.5 text-[9.5px] font-medium" style={{ backgroundColor: colors.d4, color: colors.t1 }}>
+                              {row.ps.emotion}
+                            </span>
+                          )}
+                          {row.ps.readiness && (
+                            <span className="rounded-[3px] px-1.5 py-0.5 text-[9.5px] font-medium" style={{ backgroundColor: colors.d4, color: readinessColor }}>
+                              {row.ps.readiness.score}/100
+                            </span>
+                          )}
+                          {row.biasTotal > 0 && (
+                            <span className="rounded-[3px] px-1.5 py-0.5 text-[9.5px] font-medium" style={{ backgroundColor: colors.d4, color: row.biasAligned === row.biasTotal ? colors.grn : row.biasAligned === 0 ? colors.red : colors.acc }}>
+                              bias {row.biasAligned}/{row.biasTotal}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[9.5px]" style={{ color: colors.t2 }}>No brief logged</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <section className="mt-4 rounded-[8px] px-[14px] py-3" style={{ backgroundColor: colors.d2, border: cardBorder }}>
             <p style={tinyMetaLabelStyle}>3 things to action</p>

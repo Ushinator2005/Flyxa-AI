@@ -263,7 +263,17 @@ export interface StoredRival {
     stage: string;
     name: string;
     streakDays: number;
-    stats: { discipline: number; psychology: number; consistency: number; backtestHours: number };
+    stats: {
+      dailyJournalStreak?: number;
+      dailyJournalScore?: number;
+      tradingJournalScore?: number;
+      backtestSessions?: number;
+      processScore?: number;
+      discipline?: number;
+      psychology?: number;
+      consistency?: number;
+      backtestHours?: number;
+    };
     xp: number;
   };
 }

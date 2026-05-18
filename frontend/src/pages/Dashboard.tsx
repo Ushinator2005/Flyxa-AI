@@ -10,6 +10,7 @@ import {
 import { format } from 'date-fns';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings, ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID } from '../contexts/AppSettingsContext.js';
+import useFlyxaStore from '../store/flyxaStore.js';
 import { useHighImpactAlerts } from '../hooks/useHighImpactAlerts.js';
 import {
   buildAnalyticsSummary,
@@ -224,6 +225,7 @@ export default function Dashboard() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, preferences } = useAppSettings();
+  const storeAccounts = useFlyxaStore(state => state.accounts);
 
   // Fire bottom-right toast notifications when high-impact events are imminent.
   useHighImpactAlerts(preferences?.timezone ?? 'America/New_York');
@@ -323,6 +325,10 @@ export default function Dashboard() {
   const gaugeLossArc = gaugeScored > 0 ? (losses / gaugeScored) * GAUGE_ARC : 0;
 
   const todayPnL    = todayTrades.reduce((s, t) => s + t.pnl, 0);
+  // TradingAccount (from context) has no balance; use store Account which does.
+  const selectedStoreAcct = selectedAccountId !== ALL_ACCOUNTS_ID
+    ? storeAccounts.find(a => a.id === selectedAccountId)
+    : undefined;
   const selectedAcct = selectedAccountId !== ALL_ACCOUNTS_ID
     ? accounts.find(a => a.id === selectedAccountId)
     : undefined;
@@ -405,7 +411,20 @@ export default function Dashboard() {
         </div>
 
         {/* Stat cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: 14, flexShrink: 0 }}>
+          {selectedStoreAcct && (() => {
+            const sb = selectedStoreAcct.startingBalance ?? 0;
+            const liveBalance = sb + summary.netPnL;
+            return (
+              <StatCard
+                color={COBALT}
+                label="Account Balance"
+                value={fmtUSD(liveBalance)}
+                badgeLabel={sb > 0 ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
+                valueTone={summary.netPnL >= 0 ? 'positive' : 'negative'}
+              />
+            );
+          })()}
           <StatCard
             color={AMBER}
             label="Net P&L"

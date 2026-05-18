@@ -186,6 +186,7 @@ export interface TradingAccount {
   status: TradingAccountStatus;
   color: string;
   createdAt: string;
+  startingBalance?: number;
 }
 
 export interface AppPreferences {

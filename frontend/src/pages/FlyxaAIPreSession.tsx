@@ -1,6 +1,5 @@
 import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRisk } from '../contexts/RiskContext.js';
@@ -245,6 +244,7 @@ export default function FlyxaAIPreSession() {
 
   const storedPreSession = useFlyxaStore(state => state.preSession);
   const setPreSessionAction = useFlyxaStore(state => state.setPreSession);
+  const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const storedOathItems = useFlyxaStore(state => state.oathItems);
   const setOathItemsAction = useFlyxaStore(state => state.setOathItems);
 
@@ -482,7 +482,6 @@ export default function FlyxaAIPreSession() {
   }, [activeRiskPatterns, confirmedEdgePatterns, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
 
   const rthTiming = useMemo(() => getRthTiming(now), [now]);
-  const greeting = now.getHours() < 12 ? 'Good morning' : 'Good afternoon';
   const subtitle = `${etDateLabel(now)} | ${
     rthTiming.marketOpenNow ? 'RTH open now' : `RTH opens in ${formatDuration(rthTiming.minutesUntilOpen)}`
   }`;
@@ -553,7 +552,7 @@ export default function FlyxaAIPreSession() {
   }, [checklistTotals.completed, checklistTotals.pct, checklistTotals.total, emotion, emotionLogged, lastSession, recentBehavior.planAdherence, recentBehavior.revengeTagged]);
 
   const persistPreSession = (updates: Partial<{ emotion: string; note: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null }>) => {
-    setPreSessionAction({
+    const data = {
       emotion: updates.emotion ?? emotion,
       note: updates.note ?? note,
       bias: updates.bias ?? bias,
@@ -562,7 +561,9 @@ export default function FlyxaAIPreSession() {
       readiness,
       sessionPlan,
       commitment: storedPreSession?.commitment,
-    });
+    };
+    setPreSessionAction(data);
+    setPreSessionForDate(now.toISOString().slice(0, 10), data);
   };
 
   const setEmotionAndPersist = (nextEmotion: string) => {
@@ -605,7 +606,7 @@ export default function FlyxaAIPreSession() {
 
   const startSession = () => {
     const committedAt = new Date().toISOString();
-    setPreSessionAction({
+    const sessionData = {
       emotion,
       note,
       bias,
@@ -622,7 +623,9 @@ export default function FlyxaAIPreSession() {
         readiness,
         sessionPlan,
       },
-    });
+    };
+    setPreSessionAction(sessionData);
+    setPreSessionForDate(now.toISOString().slice(0, 10), sessionData);
     navigate('/journal');
   };
 
@@ -636,10 +639,8 @@ export default function FlyxaAIPreSession() {
 
   return (
     <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ backgroundColor: C.d0, color: C.t0 }}>
-      <div className="grid h-full grid-cols-[178px_minmax(0,1fr)] overflow-hidden">
-        <FlyxaNav />
-
-        <main className="min-h-0 overflow-hidden" style={{ backgroundColor: C.d0 }}>
+      <div className="h-full overflow-hidden">
+        <main className="min-h-0 h-full overflow-hidden" style={{ backgroundColor: C.d0 }}>
           <div className="flex h-full min-h-0 flex-col">
             <section className="border-b px-6 py-5" style={{ borderColor: C.b0 }}>
               <div className="flex items-start justify-between gap-4">
@@ -760,7 +761,7 @@ export default function FlyxaAIPreSession() {
                     <div>
                       <p style={SECTION_LABEL_STYLE}>Before you trade</p>
                       <p className="mt-3 text-[13px] leading-[1.8]" style={{ color: C.t1 }}>
-                        {greeting}. This is the line between planned execution and emotional clicking. If any part of this feels false today, size down or stand down.
+                        This is the line between planned execution and emotional clicking. If any part of this feels false today, size down or stand down.
                       </p>
                       <div className="mt-5 space-y-2.5">
                         {preTradeReminderItems.map((item, index) => (

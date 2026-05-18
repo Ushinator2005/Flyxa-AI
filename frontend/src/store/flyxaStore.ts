@@ -74,6 +74,7 @@ interface FlyxaStateData {
   backtestSessions: BacktestSession[];
   onboarding: OnboardingState | null;
   preSession: PreSessionData | null;
+  preSessionHistory: Record<string, PreSessionData>;
   chartHistory: ChartHistoryRecord[];
   aiReflections: AiReflection[];
   oathItems: Array<{ id: string; label: string }> | null;
@@ -120,6 +121,7 @@ export interface FlyxaStore extends FlyxaStateData {
   setBacktestSessions: (sessions: BacktestSession[]) => void;
   setOnboarding: (state: OnboardingState) => void;
   setPreSession: (data: PreSessionData | null) => void;
+  setPreSessionForDate: (date: string, data: PreSessionData) => void;
   setChartHistory: (records: ChartHistoryRecord[]) => void;
   addAiReflection: (reflection: AiReflection) => void;
   setOathItems: (items: Array<{ id: string; label: string }> | null) => void;
@@ -468,6 +470,7 @@ function getInitialState(): FlyxaStateData {
     backtestSessions: [],
     onboarding: null,
     preSession: null,
+    preSessionHistory: {},
     chartHistory: [],
     aiReflections: [],
     oathItems: null,
@@ -699,6 +702,10 @@ const useFlyxaStore = create<FlyxaStore>()(
 
       setPreSession: (data) => set(() => ({ preSession: data })),
 
+      setPreSessionForDate: (date, data) => set((state) => ({
+        preSessionHistory: { ...state.preSessionHistory, [date]: data },
+      })),
+
       setOathItems: (items) => set(() => ({ oathItems: items })),
 
       setChartHistory: (records) => set(() => ({ chartHistory: records })),
@@ -807,8 +814,10 @@ const useFlyxaStore = create<FlyxaStore>()(
             backtestSessions: payload.backtestSessions ?? state.backtestSessions,
             onboarding: payload.onboarding ?? state.onboarding,
             preSession: payload.preSession ?? state.preSession,
+            preSessionHistory: payload.preSessionHistory ?? state.preSessionHistory,
             chartHistory: payload.chartHistory ?? state.chartHistory,
             aiReflections: payload.aiReflections ?? state.aiReflections,
+            oathItems: payload.oathItems ?? state.oathItems,
           };
           return syncAchievements(merged);
         });
@@ -898,6 +907,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         backtestSessions: state.backtestSessions,
         onboarding: state.onboarding,
         preSession: state.preSession,
+        preSessionHistory: state.preSessionHistory,
         chartHistory: state.chartHistory,
         aiReflections: state.aiReflections,
         oathItems: state.oathItems,

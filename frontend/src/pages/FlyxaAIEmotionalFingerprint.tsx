@@ -7,6 +7,7 @@ import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
+import useFlyxaStore from '../store/flyxaStore.js';
 
 // ── constants ────────────────────────────────────────────────────────────────
 
@@ -164,8 +165,39 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{
 export default function FlyxaAIEmotionalFingerprint() {
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount } = useAppSettings();
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const filtered = useMemo(() => filterTradesBySelectedAccount(trades), [filterTradesBySelectedAccount, trades]);
   const stats = useMemo(() => computeEmotionStats(filtered), [filtered]);
+
+  // Pre-session emotion vs day performance
+  const preSessionEmotionStats = useMemo(() => {
+    const tradesByDate: Record<string, Trade[]> = {};
+    filtered.forEach(t => {
+      if (!t.trade_date) return;
+      (tradesByDate[t.trade_date] ??= []).push(t);
+    });
+    const byEmotion: Record<string, { dayPnls: number[]; dayWinRates: number[] }> = {};
+    Object.entries(preSessionHistory).forEach(([date, ps]) => {
+      const emotion = ps.emotion?.trim();
+      if (!emotion) return;
+      const dayTrades = tradesByDate[date];
+      if (!dayTrades?.length) return;
+      const dayPnl = dayTrades.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      const wins = dayTrades.filter(t => Number(t.pnl ?? 0) > 0).length;
+      const winRate = (wins / dayTrades.length) * 100;
+      if (!byEmotion[emotion]) byEmotion[emotion] = { dayPnls: [], dayWinRates: [] };
+      byEmotion[emotion].dayPnls.push(dayPnl);
+      byEmotion[emotion].dayWinRates.push(winRate);
+    });
+    return Object.entries(byEmotion)
+      .map(([emotion, { dayPnls, dayWinRates }]) => ({
+        emotion,
+        days: dayPnls.length,
+        avgDayPnl: dayPnls.reduce((s, v) => s + v, 0) / dayPnls.length,
+        avgWinRate: dayWinRates.reduce((s, v) => s + v, 0) / dayWinRates.length,
+      }))
+      .sort((a, b) => b.avgDayPnl - a.avgDayPnl);
+  }, [filtered, preSessionHistory]);
 
   const bestState  = useMemo(() => stats.filter(s => s.trades >= 3).sort((a, b) => b.winRate - a.winRate)[0] ?? null, [stats]);
   const worstState = useMemo(() => stats.filter(s => s.trades >= 3).sort((a, b) => a.winRate - b.winRate)[0] ?? null, [stats]);
@@ -299,6 +331,32 @@ export default function FlyxaAIEmotionalFingerprint() {
                         {stats.map(s => <EmotionCard key={s.emotion} stat={s} />)}
                       </div>
                     </div>
+
+                    {preSessionEmotionStats.length > 0 && (
+                      <div className="rounded-[8px] border p-4" style={{ border: CARD_BORDER, backgroundColor: EC.d2 }}>
+                        <p style={SECTION_LABEL}>Pre-session emotion vs session P&amp;L</p>
+                        <p className="mt-1 mb-3 text-[11px]" style={{ color: EC.t2 }}>How your pre-open mental state correlates with that day&apos;s overall performance.</p>
+                        <div className="space-y-2">
+                          {preSessionEmotionStats.map(row => {
+                            const meta = EMOTION_META[row.emotion] ?? { color: EC.t1, bg: 'rgba(138,129,120,0.1)' };
+                            return (
+                              <div key={row.emotion} className="flex items-center gap-3 rounded-[6px] px-3 py-2.5" style={{ backgroundColor: EC.d3 }}>
+                                <span className="min-w-0 flex-1 rounded-[3px] px-2 py-0.5 text-[11px] font-semibold" style={{ color: meta.color, backgroundColor: meta.bg }}>
+                                  {row.emotion}
+                                </span>
+                                <span className="text-[10px]" style={{ color: EC.t2 }}>{row.days} day{row.days !== 1 ? 's' : ''}</span>
+                                <span className="w-16 text-right text-[12px] font-medium" style={{ color: row.avgDayPnl >= 0 ? EC.grn : EC.red, fontFamily: 'DM Mono, ui-monospace, monospace' }}>
+                                  {row.avgDayPnl >= 0 ? '+' : ''}{row.avgDayPnl.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                                </span>
+                                <span className="w-12 text-right text-[11px]" style={{ color: EC.t2 }}>
+                                  {row.avgWinRate.toFixed(0)}% WR
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="rounded-[8px] border p-4" style={{ border: CARD_BORDER, backgroundColor: EC.d2 }}>
                       <p style={SECTION_LABEL}>Recent trades — emotion timeline</p>
