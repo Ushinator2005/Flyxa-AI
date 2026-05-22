@@ -447,7 +447,7 @@ function ensureAccount(entries: unknown[], accountId: string): JournalEntry[] {
     }));
 }
 
-function getInitialState(): FlyxaStateData {
+export function getInitialState(): FlyxaStateData {
   const baseAccount = defaultAccount();
   return {
     entries: [],

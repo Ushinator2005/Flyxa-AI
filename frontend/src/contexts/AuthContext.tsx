@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../services/api.js';
-import useFlyxaStore from '../store/flyxaStore.js';
+import useFlyxaStore, { getInitialState } from '../store/flyxaStore.js';
 
 interface AuthContextType {
   user: User | null;
@@ -78,6 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       if (event === 'SIGNED_OUT') {
         setIsPasswordRecovery(false);
+        // Reset in-memory state first so a subsequent sign-in by a different user
+        // doesn't inherit the previous user's entries via the merge safety guard.
+        useFlyxaStore.setState(getInitialState(), true);
         useFlyxaStore.persist.clearStorage();
       }
     });
