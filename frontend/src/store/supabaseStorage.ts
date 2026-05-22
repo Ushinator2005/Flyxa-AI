@@ -5,6 +5,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const SAVE_DEBOUNCE_MS = 500;
 const LOCAL_SAVED_AT_KEY = 'flyxa-store-saved-at';
+const LOCAL_STORE_UID_KEY = 'flyxa-store-uid';
 const LOCAL_ENTRIES_SAFE_KEY = 'flyxa-entries-safe';
 const LOCAL_ENTRIES_SAFE_UID_KEY = 'flyxa-entries-safe-uid';
 
@@ -327,9 +328,10 @@ export const supabaseZustandStorage: StateStorage = {
         return recovered;
       }
 
-      // Then localStorage
+      // Then localStorage — only if it belongs to this user
       const local = localStorage.getItem('flyxa-store');
-      if (local) {
+      const localUid = localStorage.getItem(LOCAL_STORE_UID_KEY);
+      if (local && (!localUid || localUid === userId)) {
         const sanitizedLocal = sanitizeStoreValue(local);
         void flushSaveWithRetry(userId, sanitizedLocal);
         return sanitizedLocal;
@@ -345,7 +347,9 @@ export const supabaseZustandStorage: StateStorage = {
       }
     } catch {
       const local = localStorage.getItem('flyxa-store');
-      return local ? sanitizeStoreValue(local) : null;
+      const localUid = localStorage.getItem(LOCAL_STORE_UID_KEY);
+      if (local && (!localUid || localUid === userId)) return sanitizeStoreValue(local);
+      return null;
     }
 
     return null;
@@ -390,6 +394,8 @@ export const supabaseZustandStorage: StateStorage = {
     const userId = await getUserId();
     if (!userId) return;
 
+    try { localStorage.setItem(LOCAL_STORE_UID_KEY, userId); } catch { /* quota */ }
+
     const entries = extractEntries(sanitizedValue);
     mirrorLocalEntriesSafe(entries, userId);
 
@@ -405,6 +411,7 @@ export const supabaseZustandStorage: StateStorage = {
     // be ignored for any different account that signs in on this device.
     localStorage.removeItem('flyxa-store');
     localStorage.removeItem(LOCAL_SAVED_AT_KEY);
+    localStorage.removeItem(LOCAL_STORE_UID_KEY);
     localStorage.removeItem(LOCAL_ENTRIES_SAFE_UID_KEY);
     localStorage.removeItem(LOCAL_ENTRIES_SAFE_KEY);
   },
