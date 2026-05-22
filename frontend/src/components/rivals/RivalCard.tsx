@@ -21,10 +21,10 @@ interface Metric {
 
 export default function RivalCard({ rival, currentUser, isLast }: RivalCardProps) {
   const metrics: Metric[] = [
-    { label: 'Streak', myVal: currentUser.mascot.streakDays, theirVal: rival.mascot.streakDays },
-    { label: 'Discipline', myVal: currentUser.mascot.stats.discipline, theirVal: rival.mascot.stats.discipline },
-    { label: 'Consistency', myVal: currentUser.mascot.stats.consistency, theirVal: rival.mascot.stats.consistency },
-    { label: 'Psychology', myVal: currentUser.mascot.stats.psychology, theirVal: rival.mascot.stats.psychology },
+    { label: 'Daily', myVal: currentUser.mascot.stats.dailyJournalScore, theirVal: rival.mascot.stats.dailyJournalScore },
+    { label: 'Trading', myVal: currentUser.mascot.stats.tradingJournalScore, theirVal: rival.mascot.stats.tradingJournalScore },
+    { label: 'Backtests', myVal: currentUser.mascot.stats.backtestSessions, theirVal: rival.mascot.stats.backtestSessions },
+    { label: 'Process', myVal: currentUser.mascot.stats.processScore, theirVal: rival.mascot.stats.processScore },
   ];
 
   return (

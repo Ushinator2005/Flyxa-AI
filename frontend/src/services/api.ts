@@ -226,6 +226,36 @@ export const marketDataApi = {
       `/api/market-data/chart?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`
     ),
   getFfCalendar: () => api.get<Array<Record<string, unknown>>>('/api/market-data/ff-calendar'),
+  getXNews: () => api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>('/api/market-data/x-news'),
+};
+
+export interface RivalProfileResponse {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarInitials: string;
+  avatarColor: string;
+}
+
+export interface RivalRequestResponse {
+  id: string;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  direction: 'incoming' | 'outgoing';
+  createdAt: string;
+  respondedAt: string | null;
+  profile: RivalProfileResponse | null;
+}
+
+export const rivalsApi = {
+  getProfile: () => api.get<RivalProfileResponse | null>('/api/rivals/profile'),
+  updateProfile: (data: { username: string; displayName?: string; avatarColor?: string }) =>
+    api.put<RivalProfileResponse>('/api/rivals/profile', data),
+  search: (username: string) =>
+    api.get<RivalProfileResponse | null>(`/api/rivals/search?username=${encodeURIComponent(username)}`),
+  getAll: () => api.get<RivalRequestResponse[]>('/api/rivals'),
+  sendRequest: (username: string) => api.post<RivalRequestResponse>('/api/rivals/requests', { username }),
+  updateRequest: (id: string, action: 'accept' | 'decline' | 'cancel') =>
+    api.put<RivalRequestResponse>(`/api/rivals/requests/${id}`, { action }),
 };
 
 export interface BillingLivePricesResponse {

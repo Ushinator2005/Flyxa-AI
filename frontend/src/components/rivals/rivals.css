@@ -85,7 +85,7 @@
 
 .rivals-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -125,6 +125,156 @@
   grid-template-columns: 304px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+.rivals-setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.rivals-profile-body {
+  padding: 13px 15px;
+}
+
+.rivals-profile-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.rivals-profile-current span,
+.rivals-profile-note,
+.rivals-profile-status,
+.rivals-request-empty {
+  color: var(--rv-text-2);
+  font-size: 11px;
+}
+
+.rivals-profile-current span {
+  color: var(--rv-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.rivals-profile-current strong {
+  font-family: var(--rv-mono);
+  color: var(--rv-blue);
+  font-size: 12px;
+}
+
+.rivals-profile-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px;
+  gap: 8px;
+}
+
+.rivals-profile-form input {
+  min-width: 0;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--rv-border);
+  background: var(--rv-layer-2);
+  color: var(--rv-text);
+  padding: 0 10px;
+  font-size: 12px;
+  outline: none;
+}
+
+.rivals-profile-form input:focus {
+  border-color: var(--rv-blue-border);
+}
+
+.rivals-profile-form button,
+.rivals-request-actions button {
+  border-radius: 6px;
+  border: 1px solid var(--rv-blue-border);
+  background: var(--rv-blue-dim);
+  color: var(--rv-blue);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rivals-profile-form button:disabled,
+.rivals-request-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rivals-profile-note,
+.rivals-profile-status {
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+.rivals-profile-status {
+  color: var(--rv-amber);
+}
+
+.rivals-request-list {
+  display: grid;
+}
+
+.rivals-request-empty {
+  padding: 14px 15px;
+}
+
+.rivals-request-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  border-top: 1px solid var(--rv-border-sub);
+}
+
+.rivals-request-row:first-child {
+  border-top: none;
+}
+
+.rivals-request-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rv-border);
+  font-family: var(--rv-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rivals-request-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.rivals-request-copy strong {
+  font-size: 12.5px;
+}
+
+.rivals-request-copy span {
+  color: var(--rv-text-3);
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rivals-request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.rivals-request-actions button {
+  height: 28px;
+  padding: 0 9px;
 }
 
 .rivals-stack {
@@ -255,6 +405,7 @@
 }
 
 .mascot-stage-pill {
+  cursor: pointer;
   font-size: 9px;
   font-family: var(--rv-mono);
   text-transform: uppercase;
@@ -264,6 +415,11 @@
   padding: 2px 5px;
   color: var(--rv-text-2);
   background: var(--rv-layer-2);
+}
+
+.mascot-stage-pill:hover {
+  border-color: var(--rv-blue-border);
+  color: var(--rv-blue);
 }
 
 .mascot-stage-pill.active {
@@ -640,6 +796,13 @@
   border-color: var(--rv-blue-border);
 }
 
+.rv-modal-error {
+  margin: 0;
+  color: var(--rv-red);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .rv-modal button {
   width: 100%;
   border-radius: 6px;
@@ -659,6 +822,10 @@
 
 @media (max-width: 1080px) {
   .rivals-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rivals-setup-grid {
     grid-template-columns: 1fr;
   }
 
@@ -673,6 +840,21 @@
 
   .rv-lb-row {
     grid-template-columns: 32px 32px minmax(110px, 1fr) minmax(80px, 1fr) 68px;
+  }
+}
+
+@media (max-width: 640px) {
+  .rivals-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .rivals-profile-form,
+  .rivals-request-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rivals-request-actions {
+    justify-content: flex-start;
   }
 }
 

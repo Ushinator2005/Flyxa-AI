@@ -2,29 +2,29 @@ import type { LeaderboardMetric, MascotStage, MascotStats, Rival } from '../type
 
 const STAGE_THRESHOLDS: Record<MascotStage, number> = {
   seed: 0,
-  rookie: 7,
-  veteran: 30,
-  elite: 90,
-  apex: 180,
+  rookie: 25,
+  veteran: 50,
+  elite: 75,
+  apex: 90,
 };
 
 const STAGE_ORDER: MascotStage[] = ['seed', 'rookie', 'veteran', 'elite', 'apex'];
 
-export function getMascotStage(streakDays: number): MascotStage {
-  if (streakDays >= 180) return 'apex';
-  if (streakDays >= 90) return 'elite';
-  if (streakDays >= 30) return 'veteran';
-  if (streakDays >= 7) return 'rookie';
+export function getMascotStage(processScore: number): MascotStage {
+  if (processScore >= 90) return 'apex';
+  if (processScore >= 75) return 'elite';
+  if (processScore >= 50) return 'veteran';
+  if (processScore >= 25) return 'rookie';
   return 'seed';
 }
 
 export function getMascotXP(streakDays: number, stats: MascotStats): number {
   return (
     streakDays * 2 +
-    stats.discipline +
-    stats.psychology +
-    stats.consistency +
-    stats.backtestHours * 0.5
+    stats.dailyJournalScore +
+    stats.tradingJournalScore +
+    stats.processScore +
+    stats.backtestSessions * 2
   );
 }
 
@@ -38,12 +38,12 @@ export function getMascotLabel(stage: MascotStage): string {
   }
 }
 
-export function getStageProgress(streakDays: number): {
+export function getStageProgress(processScore: number): {
   current: MascotStage;
   next: MascotStage | null;
   progressPct: number;
 } {
-  const current = getMascotStage(streakDays);
+  const current = getMascotStage(processScore);
   const currentIdx = STAGE_ORDER.indexOf(current);
   const next = currentIdx < STAGE_ORDER.length - 1 ? STAGE_ORDER[currentIdx + 1] : null;
 
@@ -52,7 +52,7 @@ export function getStageProgress(streakDays: number): {
   const currentThreshold = STAGE_THRESHOLDS[current];
   const nextThreshold = STAGE_THRESHOLDS[next];
   const progressPct = Math.round(
-    ((streakDays - currentThreshold) / (nextThreshold - currentThreshold)) * 100,
+    ((processScore - currentThreshold) / (nextThreshold - currentThreshold)) * 100,
   );
   return { current, next, progressPct: Math.min(100, Math.max(0, progressPct)) };
 }
@@ -79,10 +79,9 @@ export function getMascotHealth(
 
 export function getRivalMetricValue(rival: Rival, metric: LeaderboardMetric): number {
   switch (metric) {
-    case 'streak': return rival.mascot.streakDays;
-    case 'discipline': return rival.mascot.stats.discipline;
-    case 'psychology': return rival.mascot.stats.psychology;
-    case 'consistency': return rival.mascot.stats.consistency;
-    case 'backtest': return rival.mascot.stats.backtestHours;
+    case 'dailyJournal': return rival.mascot.stats.dailyJournalScore;
+    case 'tradingJournal': return rival.mascot.stats.tradingJournalScore;
+    case 'backtest': return rival.mascot.stats.backtestSessions;
+    case 'processScore': return rival.mascot.stats.processScore;
   }
 }

@@ -14,6 +14,7 @@ import playbookRouter from './routes/playbook';
 import journalRouter from './routes/journal';
 import marketDataRouter from './routes/marketData';
 import billingRouter from './routes/billing';
+import rivalsRouter from './routes/rivals';
 
 dotenv.config({ override: true });
 
@@ -122,6 +123,7 @@ app.use('/api/playbook', playbookRouter);
 app.use('/api/journal', journalRouter);
 app.use('/api/market-data', marketDataRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/rivals', rivalsRouter);
 
 // Error handler
 app.use(errorHandler);

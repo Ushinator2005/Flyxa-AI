@@ -7,6 +7,7 @@ import {
   DEFAULT_ACCOUNT_ID,
   DEFAULT_TRADING_ACCOUNT,
   ensureDefaultAccount,
+  normalizeAccountStatus,
   resolveDefaultTradeAccountId,
 } from '../utils/tradingAccounts.js';
 import useFlyxaStore from '../store/flyxaStore.js';
@@ -158,12 +159,57 @@ interface AppSettingsRow {
 
 async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsRow | null> {
   try {
-    const { data, error } = await supabase
-      .from('user_store')
-      .select('app_settings')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (!error && data?.app_settings) return data.app_settings as AppSettingsRow;
+    const [settingsResult, accountsResult] = await Promise.all([
+      supabase.from('user_store').select('app_settings').eq('user_id', userId).maybeSingle(),
+      supabase.from('trading_accounts').select('id, name, broker, type, status, color, starting_balance, created_at').eq('user_id', userId),
+    ]);
+
+    if (settingsResult.error) return null;
+
+    const row: AppSettingsRow = settingsResult.data?.app_settings
+      ? { ...(settingsResult.data.app_settings as AppSettingsRow) }
+      : {};
+
+    if (!accountsResult.error && accountsResult.data?.length) {
+      // Always merge trading_accounts into app_settings — this recovers any accounts that
+      // were lost from app_settings (e.g. after a localStorage clear + timing race) while
+      // preserving accounts that already exist in app_settings.
+      const existingIds = new Set((row.accounts ?? []).map(a => a.id));
+
+      const missingAccounts = accountsResult.data
+        .filter(a => !existingIds.has(a.id as string))
+        .map(a => ({
+          id: a.id as string,
+          name: a.name as string,
+          broker: (a.broker as string | null) ?? '',
+          type: (a.type as string | null) ?? 'Futures',
+          status: normalizeAccountStatus(a.status),
+          color: (a.color as string | null) ?? '#6366f1',
+          createdAt: a.created_at as string,
+          ...(a.starting_balance != null ? { startingBalance: Number(a.starting_balance) } : {}),
+        }));
+
+      if (missingAccounts.length > 0) {
+        row.accounts = [...(row.accounts ?? []), ...missingAccounts];
+      }
+
+      // Also merge starting_balance for any existing accounts that are missing it
+      const balanceMap = new Map<string, number | null>(
+        accountsResult.data.map(a => [a.id as string, a.starting_balance != null ? Number(a.starting_balance) : null])
+      );
+      row.accounts = (row.accounts ?? []).map(account => ({
+        ...account,
+        startingBalance: account.startingBalance
+          ?? (balanceMap.has(account.id) && balanceMap.get(account.id) != null
+            ? (balanceMap.get(account.id) as number)
+            : undefined),
+      }));
+    }
+
+    // Only fall through to localStorage migration if there is truly nothing to load
+    if (!settingsResult.data?.app_settings && !row.accounts?.length) return null;
+
+    return row;
   } catch { /* fall through to localStorage migration */ }
   return null;
 }
@@ -215,6 +261,18 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   const [tradeAccounts, setTradeAccounts] = useState<Record<string, string>>({});
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDone = useRef(false);
+
+  // Refs to hold latest state values for use in callbacks that don't re-create on state change
+  const accountsRef = useRef(accounts);
+  const preferencesRef = useRef(preferences);
+  const confluenceOptionsRef = useRef(confluenceOptions);
+  const selectedAccountIdRef = useRef(selectedAccountId);
+  const tradeAccountsRef = useRef(tradeAccounts);
+  useEffect(() => { accountsRef.current = accounts; }, [accounts]);
+  useEffect(() => { preferencesRef.current = preferences; }, [preferences]);
+  useEffect(() => { confluenceOptionsRef.current = confluenceOptions; }, [confluenceOptions]);
+  useEffect(() => { selectedAccountIdRef.current = selectedAccountId; }, [selectedAccountId]);
+  useEffect(() => { tradeAccountsRef.current = tradeAccounts; }, [tradeAccounts]);
 
   // Load from Supabase on user login
   useEffect(() => {
@@ -377,6 +435,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         id: nextAccount.id, user_id: user.id, name: nextAccount.name,
         broker: nextAccount.broker || null,
         type: nextAccount.type, status: nextAccount.status, color: nextAccount.color,
+        starting_balance: nextAccount.startingBalance ?? null,
       }).then(({ error }) => {
         if (error) console.error('[Accounts] Failed to save new account:', error.message);
       });
@@ -384,11 +443,25 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   }, [user]);
 
   const updateAccount = useCallback((accountId: string, updates: Partial<Omit<TradingAccount, 'id' | 'createdAt'>>) => {
-    setAccounts(current => current.map(account => (
-      account.id === accountId
-        ? { ...account, ...updates }
-        : account
-    )));
+    const nextAccounts = ensureDefaultAccount(
+      accountsRef.current.map(account =>
+        account.id === accountId ? { ...account, ...updates } : account
+      )
+    );
+    setAccounts(nextAccounts);
+
+    // When startingBalance changes, save immediately to user_store without waiting for debounce.
+    // This ensures the value survives a page refresh even if the 1.5s timer hasn't fired yet.
+    if ('startingBalance' in updates && user && initialLoadDone.current) {
+      void saveAppSettingsToSupabase(user.id, {
+        accounts: nextAccounts,
+        preferences: preferencesRef.current,
+        selectedAccountId: selectedAccountIdRef.current,
+        tradeAccounts: tradeAccountsRef.current,
+        confluenceOptions: confluenceOptionsRef.current,
+      });
+    }
+
     if (user && accountId !== DEFAULT_ACCOUNT_ID) {
       supabase.from('trading_accounts').update({
         ...('name' in updates ? { name: updates.name } : {}),
@@ -396,9 +469,12 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         ...('type' in updates ? { type: updates.type } : {}),
         ...('status' in updates ? { status: updates.status } : {}),
         ...('color' in updates ? { color: updates.color } : {}),
+        ...('startingBalance' in updates ? { starting_balance: updates.startingBalance ?? null } : {}),
         updated_at: new Date().toISOString(),
       }).eq('id', accountId).eq('user_id', user.id).then(({ error }) => {
-        if (error) console.error('[Accounts] Failed to update account:', error.message);
+        if (error && !error.message.includes('starting_balance')) {
+          console.error('[Accounts] Failed to update account:', error.message);
+        }
       });
     }
   }, [user]);

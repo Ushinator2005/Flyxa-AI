@@ -18,10 +18,10 @@ const STAGE_SYMBOL: Record<MascotStage, string> = {
 };
 
 const STAT_BARS = [
-  { key: 'discipline' as const, label: 'Discipline', color: '#1E6FFF', max: 100 },
-  { key: 'psychology' as const, label: 'Psychology', color: '#a78bfa', max: 100 },
-  { key: 'consistency' as const, label: 'Consistency', color: '#14b8a6', max: 100 },
-  { key: 'backtestHours' as const, label: 'Backtest Hrs', color: '#f59e0b', max: 100 },
+  { key: 'dailyJournalScore' as const, label: 'Daily Journal', color: '#1E6FFF', max: 100, suffix: '/100' },
+  { key: 'tradingJournalScore' as const, label: 'Trading Journal', color: '#f59e0b', max: 100, suffix: '%' },
+  { key: 'backtestSessions' as const, label: 'Backtesting Sessions', color: '#14b8a6', max: 50, suffix: '' },
+  { key: 'processScore' as const, label: 'Process Score', color: '#a78bfa', max: 100, suffix: '/100' },
 ];
 
 const HEALTH_BADGE: Record<string, { dot: string; label: string }> = {
@@ -53,7 +53,7 @@ export default function MascotPanel({ mascot, lastJournalDate }: MascotPanelProp
   const today = new Date().toISOString().split('T')[0];
   const journalDate = lastJournalDate ?? today;
   const health = getMascotHealth(mascot.streakDays, journalDate);
-  const { current, next, progressPct } = getStageProgress(mascot.streakDays);
+  const { current, next, progressPct } = getStageProgress(mascot.stats.processScore);
   const healthBadge = HEALTH_BADGE[health];
 
   return (
@@ -116,7 +116,7 @@ export default function MascotPanel({ mascot, lastJournalDate }: MascotPanelProp
           <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 600, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
             {mascot.streakDays}
           </span>
-          <span style={{ fontSize: 11, color: T2 }}>day streak</span>
+          <span style={{ fontSize: 11, color: T2 }}>day daily journal run</span>
         </div>
       </div>
 
@@ -124,7 +124,7 @@ export default function MascotPanel({ mascot, lastJournalDate }: MascotPanelProp
         <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
           {STAT_BARS.map(bar => {
             const raw = mascot.stats[bar.key];
-            const pct = Math.min(100, Math.round((raw / bar.max) * 100));
+            const pct = Math.max(0, Math.min(100, Math.round((raw / bar.max) * 100)));
             return (
               <div key={bar.key}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
@@ -138,7 +138,7 @@ export default function MascotPanel({ mascot, lastJournalDate }: MascotPanelProp
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {raw}
+                    {raw}{bar.suffix}
                   </span>
                 </div>
                 <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>

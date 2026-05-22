@@ -4,6 +4,8 @@ import Header from './Header.js';
 import RiskWarningBanner from '../risk/RiskWarningBanner.js';
 import SessionStatusBar from './SessionStatusBar.js';
 import FlyxaChatWidget from '../common/FlyxaChatWidget.js';
+import UsernamePrompt from '../common/UsernamePrompt.js';
+import ErrorBoundary from '../common/ErrorBoundary.js';
 import { useRisk } from '../../contexts/RiskContext.js';
 
 export default function Layout() {
@@ -30,11 +32,14 @@ export default function Layout() {
         )}
         <main className={isFullBleed ? 'flex-1 overflow-hidden p-0' : 'flex-1 overflow-auto p-8'}>
           <div className={isFullBleed ? 'h-full w-full' : 'mx-auto max-w-[1400px]'}>
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>
       <FlyxaChatWidget />
+      <UsernamePrompt />
     </div>
   );
 }

@@ -34,6 +34,7 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
     ),
     color: account.color,
     createdAt: account.createdAt,
+    ...(account.startingBalance !== undefined ? { startingBalance: account.startingBalance } : {}),
   }));
 
   const withoutDuplicates = normalizedAccounts.filter((account, index, collection) => (

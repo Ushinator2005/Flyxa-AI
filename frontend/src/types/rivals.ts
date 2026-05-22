@@ -1,10 +1,11 @@
 export type MascotStage = 'seed' | 'rookie' | 'veteran' | 'elite' | 'apex';
 
 export interface MascotStats {
-  discipline: number;
-  psychology: number;
-  consistency: number;
-  backtestHours: number;
+  dailyJournalStreak: number;
+  dailyJournalScore: number;
+  tradingJournalScore: number;
+  backtestSessions: number;
+  processScore: number;
 }
 
 export interface Mascot {
@@ -25,4 +26,4 @@ export interface Rival {
   isMe?: boolean;
 }
 
-export type LeaderboardMetric = 'streak' | 'discipline' | 'psychology' | 'consistency' | 'backtest';
+export type LeaderboardMetric = 'dailyJournal' | 'tradingJournal' | 'backtest' | 'processScore';

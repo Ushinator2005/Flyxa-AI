@@ -14,7 +14,6 @@ import {
   CheckCircle,
   Star,
   Calendar,
-  Sparkles,
   ArrowUpRight,
   Ruler,
   DollarSign,
@@ -205,13 +204,10 @@ export default function Achievements() {
     <div className="achv-page animate-fade-in">
       <header className="achv-hero">
         <div className="achv-hero-copy">
-          <span className="achv-kicker">
-            <Sparkles size={13} />
-            Performance path
-          </span>
+          <span className="achv-kicker">Performance record</span>
           <h1>Streaks &amp; Achievements</h1>
           <p>
-            A cleaner view of the habits, streaks, and milestones you are building toward each session.
+            Process streaks, execution milestones, and earned consistency markers from your trading history.
           </p>
         </div>
         <div className="achv-hero-score">
@@ -229,7 +225,7 @@ export default function Achievements() {
           <div>
             <span className="achv-focus-label">Current focus</span>
             <h2>{strongestStreak > 0 ? `${strongestStreak} session run` : 'Build the first run'}</h2>
-            <p>Keep clean execution visible. The page now tracks what is active, what is close, and what is already earned.</p>
+            <p>Keep the next session measurable: plan adherence, journal completion, and clean execution before outcome.</p>
           </div>
           <div className="achv-focus-mark">
             <Trophy size={26} />
@@ -301,7 +297,7 @@ export default function Achievements() {
         <div className="achv-toolbar">
           <div>
             <h2 className="achv-section-title">Achievement Board</h2>
-            <p className="achv-section-sub">Earned badges stay prominent. Locked badges show progress, not noise.</p>
+            <p className="achv-section-sub">Earned items are listed first. Locked items show current progress.</p>
           </div>
           <button
             type="button"

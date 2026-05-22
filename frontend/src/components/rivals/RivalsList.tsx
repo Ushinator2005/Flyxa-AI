@@ -14,16 +14,16 @@ const STAGE_LABELS: Record<string, string> = {
   apex: 'Apex',
 };
 
-function getMetricVal(rival: Rival, key: 'streak' | 'discipline' | 'consistency' | 'psychology'): number {
+function getMetricVal(rival: Rival, key: 'dailyJournal' | 'tradingJournal' | 'backtest' | 'processScore'): number {
   switch (key) {
-    case 'streak':
-      return rival.mascot.streakDays;
-    case 'discipline':
-      return rival.mascot.stats.discipline;
-    case 'consistency':
-      return rival.mascot.stats.consistency;
-    case 'psychology':
-      return rival.mascot.stats.psychology;
+    case 'dailyJournal':
+      return rival.mascot.stats.dailyJournalScore;
+    case 'tradingJournal':
+      return rival.mascot.stats.tradingJournalScore;
+    case 'backtest':
+      return rival.mascot.stats.backtestSessions;
+    case 'processScore':
+      return rival.mascot.stats.processScore;
   }
 }
 
@@ -38,7 +38,7 @@ export default function RivalsList({ rivals, currentUser }: RivalsListProps) {
   const ordered = [...rivals].sort((a, b) => {
     if (a.isMe) return -1;
     if (b.isMe) return 1;
-    return b.mascot.streakDays - a.mascot.streakDays;
+    return b.mascot.stats.processScore - a.mascot.stats.processScore;
   });
 
   return (
@@ -52,19 +52,19 @@ export default function RivalsList({ rivals, currentUser }: RivalsListProps) {
 
       <div className="rv-table-head">
         <span>Rival</span>
-        <span className="align-r">Streak</span>
-        <span className="align-r">Discipline</span>
-        <span className="align-r">Consistency</span>
-        <span className="align-r">Psychology</span>
+        <span className="align-r">Daily</span>
+        <span className="align-r">Trading</span>
+        <span className="align-r">Backtests</span>
+        <span className="align-r">Process</span>
         <span className="align-r">Action</span>
       </div>
 
       {ordered.map(rival => {
         const isMe = Boolean(rival.isMe);
-        const streak = getMetricVal(rival, 'streak');
-        const discipline = getMetricVal(rival, 'discipline');
-        const consistency = getMetricVal(rival, 'consistency');
-        const psychology = getMetricVal(rival, 'psychology');
+        const dailyJournal = getMetricVal(rival, 'dailyJournal');
+        const tradingJournal = getMetricVal(rival, 'tradingJournal');
+        const backtest = getMetricVal(rival, 'backtest');
+        const processScore = getMetricVal(rival, 'processScore');
 
         return (
           <div key={rival.id} className={`rv-row ${isMe ? 'me' : ''}`}>
@@ -87,10 +87,10 @@ export default function RivalsList({ rivals, currentUser }: RivalsListProps) {
               </div>
             </div>
 
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.streakDays, streak)}`}>{streak}</div>
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.discipline, discipline)}`}>{discipline}</div>
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.consistency, consistency)}`}>{consistency}</div>
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.psychology, psychology)}`}>{psychology}</div>
+            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.dailyJournalScore, dailyJournal)}`}>{dailyJournal}</div>
+            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.tradingJournalScore, tradingJournal)}`}>{tradingJournal}%</div>
+            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.backtestSessions, backtest)}`}>{backtest}</div>
+            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.processScore, processScore)}`}>{processScore}</div>
 
             <div className="rv-action">
               <span className={`rv-badge ${isMe ? 'me' : ''}`}>{isMe ? 'YOU' : 'VS'}</span>

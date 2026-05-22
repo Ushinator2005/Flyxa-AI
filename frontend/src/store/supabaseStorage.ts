@@ -6,6 +6,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const SAVE_DEBOUNCE_MS = 500;
 const LOCAL_SAVED_AT_KEY = 'flyxa-store-saved-at';
 const LOCAL_ENTRIES_SAFE_KEY = 'flyxa-entries-safe';
+const LOCAL_ENTRIES_SAFE_UID_KEY = 'flyxa-entries-safe-uid';
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingValue: string | null = null;
@@ -97,7 +98,7 @@ function sanitizeStoreValue(value: string): string {
   }
 }
 
-function mirrorLocalEntriesSafe(entries: Record<string, unknown>[]): void {
+function mirrorLocalEntriesSafe(entries: Record<string, unknown>[], userId: string): void {
   try {
     const next: Record<string, unknown> = {};
     for (const entry of entries) {
@@ -105,11 +106,19 @@ function mirrorLocalEntriesSafe(entries: Record<string, unknown>[]): void {
       next[id] = stripBase64Images(entry);
     }
     localStorage.setItem(LOCAL_ENTRIES_SAFE_KEY, JSON.stringify(next));
+    localStorage.setItem(LOCAL_ENTRIES_SAFE_UID_KEY, userId);
   } catch { /* quota */ }
 }
 
-function readLocalEntriesSafe(): Record<string, unknown>[] {
+/**
+ * Read the local safe entry backup, but ONLY if it belongs to the given user.
+ * This prevents entries from a previously signed-in user from leaking into
+ * a newly created account on the same device.
+ */
+function readLocalEntriesSafe(userId: string): Record<string, unknown>[] {
   try {
+    const storedUid = localStorage.getItem(LOCAL_ENTRIES_SAFE_UID_KEY);
+    if (storedUid !== userId) return [];
     const raw = localStorage.getItem(LOCAL_ENTRIES_SAFE_KEY);
     if (!raw) return [];
     const map = JSON.parse(raw) as Record<string, unknown>;
@@ -197,7 +206,7 @@ async function flushSave(userId: string, value: string): Promise<void> {
   // Secondary store — per-entry rows mirror the current store.
   const entries = extractEntries(sanitizedValue);
   await syncEntriesToTable(userId, entries);
-  mirrorLocalEntriesSafe(entries);
+  mirrorLocalEntriesSafe(entries, userId);
 }
 
 // Retries flushSave up to 2 extra times (3 total) with increasing delays.
@@ -295,8 +304,8 @@ export const supabaseZustandStorage: StateStorage = {
           return recovered;
         }
 
-        // Last resort: localStorage safe backup
-        const safeEntries = readLocalEntriesSafe();
+        // Last resort: localStorage safe backup (only if it belongs to this user)
+        const safeEntries = readLocalEntriesSafe(userId);
         if (safeEntries.length > 0) {
           const base = data.flyxa_data as Record<string, unknown>;
           const rebuilt = JSON.stringify({
@@ -326,8 +335,8 @@ export const supabaseZustandStorage: StateStorage = {
         return sanitizedLocal;
       }
 
-      // Last resort: safe backup
-      const safeEntries = readLocalEntriesSafe();
+      // Last resort: safe backup (only if it belongs to this user)
+      const safeEntries = readLocalEntriesSafe(userId);
       if (safeEntries.length > 0) {
         const rebuilt = JSON.stringify({ state: { entries: safeEntries }, version: 1 });
         const sanitizedRebuilt = sanitizeStoreValue(rebuilt);
@@ -375,14 +384,14 @@ export const supabaseZustandStorage: StateStorage = {
       localStorage.setItem(LOCAL_SAVED_AT_KEY, Date.now().toString());
     } catch { /* quota exceeded */ }
 
-    const entries = extractEntries(sanitizedValue);
-    mirrorLocalEntriesSafe(entries);
-
     pendingValue = sanitizedValue;
     if (saveTimer) clearTimeout(saveTimer);
 
     const userId = await getUserId();
     if (!userId) return;
+
+    const entries = extractEntries(sanitizedValue);
+    mirrorLocalEntriesSafe(entries, userId);
 
     saveTimer = setTimeout(() => {
       if (pendingValue) void flushSaveWithRetry(userId, pendingValue);
@@ -392,8 +401,11 @@ export const supabaseZustandStorage: StateStorage = {
   removeItem: async (_key: string): Promise<void> => {
     // Only clear the local device cache — never delete cloud data.
     // Supabase is the source of truth and must survive sign-out.
-    // LOCAL_ENTRIES_SAFE_KEY is intentionally NOT cleared here.
+    // The safe backup is tagged with the signed-out user's ID, so it will
+    // be ignored for any different account that signs in on this device.
     localStorage.removeItem('flyxa-store');
     localStorage.removeItem(LOCAL_SAVED_AT_KEY);
+    localStorage.removeItem(LOCAL_ENTRIES_SAFE_UID_KEY);
+    localStorage.removeItem(LOCAL_ENTRIES_SAFE_KEY);
   },
 };

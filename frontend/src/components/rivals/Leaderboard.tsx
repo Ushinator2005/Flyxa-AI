@@ -17,10 +17,10 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const TABS: { key: LeaderboardMetric; label: string; unit: string }[] = [
-  { key: 'streak', label: 'Streak', unit: 'days' },
-  { key: 'discipline', label: 'Discipline', unit: 'pts' },
-  { key: 'backtest', label: 'Backtest', unit: 'hrs' },
-  { key: 'psychology', label: 'Psychology', unit: 'pts' },
+  { key: 'processScore', label: 'Process Score', unit: 'pts' },
+  { key: 'dailyJournal', label: 'Daily Journal', unit: 'days' },
+  { key: 'tradingJournal', label: 'Trading Journal', unit: '%' },
+  { key: 'backtest', label: 'Backtesting', unit: 'sessions' },
 ];
 
 function rankClass(rank: number) {
@@ -38,7 +38,7 @@ function barColor(rank: number, isMe: boolean, avatarColor: string) {
   return avatarColor;
 }
 
-export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'streak' }: LeaderboardProps) {
+export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'processScore' }: LeaderboardProps) {
   const [metric, setMetric] = useState<LeaderboardMetric>(defaultMetric);
   const activeTab = TABS.find(tab => tab.key === metric) ?? TABS[0];
 

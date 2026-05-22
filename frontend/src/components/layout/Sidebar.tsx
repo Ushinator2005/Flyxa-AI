@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
+import { rivalsApi } from '../../services/api.js';
 
 const AMBER      = '#f59e0b';
 const AMBER_DIM  = 'rgba(245,158,11,0.10)';
@@ -88,6 +89,30 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
   const { accounts, selectedAccountId, setSelectedAccountId } = useAppSettings();
   const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID);
   const selectedAcct = accounts.find(a => a.id === selectedAccountId);
+  const displayName = (user?.user_metadata?.name as string | undefined)
+    || (user?.user_metadata?.full_name as string | undefined)
+    || user?.email?.split('@')[0]
+    || 'Trader';
+  const [rivalUsername, setRivalUsername] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    rivalsApi.getProfile()
+      .then(p => { if (!cancelled && p?.username) setRivalUsername(p.username); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      rivalsApi.getProfile()
+        .then(p => { if (p?.username) setRivalUsername(p.username); })
+        .catch(() => {});
+    };
+    window.addEventListener('flyxa:profile-saved', handler);
+    return () => window.removeEventListener('flyxa:profile-saved', handler);
+  }, []);
+
   const [accountsCollapsed, setAccountsCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('flyxa-ai.sidebar.accounts.collapsed') === '1';
@@ -103,18 +128,33 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
     onNavClick?.();
   };
 
+  const handleProfileClick = () => {
+    navigate('/settings#profile');
+    onNavClick?.();
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Logo */}
-      <div style={{
+      <button
+        type="button"
+        onClick={handleProfileClick}
+        title="Open profile settings"
+        aria-label="Open profile settings"
+        style={{
         minHeight: collapsed ? 54 : 62,
         borderBottom: `1px solid ${BSUB}`,
+        borderTop: 'none',
+        borderLeft: 'none',
+        borderRight: 'none',
         background: S1,
         display: 'flex',
         alignItems: 'center',
         justifyContent: collapsed ? 'center' : 'flex-start',
         paddingLeft: collapsed ? 0 : 12,
+        cursor: 'pointer',
+        width: '100%',
       }}>
         <svg
           viewBox="0 0 160 38"
@@ -132,7 +172,7 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
           <line x1="76" y1="9" x2="160" y2="9" stroke="#F59E0B" strokeWidth="2.2" strokeLinecap="round" />
           <circle cx="48" cy="27" r="4.8" fill="#F59E0B" />
         </svg>
-      </div>
+      </button>
 
       {/* Nav + Accounts */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '12px 6px' : '12px 8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -319,17 +359,21 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
       {/* User card */}
       {collapsed ? (
         <div style={{ padding: '10px 0 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          <div
-            title={user?.email ?? 'Trader'}
+          <button
+            type="button"
+            onClick={handleProfileClick}
+            title="Open profile settings"
             style={{
               width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
               background: AMBER_DIM, border: `1px solid ${AMBER_BORD}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 700, color: AMBER, fontFamily: MONO,
+              cursor: 'pointer',
+              padding: 0,
             }}
           >
-            {(user?.email ?? 'FX').slice(0, 2).toUpperCase()}
-          </div>
+            {displayName.slice(0, 2).toUpperCase()}
+          </button>
           <button
             onClick={signOut}
             title="Sign out"
@@ -342,22 +386,41 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
         </div>
       ) : (
         <div style={{ padding: '10px 12px 14px', display: 'flex', alignItems: 'center', gap: 9 }}>
-          <div style={{
+          <button
+            type="button"
+            onClick={handleProfileClick}
+            title="Open profile settings"
+            style={{
             width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
             background: AMBER_DIM, border: `1px solid ${AMBER_BORD}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 11, fontWeight: 700, color: AMBER, fontFamily: MONO,
+            cursor: 'pointer',
+            padding: 0,
           }}>
-            {(user?.email ?? 'FX').slice(0, 2).toUpperCase()}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+            {displayName.slice(0, 2).toUpperCase()}
+          </button>
+          <button
+            type="button"
+            onClick={handleProfileClick}
+            title="Open profile settings"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              border: 'none',
+              background: 'transparent',
+              padding: 0,
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+          >
             <div style={{ fontSize: 12, fontWeight: 500, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.email?.split('@')[0] ?? 'Trader'}
+              {rivalUsername ?? displayName}
             </div>
-            <div style={{ fontSize: 10, color: accountStatusColor(selectedAcct?.status ?? ''), textTransform: 'capitalize' }}>
+            <div style={{ fontSize: 10, color: accountStatusColor(selectedAcct?.status ?? ''), textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {selectedAcct?.status?.toLowerCase() ?? 'free plan'}
             </div>
-          </div>
+          </button>
           <button
             onClick={signOut}
             title="Sign out"

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext.js';
 import Layout from './components/layout/Layout.js';
@@ -8,6 +8,8 @@ import useFlyxaStore from './store/flyxaStore.js';
 import { useDailyLossUsed } from './store/selectors.js';
 import { pushToast } from './store/toastStore.js';
 import { useBackgroundNewsPoller } from './hooks/useBackgroundNewsPoller.js';
+import FlyxaLogo from './components/common/FlyxaLogo.js';
+import { Check, AlertCircle } from 'lucide-react';
 
 const Auth = lazy(() => import('./pages/Auth.js'));
 const Dashboard = lazy(() => import('./pages/Dashboard.js'));
@@ -37,6 +39,161 @@ function RouteFallback() {
   );
 }
 
+function PasswordRecoveryModal() {
+  const { updatePassword } = useAuth();
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (password !== confirm) { setError('Passwords do not match.'); return; }
+    setSaving(true);
+    const { error: err } = await updatePassword(password);
+    setSaving(false);
+    if (err) { setError(err); return; }
+    setDone(true);
+  };
+
+  const SANS = 'var(--font-sans)';
+  const T1 = 'var(--app-text)';
+  const T3 = 'var(--app-text-subtle)';
+  const S1 = 'var(--app-panel)';
+  const BORDER = 'var(--app-border)';
+  const S2 = 'var(--app-panel-strong)';
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pwd-recovery-title"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+        background: 'rgba(10,8,6,0.88)',
+        backdropFilter: 'blur(14px)',
+        fontFamily: SANS,
+      }}
+    >
+      <section style={{
+        width: 'min(440px, 100%)',
+        borderRadius: 14,
+        border: '1px solid rgba(245,158,11,0.16)',
+        background: S1,
+        overflow: 'hidden',
+        position: 'relative',
+      }}>
+        {/* Top amber accent */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: 'linear-gradient(90deg, transparent 0%, rgba(245,158,11,0.4) 20%, #f59e0b 50%, rgba(245,158,11,0.3) 80%, transparent 100%)',
+        }} />
+
+        <div style={{ padding: '32px 28px 26px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ marginBottom: 20 }}>
+            <FlyxaLogo size={44} showWordmark={false} />
+          </div>
+          <h2 id="pwd-recovery-title" style={{ margin: 0, color: T1, fontSize: 20, fontWeight: 660, letterSpacing: '-0.025em' }}>
+            {done ? 'Password updated' : 'Set a new password'}
+          </h2>
+          <p style={{ margin: '8px 0 0', color: T3, fontSize: 12.5, lineHeight: 1.6 }}>
+            {done
+              ? 'Your password has been updated. You can now continue to Flyxa.'
+              : 'Choose a strong password for your account.'}
+          </p>
+        </div>
+
+        <div style={{ padding: '24px 28px 28px' }}>
+          {done ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '12px 16px', borderRadius: 8,
+              background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)',
+              color: '#34d399', fontSize: 13,
+            }}>
+              <Check size={15} strokeWidth={2.5} />
+              Password updated successfully. Redirecting…
+            </div>
+          ) : (
+            <form onSubmit={(e) => { void handleSubmit(e); }}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: T3, marginBottom: 7 }}>
+                  New password
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  required
+                  style={{
+                    width: '100%', height: 44, borderRadius: 8,
+                    border: `1px solid ${BORDER}`, background: S2,
+                    color: T1, padding: '0 14px', fontSize: 13.5,
+                    fontFamily: SANS, outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: T3, marginBottom: 7 }}>
+                  Confirm password
+                </label>
+                <input
+                  type="password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="Repeat your new password"
+                  required
+                  style={{
+                    width: '100%', height: 44, borderRadius: 8,
+                    border: `1px solid ${BORDER}`, background: S2,
+                    color: T1, padding: '0 14px', fontSize: 13.5,
+                    fontFamily: SANS, outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              {error && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 14px', borderRadius: 8, marginBottom: 14,
+                  background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)',
+                  color: '#f87171', fontSize: 12,
+                }}>
+                  <AlertCircle size={14} />
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={saving}
+                style={{
+                  width: '100%', height: 44, borderRadius: 8, border: 'none',
+                  background: saving ? 'rgba(245,158,11,0.45)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: '#0a0806', fontSize: 13.5, fontWeight: 750,
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  boxShadow: saving ? 'none' : '0 4px 20px rgba(245,158,11,0.22)',
+                  transition: 'opacity 0.15s',
+                  fontFamily: SANS,
+                }}
+              >
+                <Check size={15} strokeWidth={2.5} />
+                {saving ? 'Saving…' : 'Update password'}
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ProtectedRoute() {
   const { user, loading } = useAuth();
 
@@ -57,7 +214,7 @@ function ProtectedLayout() {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, isPasswordRecovery } = useAuth();
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
   const hasWarned80 = useRef(false);
   const hasWarnedHit = useRef(false);
@@ -232,6 +389,7 @@ export default function App() {
         </Routes>
       </Suspense>
       <ToastStack />
+      {isPasswordRecovery && <PasswordRecoveryModal />}
     </>
   );
 }

@@ -3,25 +3,32 @@ import { useState } from 'react';
 interface AddRivalModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (username: string) => void;
+  onSubmit: (username: string) => Promise<void>;
 }
 
 export default function AddRivalModal({ open, onClose, onSubmit }: AddRivalModalProps) {
   const [username, setUsername] = useState('');
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
   if (!open) return null;
 
-  const submit = () => {
+  const submit = async () => {
     const cleaned = username.trim().replace(/^@/, '');
     if (!cleaned) return;
-    onSubmit(cleaned);
+    setError('');
     setSent(true);
-    window.setTimeout(() => {
+    try {
+      await onSubmit(cleaned);
+      window.setTimeout(() => {
+        setSent(false);
+        setUsername('');
+        onClose();
+      }, 900);
+    } catch (err) {
       setSent(false);
-      setUsername('');
-      onClose();
-    }, 900);
+      setError(err instanceof Error ? err.message : 'Could not send rival request.');
+    }
   };
 
   return (
@@ -30,17 +37,18 @@ export default function AddRivalModal({ open, onClose, onSubmit }: AddRivalModal
       <div className="rv-modal" onClick={event => event.stopPropagation()}>
         <div className="rv-section-kicker">Rivals</div>
         <h3>Challenge someone</h3>
-        <p>Enter their Flyxa username. They will receive a rival request.</p>
+        <p>Enter their Flyxa username. They will receive a rival request if that username exists.</p>
         <input
           value={username}
           placeholder="@username"
           onChange={event => setUsername(event.target.value)}
           onKeyDown={event => {
-            if (event.key === 'Enter') submit();
+            if (event.key === 'Enter') void submit();
           }}
         />
-        <button type="button" disabled={!username.trim() || sent} onClick={submit}>
-          {sent ? 'Request sent' : 'Send request'}
+        {error && <p className="rv-modal-error">{error}</p>}
+        <button type="button" disabled={!username.trim() || sent} onClick={() => { void submit(); }}>
+          {sent ? 'Sending...' : 'Send request'}
         </button>
       </div>
     </div>

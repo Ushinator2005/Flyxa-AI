@@ -1,4 +1,5 @@
-﻿import type { Mascot, MascotStage } from '../../types/rivals.js';
+import { useState } from 'react';
+import type { Mascot, MascotStage } from '../../types/rivals.js';
 import { getStageProgress } from '../../lib/mascotProgression.js';
 import MascotCharacter from './MascotCharacter.js';
 
@@ -17,15 +18,18 @@ const STAGE_LABELS: Record<MascotStage, string> = {
 };
 
 const BAR_META = [
-  { key: 'discipline' as const, label: 'Discipline', color: 'var(--rv-blue)', max: 100 },
-  { key: 'psychology' as const, label: 'Psychology', color: 'var(--rv-purple)', max: 100 },
-  { key: 'consistency' as const, label: 'Consistency', color: 'var(--rv-green)', max: 100 },
-  { key: 'backtestHours' as const, label: 'Backtest Hours', color: 'var(--rv-amber)', max: 100 },
+  { key: 'dailyJournalScore' as const, label: 'Daily Journal', color: 'var(--rv-blue)', max: 100, suffix: '/100' },
+  { key: 'tradingJournalScore' as const, label: 'Trading Journal', color: 'var(--rv-amber)', max: 100, suffix: '%' },
+  { key: 'backtestSessions' as const, label: 'Backtesting Sessions', color: 'var(--rv-green)', max: 50, suffix: '' },
+  { key: 'processScore' as const, label: 'Process Score', color: 'var(--rv-purple)', max: 100, suffix: '/100' },
 ];
 
 export default function MascotCard({ mascot }: MascotCardProps) {
-  const { current, next, progressPct } = getStageProgress(mascot.streakDays);
+  const { current, next, progressPct } = getStageProgress(mascot.stats.processScore);
+  const [previewStage, setPreviewStage] = useState<MascotStage | null>(null);
+  const displayedStage = previewStage ?? current;
   const currentLabel = STAGE_LABELS[current];
+  const displayedLabel = STAGE_LABELS[displayedStage];
   const stageIndex = STAGES.indexOf(current);
 
   return (
@@ -33,11 +37,11 @@ export default function MascotCard({ mascot }: MascotCardProps) {
       <div className="mascot-header">
         <div className="mascot-top-row">
           <div>
-            <span className="rv-section-kicker">Mascot Progression</span>
+            <span className="rv-section-kicker">Process Progression</span>
             <h3 className="mascot-name">{mascot.name}</h3>
-            <div className="mascot-tier">{currentLabel} Tier</div>
+            <div className="mascot-tier">{previewStage ? `${displayedLabel} Preview` : `${currentLabel} Tier`}</div>
           </div>
-          <span className="mascot-chip">{mascot.streakDays} day streak</span>
+          <span className="mascot-chip">{mascot.stats.processScore}/100 process score</span>
         </div>
       </div>
 
@@ -53,15 +57,21 @@ export default function MascotCard({ mascot }: MascotCardProps) {
         </div>
         <div className="mascot-stage-row">
           {STAGES.map(stage => (
-            <span key={stage} className={`mascot-stage-pill ${stage === current ? 'active' : ''}`}>
+            <button
+              key={stage}
+              type="button"
+              className={`mascot-stage-pill ${stage === displayedStage ? 'active' : ''}`}
+              onClick={() => setPreviewStage(stage === previewStage ? null : stage)}
+              title={`Preview ${STAGE_LABELS[stage]} mascot`}
+            >
               {STAGE_LABELS[stage]}
-            </span>
+            </button>
           ))}
         </div>
       </div>
 
       <div className="mascot-visual">
-        <MascotCharacter stage={mascot.stage} health="healthy" size={150} />
+        <MascotCharacter stage={displayedStage} health="healthy" size={150} />
       </div>
 
       <div className="mascot-bars">
@@ -72,7 +82,7 @@ export default function MascotCard({ mascot }: MascotCardProps) {
             <div key={stat.key}>
               <div className="mascot-bar-head">
                 <span className="mascot-bar-label">{stat.label}</span>
-                <span className="mascot-bar-value" style={{ color: stat.color }}>{value}</span>
+                <span className="mascot-bar-value" style={{ color: stat.color }}>{value}{stat.suffix}</span>
               </div>
               <div className="mascot-track">
                 <div className="mascot-fill" style={{ width: `${pct}%`, background: stat.color }} />
@@ -84,10 +94,13 @@ export default function MascotCard({ mascot }: MascotCardProps) {
 
       <div className="mascot-footer">
         <span className="mascot-footer-note">
-          {next ? `${progressPct}% to ${STAGE_LABELS[next]}` : 'You are at max stage'}
+          {previewStage
+            ? `Previewing ${displayedLabel}; your current tier is ${currentLabel}`
+            : next
+              ? `${progressPct}% to ${STAGE_LABELS[next]}`
+              : 'You are at max stage'}
         </span>
       </div>
     </div>
   );
 }
-

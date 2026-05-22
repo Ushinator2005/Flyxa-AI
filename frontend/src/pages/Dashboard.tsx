@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, ClipboardCheck, X,
+  FileText, Crosshair, Target,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell,
@@ -519,6 +520,92 @@ export default function Dashboard() {
             >
               <X size={13} />
             </button>
+          </div>
+        )}
+
+        {/* Onboarding empty state */}
+        {filteredTrades.length === 0 && (
+          <div style={{
+            background: S1,
+            border: `1px solid ${BORDER}`,
+            borderRadius: 10,
+            padding: '36px 32px',
+            flexShrink: 0,
+          }}>
+            <div style={{ maxWidth: 560 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: AMBER, margin: '0 0 10px' }}>
+                Getting started
+              </p>
+              <h2 style={{ fontSize: 20, fontWeight: 600, color: T1, margin: '0 0 8px', letterSpacing: '-0.025em' }}>
+                Welcome to Flyxa
+              </h2>
+              <p style={{ fontSize: 13, color: T3, margin: '0 0 28px', lineHeight: 1.6 }}>
+                You haven't logged any trades yet. Here are a few things to set up before your first session.
+              </p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              {[
+                {
+                  icon: TrendingUp,
+                  label: 'Log your first trade',
+                  desc: 'Open the Trade Scanner and record your first entry.',
+                  to: '/scanner',
+                  accent: AMBER,
+                  accentDim: AMBER_DIM,
+                },
+                {
+                  icon: FileText,
+                  label: 'Build your trading plan',
+                  desc: 'Document your strategy, rules, and setups.',
+                  to: '/trading-plan',
+                  accent: COBALT,
+                  accentDim: COBALT_DIM,
+                },
+                {
+                  icon: Crosshair,
+                  label: 'Set your goals',
+                  desc: 'Define targets for consistency, profit, and process.',
+                  to: '/goals',
+                  accent: GREEN,
+                  accentDim: GREEN_DIM,
+                },
+                {
+                  icon: Target,
+                  label: 'Run a backtest',
+                  desc: 'Test your edge before risking real capital.',
+                  to: '/backtest',
+                  accent: T3,
+                  accentDim: BSUB,
+                },
+              ].map(({ icon: Icon, label, desc, to, accent, accentDim }) => (
+                <button
+                  key={to}
+                  type="button"
+                  onClick={() => navigate(to)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
+                    padding: '16px 18px', borderRadius: 8, textAlign: 'left',
+                    background: accentDim, border: `1px solid ${accent}22`,
+                    cursor: 'pointer', transition: 'border-color 0.15s, opacity 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = `${accent}55`; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = `${accent}22`; }}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 7,
+                    background: `${accent}22`, border: `1px solid ${accent}33`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <Icon size={15} color={accent} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: T1, margin: '0 0 4px', fontFamily: SANS }}>{label}</p>
+                    <p style={{ fontSize: 11, color: T3, margin: 0, lineHeight: 1.5, fontFamily: SANS }}>{desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
