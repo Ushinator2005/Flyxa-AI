@@ -36,12 +36,6 @@ const C = {
   acc: '#f59e0b', grn: '#22d68a', red: '#f05252',
 };
 
-const SECTION_LABEL_STYLE: CSSProperties = {
-  fontSize: 9.5, fontWeight: 500, letterSpacing: '0.12em',
-  textTransform: 'uppercase', color: C.t2,
-};
-const CARD_BORDER = `1px solid ${C.b0}`;
-
 
 const emotions = ['Frustrated', 'Anxious', 'Neutral', 'Focused', 'Confident'] as const;
 const biasOptions: BiasValue[] = ['Bull', 'Bear', 'Neutral'];
@@ -482,9 +476,6 @@ export default function FlyxaAIPreSession() {
   }, [activeRiskPatterns, confirmedEdgePatterns, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
 
   const rthTiming = useMemo(() => getRthTiming(now), [now]);
-  const subtitle = `${etDateLabel(now)} | ${
-    rthTiming.marketOpenNow ? 'RTH open now' : `RTH opens in ${formatDuration(rthTiming.minutesUntilOpen)}`
-  }`;
   const emotionLogged = emotion.trim().length > 0;
   const activeOathItems: ChecklistItem[] = storedOathItems ?? oathChecklistItems;
 
@@ -637,505 +628,388 @@ export default function FlyxaAIPreSession() {
     );
   }
 
+  const readinessColor = readiness.status === 'Ready' ? C.grn : readiness.status === 'Caution' ? C.acc : C.red;
+
   return (
-    <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ backgroundColor: C.d0, color: C.t0 }}>
-      <div className="h-full overflow-hidden">
-        <main className="min-h-0 h-full overflow-hidden" style={{ backgroundColor: C.d0 }}>
-          <div className="flex h-full min-h-0 flex-col">
-            <section className="border-b px-6 py-5" style={{ borderColor: C.b0 }}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: C.t2 }}>Flyxa AI</p>
-                  <h1 className="mt-2 text-[24px] font-bold tracking-[-0.02em]" style={{ color: C.t0 }}>Pre-session oath</h1>
-                  <p className="mt-1 text-[12px]" style={{ color: C.t2 }}>{subtitle}</p>
-                </div>
-                <div className="rounded-[8px] px-3 py-2 text-right" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p className="flex items-center justify-end gap-2 text-[11px]">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: rthTiming.marketOpenToday ? C.grn : C.t2 }} />
-                    <span style={{ color: rthTiming.marketOpenToday ? C.grn : C.t1 }}>
-                      {rthTiming.marketOpenToday ? 'Market open today' : 'Market closed'}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-[12px]" style={{ color: C.t1 }}>
-                    {lastSession
-                      ? `Last session ${formatSignedCurrency(lastSession.netPnl)} (${lastSession.tradeCount} trades)`
-                      : 'Last session result unavailable'}
-                  </p>
-                </div>
-              </div>
-            </section>
+    <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-            <section className="border-b px-5 py-4" style={{ borderColor: C.b0, backgroundColor: C.d1 }}>
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
-                <div
-                  className="rounded-[8px] border px-4 py-3"
-                  style={{
-                    borderColor: readiness.status === 'Ready'
-                      ? 'rgba(34,214,138,0.28)'
-                      : readiness.status === 'Caution'
-                        ? 'rgba(245,158,11,0.28)'
-                        : 'rgba(240,82,82,0.28)',
-                    backgroundColor: readiness.status === 'Ready'
-                      ? 'rgba(34,214,138,0.08)'
-                      : readiness.status === 'Caution'
-                        ? 'rgba(245,158,11,0.08)'
-                        : 'rgba(240,82,82,0.08)',
-                  }}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p style={SECTION_LABEL_STYLE}>Readiness verdict</p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <span
-                          className="rounded-[4px] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
-                          style={{
-                            color: readiness.status === 'Ready' ? C.grn : readiness.status === 'Caution' ? C.acc : C.red,
-                            backgroundColor: readiness.status === 'Ready'
-                              ? 'rgba(34,214,138,0.12)'
-                              : readiness.status === 'Caution'
-                                ? 'rgba(245,158,11,0.12)'
-                                : 'rgba(240,82,82,0.12)',
-                            border: `1px solid ${readiness.status === 'Ready'
-                              ? 'rgba(34,214,138,0.28)'
-                              : readiness.status === 'Caution'
-                                ? 'rgba(245,158,11,0.28)'
-                                : 'rgba(240,82,82,0.28)'}`,
-                          }}
-                        >
-                          {readiness.status}
-                        </span>
-                        <span className="font-mono text-[14px] font-semibold" style={{ color: C.t0 }}>{readiness.score}/100</span>
-                      </div>
-                    </div>
-                    <p className="max-w-[520px] text-[12px] leading-[1.6]" style={{ color: C.t1 }}>
-                      {readiness.summary}
-                    </p>
-                  </div>
-                  {readiness.reasons.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {readiness.reasons.map(reason => (
-                        <span key={reason} className="rounded-[4px] border px-2 py-1 text-[10.5px]" style={{ borderColor: C.b0, color: C.t1, backgroundColor: C.d3 }}>
-                          {reason}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+      {/* ─── Header ─────────────────────────────────────────────── */}
+      <header style={{ padding: '11px 20px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>Pre-Session</p>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: C.t0, letterSpacing: '-0.02em', marginTop: 2 }}>Trader Oath</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: C.t1 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: rthTiming.marketOpenToday ? C.grn : C.t2, flexShrink: 0 }} />
+            <span>{rthTiming.marketOpenToday ? 'RTH open' : `RTH in ${formatDuration(rthTiming.minutesUntilOpen)}`}</span>
+            <span style={{ color: C.t2 }}>·</span>
+            <span>{etDateLabel(now)}</span>
+            {lastSession && (
+              <>
+                <span style={{ color: C.t2 }}>·</span>
+                <span style={{ color: lastSession.netPnl >= 0 ? C.grn : C.red }}>last {formatSignedCurrency(lastSession.netPnl)}</span>
+              </>
+            )}
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 5,
+            border: `1px solid ${readinessColor}40`, backgroundColor: `${readinessColor}10`,
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: readinessColor }}>{readiness.status}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: C.t0 }}>{readiness.score}</span>
+          </div>
+        </div>
+      </header>
 
-                <div className="rounded-[8px] border px-4 py-3" style={{ borderColor: C.b0, backgroundColor: C.d2 }}>
-                  <p style={SECTION_LABEL_STYLE}>Behavior scan</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <div className="rounded-[6px] border px-2.5 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="font-mono text-[13px] font-semibold" style={{ color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 }}>
-                        {recentBehavior.planAdherence === null ? '—' : `${recentBehavior.planAdherence}%`}
-                      </p>
-                      <p className="mt-1 text-[10px]" style={{ color: C.t2 }}>Plan adherence</p>
-                    </div>
-                    <div className="rounded-[6px] border px-2.5 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="font-mono text-[13px] font-semibold" style={{ color: recentBehavior.revengeTagged > 0 ? C.red : C.t0 }}>
-                        {recentBehavior.revengeTagged}
-                      </p>
-                      <p className="mt-1 text-[10px]" style={{ color: C.t2 }}>Revenge tags</p>
-                    </div>
-                    <div className="rounded-[6px] border px-2.5 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="font-mono text-[13px] font-semibold" style={{ color: C.t0 }}>
-                        {checklistTotals.completed}/{checklistTotals.total}
-                      </p>
-                      <p className="mt-1 text-[10px]" style={{ color: C.t2 }}>Checks done</p>
-                    </div>
-                  </div>
+      {/* ─── Body ───────────────────────────────────────────────── */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Left sidebar — inputs */}
+        <aside style={{
+          width: 268, flexShrink: 0, borderRight: `1px solid ${C.b0}`,
+          overflowY: 'auto', padding: '18px 14px',
+          display: 'flex', flexDirection: 'column', gap: 0,
+        }}>
+
+          {/* State of mind */}
+          <div style={{ marginBottom: 18 }}>
+            <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>State of mind</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {emotions.map(em => {
+                const sel = emotion === em;
+                const ec = em === 'Frustrated' ? C.red : em === 'Anxious' ? '#f97316' : em === 'Confident' ? C.grn : C.acc;
+                return (
+                  <button key={em} type="button" onClick={() => setEmotionAndPersist(em)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 5,
+                    border: `1px solid ${sel ? ec + '50' : C.b0}`,
+                    backgroundColor: sel ? ec + '12' : 'transparent',
+                    color: sel ? ec : C.t1, fontSize: 12, fontWeight: sel ? 500 : 400,
+                    cursor: 'pointer', textAlign: 'left', width: '100%',
+                  }}>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, backgroundColor: sel ? ec : C.b1 }} />
+                    {em}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea
+              id="presession-note" value={note}
+              onChange={e => setNoteAndPersist(e.target.value)}
+              style={{
+                marginTop: 8, width: '100%', height: 64, resize: 'none', borderRadius: 5,
+                border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t0,
+                fontSize: 12, padding: '7px 10px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+              }}
+              placeholder="Pre-open note..."
+            />
+          </div>
+
+          <div style={{ height: 1, backgroundColor: C.b0, marginBottom: 18 }} />
+
+          {/* Market bias */}
+          <div style={{ marginBottom: 18 }}>
+            <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 10 }}>Market bias</p>
+            {(['ES', 'NQ'] as const).map(instrument => (
+              <div key={instrument} style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 10, fontFamily: 'monospace', color: C.t2, marginBottom: 5, letterSpacing: '0.06em' }}>{instrument}</p>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {biasOptions.map(opt => {
+                    const sel = bias[instrument] === opt;
+                    const oc = opt === 'Bull' ? C.grn : opt === 'Bear' ? C.red : C.acc;
+                    return (
+                      <button key={opt} type="button" onClick={() => setBiasAndPersist(instrument, opt)} style={{
+                        flex: 1, padding: '5px 0', borderRadius: 4,
+                        border: `1px solid ${sel ? oc + '55' : C.b0}`,
+                        backgroundColor: sel ? oc + '18' : 'transparent',
+                        fontSize: 11, fontWeight: sel ? 600 : 400,
+                        color: sel ? oc : C.t2, cursor: 'pointer',
+                      }}>{opt}</button>
+                    );
+                  })}
                 </div>
               </div>
-            </section>
+            ))}
+          </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <section
-                  className="rounded-[8px] p-5 xl:col-span-2"
-                  style={{
-                    backgroundColor: C.d2,
-                    border: `1px solid rgba(245,158,11,0.32)`,
-                  }}
-                >
-                  <div className="grid gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
-                    <div>
-                      <p style={SECTION_LABEL_STYLE}>Before you trade</p>
-                      <p className="mt-3 text-[13px] leading-[1.8]" style={{ color: C.t1 }}>
-                        This is the line between planned execution and emotional clicking. If any part of this feels false today, size down or stand down.
-                      </p>
-                      <div className="mt-5 space-y-2.5">
-                        {preTradeReminderItems.map((item, index) => (
-                          <div key={item} className="flex gap-3 rounded-[6px] border px-3.5 py-3" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                            <span className="font-mono text-[12px]" style={{ color: C.acc }}>{String(index + 1).padStart(2, '0')}</span>
-                            <p className="text-[13px] leading-[1.65]" style={{ color: C.t0 }}>{item}</p>
-                          </div>
-                        ))}
+          <div style={{ height: 1, backgroundColor: C.b0, marginBottom: 18 }} />
+
+          {/* Risk limits */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>Risk limits</p>
+              <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor}
+                style={{ fontSize: 10, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >{riskEditOpen ? 'cancel' : 'edit'}</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+              {[
+                { label: 'max loss', value: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
+                { label: 'max trades', value: String(riskLimits.maxTrades), color: C.t0 },
+                { label: 'contracts', value: String(riskLimits.maxContracts), color: C.t0 },
+                { label: 'target', value: formatCurrency(riskLimits.target), color: C.grn },
+              ].map(stat => (
+                <div key={stat.label} style={{ padding: '8px 10px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                  <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: stat.color }}>{stat.value}</p>
+                  <p style={{ fontSize: 10, color: C.t2, marginTop: 2 }}>{stat.label}</p>
+                </div>
+              ))}
+            </div>
+            {riskEditOpen && (
+              <div style={{ marginTop: 8, padding: 12, borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {([
+                    ['daily_loss_limit', 'Max loss', '$'],
+                    ['max_trades_per_day', 'Max trades', ''],
+                    ['max_contracts_per_trade', 'Contracts', ''],
+                    ['account_size', 'Account size', '$'],
+                    ['risk_percentage', 'Risk %', '%'],
+                  ] as const).map(([field, label, suffix]) => (
+                    <label key={field} style={{ fontSize: 10, color: C.t2 }}>
+                      {label}
+                      <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 7px' }}>
+                        {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
+                        <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'}
+                          value={riskDraft[field]}
+                          onChange={e => updateRiskDraft(field, e.target.value)}
+                          style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }}
+                        />
+                        {suffix === '%' && <span style={{ color: C.t2, fontSize: 11 }}>%</span>}
                       </div>
-                    </div>
+                    </label>
+                  ))}
+                </div>
+                {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginTop: 5 }}>{riskSaveError}</p>}
+                <button type="button" onClick={saveRiskLimits} disabled={riskSaving}
+                  style={{ marginTop: 8, width: '100%', padding: '6px 0', borderRadius: 4, border: `1px solid rgba(245,158,11,0.3)`, backgroundColor: 'rgba(245,158,11,0.09)', color: C.acc, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                >{riskSaving ? 'Saving...' : 'Save limits'}</button>
+              </div>
+            )}
+          </div>
 
-                    <div className="rounded-[8px] border p-4" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <div className="flex items-center justify-between gap-3">
-                        <p style={SECTION_LABEL_STYLE}>Trader oath</p>
-                        <div className="flex items-center gap-2">
-                          {!oathEditOpen && (
-                            <span className="rounded-[4px] border px-2.5 py-1.5 font-mono text-[11px]" style={{ borderColor: C.b0, color: C.t1 }}>
-                              {activeOathItems.filter(item => Boolean(checklistState[item.id])).length}/{activeOathItems.length}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
-                            className="rounded-[4px] border px-2 py-1 text-[11px]"
-                            style={{ borderColor: C.b1, backgroundColor: C.d3, color: oathEditOpen ? C.t1 : C.acc }}
-                          >
-                            {oathEditOpen ? 'Cancel' : 'Edit'}
-                          </button>
-                        </div>
-                      </div>
+          <div style={{ height: 1, backgroundColor: C.b0, marginBottom: 18 }} />
 
-                      {oathEditOpen ? (
-                        <div className="mt-4 space-y-2">
-                          {oathDraft.map((item, idx) => (
-                            <div key={item.id} className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={item.label}
-                                onChange={e => {
-                                  const next = [...oathDraft];
-                                  next[idx] = { ...item, label: e.target.value };
-                                  setOathDraft(next);
-                                }}
-                                className="flex-1 rounded-[6px] border px-3 py-2 text-[12px] outline-none"
-                                style={{ borderColor: C.b0, backgroundColor: C.d2, color: C.t0 }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setOathDraft(oathDraft.filter((_, i) => i !== idx))}
-                                className="flex h-7 w-7 items-center justify-center rounded-[4px] border text-[11px]"
-                                style={{ borderColor: C.b1, backgroundColor: C.d2, color: C.t2 }}
-                                aria-label="Remove oath"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => setOathDraft([...oathDraft, { id: `oath-custom-${Date.now()}`, label: '' }])}
-                            className="mt-1 w-full rounded-[6px] border py-2 text-[12px]"
-                            style={{ borderColor: C.b1, backgroundColor: 'transparent', color: C.t2 }}
-                          >
-                            + Add oath
-                          </button>
-                          <button
-                            type="button"
-                            onClick={saveOathItems}
-                            className="mt-1 w-full rounded-[6px] border py-2 text-[12px] font-medium"
-                            style={{ borderColor: 'rgba(245,158,11,0.4)', backgroundColor: 'rgba(245,158,11,0.1)', color: C.acc }}
-                          >
-                            Save oaths
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-4 space-y-3">
-                          {activeOathItems.map(item => {
-                            const checked = Boolean(checklistState[item.id]);
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => toggleChecklist(item)}
-                                className="flex w-full items-start gap-3 rounded-[6px] border px-3.5 py-3 text-left"
-                                style={{
-                                  borderColor: checked ? 'rgba(245,158,11,0.34)' : C.b0,
-                                  backgroundColor: checked ? 'rgba(245,158,11,0.08)' : C.d2,
-                                }}
-                              >
-                                {customCheckbox(checked)}
-                                <p className="text-[13px] leading-[1.55]" style={{ color: checked ? C.t0 : C.t1 }}>{item.label}</p>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-[8px] p-4" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p style={SECTION_LABEL_STYLE}>How are you feeling?</p>
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-5">
-                    {emotions.map(item => {
-                      const selected = emotion === item;
-                      return (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => setEmotionAndPersist(item)}
-                          className="rounded-[6px] border px-2 py-2 text-center text-[12px] font-medium"
-                          style={{
-                            borderColor: selected ? C.acc : C.b0,
-                            backgroundColor: selected ? 'rgba(245,158,11,0.10)' : C.d3,
-                            color: selected ? C.acc : C.t0,
-                          }}
-                        >
-                          {item}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <label className="mt-3 block text-[11px]" style={{ color: C.t2 }} htmlFor="presession-note">Anything on your mind before the open?</label>
-                  <textarea
-                    id="presession-note"
-                    value={note}
-                    onChange={event => setNoteAndPersist(event.target.value)}
-                    className="mt-2 h-24 w-full resize-none rounded-[6px] border px-3 py-2 text-[12px] outline-none"
-                    style={{ borderColor: C.b0, backgroundColor: C.d3, color: C.t0 }}
-                    placeholder="Quick pre-open note..."
-                  />
-                </section>
-
-                <section className="rounded-[8px] p-4" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <div className="flex items-center justify-between gap-3">
-                    <p style={SECTION_LABEL_STYLE}>Today&apos;s risk limits</p>
-                    <button
-                      type="button"
-                      onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor}
-                      className="rounded-[4px] border px-2 py-1 text-[11px]"
-                      style={{ borderColor: C.b1, backgroundColor: C.d3, color: riskEditOpen ? C.t1 : C.acc }}
-                    >
-                      {riskEditOpen ? 'Cancel' : 'Edit'}
-                    </button>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div className="rounded-[6px] border px-3 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="text-[12px] font-semibold" style={{ color: C.red }}>{formatCurrency(-riskLimits.maxDailyLoss)}</p>
-                      <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>Max daily loss</p>
-                    </div>
-                    <div className="rounded-[6px] border px-3 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="text-[12px] font-semibold" style={{ color: C.t0 }}>{riskLimits.maxTrades}</p>
-                      <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>Max trades</p>
-                    </div>
-                    <div className="rounded-[6px] border px-3 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="text-[12px] font-semibold" style={{ color: C.t0 }}>{riskLimits.maxContracts}</p>
-                      <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>Max contracts</p>
-                    </div>
-                    <div className="rounded-[6px] border px-3 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="text-[12px] font-semibold" style={{ color: C.grn }}>{formatCurrency(riskLimits.target)}</p>
-                      <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>Session target</p>
-                    </div>
-                  </div>
-                  {riskEditOpen && (
-                    <div className="mt-3 rounded-[8px] border p-3" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {[
-                          ['daily_loss_limit', 'Max daily loss', '$'],
-                          ['max_trades_per_day', 'Max trades', ''],
-                          ['max_contracts_per_trade', 'Max contracts', ''],
-                          ['account_size', 'Account size', '$'],
-                          ['risk_percentage', 'Risk per trade %', '%'],
-                        ].map(([field, label, suffix]) => (
-                          <label key={field} className="text-[11px]" style={{ color: C.t2 }}>
-                            {label}
-                            <div className="mt-1 flex items-center rounded-[5px] border px-2" style={{ borderColor: C.b0, backgroundColor: C.d2 }}>
-                              {suffix === '$' && <span style={{ color: C.t2 }}>$</span>}
-                              <input
-                                type="number"
-                                min="0"
-                                step={field === 'risk_percentage' ? '0.1' : '1'}
-                                value={riskDraft[field as keyof typeof riskDraft]}
-                                onChange={event => updateRiskDraft(field as keyof typeof riskDraft, event.target.value)}
-                                className="min-w-0 flex-1 bg-transparent py-1.5 text-[12px] outline-none"
-                                style={{ color: C.t0 }}
-                              />
-                              {suffix === '%' && <span style={{ color: C.t2 }}>%</span>}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                      {riskSaveError && <p className="mt-2 text-[11px]" style={{ color: C.red }}>{riskSaveError}</p>}
-                      <div className="mt-3 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={saveRiskLimits}
-                          disabled={riskSaving}
-                          className="rounded-[5px] border px-3 py-1.5 text-[11px] font-medium disabled:opacity-60"
-                          style={{ borderColor: 'rgba(245,158,11,0.35)', backgroundColor: 'rgba(245,158,11,0.12)', color: C.acc }}
-                        >
-                          {riskSaving ? 'Saving...' : 'Save risk limits'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-[8px] p-4" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p style={SECTION_LABEL_STYLE}>Flyxa pattern watch</p>
-                  <div className="mt-3 space-y-2">
-                    {activeRiskPatterns.map(pattern => (
-                      <article key={`watch-${pattern.id}`} className="grid overflow-hidden rounded-[8px]" style={{ gridTemplateColumns: '4px minmax(0,1fr)', border: `1px solid ${C.red}30` }}>
-                        <div style={{ backgroundColor: C.red }} />
-                        <div className="px-3 py-2" style={{ backgroundColor: C.d3 }}>
-                          <p className="text-[12px] font-semibold" style={{ color: C.red }}>Watch: {pattern.title}</p>
-                          <p className="mt-1 text-[11px] leading-[1.6]" style={{ color: C.t1 }}>{buildPatternInstruction(pattern, 'watch')}</p>
-                        </div>
-                      </article>
-                    ))}
-                    {confirmedEdgePatterns.map(pattern => (
-                      <article key={`protect-${pattern.id}`} className="grid overflow-hidden rounded-[8px]" style={{ gridTemplateColumns: '4px minmax(0,1fr)', border: `1px solid ${C.grn}30` }}>
-                        <div style={{ backgroundColor: C.grn }} />
-                        <div className="px-3 py-2" style={{ backgroundColor: C.d3 }}>
-                          <p className="text-[12px] font-semibold" style={{ color: C.grn }}>Protect: {pattern.title}</p>
-                          <p className="mt-1 text-[11px] leading-[1.6]" style={{ color: C.t1 }}>{buildPatternInstruction(pattern, 'protect')}</p>
-                        </div>
-                      </article>
-                    ))}
-                    {activeRiskPatterns.length === 0 && (
-                      <div className="rounded-[8px] border px-3 py-2" style={{ borderColor: `${C.grn}30`, backgroundColor: `rgba(34,214,138,0.07)` }}>
-                        <p className="text-[12px] font-semibold" style={{ color: C.grn }}>No active risk flags today</p>
-                        <p className="mt-1 text-[11px]" style={{ color: C.t1 }}>Keep your process tight and continue executing your highest-confidence setups.</p>
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <section className="rounded-[8px] p-4" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p style={SECTION_LABEL_STYLE}>Market context</p>
-                  <div className="mt-3 space-y-3">
-                    {(['ES', 'NQ'] as const).map(instrument => (
-                      <div key={instrument}>
-                        <p className="text-[11px]" style={{ color: C.t2 }}>{instrument} bias</p>
-                        <div className="mt-1 flex gap-2">
-                          {biasOptions.map(option => {
-                            const selected = bias[instrument] === option;
-                            const isBull = option === 'Bull';
-                            const isBear = option === 'Bear';
-                            const selectedColor = isBull ? C.grn : isBear ? C.red : C.acc;
-                            const selectedBg = isBull
-                              ? 'rgba(34,214,138,0.12)'
-                              : isBear
-                                ? 'rgba(240,82,82,0.12)'
-                                : 'rgba(245,158,11,0.10)';
-                            const label = option === 'Bull' ? 'Bullish' : option === 'Bear' ? 'Bearish' : 'Neutral';
-                            return (
-                              <button
-                                key={`${instrument}-${option}`}
-                                type="button"
-                                onClick={() => setBiasAndPersist(instrument, option)}
-                                className="rounded-[4px] border px-3 py-1 text-[11px]"
-                                style={{
-                                  borderColor: selected ? selectedColor : C.b0,
-                                  backgroundColor: selected ? selectedBg : C.d3,
-                                  color: selected ? selectedColor : C.t1,
-                                }}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="rounded-[6px] border px-3 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                      <p className="text-[11px]" style={{ color: C.t2 }}>News today</p>
-                      <p className="mt-1 text-[12px]" style={{ color: C.t0 }}>No major news</p>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-[8px] p-4 xl:col-span-2" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p style={SECTION_LABEL_STYLE}>Pre-session checklist</p>
-                  <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: C.t1 }}>Mental checks</p>
-                      <div className="mt-2 space-y-2">
-                        {mentalChecklistWithAdaptiveItems.map(item => {
-                          const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => toggleChecklist(item)}
-                              className="flex w-full items-start gap-2 rounded-[6px] border px-2.5 py-2 text-left"
-                              style={{ borderColor: C.b0, backgroundColor: C.d3 }}
-                            >
-                              {customCheckbox(checked)}
-                              <div>
-                                <p className="text-[12px]" style={{ color: C.t0 }}>{item.label}</p>
-                                {item.autoFromEmotion && <p className="text-[10px]" style={{ color: C.t2 }}>Auto-linked to emotion log</p>}
-                                {item.source && <p className="text-[10px]" style={{ color: C.t2 }}>{item.source}</p>}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: C.t1 }}>Technical checks</p>
-                      <div className="mt-2 space-y-2">
-                        {technicalChecklistItems.map(item => {
-                          const checked = Boolean(checklistState[item.id]);
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => toggleChecklist(item)}
-                              className="flex w-full items-start gap-2 rounded-[6px] border px-2.5 py-2 text-left"
-                              style={{ borderColor: C.b0, backgroundColor: C.d3 }}
-                            >
-                              {customCheckbox(checked)}
-                              <div>
-                                <p className="text-[12px]" style={{ color: C.t0 }}>{item.label}</p>
-                                {item.source && <p className="text-[10px]" style={{ color: C.t2 }}>From pattern: {item.source}</p>}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-[8px] p-4 xl:col-span-2" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p style={SECTION_LABEL_STYLE}>Today&apos;s session plan</p>
-                  <div className="mt-3 space-y-2">
-                    {sessionPlan.map((row, index) => (
-                      <div key={row.id} className="flex items-start gap-3 rounded-[6px] border px-3 py-2" style={{ borderColor: C.b0, backgroundColor: C.d3 }}>
-                        <span className="mt-0.5 text-[11px]" style={{ color: C.t2 }}>{index + 1}.</span>
-                        <p className="flex-1 text-[12px] leading-[1.6]" style={{ color: C.t0 }}>{row.rule}</p>
-                        <span className="shrink-0 rounded-[4px] px-2 py-[3px] text-[10px] font-semibold uppercase" style={{ ...sourceBadgeStyle(row.source), letterSpacing: '0.08em' }}>
-                          {row.source}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="rounded-[8px] p-4 xl:col-span-2" style={{ backgroundColor: C.d2, border: CARD_BORDER }}>
-                  <p className="mb-3 text-[12px] leading-[1.6]" style={{ color: C.t1 }}>
-                    Starting the session confirms this oath is complete enough to trade with discipline. If it is not, use the dashboard instead of the order buttons.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={startSession}
-                      className="rounded-[6px] border px-4 py-2 text-[12px] font-semibold"
-                      style={{ borderColor: C.acc, backgroundColor: C.acc, color: '#0e0d0d' }}
-                    >
-                      I accept the oath — start session
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/')}
-                      className="rounded-[6px] border px-4 py-2 text-[12px] font-semibold"
-                      style={{ borderColor: C.b1, backgroundColor: 'transparent', color: C.t1 }}
-                    >
-                      Skip brief and go to dashboard
-                    </button>
-                  </div>
-                </section>
+          {/* Behavior scan */}
+          <div>
+            <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 10 }}>Behavior scan</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: C.t2 }}>Plan adherence</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 }}>
+                  {recentBehavior.planAdherence === null ? '—' : `${recentBehavior.planAdherence}%`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: C.t2 }}>Revenge tags</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: recentBehavior.revengeTagged > 0 ? C.red : C.t0 }}>{recentBehavior.revengeTagged}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: C.t2 }}>Checks done</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: C.t0 }}>{checklistTotals.completed}/{checklistTotals.total}</span>
               </div>
             </div>
+            {readiness.reasons.length > 0 && (
+              <div style={{ marginTop: 10, padding: '9px 10px', borderRadius: 5, border: `1px solid ${readinessColor}28`, backgroundColor: `${readinessColor}08` }}>
+                <p style={{ fontSize: 11, color: C.t1, lineHeight: 1.65 }}>{readiness.summary}</p>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* ─── Main content ─────────────────────────────────────── */}
+        <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '22px 26px', display: 'flex', flexDirection: 'column', gap: 26 }}>
+
+          {/* Trader oath */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em' }}>Trader Oath</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.t2 }}>
+                  {activeOathItems.filter(item => Boolean(checklistState[item.id])).length}/{activeOathItems.length}
+                </span>
+                <button type="button" onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
+                  style={{ fontSize: 11, color: oathEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >{oathEditOpen ? 'cancel' : 'edit'}</button>
+              </div>
+            </div>
+            {oathEditOpen ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {oathDraft.map((item, idx) => (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="text" value={item.label}
+                      onChange={e => { const next = [...oathDraft]; next[idx] = { ...item, label: e.target.value }; setOathDraft(next); }}
+                      style={{ flex: 1, borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t0, fontSize: 12, padding: '8px 10px', outline: 'none', fontFamily: 'inherit' }}
+                    />
+                    <button type="button" onClick={() => setOathDraft(oathDraft.filter((_, i) => i !== idx))}
+                      style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t2, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+                      aria-label="Remove">✕</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setOathDraft([...oathDraft, { id: `oath-custom-${Date.now()}`, label: '' }])}
+                  style={{ padding: '7px 0', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: 'transparent', color: C.t2, fontSize: 12, cursor: 'pointer' }}
+                >+ Add</button>
+                <button type="button" onClick={saveOathItems}
+                  style={{ padding: '7px 0', borderRadius: 5, border: `1px solid rgba(245,158,11,0.35)`, backgroundColor: 'rgba(245,158,11,0.1)', color: C.acc, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                >Save</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {activeOathItems.map((item, idx) => {
+                  const checked = Boolean(checklistState[item.id]);
+                  return (
+                    <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 14px',
+                      borderRadius: 5, border: `1px solid ${checked ? 'rgba(245,158,11,0.22)' : C.b0}`,
+                      backgroundColor: checked ? 'rgba(245,158,11,0.06)' : C.d2,
+                      cursor: 'pointer', textAlign: 'left', width: '100%',
+                    }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 10, color: checked ? C.acc : C.t2, flexShrink: 0, marginTop: 3 }}>{String(idx + 1).padStart(2, '0')}</span>
+                      {customCheckbox(checked)}
+                      <p style={{ fontSize: 13, lineHeight: 1.6, color: checked ? C.t0 : C.t1, flex: 1 }}>{item.label}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div style={{ height: 1, backgroundColor: C.b0 }} />
+
+          {/* Before you trade */}
+          <div>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em', marginBottom: 10 }}>Before you trade</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {preTradeReminderItems.map((item, idx) => (
+                <div key={item} style={{ display: 'flex', gap: 14, padding: '9px 12px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 10, color: C.t2, flexShrink: 0, marginTop: 2 }}>{String(idx + 1).padStart(2, '0')}</span>
+                  <p style={{ fontSize: 12, lineHeight: 1.65, color: C.t1 }}>{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ height: 1, backgroundColor: C.b0 }} />
+
+          {/* Checklist */}
+          <div>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em', marginBottom: 12 }}>Pre-session checklist</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 500 }}>Mental</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {mentalChecklistWithAdaptiveItems.map(item => {
+                    const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
+                    return (
+                      <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px',
+                        borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2,
+                        cursor: 'pointer', textAlign: 'left', width: '100%',
+                      }}>
+                        {customCheckbox(checked)}
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 11.5, color: C.t0, lineHeight: 1.45 }}>{item.label}</p>
+                          {(item.autoFromEmotion || item.source) && (
+                            <p style={{ fontSize: 9.5, color: C.t2, marginTop: 1 }}>{item.autoFromEmotion ? 'auto-linked to emotion' : item.source}</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 500 }}>Technical</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {technicalChecklistItems.map(item => {
+                    const checked = Boolean(checklistState[item.id]);
+                    return (
+                      <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px',
+                        borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2,
+                        cursor: 'pointer', textAlign: 'left', width: '100%',
+                      }}>
+                        {customCheckbox(checked)}
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 11.5, color: C.t0, lineHeight: 1.45 }}>{item.label}</p>
+                          {item.source && <p style={{ fontSize: 9.5, color: C.t2, marginTop: 1 }}>{item.source}</p>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ height: 1, backgroundColor: C.b0 }} />
+
+          {/* Session plan */}
+          <div>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em', marginBottom: 10 }}>Session plan</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {sessionPlan.map((row, idx) => (
+                <div key={row.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '10px 12px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 10, color: C.t2, flexShrink: 0, marginTop: 3 }}>{idx + 1}</span>
+                  <p style={{ flex: 1, fontSize: 12, lineHeight: 1.65, color: C.t0 }}>{row.rule}</p>
+                  <span style={{ ...sourceBadgeStyle(row.source), flexShrink: 0, borderRadius: 4, padding: '3px 8px', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{row.source}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pattern watch — only renders if patterns are active */}
+          {(activeRiskPatterns.length > 0 || confirmedEdgePatterns.length > 0) && (
+            <>
+              <div style={{ height: 1, backgroundColor: C.b0 }} />
+              <div>
+                <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em', marginBottom: 10 }}>Pattern watch</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {activeRiskPatterns.map(p => (
+                    <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', borderRadius: 5, overflow: 'hidden', border: `1px solid rgba(240,82,82,0.2)` }}>
+                      <div style={{ backgroundColor: C.red }} />
+                      <div style={{ padding: '9px 12px', backgroundColor: C.d2 }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: C.red }}>Watch: {p.title}</p>
+                        <p style={{ fontSize: 11, color: C.t1, marginTop: 2, lineHeight: 1.6 }}>{buildPatternInstruction(p, 'watch')}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {confirmedEdgePatterns.map(p => (
+                    <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', borderRadius: 5, overflow: 'hidden', border: `1px solid rgba(34,214,138,0.2)` }}>
+                      <div style={{ backgroundColor: C.grn }} />
+                      <div style={{ padding: '9px 12px', backgroundColor: C.d2 }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: C.grn }}>Lean in: {p.title}</p>
+                        <p style={{ fontSize: 11, color: C.t1, marginTop: 2, lineHeight: 1.6 }}>{buildPatternInstruction(p, 'protect')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* CTA */}
+          <div style={{ borderTop: `1px solid ${C.b0}`, paddingTop: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button type="button" onClick={startSession}
+              style={{
+                height: 36, padding: '0 22px', borderRadius: 5,
+                border: `1px solid ${C.acc}`, backgroundColor: C.acc,
+                color: '#0e0d0d', fontSize: 12, fontWeight: 700,
+                cursor: 'pointer', letterSpacing: '-0.01em',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.87'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+            >
+              Accept oath — begin session
+            </button>
+            <button type="button" onClick={() => navigate('/')}
+              style={{
+                height: 36, padding: '0 16px', borderRadius: 5,
+                border: `1px solid ${C.b1}`, backgroundColor: 'transparent',
+                color: C.t1, fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              Skip to dashboard
+            </button>
           </div>
         </main>
       </div>
