@@ -17,6 +17,7 @@ const TradeScanner = lazy(() => import('./pages/TradeScanner.js'));
 const MarketNews = lazy(() => import('./pages/MarketNews.js'));
 const FlyxaAI = lazy(() => import('./pages/FlyxaAI.js'));
 const FlyxaAIPatterns = lazy(() => import('./pages/FlyxaAIPatterns.js'));
+const FlyxaAIAsk = lazy(() => import('./pages/FlyxaAIAsk.js'));
 const FlyxaAIPreSession = lazy(() => import('./pages/FlyxaAIPreSession.js'));
 const FlyxaAIEmotionalFingerprint = lazy(() => import('./pages/FlyxaAIEmotionalFingerprint.js'));
 const FlyxaAIPostSession = lazy(() => import('./pages/FlyxaAIPostSession.js'));
@@ -364,6 +365,7 @@ export default function App() {
               <Route path="/market-news" element={<MarketNews />} />
               <Route path="/flyxa-ai" element={<FlyxaAI />} />
               <Route path="/flyxa-ai/patterns" element={<FlyxaAIPatterns />} />
+              <Route path="/flyxa-ai/ask" element={<FlyxaAIAsk />} />
               <Route path="/pre-session" element={<FlyxaAIPreSession />} />
               <Route path="/flyxa-ai/pre-session" element={<Navigate to="/pre-session" replace />} />
               <Route path="/flyxa-ai/emotional-fingerprint" element={<FlyxaAIEmotionalFingerprint />} />

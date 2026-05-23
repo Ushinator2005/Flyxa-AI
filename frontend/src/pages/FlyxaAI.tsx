@@ -1554,7 +1554,7 @@ export default function FlyxaAI() {
               { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
               { key: 'emotional', label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },
               { key: 'post-session', label: 'Post-session', to: '/flyxa-ai/post-session', end: false },
-              { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai', end: false },
+              { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai/ask', end: false },
             ].map(item => (
               <NavLink key={item.key} to={item.to} end={item.end}>
                 {({ isActive }) => (
