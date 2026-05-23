@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Trade as ApiTrade } from '../types/index.js';
 import useFlyxaStore, { createEmptyJournalEntry, DEFAULT_ACCOUNT_ID } from '../store/flyxaStore.js';
 import type { Trade as StoreTrade } from '../store/types.js';
@@ -182,12 +182,15 @@ export function evictTradeFromCache(_userId: string, _tradeId: string) {
   // Cache layer removed in favor of unified flyxa-store.
 }
 
+let legacyTradesRestorePromise: Promise<void> | null = null;
+
 export function useTrades() {
   const entries = useFlyxaStore((state) => state.entries);
   const activeAccountId = useFlyxaStore((state) => state.activeAccountId);
   const deletedTradeIds = useFlyxaStore((state) => state.deletedTradeIds);
   const addEntry = useFlyxaStore((state) => state.addEntry);
   const addTrade = useFlyxaStore((state) => state.addTrade);
+  const setEntries = useFlyxaStore((state) => state.setEntries);
   const updateTradeInStore = useFlyxaStore((state) => state.updateTrade);
   const deleteTradeInStore = useFlyxaStore((state) => state.deleteTrade);
 
@@ -207,6 +210,42 @@ export function useTrades() {
   const fetchTrades = useCallback(async () => {
     return;
   }, []);
+
+  useEffect(() => {
+    if (entries.length > 0 || legacyTradesRestorePromise) return;
+
+    legacyTradesRestorePromise = (async () => {
+      try {
+        const legacyTrades = await tradesApi.getAll();
+        if (!Array.isArray(legacyTrades) || legacyTrades.length === 0) return;
+        if (useFlyxaStore.getState().entries.length > 0) return;
+
+        const grouped = new Map<string, ReturnType<typeof createEmptyJournalEntry>>();
+
+        legacyTrades.forEach((trade) => {
+          const date = trade.trade_date ?? new Date().toISOString().slice(0, 10);
+          const accountId = trade.accountId ?? trade.account_id ?? activeAccountId ?? DEFAULT_ACCOUNT_ID;
+          const key = `${date}::${accountId}`;
+          let entry = grouped.get(key);
+
+          if (!entry) {
+            entry = createEmptyJournalEntry(date, accountId);
+            grouped.set(key, entry);
+          }
+
+          entry.trades.push(toStoreTrade(trade, entry.id, accountId));
+        });
+
+        const restoredEntries = Array.from(grouped.values()).filter(entry => entry.trades.length > 0);
+        if (restoredEntries.length > 0) {
+          setEntries(restoredEntries);
+          await flushSupabaseStoreNow();
+        }
+      } catch {
+        // Legacy table may not exist or backend may be offline; the journal store remains the source of truth.
+      }
+    })();
+  }, [activeAccountId, entries.length, setEntries]);
 
   const createTrade = useCallback(async (data: Partial<ApiTrade>): Promise<ApiTrade> => {
     const tradeDate = data.trade_date ?? new Date().toISOString().slice(0, 10);

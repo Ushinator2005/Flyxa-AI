@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -528,13 +529,13 @@ export default function Analytics() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div data-tour-id="analytics-header" className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-[18px] font-semibold leading-tight text-[var(--app-text)]">Analytics</h1>
           <p className="mt-1 text-xs text-[var(--app-text-muted)]">Performance breakdown for your selected period</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div data-tour-id="analytics-period-filter" className="flex flex-wrap gap-2">
           {PERIOD_OPTIONS.map(option => {
             const active = period === option.key;
             return (
@@ -555,7 +556,28 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      {accountTrades.length === 0 ? (
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-5 py-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Analytics locked</p>
+          <h2 className="mt-2 text-[16px] font-semibold text-[var(--app-text)]">Log trades to unlock performance breakdowns</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--app-text-muted)]">
+            Once you add trades, this page will show equity curve, win rate, session performance, confluence quality, and time-of-day stats.
+          </p>
+          <Link
+            to="/scanner"
+            className="mt-4 inline-flex h-9 items-center rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--app-bg)]"
+          >
+            Log first trade
+          </Link>
+        </section>
+      ) : filteredTrades.length === 0 ? (
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-5 py-5">
+          <h2 className="text-[15px] font-semibold text-[var(--app-text)]">No trades in this period</h2>
+          <p className="mt-2 text-sm text-[var(--app-text-muted)]">Switch to All or choose a wider period to review your full history.</p>
+        </section>
+      ) : null}
+
+      <div data-tour-id="analytics-metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <MetricCard
           label="Net P&L"
           value={formatSignedCurrency(metrics.netPnL)}
@@ -629,7 +651,7 @@ export default function Analytics() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+        <section data-tour-id="analytics-equity-curve" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-[var(--app-text)]">Cumulative P&amp;L</h2>
             <div className="flex items-center gap-3 text-xs text-[var(--app-text-muted)]">
@@ -685,7 +707,7 @@ export default function Analytics() {
           )}
         </section>
 
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+        <section data-tour-id="analytics-win-loss" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-[var(--app-text)]">Win / Loss</h2>
             <span className="rounded-md bg-[var(--accent-dim)] px-2.5 py-1 text-[11px] text-[var(--accent)]">
@@ -834,7 +856,7 @@ export default function Analytics() {
         </section>
       </div>
 
-      <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+      <section data-tour-id="analytics-time-of-day" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
         <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L by time of day</h3>
@@ -896,7 +918,7 @@ export default function Analytics() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+      <section data-tour-id="analytics-confluence" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
         <div className="mb-5 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-[var(--app-text)]">Confluence Performance</h3>
           <p className="text-xs text-[var(--app-text-muted)]">Ranked by net P&amp;L contribution</p>

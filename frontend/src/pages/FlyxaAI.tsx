@@ -1577,7 +1577,7 @@ export default function FlyxaAI() {
 
         <main className="min-h-0 overflow-hidden" style={{ backgroundColor: colors.d0 }}>
           <div className="flex h-full min-h-0 flex-col">
-            <section className="border-b px-6 py-5" style={{ borderColor: colors.b0 }}>
+            <section data-tour-id="flyxa-ai-header" className="border-b px-6 py-5" style={{ borderColor: colors.b0 }}>
               <div className="flex items-end justify-between gap-6">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">
@@ -1721,7 +1721,27 @@ export default function FlyxaAI() {
               )}
             </section>
 
-            <section className="border-t" style={{ borderColor: colors.b0 }}>
+            {safeAccountTrades.length === 0 && (
+              <section className="border-t px-6 py-5" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                <div className="rounded-[8px] border px-4 py-4" style={{ borderColor: colors.b1, backgroundColor: colors.d2 }}>
+                  <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.acc }}>Flyxa AI locked</p>
+                  <h2 className="mt-2 text-[16px] font-semibold" style={{ color: colors.t0 }}>Log trades before asking for analysis</h2>
+                  <p className="mt-2 max-w-2xl text-[12px] leading-6" style={{ color: colors.t1 }}>
+                    Flyxa needs real journal data to find patterns, emotional fingerprints, confluence quality, and post-session feedback.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/scanner')}
+                    className="mt-4 rounded-[5px] px-3 py-2 text-[12px] font-semibold"
+                    style={{ backgroundColor: colors.acc, color: colors.d0 }}
+                  >
+                    Log first trade
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <section data-tour-id="flyxa-ai-stats" className="border-t" style={{ borderColor: colors.b0 }}>
               <div className="grid grid-cols-5 gap-px" style={{ backgroundColor: colors.b0 }}>
                 {statCells.map(stat => (
                   <div key={stat.label} className="px-[15px] py-[13px]" style={{ backgroundColor: colors.d1 }}>
@@ -1736,7 +1756,7 @@ export default function FlyxaAI() {
             </section>
 
             <div className="min-h-0 flex-1 overflow-y-auto border-t px-5 py-4" style={{ borderColor: colors.b0 }}>
-              <section>
+              <section data-tour-id="flyxa-ai-reflection">
                 <div className="flex items-center gap-3 rounded-[8px] px-[14px] py-3" style={{ backgroundColor: colors.d2, border: cardBorder }}>
                   <div className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border" style={{ backgroundColor: 'rgba(0,212,168,0.08)', borderColor: 'rgba(0,212,168,0.18)' }}>
                     <Clock3 size={13} color={colors.acc} />
@@ -1818,7 +1838,7 @@ export default function FlyxaAI() {
                 </div>
               )}
 
-              <section className="mt-4">
+              <section className="mt-4" data-tour-id="flyxa-ai-insights">
                 <p style={tinyMetaLabelStyle}>AI insights &middot; {displayedInsights.length} found &middot; {getPeriodWindow(timeframe).periodLabel}</p>
                 <div className="mt-2 space-y-2">
                   {displayedInsights.map(insight => {

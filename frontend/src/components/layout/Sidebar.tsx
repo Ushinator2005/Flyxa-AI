@@ -58,11 +58,13 @@ function NavItem({
     : location.pathname === pathName || location.pathname.startsWith(pathName + '/');
 
   const [hov, setHov] = useState(false);
+  const tourId = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   return (
     <NavLink
       to={path}
       onClick={onClick}
+      data-tour-id={tourId}
       title={collapsed ? label : undefined}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
@@ -417,8 +419,8 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
             <div style={{ fontSize: 12, fontWeight: 500, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {rivalUsername ?? displayName}
             </div>
-            <div style={{ fontSize: 10, color: accountStatusColor(selectedAcct?.status ?? ''), textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selectedAcct?.status?.toLowerCase() ?? 'free plan'}
+            <div style={{ fontSize: 10, color: T3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.email ?? selectedAcct?.status?.toLowerCase() ?? 'free plan'}
             </div>
           </button>
           <button

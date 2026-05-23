@@ -789,7 +789,7 @@ export default function Goals() {
 
   return (
     <div className="goals-page">
-      <section className="goals-hero">
+      <section className="goals-hero" data-tour-id="goals-hero">
         <div className="goals-hero-grid" aria-hidden="true" />
         <div className="goals-hero-glow" aria-hidden="true" />
         <div className="goals-hero-inner">
@@ -812,7 +812,7 @@ export default function Goals() {
             <button type="button" className="goals-btn goals-btn-ghost" onClick={() => setActiveFilter('achieved')}>
               View achieved
             </button>
-            <button type="button" className="goals-btn goals-btn-primary" onClick={openAddModal}>
+            <button type="button" className="goals-btn goals-btn-primary" onClick={openAddModal} data-tour-id="goals-new-goal">
               <Plus size={13} />
               New Goal
             </button>
@@ -820,7 +820,7 @@ export default function Goals() {
         </div>
       </section>
 
-      <section className="goals-reminder">
+      <section className="goals-reminder" data-tour-id="goals-reminder">
         <div className="goals-reminder-bar" />
         <p>
           Every losing day you journal is a brick between you and the trader who quit. You're{' '}
@@ -830,7 +830,7 @@ export default function Goals() {
       </section>
 
       <section className="goals-content">
-        <header className="goals-toolbar">
+        <header className="goals-toolbar" data-tour-id="goals-filters">
           <div className="goals-toolbar-left">
             <div className="goals-filter-tabs">
               {(['all', 'active', 'achieved', 'paused'] as GoalFilter[]).map(filter => (
@@ -871,7 +871,7 @@ export default function Goals() {
         {goals.length === 0 ? (
           <EmptyState onAdd={openAddModal} />
         ) : (
-          <div className="goals-grid">
+          <div className="goals-grid" data-tour-id="goals-grid">
             {displayedGoals.map(goal => (
               <GoalCard
                 key={goal.id}

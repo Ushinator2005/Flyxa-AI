@@ -634,7 +634,7 @@ export default function FlyxaAIPreSession() {
     <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
       {/* ─── Header ─────────────────────────────────────────────── */}
-      <header style={{ padding: '11px 20px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
+      <header data-tour-id="pre-session-header" style={{ padding: '11px 20px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>Pre-Session</p>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: C.t0, letterSpacing: '-0.02em', marginTop: 2 }}>Trader Oath</h1>
@@ -666,14 +666,14 @@ export default function FlyxaAIPreSession() {
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
 
         {/* Left sidebar — inputs */}
-        <aside style={{
+        <aside data-tour-id="pre-session-inputs" style={{
           width: 268, flexShrink: 0, borderRight: `1px solid ${C.b0}`,
           overflowY: 'auto', padding: '18px 14px',
           display: 'flex', flexDirection: 'column', gap: 0,
         }}>
 
           {/* State of mind */}
-          <div style={{ marginBottom: 18 }}>
+          <div data-tour-id="pre-session-mindset" style={{ marginBottom: 18 }}>
             <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>State of mind</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {emotions.map(em => {
@@ -708,7 +708,7 @@ export default function FlyxaAIPreSession() {
           <div style={{ height: 1, backgroundColor: C.b0, marginBottom: 18 }} />
 
           {/* Market bias */}
-          <div style={{ marginBottom: 18 }}>
+          <div data-tour-id="pre-session-risk" style={{ marginBottom: 18 }}>
             <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 10 }}>Market bias</p>
             {(['ES', 'NQ'] as const).map(instrument => (
               <div key={instrument} style={{ marginBottom: 10 }}>
@@ -790,7 +790,7 @@ export default function FlyxaAIPreSession() {
           <div style={{ height: 1, backgroundColor: C.b0, marginBottom: 18 }} />
 
           {/* Behavior scan */}
-          <div>
+          <div data-tour-id="pre-session-behavior">
             <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 10 }}>Behavior scan</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -820,7 +820,7 @@ export default function FlyxaAIPreSession() {
         <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '22px 26px', display: 'flex', flexDirection: 'column', gap: 26 }}>
 
           {/* Trader oath */}
-          <div>
+          <div data-tour-id="pre-session-oath">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em' }}>Trader Oath</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -876,7 +876,7 @@ export default function FlyxaAIPreSession() {
           <div style={{ height: 1, backgroundColor: C.b0 }} />
 
           {/* Before you trade */}
-          <div>
+          <div data-tour-id="pre-session-checklist">
             <h2 style={{ fontSize: 13, fontWeight: 600, color: C.t0, letterSpacing: '-0.01em', marginBottom: 10 }}>Before you trade</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {preTradeReminderItems.map((item, idx) => (
@@ -988,7 +988,7 @@ export default function FlyxaAIPreSession() {
           )}
 
           {/* CTA */}
-          <div style={{ borderTop: `1px solid ${C.b0}`, paddingTop: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div data-tour-id="pre-session-begin" style={{ borderTop: `1px solid ${C.b0}`, paddingTop: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
             <button type="button" onClick={startSession}
               style={{
                 height: 36, padding: '0 22px', borderRadius: 5,

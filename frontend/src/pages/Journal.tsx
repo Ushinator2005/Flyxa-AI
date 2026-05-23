@@ -284,6 +284,7 @@ function EntryItem({
     >
       {/* Date badge */}
       <div
+        data-tour-id="journal-header"
         style={{
           width: '46px',
           flexShrink: 0,
@@ -780,6 +781,7 @@ export default function Journal() {
           </button>
           <button
             type="button"
+            data-tour-id="journal-new-entry"
             onClick={createEntry}
             disabled={backupBusy !== null}
             style={{
@@ -819,7 +821,7 @@ export default function Journal() {
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '300px 1fr', minHeight: 0, overflow: 'hidden' }}>
 
         {/* Left: entry list */}
-        <div style={{ borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        <div data-tour-id="journal-entry-list" style={{ borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           {/* Search */}
           <div style={{ padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
             <div style={{ position: 'relative' }}>
@@ -980,7 +982,7 @@ export default function Journal() {
               </div>
 
               {/* Mood toggles */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '10px 20px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+              <div data-tour-id="journal-mood" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '10px 20px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {JOURNAL_MOODS.map(mood => {
                   const isActive = moodByEntryId[selected.id] === mood;
                   const ms = MOOD_STYLES[mood];
@@ -1048,7 +1050,7 @@ export default function Journal() {
                 </div>
 
                 {/* Section tabs */}
-                <div style={{ padding: '0 20px', borderBottom: `1px solid ${BSUB}`, display: 'flex', alignItems: 'center', gap: '18px', flexShrink: 0 }}>
+                <div data-tour-id="journal-section-tabs" style={{ padding: '0 20px', borderBottom: `1px solid ${BSUB}`, display: 'flex', alignItems: 'center', gap: '18px', flexShrink: 0 }}>
                   {JOURNAL_SECTION_TABS.map(tab => {
                     const active = activeSectionTab === tab.key;
                     return (
@@ -1076,6 +1078,7 @@ export default function Journal() {
 
                 {/* Body textarea */}
                 <textarea
+                  data-tour-id="journal-editor"
                   ref={textareaRef}
                   value={sectionDraft[activeSectionTab]}
                   onChange={e => handleContentChange(e.target.value)}

@@ -1,4 +1,4 @@
-import type { TradingAccount, TradingAccountStatus } from '../types/index.js';
+import type { TradingAccount, TradingAccountStatus, TradingAccountType } from '../types/index.js';
 
 export const ALL_ACCOUNTS_ID = 'all';
 export const DEFAULT_ACCOUNT_ID = 'default-account';
@@ -22,12 +22,18 @@ export function normalizeAccountStatus(
     : fallbackStatus;
 }
 
+export function normalizeAccountType(type: unknown, fallbackType: TradingAccountType = 'Futures'): TradingAccountType {
+  return type === 'Futures' || type === 'Forex' || type === 'Stocks'
+    ? type
+    : fallbackType;
+}
+
 export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount[] {
   const normalizedAccounts = accounts.map(account => ({
     id: account.id,
     name: account.name,
     broker: account.broker,
-    type: account.type,
+    type: normalizeAccountType(account.type),
     status: normalizeAccountStatus(
       account.status,
       account.id === DEFAULT_ACCOUNT_ID ? DEFAULT_TRADING_ACCOUNT.status : 'Eval'

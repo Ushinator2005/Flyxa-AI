@@ -8,6 +8,7 @@ import {
   DEFAULT_TRADING_ACCOUNT,
   ensureDefaultAccount,
   normalizeAccountStatus,
+  normalizeAccountType,
   resolveDefaultTradeAccountId,
 } from '../utils/tradingAccounts.js';
 import useFlyxaStore from '../store/flyxaStore.js';
@@ -176,13 +177,13 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
       // preserving accounts that already exist in app_settings.
       const existingIds = new Set((row.accounts ?? []).map(a => a.id));
 
-      const missingAccounts = accountsResult.data
+      const missingAccounts: TradingAccount[] = accountsResult.data
         .filter(a => !existingIds.has(a.id as string))
         .map(a => ({
           id: a.id as string,
           name: a.name as string,
           broker: (a.broker as string | null) ?? '',
-          type: (a.type as string | null) ?? 'Futures',
+          type: normalizeAccountType(a.type),
           status: normalizeAccountStatus(a.status),
           color: (a.color as string | null) ?? '#6366f1',
           createdAt: a.created_at as string,

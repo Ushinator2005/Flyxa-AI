@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X,
-  FileText, Crosshair, Target,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell,
@@ -156,9 +155,9 @@ function ResultBadge({ trade }: { trade: Trade }) {
   return                    <Pill color={RED}   bg={RED_DIM}>LOSS</Pill>;
 }
 
-function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Card({ children, style, ...props }: React.HTMLAttributes<HTMLDivElement> & { style?: React.CSSProperties }) {
   return (
-    <div style={{ background: S1, border: `1px solid ${BORDER}`, borderRadius: 8, ...style }}>
+    <div {...props} style={{ background: S1, border: `1px solid ${BORDER}`, borderRadius: 8, ...style }}>
       {children}
     </div>
   );
@@ -359,7 +358,7 @@ export default function Dashboard() {
       <div style={{ flex: 1, height: '100%', overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
         {/* Top bar */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div data-tour-id="dashboard-overview" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 600, color: T1, margin: 0, letterSpacing: '-0.02em' }}>
               Dashboard
@@ -371,7 +370,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ position: 'relative' }}>
+            <div data-tour-id="dashboard-account-filter" style={{ position: 'relative' }}>
               <select
                 value={selectedAccountId}
                 onChange={e => setSelectedAccountId(e.target.value)}
@@ -394,6 +393,7 @@ export default function Dashboard() {
               <span style={{ pointerEvents: 'none', position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: T3 }}>▼</span>
             </div>
             <button
+              data-tour-id="dashboard-log-trade"
               onClick={() => navigate('/scanner')}
               style={{
                 height: 34, padding: '0 14px',
@@ -412,7 +412,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stat cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: 14, flexShrink: 0 }}>
+        <div data-tour-id="dashboard-metrics" style={{ display: 'grid', gridTemplateColumns: `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: 14, flexShrink: 0 }}>
           {selectedStoreAcct && (() => {
             const sb = selectedStoreAcct.startingBalance ?? 0;
             const liveBalance = sb + summary.netPnL;
@@ -534,92 +534,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Onboarding empty state */}
-        {filteredTrades.length === 0 && (
-          <div style={{
-            background: S1,
-            border: `1px solid ${BORDER}`,
-            borderRadius: 10,
-            padding: '36px 32px',
-            flexShrink: 0,
-          }}>
-            <div style={{ maxWidth: 560 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: AMBER, margin: '0 0 10px' }}>
-                Getting started
-              </p>
-              <h2 style={{ fontSize: 20, fontWeight: 600, color: T1, margin: '0 0 8px', letterSpacing: '-0.025em' }}>
-                Welcome to Flyxa
-              </h2>
-              <p style={{ fontSize: 13, color: T3, margin: '0 0 28px', lineHeight: 1.6 }}>
-                You haven't logged any trades yet. Here are a few things to set up before your first session.
-              </p>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-              {[
-                {
-                  icon: TrendingUp,
-                  label: 'Log your first trade',
-                  desc: 'Open the Trade Scanner and record your first entry.',
-                  to: '/scanner',
-                  accent: AMBER,
-                  accentDim: AMBER_DIM,
-                },
-                {
-                  icon: FileText,
-                  label: 'Build your trading plan',
-                  desc: 'Document your strategy, rules, and setups.',
-                  to: '/trading-plan',
-                  accent: COBALT,
-                  accentDim: COBALT_DIM,
-                },
-                {
-                  icon: Crosshair,
-                  label: 'Set your goals',
-                  desc: 'Define targets for consistency, profit, and process.',
-                  to: '/goals',
-                  accent: GREEN,
-                  accentDim: GREEN_DIM,
-                },
-                {
-                  icon: Target,
-                  label: 'Run a backtest',
-                  desc: 'Test your edge before risking real capital.',
-                  to: '/backtest',
-                  accent: T3,
-                  accentDim: BSUB,
-                },
-              ].map(({ icon: Icon, label, desc, to, accent, accentDim }) => (
-                <button
-                  key={to}
-                  type="button"
-                  onClick={() => navigate(to)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10,
-                    padding: '16px 18px', borderRadius: 8, textAlign: 'left',
-                    background: accentDim, border: `1px solid ${accent}22`,
-                    cursor: 'pointer', transition: 'border-color 0.15s, opacity 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = `${accent}55`; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = `${accent}22`; }}
-                >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 7,
-                    background: `${accent}22`, border: `1px solid ${accent}33`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <Icon size={15} color={accent} />
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: T1, margin: '0 0 4px', fontFamily: SANS }}>{label}</p>
-                    <p style={{ fontSize: 11, color: T3, margin: 0, lineHeight: 1.5, fontFamily: SANS }}>{desc}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* 2-column content grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, flex: 1, minHeight: 0 }}>
 
@@ -627,14 +541,14 @@ export default function Dashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
             {/* P&L Calendar */}
-            <Card style={{ flexShrink: 0 }}>
+            <Card style={{ flexShrink: 0 }} data-tour-id="dashboard-calendar">
               <div style={{ padding: '14px 18px' }}>
                 <MonthlyHeatmap trades={filteredTrades} />
               </div>
             </Card>
 
             {/* Recent Trades table */}
-            <Card>
+            <Card data-tour-id="dashboard-recent-trades">
               <CardHeader
                 title="Recent Trades"
                 sub={`${displayTrades.length} trade${displayTrades.length !== 1 ? 's' : ''}`}
@@ -650,9 +564,19 @@ export default function Dashboard() {
                 }
               />
               {displayTrades.length === 0 ? (
-                <p style={{ textAlign: 'center', padding: '32px 0', fontSize: 13, color: T3 }}>
-                  No trades yet — log your first trade to get started.
-                </p>
+                <div style={{ padding: '34px 18px', textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: T1, margin: '0 0 6px' }}>No trades logged yet</p>
+                  <p style={{ fontSize: 12, color: T3, margin: '0 0 14px' }}>
+                    Add your first chart screenshot to unlock the dashboard, calendar, analytics, and Flyxa AI feedback.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/scanner')}
+                    style={{ height: 32, borderRadius: 5, border: 'none', background: AMBER, color: '#090909', fontSize: 12, fontWeight: 700, padding: '0 12px', cursor: 'pointer' }}
+                  >
+                    Log first trade
+                  </button>
+                </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>

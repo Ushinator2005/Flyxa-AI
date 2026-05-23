@@ -320,7 +320,7 @@ export default function TradingPlan() {
 
   return (
     <div className="tp-page">
-      <header className="tp-header">
+      <header className="tp-header" data-tour-id="trading-plan-header">
         <div className="tp-header-main">
           <div>
             <p className="tp-eyebrow">Strategy Operating System</p>
@@ -346,7 +346,7 @@ export default function TradingPlan() {
           </div>
         </div>
 
-        <div className="tp-kpi-grid">
+        <div className="tp-kpi-grid" data-tour-id="trading-plan-kpis">
           <article className="tp-kpi tp-kpi-amber">
             <p className="tp-kpi-label">Strategy Coverage</p>
             <p className="tp-kpi-value num">{strategyCoverage}%</p>
@@ -369,7 +369,7 @@ export default function TradingPlan() {
           </article>
         </div>
 
-        <nav className="tp-tabs">
+        <nav className="tp-tabs" data-tour-id="trading-plan-tabs">
           {TAB_ITEMS.map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -390,7 +390,7 @@ export default function TradingPlan() {
 
       <main className="tp-content trading-plan-scroll">
         {activeTab === 'trading-plan' && (
-          <section className="tp-main-grid">
+          <section className="tp-main-grid" data-tour-id="trading-plan-core">
             <div className="tp-panel">
               <div className="tp-section-head">
                 <h2>Core Strategy Blocks</h2>
@@ -426,7 +426,7 @@ export default function TradingPlan() {
               </div>
             </div>
 
-            <aside className="tp-side">
+            <aside className="tp-side" data-tour-id="trading-plan-side">
               <article className="tp-quote">
                 <Sparkles size={14} />
                 <p>The plan is written by your best self. Follow it when emotions get loud.</p>

@@ -1051,6 +1051,7 @@ export default function Backtest() {
         }}
       >
         <div
+          data-tour-id="backtest-header"
           style={{
             position: 'sticky',
             top: 0,
@@ -1080,6 +1081,7 @@ export default function Backtest() {
 
           <button
             type="button"
+            data-tour-id="backtest-new-session"
             onClick={() => setShowNewSessionForm(true)}
             style={{
               display: 'inline-flex',
@@ -1101,7 +1103,7 @@ export default function Backtest() {
         </div>
 
         <div style={{ padding: '24px 28px 40px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 20 }}>
+          <div data-tour-id="backtest-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 20 }}>
             {statCards.map(card => (
               <div
                 key={card.label}
@@ -1150,6 +1152,7 @@ export default function Backtest() {
           </div>
 
           <div
+            data-tour-id="backtest-current-focus"
             style={{
               marginBottom: 20,
               background: 'var(--surface-1)',
@@ -1246,7 +1249,7 @@ export default function Backtest() {
             </button>
           </div>
 
-          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          <div data-tour-id="backtest-session-library" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             <div
               style={{
                 padding: '14px 20px',

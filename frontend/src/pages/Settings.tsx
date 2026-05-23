@@ -1,11 +1,12 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, Monitor, Palette, Plus, Scan, Trash2, User, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Database, Download, Monitor, Palette, Plus, Scan, Trash2, User, Wallet, X } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRivals } from '../hooks/useRivals.js';
+import useFlyxaStore from '../store/flyxaStore.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
@@ -501,6 +502,7 @@ export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { profile, saveProfile } = useRivals();
+  const journalEntries = useFlyxaStore(state => state.entries);
   const {
     accounts,
     defaultTradeAccountId,
@@ -532,12 +534,69 @@ export default function Settings() {
   const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveToastReadyRef = useRef(false);
+  const loadedTradeCount = journalEntries.reduce((sum, entry) => sum + entry.trades.length, 0);
+  const backupStamp = new Date().toISOString().slice(0, 10);
+
+  function downloadTextFile(filename: string, contents: string, type: string) {
+    const blob = new Blob([contents], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportJson() {
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      user: user ? { id: user.id, email: user.email ?? null } : null,
+      summary: {
+        journalDays: journalEntries.length,
+        trades: loadedTradeCount,
+      },
+      entries: journalEntries,
+    };
+    downloadTextFile(`flyxa-trade-backup-${backupStamp}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  }
+
+  function csvCell(value: unknown): string {
+    const raw = value == null ? '' : String(value);
+    return `"${raw.replace(/"/g, '""')}"`;
+  }
+
+  function handleExportCsv() {
+    const rows = journalEntries.flatMap(entry => entry.trades.map(trade => ({
+      entryDate: entry.date,
+      symbol: trade.symbol,
+      direction: trade.direction,
+      entry: trade.entry,
+      stopLoss: trade.sl,
+      takeProfit: trade.tp,
+      exit: trade.exit ?? '',
+      contracts: trade.contracts,
+      pnl: trade.pnl,
+      result: trade.result,
+      entryTime: trade.time ?? (trade as unknown as { entryTime?: string }).entryTime ?? '',
+      account: trade.account ?? entry.account ?? '',
+      notes: trade.reflection?.execution ?? '',
+    })));
+    const headers = ['entryDate', 'symbol', 'direction', 'entry', 'stopLoss', 'takeProfit', 'exit', 'contracts', 'pnl', 'result', 'entryTime', 'account', 'notes'];
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => headers.map(header => csvCell(row[header as keyof typeof row])).join(',')),
+    ].join('\n');
+    downloadTextFile(`flyxa-trades-${backupStamp}.csv`, csv, 'text/csv');
+  }
 
   const navSections = [
     {
       key: 'profile',
       title: 'Profile',
-      description: 'Username and public identity.',
+      description: 'Login and public identity.',
       icon: <User size={16} />,
       ref: profileRef,
     },
@@ -754,7 +813,7 @@ export default function Settings() {
     >
 
       {/* Page header */}
-      <div>
+      <div data-tour-id="settings-header">
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: T1, lineHeight: 1.2 }}>Settings</h1>
         <p style={{ marginTop: '4px', fontSize: '12px', color: T3 }}>
           Manage your profile, workspace preferences, display defaults, and trading accounts.
@@ -763,6 +822,7 @@ export default function Settings() {
 
       {/* Nav cards */}
       <div
+        data-tour-id="settings-nav"
         style={{
           position: 'sticky',
           top: '8px',
@@ -832,8 +892,159 @@ export default function Settings() {
       </div>
 
       {/* Profile section */}
-      <section ref={profileRef} style={{ scrollMarginTop: '140px' }}>
+      <section ref={profileRef} data-tour-id="settings-profile" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Profile" />
+        <SectionCard
+          title="Data safety"
+          subtitle="Confirm which login owns the data currently loaded on this device."
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            <div
+              style={{
+                border: `1px solid ${BORDER}`,
+                borderRadius: '8px',
+                background: S2,
+                padding: '14px',
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '7px',
+                  background: AMBER_DIM,
+                  border: '1px solid rgba(245,158,11,0.28)',
+                  color: AMBER,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <User size={15} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: '11px', color: T3, margin: '0 0 4px' }}>Signed in as</p>
+                <p style={{ fontSize: '13px', color: T1, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {user?.email ?? 'Not signed in'}
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `1px solid ${BORDER}`,
+                borderRadius: '8px',
+                background: S2,
+                padding: '14px',
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '7px',
+                  background: 'rgba(52,211,153,0.1)',
+                  border: '1px solid rgba(52,211,153,0.24)',
+                  color: '#34d399',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Database size={15} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: '11px', color: T3, margin: '0 0 4px' }}>Loaded journal data</p>
+                <p style={{ fontSize: '13px', color: T1, fontWeight: 600, margin: 0 }}>
+                  {journalEntries.length} {journalEntries.length === 1 ? 'day' : 'days'} · {loadedTradeCount} {loadedTradeCount === 1 ? 'trade' : 'trades'}
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `1px solid ${BORDER}`,
+                borderRadius: '8px',
+                background: S2,
+                padding: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '7px',
+                    background: 'rgba(96,165,250,0.1)',
+                    border: '1px solid rgba(96,165,250,0.24)',
+                    color: '#60a5fa',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Download size={15} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: '11px', color: T3, margin: '0 0 4px' }}>Manual backup</p>
+                  <p style={{ fontSize: '13px', color: T1, fontWeight: 600, margin: 0 }}>Export journal data</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleExportJson}
+                  disabled={journalEntries.length === 0}
+                  style={{
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: `1px solid ${BORDER}`,
+                    background: S1,
+                    color: journalEntries.length === 0 ? T3 : T1,
+                    padding: '0 10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: journalEntries.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: journalEntries.length === 0 ? 0.6 : 1,
+                  }}
+                >
+                  JSON backup
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  disabled={loadedTradeCount === 0}
+                  style={{
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: `1px solid ${BORDER}`,
+                    background: S1,
+                    color: loadedTradeCount === 0 ? T3 : T1,
+                    padding: '0 10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: loadedTradeCount === 0 ? 'not-allowed' : 'pointer',
+                    opacity: loadedTradeCount === 0 ? 0.6 : 1,
+                  }}
+                >
+                  CSV trades
+                </button>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
         <SectionCard
           title="Your profile"
           subtitle="Set the username other traders use to find you and send rival requests."
@@ -1179,6 +1390,31 @@ export default function Settings() {
             </div>
           </SectionCard>
         </div>
+
+        <div style={{ marginTop: '16px' }}>
+          <SectionCard
+            title="Product tour"
+            subtitle="Reopen the feature walkthrough if you want to review the app tab by tab."
+          >
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event('flyxa:restart-tour'))}
+              style={{
+                height: '36px',
+                borderRadius: '6px',
+                border: `1px solid ${AMBER}`,
+                background: AMBER_DIM,
+                color: AMBER,
+                padding: '0 14px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Restart Website Tour
+            </button>
+          </SectionCard>
+        </div>
       </section>
 
       {/* Display section */}
@@ -1218,7 +1454,7 @@ export default function Settings() {
       </section>
 
       {/* Scanner section */}
-      <section ref={scannerRef} style={{ scrollMarginTop: '140px' }}>
+      <section ref={scannerRef} data-tour-id="settings-scanner" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Scanner" />
         <SectionCard
           title="Chart zone colors"
@@ -1256,7 +1492,7 @@ export default function Settings() {
       </section>
 
       {/* Accounts section */}
-      <section ref={accountsRef} style={{ scrollMarginTop: '140px' }}>
+      <section ref={accountsRef} data-tour-id="settings-accounts" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Accounts" />
         <SectionCard
           title="Trading accounts"
@@ -1264,6 +1500,7 @@ export default function Settings() {
           headerRight={
             <button
               type="button"
+              data-tour-id="settings-add-account"
               onClick={() => setShowAddAccountModal(true)}
               style={{
                 height: '34px',

@@ -181,27 +181,23 @@ function clearLegacyKeys(): void {
 // ---------------------------------------------------------------------------
 
 async function syncEntriesToTable(userId: string, entries: Record<string, unknown>[]): Promise<void> {
-  if (entries.length > 0) {
-    const rows = entries.map(e => ({
-      id: e.id as string,
-      user_id: userId,
-      date: e.date as string,
-      data: stripBase64Images(e) as Record<string, unknown>,
-      updated_at: new Date().toISOString(),
-    }));
-    await supabase.from('store_entries_backup').upsert(rows, { onConflict: 'id' });
-  }
+  if (entries.length === 0) return;
+
+  const rows = entries.map(e => ({
+    id: e.id as string,
+    user_id: userId,
+    date: e.date as string,
+    data: stripBase64Images(e) as Record<string, unknown>,
+    updated_at: new Date().toISOString(),
+  }));
+  await supabase.from('store_entries_backup').upsert(rows, { onConflict: 'id' });
 
   const currentIds = entries.map(e => e.id as string);
-  if (currentIds.length > 0) {
-    await supabase
-      .from('store_entries_backup')
-      .delete()
-      .eq('user_id', userId)
-      .not('id', 'in', `(${currentIds.join(',')})`);
-  } else {
-    await supabase.from('store_entries_backup').delete().eq('user_id', userId);
-  }
+  await supabase
+    .from('store_entries_backup')
+    .delete()
+    .eq('user_id', userId)
+    .not('id', 'in', `(${currentIds.join(',')})`);
 }
 
 async function recoverFromJournalEntries(
@@ -471,7 +467,6 @@ export const supabaseZustandStorage: StateStorage = {
       try {
         localStorage.removeItem(localStoreKey(userId));
         localStorage.removeItem(localSavedAtKey(userId));
-        localStorage.removeItem(localEntriesSafeKey(userId));
       } catch { /* ignore */ }
     }
     // Clean up legacy shared keys so they can't interfere going forward.

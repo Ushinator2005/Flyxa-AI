@@ -523,11 +523,33 @@ export default function Billing() {
     setFormField('payouts', form.payouts.filter(p => p.id !== id));
   };
 
+  const phaseRail = [
+    { label: 'Eval', value: derived.activeAccounts, color: 'var(--amber)' },
+    { label: 'Funded', value: derived.fundedAccounts, color: '#818cf8' },
+    { label: 'Passed', value: derived.passedAccounts, color: 'var(--green)' },
+    { label: 'Blown', value: derived.blownAccounts, color: 'var(--red)' },
+  ];
+  const netTone = derived.netPnL >= 0 ? 'positive' : 'negative';
+
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: '24px 28px 40px', background: 'var(--app-bg)' }}>
       <style>{`
-        .billing-stat-card { transition: border-color 140ms ease, transform 140ms ease, background 140ms ease; }
-        .billing-stat-card:hover { border-color: var(--amber-border); transform: translateY(-1px); background: var(--surface-2); }
+        .billing-desk { display: grid; grid-template-columns: minmax(320px, 1.15fr) minmax(320px, 1fr); gap: 14px; margin-bottom: 16px; }
+        .billing-hero-panel { position: relative; overflow: hidden; border: 1px solid rgba(245,158,11,0.28); border-radius: 8px; background: linear-gradient(135deg, rgba(245,158,11,0.14), rgba(255,255,255,0.025) 42%, var(--surface-1)); padding: 18px; }
+        .billing-hero-panel::after { content: ""; position: absolute; inset: auto 18px 0 18px; height: 1px; background: linear-gradient(90deg, transparent, rgba(245,158,11,0.45), transparent); }
+        .billing-kicker { margin: 0; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 700; }
+        .billing-ledger-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .billing-stat-card { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); padding: 14px; transition: border-color 140ms ease, transform 140ms ease, background 140ms ease; min-width: 0; }
+        .billing-stat-card:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); background: var(--surface-2); }
+        .billing-stat-label { margin: 0; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--txt-3); }
+        .billing-stat-value { margin: 7px 0 4px; font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--txt); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .billing-stat-note { margin: 0; font-size: 11px; color: var(--txt-3); line-height: 1.45; }
+        .billing-phase-rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+        .billing-phase-chip { border: 1px solid var(--border); background: rgba(255,255,255,0.025); border-radius: 7px; padding: 9px 10px; min-width: 0; }
+        .billing-command-btn { height: 34px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--txt-2); display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color 120ms, color 120ms, background 120ms; }
+        .billing-command-btn:hover { border-color: rgba(255,255,255,0.18); color: var(--txt); }
+        .billing-command-btn.primary { border-color: var(--amber); background: var(--amber); color: var(--bg); }
+        .billing-break-even { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid rgba(96,165,250,0.18); border-radius: 8px; background: linear-gradient(90deg, rgba(96,165,250,0.08), var(--surface-1)); padding: 14px 16px; margin-bottom: 18px; flex-wrap: wrap; }
         .billing-table-row:hover td { background: var(--surface-2); }
         .billing-action-icon { border: none; background: transparent; color: var(--txt-3); display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
         .billing-action-icon:hover { color: var(--txt-2); }
@@ -547,7 +569,135 @@ export default function Billing() {
         .pipeline-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px; padding: 12px 14px; cursor: pointer; transition: border-color 140ms, transform 140ms; }
         .pipeline-card:hover { border-color: var(--amber-border); transform: translateY(-1px); }
         .payout-row { display: grid; grid-template-columns: 1fr 140px 28px; gap: 8px; align-items: center; }
+        @media (max-width: 1120px) {
+          .billing-desk { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 760px) {
+          .billing-ledger-grid, .billing-phase-rail { grid-template-columns: 1fr 1fr; }
+        }
       `}</style>
+
+      <section style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div>
+          <p className="billing-kicker">Funding Desk</p>
+          <h1 style={{ margin: '6px 0 0', fontSize: 20, fontWeight: 600, color: 'var(--txt)', letterSpacing: 0 }}>Billing</h1>
+          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--txt-2)', lineHeight: 1.45 }}>
+            Track prop firm spend, challenge phases, discounts, payouts, and account ROI.
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="billing-command-btn" onClick={() => setViewMode(viewMode === 'table' ? 'pipeline' : 'table')}>
+            {viewMode === 'table' ? <LayoutGrid size={14} /> : <List size={14} />}
+            {viewMode === 'table' ? 'Pipeline' : 'Ledger'}
+          </button>
+          <button type="button" className="billing-command-btn primary" onClick={openAddModal}>
+            <Plus size={14} />
+            Add Account
+          </button>
+        </div>
+      </section>
+
+      <section className="billing-desk">
+        <article className="billing-hero-panel">
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
+            <div>
+              <p className="billing-stat-label">Net Position</p>
+              <p style={{ margin: '8px 0 6px', fontFamily: 'var(--font-mono)', fontSize: 36, lineHeight: 1, fontWeight: 500, color: netTone === 'positive' ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>
+                {formatSignedCurrency(derived.netPnL)}
+              </p>
+              <p className="billing-stat-note">
+                {derived.totalPayouts > 0 ? `${formatCurrency(derived.totalPayouts)} received against ${formatCurrency(derived.totalSpent)} spent.` : `${formatCurrency(derived.totalSpent)} in fees logged before payouts.`}
+              </p>
+            </div>
+            <span style={{ width: 38, height: 38, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: netTone === 'positive' ? 'var(--green-dim)' : 'var(--red-dim)', color: netTone === 'positive' ? 'var(--green)' : 'var(--red)', border: netTone === 'positive' ? '1px solid var(--green-border)' : '1px solid var(--red-border)', flexShrink: 0 }}>
+              {netTone === 'positive' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+            <div>
+              <p className="billing-stat-label">Spent</p>
+              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--red)', fontSize: 15 }}>{formatCurrency(derived.totalSpent)}</p>
+            </div>
+            <div>
+              <p className="billing-stat-label">Payouts</p>
+              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--green)', fontSize: 15 }}>{formatCurrency(derived.totalPayouts)}</p>
+            </div>
+            <div>
+              <p className="billing-stat-label">Saved</p>
+              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontSize: 15 }}>{formatCurrency(derived.totalSaved)}</p>
+            </div>
+          </div>
+
+          <div className="billing-phase-rail">
+            {phaseRail.map(item => (
+              <div key={item.label} className="billing-phase-chip">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</span>
+                </div>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--txt)' }}>{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <div className="billing-ledger-grid">
+          <article className="billing-stat-card">
+            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber-border)', marginBottom: 8 }}>
+              <Flame size={14} />
+            </span>
+            <p className="billing-stat-label">Monthly Burn</p>
+            <p className="billing-stat-value" style={{ color: 'var(--amber)' }}>{formatCurrency(derived.monthlyBurn)}</p>
+            <p className="billing-stat-note">average account fee pressure</p>
+          </article>
+
+          <article className="billing-stat-card">
+            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--cobalt-dim)', color: 'var(--cobalt)', border: '1px solid var(--cobalt-border)', marginBottom: 8 }}>
+              <DollarSign size={14} />
+            </span>
+            <p className="billing-stat-label">Cost Per Pass</p>
+            <p className="billing-stat-value">{derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '-'}</p>
+            <p className="billing-stat-note">average spend per funded/pass</p>
+          </article>
+
+          <article className="billing-stat-card">
+            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
+              <Award size={14} />
+            </span>
+            <p className="billing-stat-label">Best Firm</p>
+            <p className="billing-stat-value" style={{ fontSize: 15, fontFamily: 'var(--font-sans)', fontWeight: 600 }}>
+              {derived.bestFirm ? derived.bestFirm.firm : '-'}
+            </p>
+            <p className="billing-stat-note">{derived.bestFirm ? `${formatSignedCurrency(derived.bestFirm.roi)} ROI` : 'no payouts yet'}</p>
+          </article>
+
+          <article className="billing-stat-card">
+            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
+              <Target size={14} />
+            </span>
+            <p className="billing-stat-label">Pass Rate</p>
+            <p className="billing-stat-value">{derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}</p>
+            <p className="billing-stat-note">{derived.totalAccounts} accounts purchased</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="billing-break-even">
+        <div>
+          <p className="billing-stat-label">Break-even pressure</p>
+          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--txt-2)' }}>
+            Your first {formatCurrency(derived.monthlyBurn)} of monthly trading profit covers account fees before real upside starts.
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)' }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
+          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Funded/pass <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
+          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)' }}>{derived.blownAccounts}</strong></span>
+        </div>
+      </section>
+
+      <div style={{ display: 'none' }}>
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <section style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -688,6 +838,8 @@ export default function Billing() {
       </section>
 
       {/* ── Ledger / Pipeline ────────────────────────────────────── */}
+      </div>
+
       <section style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         <header style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>

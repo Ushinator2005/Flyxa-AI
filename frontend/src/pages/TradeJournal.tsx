@@ -2241,7 +2241,7 @@ export default function TradeJournal() {
         }}
       />
 
-      <aside className="tj-day-panel">
+      <aside className="tj-day-panel" data-tour-id="scanner-day-panel">
         <div className="tj-day-header">
           <div className="tj-day-top">
             <p className="tj-month-title">{formatMonth(monthCursor)}</p>
@@ -2253,6 +2253,7 @@ export default function TradeJournal() {
                 <ChevronRight size={13} />
               </button>
               <button
+                data-tour-id="scanner-import"
                 type="button"
                 className="tj-nav"
                 title="Import trades from CSV"
@@ -2289,7 +2290,7 @@ export default function TradeJournal() {
           </div>
         </div>
 
-        <div className="tj-search-row">
+        <div className="tj-search-row" data-tour-id="scanner-search">
           <Search size={13} color="var(--txt-3)" />
           <input
             className="tj-search-input"
@@ -2362,7 +2363,7 @@ export default function TradeJournal() {
         </div>
       </aside>
 
-      <section className="tj-entry-panel">
+      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
         {!showScanner && selectedEntry && selectedEntry.trades.length > 0 ? (
           <>
             <div className="tj-sticky-head">
@@ -2434,7 +2435,7 @@ export default function TradeJournal() {
                       <Trash2 size={13} />
                       Delete
                     </button>
-                    <button type="button" className="tj-btn-primary tj-btn-save" onClick={goToScanner}>
+                    <button type="button" className="tj-btn-primary tj-btn-save" onClick={goToScanner} data-tour-id="scanner-log-trade-button">
                       <Plus size={13} />
                       Log trade
                     </button>
@@ -2444,7 +2445,7 @@ export default function TradeJournal() {
             </div>
 
             <div className="tj-entry-body">
-              <div className="tj-stats">
+              <div className="tj-stats" data-tour-id="scanner-trade-stats">
                 <div className="tj-stat">
                   <div className="tj-stat-label">Net P&amp;L</div>
                   <div className={`tj-stat-value ${computeEntryStats(selectedEntry).pnl > 0 ? 'pos' : computeEntryStats(selectedEntry).pnl < 0 ? 'neg' : ''}`}>
@@ -2476,7 +2477,7 @@ export default function TradeJournal() {
               <div className="tj-section-head first">
                 <span className="tj-section-title">Screenshot</span>
               </div>
-              <button type="button" className="tj-shot tj-shot-single" onClick={() => onShotPick(0)}>
+              <button type="button" className="tj-shot tj-shot-single" onClick={() => onShotPick(0)} data-tour-id="scanner-screenshot">
                 {primaryScreenshot ? (
                   <>
                     <img src={primaryScreenshot} alt="Trade chart" />
@@ -2506,7 +2507,7 @@ export default function TradeJournal() {
                 <span className="tj-section-title">Trades</span>
                 <button type="button" className="tj-section-action" onClick={addManualTrade}>Add trade</button>
               </div>
-              <div className="tj-trade-list">
+              <div className="tj-trade-list" data-tour-id="scanner-trade-list">
                 {selectedEntry.trades.map(trade => (
                   deleteTradeId === trade.id ? (
                     <div key={trade.id} className="tj-delete-row">
@@ -2671,6 +2672,7 @@ export default function TradeJournal() {
           </>
         ) : (
           <div
+            data-tour-id="scanner-upload"
             className="tj-empty-entry"
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -2679,11 +2681,11 @@ export default function TradeJournal() {
             <div className="tj-empty-wrap">
               <div className={`tj-empty-card ${isDragging ? 'drag' : ''}`}>
                 <span className="tj-empty-badge"><Upload size={20} /></span>
-                <p className="tj-empty-title">drop a chart screenshot</p>
+                <p className="tj-empty-title">Drop a Chart Screenshot</p>
                 <p className="tj-empty-text">
-                  Flyxa reads your <span style={{ color: 'var(--amber)' }}>entry</span>, <span style={{ color: 'var(--amber)' }}>SL</span>, <span style={{ color: 'var(--amber)' }}>TP</span>, and <span style={{ color: 'var(--amber)' }}>exit</span>
+                  Flyxa reads your <span style={{ color: 'var(--amber)' }}>entry</span>, <span style={{ color: 'var(--amber)' }}>stop loss</span>, <span style={{ color: 'var(--amber)' }}>take profit</span>, and <span style={{ color: 'var(--amber)' }}>exit</span>
                   <br />
-                  automatically in seconds
+                  automatically in seconds.
                 </p>
                 {scanError && <p className="tj-empty-text tj-empty-error">{scanError}</p>}
                 {isScanning && (
@@ -2701,19 +2703,19 @@ export default function TradeJournal() {
                       <span className="tj-scan-dot" />
                       <span className="tj-scan-dot" />
                     </div>
-                    <p className="tj-empty-text">"Patience is expensive, but revenge is costlier."</p>
+                    <p className="tj-empty-text">Patience is expensive, but revenge is costlier.</p>
                   </div>
                 )}
                 <div className="tj-empty-actions">
                   <button type="button" className="tj-btn-primary" onClick={() => scanInputRef.current?.click()} disabled={isScanning}>
-                    Upload file
+                    Upload File
                   </button>
                   <button type="button" className="tj-btn-ghost" onClick={addBlankDay} disabled={isScanning}>
-                    Start blank day
+                    Start Blank Day
                   </button>
                 </div>
               </div>
-              <div className="tj-empty-meta">PNG | JPG | WEBP | Max 10MB</div>
+              <div className="tj-empty-meta">PNG, JPG, or WEBP · Max 10 MB</div>
             </div>
           </div>
         )}

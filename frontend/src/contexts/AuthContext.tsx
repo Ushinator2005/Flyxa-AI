@@ -80,8 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsPasswordRecovery(false);
         // Reset in-memory state first so a subsequent sign-in by a different user
         // doesn't inherit the previous user's entries via the merge safety guard.
-        useFlyxaStore.setState(getInitialState(), true);
-        useFlyxaStore.persist.clearStorage();
+        useFlyxaStore.setState(getInitialState());
       }
     });
 
