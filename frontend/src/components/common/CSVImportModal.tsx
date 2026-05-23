@@ -79,9 +79,9 @@ const GUESSES: Record<FieldKey, string[]> = {
   direction:      ['direction', 'market pos', 'market pos.', 'side', 'b/s', 'buy/sell', 'type', 'action', 'pos'],
   entry_price:    ['entry price', 'entry', 'open price', 'avg price', 'avg entry', 'buy price', 'price'],
   exit_price:     ['exit price', 'exit', 'close price', 'sell price', 'avg exit'],
-  pnl:            ['profit', 'pnl', 'p&l', 'net profit', 'realized pnl', 'realized p&l', 'gain/loss', 'gain', 'net p&l'],
+  pnl:            ['profit', 'pnl', 'p&l', 'p/l', 'net p/l', 'net profit', 'realized pnl', 'realized p&l', 'realized p/l', 'gain/loss', 'gain', 'net p&l'],
   trade_date:     ['date', 'trade date', 'entry date', 'open date', 'day'],
-  trade_time:     ['entry time', 'time', 'open time', 'entry_time'],
+  trade_time:     ['entry time', 'time', 'open time', 'open', 'entry_time'],
   close_time:     ['exit time', 'close time', 'exit_time', 'close_time'],
   contract_size:  ['qty', 'quantity', 'contracts', 'size', 'volume', 'shares', 'lots'],
   sl_price:       ['stop loss', 'sl', 'stop', 'sl price'],
@@ -468,6 +468,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                 {[
                   { name: 'NinjaTrader', cols: 'Instrument, Market pos., Quantity, Entry price, Exit price, Entry time, Exit time, Profit' },
                   { name: 'Tradovate', cols: 'Symbol, B/S, Qty, Avg Price, Net Profit, Time' },
+                  { name: 'TopStep / TopstepX', cols: 'Symbol, Side, Qty, Avg Entry, Avg Exit, Open Time, Close Time, P/L, Net P/L' },
                   { name: 'Generic', cols: 'Symbol, Direction, Entry, Exit, PnL, Date, Contracts' },
                 ].map(fmt => (
                   <div key={fmt.name} style={{
