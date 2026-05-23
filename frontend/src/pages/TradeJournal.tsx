@@ -25,6 +25,7 @@ import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
+import CSVImportModal from '../components/common/CSVImportModal.js';
 import './TradeJournal.css';
 
 type RuleState = 'ok' | 'fail' | 'unchecked';
@@ -1716,7 +1717,7 @@ export default function TradeJournal() {
   const navigate = useNavigate();
   const { preferences, accounts } = useAppSettings();
   const { user } = useAuth();
-  const { deleteTrade: deleteTradeEverywhere } = useTrades();
+  const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
   const setEntriesInStore = useFlyxaStore(state => state.setEntries);
   const rulesTemplate = useMemo(() => getRulesTemplate(), []);
@@ -1740,6 +1741,7 @@ export default function TradeJournal() {
   const [isScreenshotFullscreen, setIsScreenshotFullscreen] = useState(false);
   const [isTradeDateEditorOpen, setIsTradeDateEditorOpen] = useState(false);
   const [tradeDateDraft, setTradeDateDraft] = useState(getTodayIso());
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   // Collapsible section state — persisted to localStorage
   const COLLAPSE_KEY = 'flyxa-journal-sections';
@@ -1767,6 +1769,42 @@ export default function TradeJournal() {
       // Best effort: local persist already happened; cloud sync can retry on next write.
     });
   }, [rulesTemplate, setEntriesInStore]);
+
+  const handleCSVImport = useCallback(async (trades: Array<{
+    symbol: string; direction: 'Long' | 'Short';
+    entry_price: number; exit_price: number; pnl: number; trade_date: string;
+    trade_time?: string; close_time?: string; contract_size?: number;
+    sl_price?: number; tp_price?: number; pre_trade_notes?: string;
+    followed_plan?: boolean; emotional_state?: string;
+  }>) => {
+    let ok = 0;
+    for (const t of trades) {
+      try {
+        await createTrade({
+          symbol: t.symbol,
+          direction: t.direction,
+          entry_price: t.entry_price,
+          exit_price: t.exit_price,
+          sl_price: t.sl_price ?? t.entry_price,
+          tp_price: t.tp_price ?? t.entry_price,
+          pnl: t.pnl,
+          contract_size: t.contract_size ?? 1,
+          trade_date: t.trade_date,
+          trade_time: t.trade_time ?? '09:30',
+          close_time: t.close_time ?? null,
+          pre_trade_notes: t.pre_trade_notes ?? '',
+          post_trade_notes: '',
+          followed_plan: t.followed_plan ?? null,
+          emotional_state: t.emotional_state ?? null,
+        });
+        ok++;
+      } catch {
+        // skip individual failures, count successes
+      }
+    }
+    pushToast({ tone: 'green', durationMs: 4000, message: `Imported ${ok} trade${ok !== 1 ? 's' : ''} from CSV` });
+    void flushSupabaseStoreNow().catch(() => {});
+  }, [createTrade]);
 
   const mutateTradeFields = useCallback((tradeId: string, fields: Partial<JournalTrade>) => {
     if (!selectedEntryId) return;
@@ -2213,6 +2251,16 @@ export default function TradeJournal() {
               </button>
               <button type="button" className="tj-nav" onClick={() => setMonthCursor(prev => shiftMonth(prev, 1))}>
                 <ChevronRight size={13} />
+              </button>
+              <button
+                type="button"
+                className="tj-nav"
+                title="Import trades from CSV"
+                onClick={() => setShowCSVImport(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 8, paddingRight: 8, fontSize: 11, color: 'var(--amber)' }}
+              >
+                <Upload size={12} />
+                Import
               </button>
             </span>
           </div>
@@ -2694,6 +2742,16 @@ export default function TradeJournal() {
             onClick={event => event.stopPropagation()}
           />
         </div>
+      )}
+
+      {showCSVImport && (
+        <CSVImportModal
+          onClose={() => setShowCSVImport(false)}
+          onImport={async (trades) => {
+            await handleCSVImport(trades);
+            setShowCSVImport(false);
+          }}
+        />
       )}
     </div>
   );
