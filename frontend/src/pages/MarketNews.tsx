@@ -91,6 +91,7 @@ interface CalendarCache {
 interface SourcePrefs {
   finnhub: boolean;
   polygon: boolean;
+  x: boolean;
   economicCalendar: boolean;
   aiFilter: boolean;
 }
@@ -146,7 +147,7 @@ function writeCalendarCache(result: CalendarResult, timeZone: string) {
 }
 
 function readSourcePrefs(): SourcePrefs {
-  const defaults: SourcePrefs = { finnhub: true, polygon: false, economicCalendar: true, aiFilter: true };
+  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, economicCalendar: true, aiFilter: true };
   try {
     const raw = localStorage.getItem(SOURCES_KEY);
     if (!raw) return defaults;
@@ -154,6 +155,7 @@ function readSourcePrefs(): SourcePrefs {
     return {
       finnhub: parsed.finnhub ?? defaults.finnhub,
       polygon: parsed.polygon ?? defaults.polygon,
+      x: parsed.x ?? defaults.x,
       economicCalendar: parsed.economicCalendar ?? defaults.economicCalendar,
       aiFilter: parsed.aiFilter ?? defaults.aiFilter,
     };
@@ -1152,6 +1154,7 @@ function SourcesPanel({ prefs, onChange }: { prefs: SourcePrefs; onChange: (valu
         {([
           { key: 'finnhub', label: 'Finnhub', note: 'Requires VITE_FINNHUB_KEY' },
           { key: 'polygon', label: 'Polygon.io', note: 'Requires VITE_POLYGON_KEY' },
+          { key: 'x', label: 'X accounts', note: 'Requires backend X_BEARER_TOKEN' },
           { key: 'economicCalendar', label: 'Economic Calendar', note: '' },
           { key: 'aiFilter', label: 'AI Filter', note: '' },
         ] as const).map(source => {
@@ -1224,20 +1227,22 @@ export default function MarketNews() {
     setLoading(true);
     setError(null);
     try {
-      const [finnhubRaw, polygonRaw] = await Promise.allSettled([
+      const [finnhubRaw, polygonRaw, xRaw] = await Promise.allSettled([
         prefs.finnhub ? fetchFinnhubNews() : Promise.resolve([]),
         prefs.polygon ? fetchPolygonNews() : Promise.resolve([]),
+        prefs.x ? marketDataApi.getXNews() : Promise.resolve([]),
       ]);
 
       const combined: RawHeadline[] = [
         ...(finnhubRaw.status === 'fulfilled' ? finnhubRaw.value : []),
         ...(polygonRaw.status === 'fulfilled' ? polygonRaw.value : []),
+        ...(xRaw.status === 'fulfilled' ? xRaw.value : []),
       ];
 
       if (combined.length === 0) {
         setError(
           !FINNHUB_KEY && !POLYGON_KEY
-            ? 'Add VITE_FINNHUB_KEY to frontend/.env and restart the dev server.'
+            ? 'Add a news source key, or configure X_BEARER_TOKEN and X_MARKET_NEWS_USERNAMES in backend/.env.'
             : 'No headlines returned. Restart the dev server to pick up API keys, then refresh.',
         );
         setLoading(false);

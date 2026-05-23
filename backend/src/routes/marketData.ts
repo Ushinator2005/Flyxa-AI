@@ -5,6 +5,8 @@ const router = Router();
 
 const ALLOWED_INTERVALS = new Set(['1m', '5m', '15m', '1h', '1d']);
 const ALLOWED_RANGES = new Set(['1d', '5d', '1mo', '3mo', '1y']);
+const X_MAX_ACCOUNTS = 10;
+const X_POSTS_PER_ACCOUNT = 10;
 
 type YahooChartResponse = {
   chart?: {
@@ -23,6 +25,49 @@ type YahooChartResponse = {
     }>;
   };
 };
+
+type XUserLookupResponse = {
+  data?: Array<{ id: string; username: string; name?: string }>;
+};
+
+type XUserPostsResponse = {
+  data?: Array<{ id: string; text: string; created_at?: string }>;
+};
+
+function getConfiguredXUsernames(): string[] {
+  return (process.env.X_MARKET_NEWS_USERNAMES ?? '')
+    .split(',')
+    .map(username => username.trim().replace(/^@/, '').toLowerCase())
+    .filter(username => /^[a-z0-9_]{1,15}$/.test(username))
+    .slice(0, X_MAX_ACCOUNTS);
+}
+
+function cleanXPostText(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/^rt @[^:]+:\s*/i, '')
+    .trim();
+}
+
+async function fetchJsonFromX<T>(url: string, bearerToken: string): Promise<T | null> {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${bearerToken}`,
+      Accept: 'application/json',
+      'User-Agent': 'FlyxaAI/1.0',
+    },
+  });
+
+  if (response.status === 429) {
+    throw new Error('X API rate limit reached. Try again later.');
+  }
+
+  if (!response.ok) {
+    throw new Error(`X API request failed with status ${response.status}.`);
+  }
+
+  return response.json() as Promise<T>;
+}
 
 function normalizeYahooResponse(payload: YahooChartResponse) {
   if (payload.chart?.error?.description) {
@@ -215,6 +260,63 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
     }
 
     return res.json([]);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/x-news', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const bearerToken = process.env.X_BEARER_TOKEN?.trim();
+    const usernames = getConfiguredXUsernames();
+
+    if (!bearerToken || usernames.length === 0) {
+      return res.json([]);
+    }
+
+    const userQuery = new URLSearchParams({
+      usernames: usernames.join(','),
+      'user.fields': 'name,username',
+    });
+    const usersPayload = await fetchJsonFromX<XUserLookupResponse>(
+      `https://api.x.com/2/users/by?${userQuery.toString()}`,
+      bearerToken,
+    );
+
+    const users = usersPayload?.data ?? [];
+    if (users.length === 0) return res.json([]);
+
+    const settledPosts = await Promise.allSettled(
+      users.map(async (user) => {
+        const postQuery = new URLSearchParams({
+          max_results: String(X_POSTS_PER_ACCOUNT),
+          exclude: 'retweets,replies',
+          'tweet.fields': 'created_at',
+        });
+        const postsPayload = await fetchJsonFromX<XUserPostsResponse>(
+          `https://api.x.com/2/users/${encodeURIComponent(user.id)}/tweets?${postQuery.toString()}`,
+          bearerToken,
+        );
+
+        return (postsPayload?.data ?? []).map(post => {
+          const headline = cleanXPostText(post.text);
+          return {
+            headline,
+            source: `X @${user.username}`,
+            timestamp: post.created_at ?? new Date().toISOString(),
+            summary: headline,
+            url: `https://x.com/${user.username}/status/${post.id}`,
+          };
+        }).filter(item => item.headline.length > 0);
+      })
+    );
+
+    const combined = settledPosts.flatMap(result => (
+      result.status === 'fulfilled' ? result.value : []
+    ));
+
+    combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return res.json(combined.slice(0, 50));
   } catch (error) {
     return next(error);
   }

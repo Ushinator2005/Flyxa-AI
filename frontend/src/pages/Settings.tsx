@@ -1,9 +1,11 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, Monitor, Palette, Plus, Scan, Trash2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Monitor, Palette, Plus, Scan, Trash2, User, Wallet, X } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
+import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
+import { useRivals } from '../hooks/useRivals.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
@@ -126,6 +128,15 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(normalized.slice(2, 4), 16);
   const b = parseInt(normalized.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function normalizeUsername(value: string): string {
+  return value
+    .trim()
+    .replace(/^@/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 24);
 }
 
 function toMinutes(value: string): number {
@@ -487,7 +498,9 @@ function SectionCard({
 
 export default function Settings() {
   const location = useLocation();
+  const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { profile, saveProfile } = useRivals();
   const {
     accounts,
     defaultTradeAccountId,
@@ -506,8 +519,12 @@ export default function Settings() {
     status: 'Eval' as TradingAccountStatus,
     startingBalance: '' as string,
   });
-  const [activeSection, setActiveSection] = useState<string>('general');
+  const [activeSection, setActiveSection] = useState<string>('profile');
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [profileDraft, setProfileDraft] = useState('');
+  const [profileStatus, setProfileStatus] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const profileRef = useRef<HTMLElement>(null);
   const generalRef = useRef<HTMLElement>(null);
   const displayRef = useRef<HTMLElement>(null);
   const scannerRef = useRef<HTMLElement>(null);
@@ -517,6 +534,13 @@ export default function Settings() {
   const autoSaveToastReadyRef = useRef(false);
 
   const navSections = [
+    {
+      key: 'profile',
+      title: 'Profile',
+      description: 'Username and public identity.',
+      icon: <User size={16} />,
+      ref: profileRef,
+    },
     {
       key: 'general',
       title: 'General',
@@ -550,6 +574,27 @@ export default function Settings() {
   function scrollToSection(key: string, ref: React.RefObject<HTMLElement | null>) {
     setActiveSection(key);
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function handleSaveProfile() {
+    const username = normalizeUsername(profileDraft || profile?.username || '');
+    setProfileDraft(username);
+    if (!username) {
+      setProfileStatus('Choose a username first.');
+      return;
+    }
+
+    setProfileSaving(true);
+    setProfileStatus('');
+    try {
+      await saveProfile({ username, displayName: username });
+      setProfileDraft('');
+      setProfileStatus('Profile saved.');
+    } catch (error) {
+      setProfileStatus(error instanceof Error ? error.message : 'Could not save profile.');
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   function resetNewAccountForm() {
@@ -611,9 +656,17 @@ export default function Settings() {
 
   const defaultTradeAccount = accounts.find(account => account.id === defaultTradeAccountId);
   const defaultTradeAccountName = defaultTradeAccount?.name ?? 'Default Account';
+  const profileUsername = profile?.username ?? '';
+  const displayName = (user?.user_metadata?.name as string | undefined)
+    || (user?.user_metadata?.full_name as string | undefined)
+    || user?.email?.split('@')[0]
+    || 'Trader';
+  const email = user?.email ?? 'No email on file';
+  const avatarInitials = (profile?.avatarInitials || displayName.slice(0, 2)).toUpperCase();
 
   useEffect(() => {
     const sectionEntries = [
+      { key: 'profile', ref: profileRef },
       { key: 'general', ref: generalRef },
       { key: 'display', ref: displayRef },
       { key: 'scanner', ref: scannerRef },
@@ -622,7 +675,7 @@ export default function Settings() {
 
     const updateActiveSectionFromScroll = () => {
       const stickyOffset = 180;
-      let nextActive = 'general';
+      let nextActive = 'profile';
 
       sectionEntries.forEach(section => {
         const top = section.ref.current?.getBoundingClientRect().top;
@@ -645,7 +698,8 @@ export default function Settings() {
 
     const sectionKey = rawHash === 'add-account' ? 'accounts' : rawHash;
     const sectionRef =
-      sectionKey === 'general' ? generalRef
+      sectionKey === 'profile' ? profileRef
+      : sectionKey === 'general' ? generalRef
       : sectionKey === 'display' ? displayRef
       : sectionKey === 'scanner' ? scannerRef
       : sectionKey === 'accounts' ? accountsRef
@@ -703,7 +757,7 @@ export default function Settings() {
       <div>
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: T1, lineHeight: 1.2 }}>Settings</h1>
         <p style={{ marginTop: '4px', fontSize: '12px', color: T3 }}>
-          Manage workspace preferences, display defaults, and trading accounts.
+          Manage your profile, workspace preferences, display defaults, and trading accounts.
         </p>
       </div>
 
@@ -714,7 +768,7 @@ export default function Settings() {
           top: '8px',
           zIndex: 25,
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
           gap: '12px',
           padding: '8px',
           borderRadius: '8px',
@@ -776,6 +830,120 @@ export default function Settings() {
           );
         })}
       </div>
+
+      {/* Profile section */}
+      <section ref={profileRef} style={{ scrollMarginTop: '140px' }}>
+        <SectionDivider label="Profile" />
+        <SectionCard
+          title="Your profile"
+          subtitle="Set the username other traders use to find you and send rival requests."
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', alignItems: 'stretch' }}>
+            <div
+              style={{
+                border: `1px solid ${BORDER}`,
+                borderRadius: '8px',
+                background: S2,
+                padding: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: AMBER_DIM,
+                  border: `1px solid ${AMBER}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: AMBER,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {avatarInitials}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ color: T1, fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayName}
+                </p>
+                <p style={{ marginTop: '3px', color: T3, fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {email}
+                </p>
+                <p style={{ marginTop: '8px', color: profileUsername ? 'var(--cobalt)' : T3, fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                  {profileUsername ? `@${profileUsername}` : 'Username not set'}
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `1px solid ${BORDER}`,
+                borderRadius: '8px',
+                background: S2,
+                padding: '14px',
+              }}
+            >
+              <FieldLabel>Username</FieldLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 92px', gap: '8px' }}>
+                <input
+                  value={profileDraft}
+                  placeholder={profileUsername || 'your_username'}
+                  onChange={event => setProfileDraft(normalizeUsername(event.target.value))}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') void handleSaveProfile();
+                  }}
+                  style={{
+                    width: '100%',
+                    minWidth: 0,
+                    height: '38px',
+                    borderRadius: '6px',
+                    border: `1px solid ${BORDER}`,
+                    background: S1,
+                    color: T1,
+                    padding: '0 12px',
+                    fontSize: '13px',
+                    outline: 'none',
+                    fontFamily: SANS,
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={profileSaving}
+                  onClick={() => { void handleSaveProfile(); }}
+                  style={{
+                    height: '38px',
+                    borderRadius: '6px',
+                    border: `1px solid ${AMBER}`,
+                    background: profileSaving ? 'rgba(245,158,11,0.08)' : AMBER_DIM,
+                    color: AMBER,
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: profileSaving ? 'not-allowed' : 'pointer',
+                    opacity: profileSaving ? 0.65 : 1,
+                  }}
+                >
+                  {profileSaving ? 'Saving' : 'Save'}
+                </button>
+              </div>
+              <p style={{ marginTop: '9px', color: T3, fontSize: '11px', lineHeight: 1.5 }}>
+                This is your public Flyxa username for rivals, requests, and leaderboards.
+              </p>
+              {profileStatus && (
+                <p style={{ marginTop: '8px', color: profileStatus.includes('saved') ? 'var(--green)' : AMBER, fontSize: '11px', fontWeight: 600 }}>
+                  {profileStatus}
+                </p>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+      </section>
 
       {/* General section */}
       <section ref={generalRef} style={{ scrollMarginTop: '140px' }}>

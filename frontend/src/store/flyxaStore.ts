@@ -502,7 +502,7 @@ function withDerivedEntries(entries: JournalEntry[]): JournalEntry[] {
 }
 
 function maybeCreateFundedAccount(accounts: Account[], billingAccount: BillingAccount): Account[] {
-  if (billingAccount.status !== 'Passed') return accounts;
+  if (billingAccount.status !== 'Passed' && billingAccount.status !== 'Funded') return accounts;
   const existing = accounts.find((account) => account.firm === billingAccount.firm && account.name === `${billingAccount.firm} Funded`);
   if (existing) return accounts;
 

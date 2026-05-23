@@ -1428,7 +1428,7 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
   const pipColor = (score: number, v: number) => score >= v ? (score <= 2 ? 'var(--red)' : score === 3 ? 'var(--amber)' : 'var(--green)') : 'var(--app-panel-strong)';
 
   const CARDS: Array<{ key: keyof Omit<typeof r,'notes'>; label: string; sub: string }> = [
-    { key:'setupQuality', label:'Setup Quality', sub:'Was this an A/B/C setup?' },
+    { key:'setupQuality', label:'Trade Quality', sub:'How clean and high-conviction was this trade?' },
     { key:'discipline', label:'Discipline', sub:'Did you follow your rules completely?' },
     { key:'execution', label:'Execution', sub:'Did you enter and exit as planned?' },
     { key:'patience', label:'Patience', sub:'Did you wait for the right moment?' },

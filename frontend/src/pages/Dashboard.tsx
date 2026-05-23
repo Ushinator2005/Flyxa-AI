@@ -489,37 +489,48 @@ export default function Dashboard() {
         {/* Pre-session brief prompt */}
         {!preSessionDone && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '11px 16px', borderRadius: 8, flexShrink: 0,
-            background: 'rgba(245,158,11,0.07)',
-            border: '1px solid rgba(245,158,11,0.22)',
+            display: 'flex', alignItems: 'center', gap: 0,
+            borderRadius: 7, flexShrink: 0, overflow: 'hidden',
+            border: '1px solid rgba(245,158,11,0.18)',
+            background: 'rgba(245,158,11,0.04)',
           }}>
-            <ClipboardCheck size={16} color={AMBER} style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: AMBER, margin: 0 }}>Pre-session brief not started</p>
-              <p style={{ fontSize: 11, color: T3, margin: '2px 0 0' }}>Set your mindset, review your plan, and confirm today's targets before the market opens.</p>
+            {/* left accent */}
+            <span style={{ width: 3, alignSelf: 'stretch', background: AMBER, flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flex: 1, minWidth: 0 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: AMBER, flexShrink: 0, boxShadow: `0 0 6px ${AMBER}` }} />
+              <p style={{ fontSize: 12, fontWeight: 500, color: AMBER, margin: 0, letterSpacing: '0.01em' }}>
+                No pre-session brief today
+              </p>
+              <span style={{ fontSize: 11, color: T3, margin: 0 }}>·</span>
+              <p style={{ fontSize: 11, color: T3, margin: 0 }}>You haven't locked in your plan yet.</p>
             </div>
-            <button
-              onClick={() => { dismissPreSession(); navigate('/pre-session'); }}
-              style={{
-                height: 30, padding: '0 14px', flexShrink: 0,
-                background: AMBER, border: 'none', borderRadius: 5,
-                fontSize: 11, fontWeight: 600, color: '#000',
-                cursor: 'pointer', fontFamily: SANS,
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.opacity = '0.85'; }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-            >
-              Start brief →
-            </button>
-            <button
-              onClick={dismissPreSession}
-              style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: T3, flexShrink: 0, display: 'flex', alignItems: 'center' }}
-              title="Dismiss for today"
-            >
-              <X size={13} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 10 }}>
+              <button
+                onClick={() => { dismissPreSession(); navigate('/pre-session'); }}
+                style={{
+                  height: 26, padding: '0 11px', flexShrink: 0,
+                  background: 'transparent',
+                  border: '1px solid rgba(245,158,11,0.35)',
+                  borderRadius: 4,
+                  fontSize: 11, fontWeight: 600, color: AMBER,
+                  cursor: 'pointer', fontFamily: SANS,
+                  letterSpacing: '0.01em',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                Begin
+              </button>
+              <button
+                onClick={dismissPreSession}
+                style={{ background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer', color: T3, flexShrink: 0, display: 'flex', alignItems: 'center', opacity: 0.6 }}
+                title="Dismiss for today"
+                onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = '0.6'; }}
+              >
+                <X size={12} />
+              </button>
+            </div>
           </div>
         )}
 

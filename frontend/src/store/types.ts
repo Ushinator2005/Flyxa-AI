@@ -163,7 +163,13 @@ export interface PropFirm {
   params: Array<{ id: string; label: string; value: string }>;
 }
 
-export type BillingAccountStatus = 'Active' | 'Passed' | 'Blown' | 'Reset';
+export type BillingAccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
+
+export interface BillingPayout {
+  id: string;
+  amount: number;
+  date: string;
+}
 
 export interface BillingAccount {
   id: string;
@@ -176,6 +182,8 @@ export interface BillingAccount {
   purchaseDate: string;
   status: BillingAccountStatus;
   payoutReceived: number;
+  payouts?: BillingPayout[];
+  notes?: string;
   roi?: number;
 }
 

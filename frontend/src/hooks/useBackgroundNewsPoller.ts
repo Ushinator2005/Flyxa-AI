@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { aiApi } from '../services/api.js';
+import { aiApi, marketDataApi } from '../services/api.js';
 
 const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY as string | undefined;
 /** Poll every 5 minutes. */
@@ -55,7 +55,14 @@ async function fetchFinnhubRaw(): Promise<RawItem[]> {
 }
 
 async function pollOnce(): Promise<void> {
-  const raw = await fetchFinnhubRaw();
+  const [finnhubResult, xResult] = await Promise.allSettled([
+    fetchFinnhubRaw(),
+    marketDataApi.getXNews(),
+  ]);
+  const raw = [
+    ...(finnhubResult.status === 'fulfilled' ? finnhubResult.value : []),
+    ...(xResult.status === 'fulfilled' ? xResult.value : []),
+  ];
   if (raw.length === 0) return;
 
   // Skip headlines we've already processed.
@@ -96,7 +103,7 @@ async function pollOnce(): Promise<void> {
 }
 
 /**
- * Silently polls Finnhub every 5 minutes in the background.
+ * Silently polls configured breaking-news sources every 5 minutes in the background.
  * New headlines are sent through the AI filter; only items classified as
  * `isBreaking: true` are written to `flyxa_breaking_cache_v1`.
  *
@@ -106,7 +113,7 @@ export function useBackgroundNewsPoller(enabled: boolean) {
   const runningRef = useRef(false);
 
   useEffect(() => {
-    if (!enabled || !FINNHUB_KEY) return;
+    if (!enabled) return;
 
     async function run() {
       if (runningRef.current) return; // prevent concurrent runs
