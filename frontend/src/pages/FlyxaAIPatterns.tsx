@@ -187,6 +187,45 @@ function getSuggestion(pattern: PatternItem): string {
     return `${sessionCount} trades while "${state}" at ${wr}% win rate and ${formatSignedCurrency(totalPnl)} — your best-performing emotional context by a meaningful margin. The practical question is what produces this state reliably. Think back to the sessions where you felt "${state}": what did you do the night before, how much preparation had you done, did you exercise, what time did you start? Even identifying one or two consistent inputs gives you something to engineer rather than just hope for.`;
   }
 
+  // ── Day-of-week ──────────────────────────────────────────────────
+  if (id.startsWith('auto-dow-risk-')) {
+    const day = id.replace('auto-dow-risk-', '');
+    return `${sessionCount} ${day} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. Something about how you approach ${day}s is producing worse outcomes than your other days. This doesn't mean ${day} has less edge — it usually means your preparation or mental state is different. Think back to the last 3 ${day} sessions: were you more rushed, trading out of sequence, or carrying something from the weekend or end-of-week into the open? One practical test: start your next ${day} with a smaller position, treat the first trade as diagnostic, and see if the pattern holds at half size.`;
+  }
+  if (id.startsWith('auto-dow-edge-')) {
+    const day = id.replace('auto-dow-edge-', '');
+    return `${sessionCount} ${day} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)} — your best performing day of the week. Think about what's structurally different about your ${day} sessions: are you better rested, have fewer distractions, or is the market character itself better suited to your style? Whatever's producing this, don't take it for granted. Document specifically what you do on a typical ${day} morning and treat it as a repeatable template.`;
+  }
+
+  // ── Time-of-day ──────────────────────────────────────────────────
+  if (id.startsWith('auto-hour-risk-')) {
+    const hour = id.replace('auto-hour-risk-', '');
+    return `${sessionCount} trades entered around ${hour} at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. This time window is a consistent execution problem. The most common reason for a specific hour underperforming is that the trader is either chasing entries after a slow period or forcing activity before a natural close. Look at the specific entry context — were these trades planned, or were they taken because something moved and you felt you had to act? If most are reactive, a simple rule (no new entries between ${hour} and 30 minutes later) is worth testing.`;
+  }
+
+  // ── Overtrading ──────────────────────────────────────────────────
+  if (id === 'auto-behav-overtrade') {
+    const wrTagLow = tags.find(t => t.label.startsWith('1-2 trades'));
+    const wrTagHigh = tags.find(t => t.label.startsWith('4+ trades'));
+    const lowWrStr = wrTagLow ? wrTagLow.label : '';
+    const highWrStr = wrTagHigh ? wrTagHigh.label : '';
+    return `${lowWrStr} vs ${highWrStr}. The data says your edge is narrow, not broad — it lives in your best 1 or 2 setups per session, not in trading volume. Most traders overtrade because they feel uncomfortable watching the market move without a position. That discomfort is a cost you're currently paying in win rate. The fix is not "trade fewer setups" as a guideline — it's a hard cap: after your second trade each day, require the next setup to score meaningfully higher on your pre-trade checklist than a normal entry. That filter will kill 70% of the bad fourth and fifth trades automatically.`;
+  }
+
+  // ── Off-plan trades ──────────────────────────────────────────────
+  if (id === 'auto-behav-offplan') {
+    const onTag = tags.find(t => t.label.startsWith('On-plan'));
+    const offTag = tags.find(t => t.label.startsWith('Off-plan'));
+    return `${onTag?.label ?? ''} vs ${offTag?.label ?? ''}. Your on-plan and off-plan trades are two different strategies with meaningfully different edge. The off-plan group isn't just "slightly worse" — it's a net negative that is directly reducing what your on-plan trades earn. Off-plan entries almost always come from one of three triggers: boredom after a winner, recovery attempt after a loser, or a live move you weren't positioned for. Identify which one accounts for most of your off-plan trades — that's the specific situation to build a rule around, not a general "stay in your plan" commitment.`;
+  }
+
+  // ── Post-loss behavior ───────────────────────────────────────────
+  if (id === 'auto-behav-postloss') {
+    const overallTag = tags.find(t => t.label.startsWith('Overall'));
+    const postTag = tags.find(t => t.label.startsWith('Post-loss'));
+    return `${overallTag?.label ?? ''} overall, but ${postTag?.label ?? ''} on the trade immediately following a losing trade. Your decision-making is reliably degraded in the 5-15 minutes after a loss — this is extremely common and the data proves it's happening to you specifically. The rule this suggests is not complicated: after any losing trade, do not take the next setup for at least 10 minutes regardless of how clean it looks. Use that time to restate your session plan. If the next entry still meets your criteria after the pause, take it. Roughly half the time, you'll decide not to — and based on this data, that's the right call.`;
+  }
+
   // ── Generic fallback ────────────────────────────────────────────
   const rrNote = rr !== null ? ` Average winner ${fmt(avgWin)}, average loser ${fmt(avgLoss)} (${rr.toFixed(1)}:1 ratio).` : '';
   if (type === 'Risk' || status === 'Active') {
@@ -408,6 +447,188 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
       });
     }
   });
+
+  // ── Day-of-week patterns ─────────────────────────────────────────
+  const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dowGroups = groupBy(filtered, t => {
+    const d = t.trade_date ? new Date(`${t.trade_date}T00:00:00`) : null;
+    return (d ? DOW_NAMES[d.getDay()] : 'Unknown') as any;
+  });
+  const meaningfulDowCount = Array.from(dowGroups.entries())
+    .filter(([day, g]) => day !== 'Unknown' && g.length >= 4).length;
+  if (meaningfulDowCount >= 3) {
+    dowGroups.forEach((group, day) => {
+      if (group.length < 4 || day === 'Unknown') return;
+      const s = summariseGroup(group);
+      const wr = Math.round(s.winRate);
+      const confidence = Math.min(88, Math.round(20 + group.length * 4 + Math.abs(s.winRate - 50)));
+      if (wr < 35 && s.netPnl < 0 && group.length >= 5) {
+        patterns.push({
+          id: `auto-dow-risk-${day}`,
+          type: 'Behaviour',
+          status: 'Active',
+          title: `${day}s are your worst trading day`,
+          description: `${group.length} ${day} trades returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate — significantly below your other days. Consider reducing size or standing aside on ${day}s until you understand what's breaking down.`,
+          firstSeen: s.firstSeen, sessionCount: group.length, totalPnl: s.netPnl,
+          tags: [{ label: day, sentiment: 'neutral' }, { label: `${wr}% win rate`, sentiment: 'negative' }, { label: `${group.length} trades`, sentiment: 'neutral' }],
+          confidence, instrument: 'All', session: 'RTH open', sessions: s.sessions,
+        });
+      } else if (wr >= 65 && s.netPnl > 0 && group.length >= 4) {
+        patterns.push({
+          id: `auto-dow-edge-${day}`,
+          type: 'Behaviour',
+          status: 'Confirmed',
+          title: `${day}s are your strongest trading day`,
+          description: `${group.length} ${day} trades returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate — your best day of the week. Document what makes your ${day} sessions different and protect this edge.`,
+          firstSeen: s.firstSeen, sessionCount: group.length, totalPnl: s.netPnl,
+          tags: [{ label: day, sentiment: 'neutral' }, { label: `${wr}% win rate`, sentiment: 'positive' }, { label: `${group.length} trades`, sentiment: 'neutral' }],
+          confidence, instrument: 'All', session: 'RTH open', sessions: s.sessions,
+        });
+      }
+    });
+  }
+
+  // ── Time-of-day patterns ─────────────────────────────────────────
+  const hourGroups = groupBy(filtered, t => {
+    if (!t.trade_time) return 'Unknown' as any;
+    const h = parseInt(t.trade_time.split(':')[0], 10);
+    if (!Number.isFinite(h)) return 'Unknown' as any;
+    return (`${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`) as any;
+  });
+  const meaningfulHourCount = Array.from(hourGroups.entries())
+    .filter(([h, g]) => h !== 'Unknown' && g.length >= 4).length;
+  if (meaningfulHourCount >= 3) {
+    hourGroups.forEach((group, hour) => {
+      if (group.length < 4 || hour === 'Unknown') return;
+      const s = summariseGroup(group);
+      const wr = Math.round(s.winRate);
+      const confidence = Math.min(85, Math.round(15 + group.length * 5 + Math.abs(s.winRate - 50)));
+      if (wr < 33 && s.netPnl < 0 && group.length >= 5) {
+        patterns.push({
+          id: `auto-hour-risk-${hour}`,
+          type: 'Behaviour',
+          status: 'Active',
+          title: `${hour} entries are a consistent leak`,
+          description: `${group.length} trades entered around ${hour} at ${wr}% win rate and ${formatSignedCurrency(s.netPnl)}. This hour is underperforming your overall average — a time-based filter here is worth testing.`,
+          firstSeen: s.firstSeen, sessionCount: group.length, totalPnl: s.netPnl,
+          tags: [{ label: hour, sentiment: 'neutral' }, { label: `${wr}% win rate`, sentiment: 'negative' }, { label: `${group.length} trades`, sentiment: 'neutral' }],
+          confidence, instrument: 'All', session: 'RTH open', sessions: s.sessions,
+        });
+      }
+    });
+  }
+
+  // ── Overtrading detection ─────────────────────────────────────────
+  const tradesByDate = groupBy(filtered, t => (t.trade_date ?? now) as any);
+  const dayStats = Array.from(tradesByDate.entries()).map(([date, ts]) => ({
+    date,
+    count: ts.length,
+    winRate: ts.filter(t => Number(t.pnl) > 0).length / ts.length * 100,
+    pnl: ts.reduce((s, t) => s + Number(t.pnl ?? 0), 0),
+  }));
+  if (dayStats.length >= 8) {
+    const highVolDays = dayStats.filter(d => d.count >= 4);
+    const lowVolDays = dayStats.filter(d => d.count <= 2);
+    if (highVolDays.length >= 3 && lowVolDays.length >= 3) {
+      const highWr = highVolDays.reduce((s, d) => s + d.winRate, 0) / highVolDays.length;
+      const lowWr = lowVolDays.reduce((s, d) => s + d.winRate, 0) / lowVolDays.length;
+      const highPnlPerDay = highVolDays.reduce((s, d) => s + d.pnl, 0) / highVolDays.length;
+      const lowPnlPerDay = lowVolDays.reduce((s, d) => s + d.pnl, 0) / lowVolDays.length;
+      if (lowWr > highWr + 15 && lowPnlPerDay > highPnlPerDay) {
+        patterns.push({
+          id: 'auto-behav-overtrade',
+          type: 'Behaviour',
+          status: 'Active',
+          title: 'Win rate drops sharply on high-volume days',
+          description: `Days with 1-2 trades: ${Math.round(lowWr)}% win rate. Days with 4+ trades: ${Math.round(highWr)}% win rate. Your edge is concentrated in selective entries — adding more trades per session actively reduces it.`,
+          firstSeen: dayStats[dayStats.length - 1].date,
+          sessionCount: highVolDays.length,
+          totalPnl: highVolDays.reduce((s, d) => s + d.pnl, 0) - lowVolDays.reduce((s, d) => s + d.pnl, 0),
+          tags: [
+            { label: `1-2 trades: ${Math.round(lowWr)}% WR`, sentiment: 'positive' },
+            { label: `4+ trades: ${Math.round(highWr)}% WR`, sentiment: 'negative' },
+          ],
+          confidence: Math.min(90, Math.round(40 + highVolDays.length * 5)),
+          instrument: 'All', session: 'RTH open',
+          sessions: highVolDays.slice(-6).map(d => ({ date: d.date, pnl: d.pnl })),
+        });
+      }
+    }
+  }
+
+  // ── Plan adherence delta ──────────────────────────────────────────
+  const planLogged = filtered.filter(t => typeof t.followed_plan === 'boolean');
+  if (planLogged.length >= 6) {
+    const onPlan = planLogged.filter(t => t.followed_plan === true);
+    const offPlan = planLogged.filter(t => t.followed_plan === false);
+    if (onPlan.length >= 3 && offPlan.length >= 3) {
+      const onWr = (onPlan.filter(t => Number(t.pnl) > 0).length / onPlan.length) * 100;
+      const offWr = (offPlan.filter(t => Number(t.pnl) > 0).length / offPlan.length) * 100;
+      const offPnl = offPlan.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      const onPnl = onPlan.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      if (onWr > offWr + 15 && offPnl < 0) {
+        patterns.push({
+          id: 'auto-behav-offplan',
+          type: 'Behaviour',
+          status: 'Active',
+          title: 'Off-plan trades are a quantified drag',
+          description: `${onPlan.length} on-plan trades: ${Math.round(onWr)}% win rate, ${formatSignedCurrency(onPnl)}. ${offPlan.length} off-plan trades: ${Math.round(offWr)}% win rate, ${formatSignedCurrency(offPnl)}. Removing off-plan entries entirely would improve your result by ${formatSignedCurrency(Math.abs(offPnl))}.`,
+          firstSeen: planLogged.map(t => t.trade_date ?? now).sort()[0] ?? now,
+          sessionCount: offPlan.length,
+          totalPnl: offPnl,
+          tags: [
+            { label: `On-plan: ${Math.round(onWr)}% WR`, sentiment: 'positive' },
+            { label: `Off-plan: ${Math.round(offWr)}% WR`, sentiment: 'negative' },
+            { label: formatSignedCurrency(offPnl), sentiment: 'negative' },
+          ],
+          confidence: Math.min(92, Math.round(30 + planLogged.length * 3)),
+          instrument: 'All', session: 'RTH open',
+          sessions: offPlan.slice(-6).map(t => ({ date: t.trade_date ?? now, pnl: Number(t.pnl ?? 0) })),
+        });
+      }
+    }
+  }
+
+  // ── Post-loss behavior ────────────────────────────────────────────
+  const sortedByTime = [...filtered].sort((a, b) => {
+    const ak = `${a.trade_date ?? ''}${a.trade_time ?? ''}`;
+    const bk = `${b.trade_date ?? ''}${b.trade_time ?? ''}`;
+    return ak.localeCompare(bk);
+  });
+  if (sortedByTime.length >= 8) {
+    const afterLoss: Trade[] = [];
+    for (let i = 1; i < sortedByTime.length; i++) {
+      const prev = sortedByTime[i - 1];
+      const curr = sortedByTime[i];
+      if (prev.trade_date !== curr.trade_date) continue;
+      if (Number(prev.pnl) < 0) afterLoss.push(curr);
+    }
+    if (afterLoss.length >= 4) {
+      const postLossWr = (afterLoss.filter(t => Number(t.pnl) > 0).length / afterLoss.length) * 100;
+      const postLossPnl = afterLoss.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      const overallWr = (filtered.filter(t => Number(t.pnl) > 0).length / filtered.length) * 100;
+      if (postLossWr < overallWr - 15 && postLossPnl < 0) {
+        patterns.push({
+          id: 'auto-behav-postloss',
+          type: 'Behaviour',
+          status: 'Active',
+          title: 'First trade after a loss underperforms',
+          description: `Your overall win rate is ${Math.round(overallWr)}%, but the trade immediately following a losing trade wins only ${Math.round(postLossWr)}% of the time across ${afterLoss.length} occurrences (${formatSignedCurrency(postLossPnl)}). A mandatory pause after any loss would remove this leak.`,
+          firstSeen: sortedByTime[0].trade_date ?? now,
+          sessionCount: afterLoss.length,
+          totalPnl: postLossPnl,
+          tags: [
+            { label: `Overall: ${Math.round(overallWr)}% WR`, sentiment: 'neutral' },
+            { label: `Post-loss: ${Math.round(postLossWr)}% WR`, sentiment: 'negative' },
+            { label: `${afterLoss.length} occurrences`, sentiment: 'neutral' },
+          ],
+          confidence: Math.min(88, Math.round(25 + afterLoss.length * 5)),
+          instrument: 'All', session: 'RTH open',
+          sessions: afterLoss.slice(-6).map(t => ({ date: t.trade_date ?? now, pnl: Number(t.pnl ?? 0) })),
+        });
+      }
+    }
+  }
 
   return patterns.sort((a, b) => Math.abs(b.totalPnl) - Math.abs(a.totalPnl));
 }
