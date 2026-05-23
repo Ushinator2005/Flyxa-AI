@@ -1,8 +1,9 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Minus, RotateCcw } from 'lucide-react';
+import { Send, RotateCcw, Sparkles } from 'lucide-react';
 import { useTrades } from '../hooks/useTrades.js';
-import { parseAndRespond, QUICK_QUESTIONS, type AskResponse, type AskDataRow } from '../utils/askFlyxa.js';
+import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
+import { api } from '../services/api.js';
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 const C = {
@@ -20,172 +21,93 @@ const C = {
   grn: 'var(--grn, #22d68a)',
   red: 'var(--red, #f05252)',
   sans: 'var(--font-sans, Inter, sans-serif)',
-  mono: 'var(--font-mono, DM Mono, monospace)',
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function confColor(c: AskResponse['confidence']) {
-  return c === 'high' ? C.grn : c === 'medium' ? C.acc : C.t2;
+// ─── Response item ─────────────────────────────────────────────────────────────
+interface AIReply {
+  question: string;
+  reply: string;
+  sampleSize: number;
+  error?: boolean;
 }
-function confLabel(c: AskResponse['confidence'], n: number) {
-  return `${c.toUpperCase()} confidence · ${n} trade${n !== 1 ? 's' : ''} analysed`;
-}
-function toneColor(tone: AskDataRow['tone']) {
-  return tone === 'pos' ? C.grn : tone === 'neg' ? C.red : C.t1;
-}
-function fmtPnl(v: number) {
-  const abs = Math.abs(v);
-  const s = abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k` : `$${abs.toFixed(0)}`;
-  return v >= 0 ? `+${s}` : `-${s}`;
-}
-function fmtPct(v: number) { return `${Math.round(v)}%`; }
 
-// ─── Response card ────────────────────────────────────────────────────────────
-function ResponseCard({ r, onNavigate }: { r: AskResponse; onNavigate: (path: string) => void }) {
-  const isError = r.noData;
-
-  const card: CSSProperties = {
-    borderRadius: 10,
-    border: `1px solid ${C.b0}`,
-    background: C.d2,
-    overflow: 'hidden',
-    marginBottom: 12,
-  };
-  const topBar: CSSProperties = {
-    height: 2,
-    background: isError ? C.t2 : `linear-gradient(90deg, ${C.acc} 0%, ${C.grn} 100%)`,
-  };
+function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string) => void }) {
+  // Format Claude's reply: split on double newlines for paragraphs
+  const paragraphs = r.reply.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
 
   return (
-    <div style={card}>
-      <div style={topBar} />
-      <div style={{ padding: '14px 16px' }}>
+    <div style={{
+      borderRadius: 10,
+      border: `1px solid ${r.error ? C.red + '30' : C.b0}`,
+      background: C.d2,
+      overflow: 'hidden',
+      marginBottom: 12,
+    }}>
+      {/* Top gradient bar */}
+      <div style={{
+        height: 2,
+        background: r.error
+          ? C.red
+          : `linear-gradient(90deg, ${C.acc} 0%, ${C.grn} 100%)`,
+      }} />
 
-        {/* Question */}
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>
+      <div style={{ padding: '14px 16px' }}>
+        {/* Question label */}
+        <div style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+          textTransform: 'uppercase', color: C.t2, marginBottom: 6,
+        }}>
           Your question
         </div>
-        <div style={{ fontSize: 12.5, color: C.t1, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.b0}` }}>
+        <div style={{
+          fontSize: 12.5, color: C.t1, marginBottom: 14,
+          paddingBottom: 12, borderBottom: `1px solid ${C.b0}`,
+        }}>
           "{r.question}"
         </div>
 
-        {/* Answer headline */}
-        <div style={{ fontSize: 15, fontWeight: 660, color: C.t0, lineHeight: 1.4, marginBottom: 8 }}>
-          {r.answer}
-        </div>
-
-        {/* Detail */}
-        <div style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.65, marginBottom: r.rows?.length ? 14 : 0 }}>
-          {r.detail}
-        </div>
-
-        {/* Data table */}
-        {r.rows && r.rows.length > 0 && (
-          <div style={{ marginBottom: 14, borderRadius: 7, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
-            {/* Header */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 70px 80px 54px',
-              padding: '6px 12px', background: C.d3,
-              fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.t2,
+        {/* Claude's answer */}
+        <div style={{ marginBottom: 14 }}>
+          {paragraphs.map((para, i) => (
+            <p key={i} style={{
+              fontSize: 13.5,
+              color: r.error ? C.red : C.t0,
+              lineHeight: 1.7,
+              margin: '0 0 10px',
+              fontWeight: i === 0 ? 540 : 400,
             }}>
-              <span>Segment</span>
-              <span style={{ textAlign: 'right' }}>Win rate</span>
-              <span style={{ textAlign: 'right' }}>Net P&L</span>
-              <span style={{ textAlign: 'right' }}>Trades</span>
-            </div>
-            {/* Rows */}
-            {r.rows.map((row, i) => {
-              const maxAbsNet = Math.max(...r.rows!.map(rr => Math.abs(rr.netPnl)), 1);
-              const barW = Math.min(100, (Math.abs(row.netPnl) / maxAbsNet) * 100);
-              return (
-                <div
-                  key={i}
-                  style={{
-                    display: 'grid', gridTemplateColumns: '1fr 70px 80px 54px',
-                    padding: '8px 12px', alignItems: 'center',
-                    borderTop: i > 0 ? `1px solid ${C.b0}` : 'none',
-                    background: i % 2 === 0 ? 'transparent' : `${C.b0}50`,
-                  }}
-                >
-                  {/* Label + mini bar */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {row.tone === 'pos'
-                        ? <TrendingUp size={11} style={{ color: C.grn, flexShrink: 0 }} />
-                        : row.tone === 'neg'
-                          ? <TrendingDown size={11} style={{ color: C.red, flexShrink: 0 }} />
-                          : <Minus size={11} style={{ color: C.t2, flexShrink: 0 }} />}
-                      <span style={{ fontSize: 12, fontWeight: 500, color: C.t0 }}>{row.label}</span>
-                    </div>
-                    <div style={{ marginTop: 4, height: 2, borderRadius: 2, background: C.d4, width: '80%' }}>
-                      <div style={{ height: 2, borderRadius: 2, width: `${barW}%`, background: toneColor(row.tone) }} />
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: toneColor(row.tone), textAlign: 'right', fontFamily: C.mono }}>
-                    {fmtPct(row.winRate)}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: toneColor(row.tone), textAlign: 'right', fontFamily: C.mono }}>
-                    {fmtPnl(row.netPnl)}
-                  </span>
-                  <span style={{ fontSize: 11, color: C.t2, textAlign: 'right', fontFamily: C.mono }}>
-                    {row.trades}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+              {para}
+            </p>
+          ))}
+        </div>
 
-        {/* Warning */}
-        {r.warning && (
-          <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: 8,
-            padding: '10px 12px', borderRadius: 7, marginBottom: 10,
-            background: `${C.red}10`, border: `1px solid ${C.red}30`,
-          }}>
-            <AlertTriangle size={13} style={{ color: C.red, flexShrink: 0, marginTop: 1 }} />
-            <span style={{ fontSize: 12, color: C.red, lineHeight: 1.5 }}>{r.warning}</span>
-          </div>
-        )}
-
-        {/* Action */}
-        {r.action && !isError && (
-          <div style={{
-            padding: '10px 12px', borderRadius: 7, marginBottom: 10,
-            background: `${C.acc}0d`, border: `1px solid ${C.acc}28`,
-            display: 'flex', gap: 8, alignItems: 'flex-start',
-          }}>
-            <ChevronRight size={13} style={{ color: C.acc, flexShrink: 0, marginTop: 1 }} />
-            <span style={{ fontSize: 12.5, color: C.acc, lineHeight: 1.5, fontWeight: 500 }}>{r.action}</span>
-          </div>
-        )}
-
-        {/* Confidence + links */}
+        {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          {/* Sample size badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             padding: '3px 8px', borderRadius: 5,
-            background: `${confColor(r.confidence)}14`,
-            border: `1px solid ${confColor(r.confidence)}28`,
+            background: `${C.acc}10`, border: `1px solid ${C.acc}25`,
           }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: confColor(r.confidence) }} />
-            <span style={{ fontSize: 10, fontWeight: 600, color: confColor(r.confidence), letterSpacing: '0.04em' }}>
-              {confLabel(r.confidence, r.sampleSize)}
+            <Sparkles size={9} style={{ color: C.acc }} />
+            <span style={{ fontSize: 10, fontWeight: 600, color: C.acc, letterSpacing: '0.04em' }}>
+              Claude AI · {r.sampleSize} trade{r.sampleSize !== 1 ? 's' : ''} analysed
             </span>
           </div>
-          {!isError && (
+
+          {!r.error && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
                 onClick={() => onNavigate('/flyxa-ai/patterns')}
-                style={{ fontSize: 11, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                style={{ fontSize: 11, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2, fontFamily: C.sans }}
               >
                 Pattern library →
               </button>
               <button
                 type="button"
                 onClick={() => onNavigate('/flyxa-ai')}
-                style={{ fontSize: 11, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                style={{ fontSize: 11, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2, fontFamily: C.sans }}
               >
                 Debrief →
               </button>
@@ -210,33 +132,47 @@ export default function FlyxaAIAsk() {
   const navigate = useNavigate();
   const { trades } = useTrades();
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<AskResponse[]>([]);
+  const [history, setHistory] = useState<AIReply[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to latest answer
   useEffect(() => {
     if (history.length > 0) {
       historyEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [history.length]);
 
-  const submitQuestion = (q: string) => {
+  const submitQuestion = async (q: string) => {
     const trimmed = q.trim();
-    if (!trimmed) return;
+    if (!trimmed || loading) return;
     setLoading(true);
     setInput('');
-    // Small delay so the loading state renders before the (sync) computation
-    setTimeout(() => {
-      const response = parseAndRespond(trimmed, trades);
-      setHistory(prev => [response, ...prev]);
+
+    const stats = computeAllStats(trades);
+    const sampleSize = trades.length;
+
+    try {
+      const { reply } = await api.post<{ reply: string }>('/api/ai/ask-flyxa-data', {
+        question: trimmed,
+        stats,
+      });
+      setHistory(prev => [{ question: trimmed, reply, sampleSize }, ...prev]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setHistory(prev => [{
+        question: trimmed,
+        reply: msg,
+        sampleSize,
+        error: true,
+      }, ...prev]);
+    } finally {
       setLoading(false);
-    }, 120);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitQuestion(input); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitQuestion(input); }
   };
 
   const clearHistory = () => setHistory([]);
@@ -248,7 +184,7 @@ export default function FlyxaAIAsk() {
     >
       <div className="grid h-full grid-cols-1 overflow-hidden lg:grid-cols-[178px_minmax(0,1fr)_252px]">
 
-        {/* ── Left sub-nav (matches FlyxaAI layout) ── */}
+        {/* ── Left sub-nav ── */}
         <aside className="min-h-0 overflow-y-auto border-r px-2 py-4" style={{ backgroundColor: C.d1, borderColor: C.b0 }}>
           <div className="px-2">
             <p className="text-[14px] font-bold tracking-[0.1em]" style={{ color: C.t0 }}>FLYXA</p>
@@ -266,14 +202,13 @@ export default function FlyxaAIAsk() {
                 key={item.to}
                 type="button"
                 onClick={() => navigate(item.to)}
-                className="block w-full border-l-2 px-2.5 py-2 text-left text-[12.5px] transition-colors hover:bg-white/[0.04]"
+                className="block w-full px-2.5 py-2 text-left text-[12.5px] transition-colors hover:bg-white/[0.04]"
                 style={{
-                  borderLeftColor: item.active ? C.acc : 'transparent',
+                  borderLeft: `2px solid ${item.active ? C.acc : 'transparent'}`,
+                  borderTop: 'none', borderRight: 'none', borderBottom: 'none',
                   backgroundColor: item.active ? 'rgba(245,158,11,0.07)' : 'transparent',
                   color: item.active ? C.acc : C.t1,
                   fontFamily: C.sans,
-                  border: 'none',
-                  borderLeft: `2px solid ${item.active ? C.acc : 'transparent'}`,
                   cursor: 'pointer',
                 }}
               >
@@ -290,14 +225,17 @@ export default function FlyxaAIAsk() {
           <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.b0}` }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.t2, marginBottom: 6 }}>
-                  Ask Flyxa
+                <div style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+                  textTransform: 'uppercase', color: C.t2, marginBottom: 6,
+                }}>
+                  Ask Flyxa AI
                 </div>
                 <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: C.t0, margin: 0 }}>
                   Query your trade data
                 </h1>
                 <p style={{ fontSize: 12.5, color: C.t1, marginTop: 4 }}>
-                  Ask anything in plain English — Flyxa runs it against your actual trade history.
+                  Ask anything in plain English — Claude AI analyses your actual trade history and thinks for itself.
                 </p>
               </div>
               {history.length > 0 && (
@@ -318,7 +256,7 @@ export default function FlyxaAIAsk() {
 
             {/* Input */}
             <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1, position: 'relative' }}>
+              <div style={{ flex: 1 }}>
                 <input
                   ref={inputRef}
                   value={input}
@@ -326,6 +264,7 @@ export default function FlyxaAIAsk() {
                   onKeyDown={handleKeyDown}
                   placeholder="e.g. When do I trade best? Do I follow my plan? Am I improving?"
                   autoFocus
+                  disabled={loading}
                   style={{
                     width: '100%', height: 42, borderRadius: 8,
                     border: `1px solid ${input ? C.acc + '50' : C.b0}`,
@@ -333,12 +272,13 @@ export default function FlyxaAIAsk() {
                     padding: '0 14px', fontSize: 13, fontFamily: C.sans,
                     outline: 'none', boxSizing: 'border-box',
                     transition: 'border-color 0.15s',
+                    opacity: loading ? 0.6 : 1,
                   }}
                 />
               </div>
               <button
                 type="button"
-                onClick={() => submitQuestion(input)}
+                onClick={() => void submitQuestion(input)}
                 disabled={!input.trim() || loading}
                 style={{
                   width: 42, height: 42, borderRadius: 8, border: 'none', flexShrink: 0,
@@ -358,15 +298,17 @@ export default function FlyxaAIAsk() {
                 <button
                   key={q}
                   type="button"
-                  onClick={() => submitQuestion(q)}
+                  onClick={() => void submitQuestion(q)}
+                  disabled={loading}
                   style={{
                     padding: '4px 10px', borderRadius: 20,
                     border: `1px solid ${C.b0}`, background: C.d3,
-                    color: C.t1, fontSize: 11, cursor: 'pointer', fontFamily: C.sans,
+                    color: C.t1, fontSize: 11, cursor: loading ? 'not-allowed' : 'pointer',
+                    fontFamily: C.sans, whiteSpace: 'nowrap',
+                    opacity: loading ? 0.5 : 1,
                     transition: 'border-color 0.12s, color 0.12s',
-                    whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = `${C.acc}50`; e.currentTarget.style.color = C.t0; }}
+                  onMouseEnter={e => { if (!loading) { e.currentTarget.style.borderColor = `${C.acc}50`; e.currentTarget.style.color = C.t0; } }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = C.b0; e.currentTarget.style.color = C.t1; }}
                 >
                   {q}
@@ -377,23 +319,28 @@ export default function FlyxaAIAsk() {
 
           {/* Responses */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+            {/* Loading card */}
             {loading && (
               <div style={{
                 borderRadius: 10, border: `1px solid ${C.b0}`, background: C.d2,
-                padding: '16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10,
+                padding: '16px', marginBottom: 12,
               }}>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {[0, 1, 2].map(i => (
-                    <div key={i} style={{
-                      width: 6, height: 6, borderRadius: '50%', background: C.acc,
-                      animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-                    }} />
-                  ))}
+                <div style={{ height: 2, background: `linear-gradient(90deg, ${C.acc}60, ${C.grn}60)`, marginBottom: 14, borderRadius: 1 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {[0, 1, 2].map(i => (
+                      <div key={i} style={{
+                        width: 6, height: 6, borderRadius: '50%', background: C.acc,
+                        animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                      }} />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: 12.5, color: C.t1 }}>Claude is thinking through your trade data…</span>
                 </div>
-                <span style={{ fontSize: 12.5, color: C.t1 }}>Analysing your trade data…</span>
               </div>
             )}
 
+            {/* Empty state */}
             {history.length === 0 && !loading && (
               <div style={{ textAlign: 'center', paddingTop: 48 }}>
                 <div style={{
@@ -402,18 +349,20 @@ export default function FlyxaAIAsk() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   margin: '0 auto 16px',
                 }}>
-                  <Send size={20} style={{ color: C.acc }} />
+                  <Sparkles size={20} style={{ color: C.acc }} />
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.t0, marginBottom: 6 }}>Ask anything about your trades</div>
-                <div style={{ fontSize: 12.5, color: C.t2, maxWidth: 360, margin: '0 auto', lineHeight: 1.6 }}>
-                  Flyxa analyses your actual trade history to give you data-backed answers — no generic advice.
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.t0, marginBottom: 6 }}>
+                  Ask anything about your trading
+                </div>
+                <div style={{ fontSize: 12.5, color: C.t2, maxWidth: 380, margin: '0 auto', lineHeight: 1.6 }}>
+                  Claude AI reads your actual trade data and reasons over it to give you genuine, personalised insights — not generic advice.
                 </div>
                 <div style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
                   {QUICK_QUESTIONS.slice(8).map(q => (
                     <button
                       key={q}
                       type="button"
-                      onClick={() => submitQuestion(q)}
+                      onClick={() => void submitQuestion(q)}
                       style={{
                         padding: '5px 12px', borderRadius: 20,
                         border: `1px solid ${C.b0}`, background: C.d2,
@@ -429,6 +378,7 @@ export default function FlyxaAIAsk() {
               </div>
             )}
 
+            {/* Response history */}
             {history.map((r, i) => (
               <ResponseCard key={i} r={r} onNavigate={navigate} />
             ))}
@@ -436,11 +386,14 @@ export default function FlyxaAIAsk() {
           </div>
         </main>
 
-        {/* ── Right panel: query guide ── */}
+        {/* ── Right panel ── */}
         <aside className="min-h-0 overflow-y-auto border-l px-4 py-[18px]" style={{ backgroundColor: C.d1, borderColor: C.b0 }}>
 
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.t2, marginBottom: 10 }}>
+            <div style={{
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: C.t2, marginBottom: 10,
+            }}>
               What you can ask
             </div>
             {[
@@ -457,22 +410,26 @@ export default function FlyxaAIAsk() {
               { topic: 'Streaks', examples: ['What\'s my longest win streak?', 'Consecutive losses?'] },
             ].map(cat => (
               <div key={cat.topic} style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.acc, marginBottom: 4 }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+                  textTransform: 'uppercase', color: C.acc, marginBottom: 4,
+                }}>
                   {cat.topic}
                 </div>
                 {cat.examples.map(ex => (
                   <button
                     key={ex}
                     type="button"
-                    onClick={() => { submitQuestion(ex); inputRef.current?.focus(); }}
+                    onClick={() => { void submitQuestion(ex); inputRef.current?.focus(); }}
+                    disabled={loading}
                     style={{
                       display: 'block', width: '100%', textAlign: 'left',
                       padding: '4px 0', background: 'none', border: 'none',
-                      fontSize: 11.5, color: C.t2, cursor: 'pointer',
+                      fontSize: 11.5, color: C.t2, cursor: loading ? 'not-allowed' : 'pointer',
                       fontFamily: C.sans, lineHeight: 1.5,
                       transition: 'color 0.1s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.color = C.t0; }}
+                    onMouseEnter={e => { if (!loading) e.currentTarget.style.color = C.t0; }}
                     onMouseLeave={e => { e.currentTarget.style.color = C.t2; }}
                   >
                     "{ex}"
@@ -486,11 +443,14 @@ export default function FlyxaAIAsk() {
             padding: '10px 12px', borderRadius: 8,
             background: `${C.acc}0a`, border: `1px solid ${C.acc}20`,
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.acc, marginBottom: 4 }}>
-              How it works
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+              textTransform: 'uppercase', color: C.acc, marginBottom: 4,
+            }}>
+              Powered by Claude AI
             </div>
             <div style={{ fontSize: 11, color: C.t1, lineHeight: 1.6 }}>
-              No AI hallucinations — every answer is calculated directly from your logged trades. More data = more reliable insights.
+              Claude reads your full trading statistics and reasons over them to give you genuine, personalised insights — not keyword-matched templates.
             </div>
           </div>
         </aside>

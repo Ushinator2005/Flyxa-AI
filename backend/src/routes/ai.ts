@@ -9,6 +9,7 @@ import {
   generatePsychologyReport,
   compareTradeToPlaybook,
   answerFlyxaQuestion,
+  answerTradeDataQuery,
   filterNewsItems,
 } from '../services/claude';
 import { analyzeChartImage } from '../services/gemini';
@@ -50,6 +51,26 @@ router.post('/scan', authMiddleware, upload.fields([
 
     const result = await analyzeChartImage(base64Image, mimeType, entryDate, entryTime, focusImages, scannerContext);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /ask-flyxa-data  — AI-powered trade data query
+router.post('/ask-flyxa-data', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const question = typeof req.body.question === 'string' ? req.body.question : '';
+    const stats = (req.body.stats && typeof req.body.stats === 'object' && !Array.isArray(req.body.stats))
+      ? (req.body.stats as Record<string, unknown>)
+      : {};
+
+    if (!question.trim()) {
+      res.status(400).json({ error: 'question is required' });
+      return;
+    }
+
+    const reply = await answerTradeDataQuery(question, stats);
+    res.json({ reply });
   } catch (err) {
     next(err);
   }

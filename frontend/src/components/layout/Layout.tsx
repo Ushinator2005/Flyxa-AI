@@ -4,6 +4,7 @@ import Header from './Header.js';
 import RiskWarningBanner from '../risk/RiskWarningBanner.js';
 import SessionStatusBar from './SessionStatusBar.js';
 import FlyxaChatWidget from '../common/FlyxaChatWidget.js';
+import SessionHUD from '../common/SessionHUD.js';
 import UsernamePrompt from '../common/UsernamePrompt.js';
 import ErrorBoundary from '../common/ErrorBoundary.js';
 import { useRisk } from '../../contexts/RiskContext.js';
@@ -39,6 +40,7 @@ export default function Layout() {
         </main>
       </div>
       <FlyxaChatWidget />
+      <SessionHUD />
       <UsernamePrompt />
     </div>
   );

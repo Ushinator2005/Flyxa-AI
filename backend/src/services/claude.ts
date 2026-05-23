@@ -2503,6 +2503,53 @@ Rules:
   return combined;
 }
 
+// ── Ask Flyxa — data-grounded trade query ─────────────────────────────────────
+
+export async function answerTradeDataQuery(
+  question: string,
+  stats: Record<string, unknown>
+): Promise<string> {
+  const trimmed = question.trim();
+  if (!trimmed) throw new Error('Question is required');
+
+  const statsJson = JSON.stringify(stats, null, 2);
+
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    temperature: 0.3,
+    max_tokens: 700,
+    system: `You are Flyxa AI — a sharp, brutally honest trading performance analyst embedded inside a trade journal app.
+
+The user just asked you a question about their trading. You have been given their complete computed trading statistics below. Your job is to:
+1. Understand exactly what the user is asking (even if phrased casually or ambiguously).
+2. Locate the relevant numbers from the provided stats.
+3. Give a direct, precise, data-driven answer using their actual figures — never invent numbers.
+4. Proactively surface any important pattern you notice (good or bad) that's relevant to their question.
+5. End with one specific, actionable recommendation.
+
+Style rules:
+- Plain conversational English. No bullet lists. No markdown headers.
+- 3–5 sentences. Concise and meaty — no filler phrases.
+- Lead with the answer, not with preamble like "Based on your data..." or "Great question!".
+- Use specific percentages and dollar amounts from the provided stats.
+- If a specific breakdown has fewer than 5 samples, note the small sample size and caveat accordingly.
+- If the stats don't contain enough information to answer the question, say so plainly and suggest what data the user should log.
+
+TRADE STATISTICS (JSON):
+${statsJson}`,
+    messages: [{ role: 'user', content: trimmed }],
+  });
+
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map(b => b.text.trim())
+    .filter(Boolean)
+    .join('\n\n');
+
+  if (!text) throw new Error('No response from Claude');
+  return text;
+}
+
 // ── Market news AI filter ─────────────────────────────────────────────────────
 
 export interface NewsFilterItem {
