@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, Database, Download, Monitor, Palette, Plus, Scan, Trash2, User, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, Scan, Tag, Trash2, User, Wallet, X } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
@@ -12,7 +12,7 @@ import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
 const DEFAULT_TIMEZONE = 'America/New_York';
-const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Blown'];
+const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Passed', 'Blown'];
 const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 120px 170px 150px 90px';
 const ACCOUNT_TABLE_COLUMN_GAP = '16px';
 const TIMEZONE_REGION_PRIORITY = ['America', 'Europe', 'Asia', 'Pacific'];
@@ -35,9 +35,14 @@ const ACCOUNT_STATUS_STYLES: Record<TradingAccountStatus, { background: string; 
     color: '#fbbf24',
   },
   Live: {
-    background: 'rgba(16,185,129,0.12)',
-    border: 'rgba(16,185,129,0.24)',
-    color: '#34d399',
+    background: 'rgba(168,85,247,0.12)',
+    border: 'rgba(168,85,247,0.24)',
+    color: '#c084fc',
+  },
+  Passed: {
+    background: 'rgba(34,197,94,0.12)',
+    border: 'rgba(34,197,94,0.24)',
+    color: '#4ade80',
   },
   Blown: {
     background: 'rgba(239,68,68,0.12)',
@@ -111,6 +116,52 @@ const SESSION_COLORS: Record<SessionTimeKey, string> = {
   preMarket: '#a78bfa',
   newYork: '#34d399',
 };
+
+// ─── Confluence tag normalisation ────────────────────────────────────────────
+// Maps known abbreviations / variant spellings → one canonical label.
+// All keys must be lowercase; values are the display-canonical form.
+const CONFLUENCE_ALIASES: Array<[canonical: string, aliases: string[]]> = [
+  ['Liquidity sweep',        ['liq sweep', 'liq. sweep', 'liquidity sweeps', 'sweep liq', 'ssl sweep', 'bsl sweep', 'inducement sweep', 'sweep']],
+  ['Market structure shift', ['mss', 'ms shift', 'structure shift', 'msb', 'market structure break', 'market structure']],
+  ['Break of structure',     ['bos', 'break of str', 'structure break', 'break of struc']],
+  ['Change of character',    ['choch', 'cho ch', 'choc', 'change of char']],
+  ['Order block',            ['ob', 'ob retest', 'order block retest', 'ob tap', 'order block tap', 'obs', 'mitigation block']],
+  ['Breaker block',          ['breaker', 'bb', 'breaker ob']],
+  ['Fair value gap',         ['fvg', 'imbalance', 'imb', 'fair value gaps', 'price gap', 'inefficiency', 'gap']],
+  ['Rejection block',        ['rej block', 'rejection ob']],
+  ['VWAP reclaim',           ['vwap', 'vwap retest', 'vwap rejection', 'vwap reject', 'vwap level']],
+  ['HTF bias',               ['htf', 'htf bias', 'higher timeframe', 'higher tf', 'higher time frame', 'htf alignment', 'daily bias', 'weekly bias']],
+  ['LTF confirmation',       ['ltf', 'ltf entry', 'lower timeframe', 'lower tf']],
+  ['Session high/low sweep', ['session sweep', 'session high sweep', 'session low sweep', 'asia sweep', 'london sweep', 'ny sweep', 'session hl']],
+  ['Volume confirmation',    ['volume', 'vol', 'vol conf', 'volume spike', 'high volume']],
+  ['Kill zone',              ['killzone', 'kill zones', 'kz', 'ny kz', 'london kz', 'asia kz', 'ny killzone', 'london killzone']],
+  ['OTE',                    ['optimal trade entry', 'ote level', 'optimal entry']],
+  ['PD array',               ['pd arrays', 'pd', 'premium/discount', 'premium discount', 'premium array']],
+  ['Point of control',       ['poc', 'p.o.c', 'value area']],
+  ['Equilibrium',            ['eq', 'equilib', '50% level', 'midpoint']],
+  ['Supply zone',            ['supply', 'supply area', 'supply ob', 'supply level']],
+  ['Demand zone',            ['demand', 'demand area', 'demand ob', 'demand level']],
+  ['Trend alignment',        ['trend', 'with trend', 'trend follow', 'trend continuation']],
+  ['Key level',              ['key sr', 'key support', 'key resistance', 'key s/r', 'key level retest', 'strong level']],
+];
+
+const _CONFLUENCE_CANONICAL_MAP = (() => {
+  const map = new Map<string, string>();
+  for (const [canonical, aliases] of CONFLUENCE_ALIASES) {
+    map.set(canonical.toLowerCase(), canonical);
+    for (const alias of aliases) {
+      map.set(alias.toLowerCase(), canonical);
+    }
+  }
+  return map;
+})();
+
+/** Resolves a raw confluence tag to its canonical display name, or returns it unchanged if unknown. */
+function normalizeConfluenceTag(raw: string): string {
+  const trimmed = raw.trim();
+  return _CONFLUENCE_CANONICAL_MAP.get(trimmed.toLowerCase()) ?? trimmed;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const AMBER = '#f59e0b';
 const AMBER_DIM = 'rgba(245,158,11,0.1)';
@@ -402,6 +453,7 @@ function StatusSelect({
   const [focused, setFocused] = useState(false);
   const palette = ACCOUNT_STATUS_STYLES[value];
   const isBlown = value === 'Blown';
+  const isPassed = value === 'Passed';
 
   return (
     <div className="relative inline-flex min-w-[110px]">
@@ -413,11 +465,11 @@ function StatusSelect({
         style={{
           width: '100%',
           appearance: 'none',
-          background: isBlown ? 'rgba(127,29,29,0.82)' : S2,
-          border: `1px solid ${focused ? palette.color : isBlown ? 'rgba(252,165,165,0.85)' : palette.border}`,
+          background: isBlown ? 'rgba(127,29,29,0.82)' : isPassed ? 'rgba(20,83,45,0.72)' : S2,
+          border: `1px solid ${focused ? palette.color : isBlown ? 'rgba(252,165,165,0.85)' : isPassed ? 'rgba(74,222,128,0.7)' : palette.border}`,
           borderRadius: '999px',
-          padding: isBlown ? '6px 28px 6px 31px' : '6px 28px 6px 12px',
-          color: isBlown ? '#fee2e2' : palette.color,
+          padding: (isBlown || isPassed) ? '6px 28px 6px 31px' : '6px 28px 6px 12px',
+          color: isBlown ? '#fee2e2' : isPassed ? '#bbf7d0' : palette.color,
           fontSize: '11px',
           fontWeight: 700,
           textTransform: 'uppercase',
@@ -428,7 +480,9 @@ function StatusSelect({
             ? `0 0 0 3px ${palette.background}`
             : isBlown
               ? 'inset 0 0 0 1px rgba(239,68,68,0.32), 0 0 20px rgba(239,68,68,0.2)'
-              : `inset 0 0 0 1px ${palette.background}`,
+              : isPassed
+                ? 'inset 0 0 0 1px rgba(34,197,94,0.22), 0 0 16px rgba(34,197,94,0.15)'
+                : `inset 0 0 0 1px ${palette.background}`,
           transition: 'border-color 0.15s, box-shadow 0.15s',
           fontFamily: SANS,
         }}
@@ -454,10 +508,17 @@ function StatusSelect({
           style={{ color: '#fecaca' }}
         />
       )}
+      {isPassed && (
+        <Check
+          size={11}
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
+          style={{ color: '#86efac' }}
+        />
+      )}
       <ChevronDown
         size={11}
         className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
-        style={{ color: isBlown ? '#fecaca' : palette.color }}
+        style={{ color: isBlown ? '#fecaca' : isPassed ? '#86efac' : palette.color }}
       />
     </div>
   );
@@ -507,10 +568,14 @@ export default function Settings() {
     accounts,
     defaultTradeAccountId,
     preferences,
+    confluenceOptions,
     addAccount,
     updateAccount,
     deleteAccount,
     updatePreferences,
+    addConfluenceOption,
+    updateConfluenceOption,
+    deleteConfluenceOption,
   } = useAppSettings();
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -531,9 +596,14 @@ export default function Settings() {
   const displayRef = useRef<HTMLElement>(null);
   const scannerRef = useRef<HTMLElement>(null);
   const accountsRef = useRef<HTMLElement>(null);
+  const journalRef = useRef<HTMLElement>(null);
+  const [newConfluenceDraft, setNewConfluenceDraft] = useState('');
+  const [editingConfluenceIndex, setEditingConfluenceIndex] = useState<number | null>(null);
+  const [editingConfluenceDraft, setEditingConfluenceDraft] = useState('');
   const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveToastReadyRef = useRef(false);
+  const confluenceSyncedRef = useRef(false);
   const loadedTradeCount = journalEntries.reduce((sum, entry) => sum + entry.trades.length, 0);
   const backupStamp = new Date().toISOString().slice(0, 10);
 
@@ -627,6 +697,13 @@ export default function Settings() {
       description: 'Manage trading accounts.',
       icon: <Wallet size={16} />,
       ref: accountsRef,
+    },
+    {
+      key: 'journal',
+      title: 'Journal',
+      description: 'Confluence tags for trade logging.',
+      icon: <Tag size={16} />,
+      ref: journalRef,
     },
   ];
 
@@ -730,6 +807,7 @@ export default function Settings() {
       { key: 'display', ref: displayRef },
       { key: 'scanner', ref: scannerRef },
       { key: 'accounts', ref: accountsRef },
+      { key: 'journal', ref: journalRef },
     ];
 
     const updateActiveSectionFromScroll = () => {
@@ -762,6 +840,7 @@ export default function Settings() {
       : sectionKey === 'display' ? displayRef
       : sectionKey === 'scanner' ? scannerRef
       : sectionKey === 'accounts' ? accountsRef
+      : sectionKey === 'journal' ? journalRef
       : null;
 
     if (!sectionRef) return;
@@ -804,6 +883,33 @@ export default function Settings() {
     }
   ), []);
 
+  // Seed confluenceOptions with tags used in journal trades, normalising aliases to canonical names
+  useEffect(() => {
+    if (confluenceSyncedRef.current || journalEntries.length === 0) return;
+    confluenceSyncedRef.current = true;
+
+    // Step 1 – normalise any existing options that are currently abbreviations/aliases
+    confluenceOptions.forEach((option, idx) => {
+      const canonical = normalizeConfluenceTag(option);
+      if (canonical !== option) updateConfluenceOption(idx, canonical);
+    });
+
+    // Step 2 – collect canonicalised tags from every trade; skip ones already present
+    const existing = new Set(
+      confluenceOptions.map(c => normalizeConfluenceTag(c).toLowerCase()),
+    );
+    journalEntries.forEach(entry => {
+      entry.trades.forEach(trade => {
+        (trade.confluences ?? []).forEach(tag => {
+          const canonical = normalizeConfluenceTag(tag);
+          if (!canonical || existing.has(canonical.toLowerCase())) return;
+          existing.add(canonical.toLowerCase());
+          addConfluenceOption(canonical);
+        });
+      });
+    });
+  }, [journalEntries, confluenceOptions, addConfluenceOption, updateConfluenceOption]);
+
   return (
     <div
       className="animate-fade-in space-y-4"
@@ -828,16 +934,15 @@ export default function Settings() {
           top: '8px',
           zIndex: 25,
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '12px',
-          padding: '8px',
+          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
           borderRadius: '8px',
           border: `1px solid ${BORDER}`,
           background: S1,
           backdropFilter: 'blur(8px)',
+          overflow: 'hidden',
         }}
       >
-        {navSections.map(section => {
+        {navSections.map((section, i) => {
           const isActive = activeSection === section.key;
           return (
             <button
@@ -845,47 +950,48 @@ export default function Settings() {
               type="button"
               onClick={() => scrollToSection(section.key, section.ref)}
               style={{
+                position: 'relative',
                 textAlign: 'left',
-                background: isActive ? AMBER_DIM : S2,
-                border: `1px solid ${isActive ? AMBER : BORDER}`,
-                borderRadius: '6px',
-                padding: '12px',
+                background: isActive ? 'rgba(245,158,11,0.06)' : 'transparent',
+                border: 'none',
+                borderLeft: i > 0 ? `1px solid ${BORDER}` : 'none',
+                borderTop: `2px solid ${isActive ? AMBER : 'transparent'}`,
+                padding: '13px 14px 11px',
                 cursor: 'pointer',
-                transition: 'border-color 0.15s, background 0.15s',
+                transition: 'background 0.15s',
               }}
               onMouseEnter={e => {
-                if (!isActive) (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.16)';
+                if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)';
               }}
               onMouseLeave={e => {
-                if (!isActive) (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER;
+                if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
               }}
             >
-              <div className="flex items-start gap-3">
-                <div
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  marginBottom: '5px',
+                  color: isActive ? AMBER : T3,
+                }}
+              >
+                {section.icon}
+                <span
                   style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '6px',
-                    background: isActive ? AMBER_DIM : S1,
-                    border: `1px solid ${isActive ? 'rgba(245,158,11,0.35)' : BORDER}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    color: isActive ? AMBER : T3,
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: isActive ? AMBER : T1,
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1,
                   }}
                 >
-                  {section.icon}
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', fontWeight: 600, color: T1, marginBottom: '3px' }}>
-                    {section.title}
-                  </p>
-                  <p style={{ fontSize: '11px', color: T3, lineHeight: 1.4 }}>
-                    {section.description}
-                  </p>
-                </div>
+                  {section.title}
+                </span>
               </div>
+              <p style={{ fontSize: '10px', color: T3, lineHeight: 1.45, paddingLeft: '23px' }}>
+                {section.description}
+              </p>
             </button>
           );
         })}
@@ -898,151 +1004,138 @@ export default function Settings() {
           title="Data safety"
           subtitle="Confirm which login owns the data currently loaded on this device."
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-            <div
-              style={{
-                border: `1px solid ${BORDER}`,
-                borderRadius: '8px',
-                background: S2,
-                padding: '14px',
-                display: 'flex',
-                gap: '12px',
-                alignItems: 'center',
-              }}
-            >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+
+            {/* Account */}
+            <div>
+              <FieldLabel>Account</FieldLabel>
               <div
                 style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '7px',
-                  background: AMBER_DIM,
-                  border: '1px solid rgba(245,158,11,0.28)',
-                  color: AMBER,
+                  height: '38px',
+                  borderRadius: '6px',
+                  border: `1px solid ${BORDER}`,
+                  background: S2,
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
+                  padding: '0 10px',
+                  gap: '8px',
+                  overflow: 'hidden',
                 }}
               >
-                <User size={15} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: '11px', color: T3, margin: '0 0 4px' }}>Signed in as</p>
-                <p style={{ fontSize: '13px', color: T1, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <User size={12} style={{ color: T3, flexShrink: 0 }} />
+                <span
+                  style={{
+                    fontSize: '12px',
+                    color: T1,
+                    fontFamily: 'var(--font-mono)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    minWidth: 0,
+                  }}
+                >
                   {user?.email ?? 'Not signed in'}
-                </p>
+                </span>
               </div>
             </div>
 
-            <div
-              style={{
-                border: `1px solid ${BORDER}`,
-                borderRadius: '8px',
-                background: S2,
-                padding: '14px',
-                display: 'flex',
-                gap: '12px',
-                alignItems: 'center',
-              }}
-            >
+            {/* Journal data */}
+            <div>
+              <FieldLabel>Journal data</FieldLabel>
               <div
                 style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '7px',
-                  background: 'rgba(52,211,153,0.1)',
-                  border: '1px solid rgba(52,211,153,0.24)',
-                  color: '#34d399',
+                  height: '38px',
+                  borderRadius: '6px',
+                  border: `1px solid ${BORDER}`,
+                  background: S2,
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
+                  padding: '0 12px',
+                  gap: '8px',
                 }}
               >
-                <Database size={15} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: '11px', color: T3, margin: '0 0 4px' }}>Loaded journal data</p>
-                <p style={{ fontSize: '13px', color: T1, fontWeight: 600, margin: 0 }}>
-                  {journalEntries.length} {journalEntries.length === 1 ? 'day' : 'days'} · {loadedTradeCount} {loadedTradeCount === 1 ? 'trade' : 'trades'}
-                </p>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: T1, lineHeight: 1 }}>{journalEntries.length}</span>
+                <span style={{ fontSize: '11px', color: T3 }}>{journalEntries.length === 1 ? 'day' : 'days'}</span>
+                <span style={{ fontSize: '11px', color: T3, opacity: 0.3 }}>·</span>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: T1, lineHeight: 1 }}>{loadedTradeCount}</span>
+                <span style={{ fontSize: '11px', color: T3 }}>{loadedTradeCount === 1 ? 'trade' : 'trades'}</span>
               </div>
             </div>
 
-            <div
-              style={{
-                border: `1px solid ${BORDER}`,
-                borderRadius: '8px',
-                background: S2,
-                padding: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '7px',
-                    background: 'rgba(96,165,250,0.1)',
-                    border: '1px solid rgba(96,165,250,0.24)',
-                    color: '#60a5fa',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Download size={15} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: '11px', color: T3, margin: '0 0 4px' }}>Manual backup</p>
-                  <p style={{ fontSize: '13px', color: T1, fontWeight: 600, margin: 0 }}>Export journal data</p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={handleExportJson}
-                  disabled={journalEntries.length === 0}
-                  style={{
-                    height: '30px',
-                    borderRadius: '6px',
-                    border: `1px solid ${BORDER}`,
-                    background: S1,
-                    color: journalEntries.length === 0 ? T3 : T1,
-                    padding: '0 10px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: journalEntries.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: journalEntries.length === 0 ? 0.6 : 1,
-                  }}
-                >
-                  JSON backup
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportCsv}
-                  disabled={loadedTradeCount === 0}
-                  style={{
-                    height: '30px',
-                    borderRadius: '6px',
-                    border: `1px solid ${BORDER}`,
-                    background: S1,
-                    color: loadedTradeCount === 0 ? T3 : T1,
-                    padding: '0 10px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: loadedTradeCount === 0 ? 'not-allowed' : 'pointer',
-                    opacity: loadedTradeCount === 0 ? 0.6 : 1,
-                  }}
-                >
-                  CSV trades
-                </button>
+            {/* Export backup */}
+            <div>
+              <FieldLabel>Export backup</FieldLabel>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {([
+                  {
+                    label: 'JSON',
+                    icon: <FileJson size={13} />,
+                    onClick: handleExportJson,
+                    disabled: journalEntries.length === 0,
+                    color: '#4f8ef7',
+                    bg: 'rgba(79,142,247,0.09)',
+                    bgHover: 'rgba(79,142,247,0.17)',
+                    border: 'rgba(79,142,247,0.35)',
+                    borderHover: 'rgba(79,142,247,0.6)',
+                  },
+                  {
+                    label: 'CSV',
+                    icon: <FileSpreadsheet size={13} />,
+                    onClick: handleExportCsv,
+                    disabled: loadedTradeCount === 0,
+                    color: '#34d399',
+                    bg: 'rgba(52,211,153,0.09)',
+                    bgHover: 'rgba(52,211,153,0.17)',
+                    border: 'rgba(52,211,153,0.35)',
+                    borderHover: 'rgba(52,211,153,0.6)',
+                  },
+                ] as const).map(btn => (
+                  <button
+                    key={btn.label}
+                    type="button"
+                    onClick={btn.onClick}
+                    disabled={btn.disabled}
+                    style={{
+                      flex: 1,
+                      height: '38px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      borderRadius: '6px',
+                      border: `1px solid ${btn.disabled ? BORDER : btn.border}`,
+                      background: btn.disabled ? 'transparent' : btn.bg,
+                      color: btn.disabled ? T3 : btn.color,
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      fontFamily: SANS,
+                      cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                      opacity: btn.disabled ? 0.38 : 1,
+                      letterSpacing: '0.04em',
+                      transition: 'background 0.15s, border-color 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      if (!btn.disabled) {
+                        const el = e.currentTarget as HTMLButtonElement;
+                        el.style.background = btn.bgHover;
+                        el.style.borderColor = btn.borderHover;
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!btn.disabled) {
+                        const el = e.currentTarget as HTMLButtonElement;
+                        el.style.background = btn.bg;
+                        el.style.borderColor = btn.border;
+                      }
+                    }}
+                  >
+                    {btn.icon}
+                    {btn.label}
+                  </button>
+                ))}
               </div>
             </div>
+
           </div>
         </SectionCard>
         <SectionCard
@@ -1766,6 +1859,173 @@ export default function Settings() {
             <Plus size={13} />
             Add another account
           </button>
+        </SectionCard>
+      </section>
+
+      {/* Journal section */}
+      <section ref={journalRef} style={{ scrollMarginTop: '140px' }}>
+        <SectionDivider label="Journal" />
+        <SectionCard
+          title="Confluence tags"
+          subtitle="Pre-defined tags you can quickly apply when logging trades in the journal. Click a tag to rename it."
+        >
+          {/* Existing tags */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: confluenceOptions.length > 0 ? '14px' : '0' }}>
+            {confluenceOptions.map((option, idx) => (
+              editingConfluenceIndex === idx ? (
+                <input
+                  key={idx}
+                  autoFocus
+                  value={editingConfluenceDraft}
+                  maxLength={64}
+                  onChange={e => setEditingConfluenceDraft(e.target.value)}
+                  onBlur={() => {
+                    const canonical = normalizeConfluenceTag(editingConfluenceDraft);
+                    if (canonical && canonical !== option) updateConfluenceOption(idx, canonical);
+                    setEditingConfluenceIndex(null);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const canonical = normalizeConfluenceTag(editingConfluenceDraft);
+                      if (canonical && canonical !== option) updateConfluenceOption(idx, canonical);
+                      setEditingConfluenceIndex(null);
+                    }
+                    if (e.key === 'Escape') setEditingConfluenceIndex(null);
+                  }}
+                  style={{
+                    height: '28px',
+                    padding: '0 10px',
+                    borderRadius: '6px',
+                    border: `1px solid ${AMBER}`,
+                    background: AMBER_DIM,
+                    color: T1,
+                    fontSize: '12px',
+                    fontFamily: SANS,
+                    outline: 'none',
+                    minWidth: '80px',
+                    maxWidth: '200px',
+                  }}
+                />
+              ) : (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    height: '28px',
+                    padding: '0 4px 0 10px',
+                    borderRadius: '6px',
+                    border: `1px solid ${BORDER}`,
+                    background: S2,
+                    cursor: 'text',
+                    userSelect: 'none',
+                  }}
+                  onClick={() => {
+                    setEditingConfluenceIndex(idx);
+                    setEditingConfluenceDraft(option);
+                  }}
+                >
+                  <span style={{ fontSize: '12px', color: T1 }}>{option}</span>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      deleteConfluenceOption(idx);
+                      if (editingConfluenceIndex === idx) setEditingConfluenceIndex(null);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: T3,
+                      cursor: 'pointer',
+                      padding: 0,
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fca5a5'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.12)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )
+            ))}
+          </div>
+
+          {/* Add new tag */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input
+              placeholder={confluenceOptions.length >= 64 ? 'Max 64 tags reached' : 'New confluence tag…'}
+              value={newConfluenceDraft}
+              maxLength={64}
+              disabled={confluenceOptions.length >= 64}
+              onChange={e => setNewConfluenceDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const canonical = normalizeConfluenceTag(newConfluenceDraft);
+                  if (canonical && confluenceOptions.length < 64) {
+                    addConfluenceOption(canonical);
+                    setNewConfluenceDraft('');
+                  }
+                }
+              }}
+              style={{
+                flex: 1,
+                height: '32px',
+                padding: '0 10px',
+                borderRadius: '6px',
+                border: `1px solid ${BORDER}`,
+                background: S2,
+                color: T1,
+                fontSize: '12px',
+                fontFamily: SANS,
+                outline: 'none',
+                opacity: confluenceOptions.length >= 64 ? 0.45 : 1,
+              }}
+            />
+            <button
+              type="button"
+              disabled={!newConfluenceDraft.trim() || confluenceOptions.length >= 64}
+              onClick={() => {
+                const canonical = normalizeConfluenceTag(newConfluenceDraft);
+                if (canonical && confluenceOptions.length < 64) {
+                  addConfluenceOption(canonical);
+                  setNewConfluenceDraft('');
+                }
+              }}
+              style={{
+                height: '32px',
+                padding: '0 12px',
+                borderRadius: '6px',
+                border: `1px solid ${BORDER}`,
+                background: 'transparent',
+                color: T3,
+                fontSize: '12px',
+                fontFamily: SANS,
+                cursor: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 'not-allowed' : 'pointer',
+                opacity: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 0.4 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                flexShrink: 0,
+              }}
+            >
+              <Plus size={13} />
+              Add
+            </button>
+          </div>
+
+          {confluenceOptions.length > 0 && (
+            <p style={{ marginTop: '10px', fontSize: '11px', color: T3 }}>
+              {confluenceOptions.length} of 64 tags · Click a tag to rename, or × to delete.
+            </p>
+          )}
         </SectionCard>
       </section>
 

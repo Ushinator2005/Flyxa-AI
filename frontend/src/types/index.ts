@@ -176,7 +176,7 @@ export interface ExtractedTradeData {
 }
 
 export type TradingAccountType = 'Futures' | 'Forex' | 'Stocks';
-export type TradingAccountStatus = 'Eval' | 'Funded' | 'Live' | 'Blown';
+export type TradingAccountStatus = 'Eval' | 'Funded' | 'Live' | 'Passed' | 'Blown';
 
 export interface TradingAccount {
   id: string;

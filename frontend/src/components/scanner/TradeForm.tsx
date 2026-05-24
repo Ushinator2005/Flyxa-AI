@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Sparkles, TrendingDown, TrendingUp, X } from 'lucide-react';
 import { Trade } from '../../types/index.js';
 import { formatCurrency } from '../../utils/calculations.js';
@@ -151,6 +152,7 @@ export default function TradeForm({
   onCancel,
   isLoading,
 }: Props) {
+  const navigate = useNavigate();
   const { confluenceOptions, accounts, getDefaultTradeAccountId } = useAppSettings();
   const [form, setForm] = useState<Partial<Trade>>(() => buildFormState(initialData));
   const [thesisSetup, setThesisSetup] = useState('');
@@ -778,7 +780,10 @@ export default function TradeForm({
 
       {/* Row 3: Confluences (full width) */}
       <div style={panel}>
-        <SectionLabel>Confluences</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: T3, margin: 0 }}>Confluences</p>
+          <button type="button" onClick={() => navigate('/settings#journal')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, color: 'var(--cobalt)', fontFamily: 'var(--font-sans)' }}>Manage tags →</button>
+        </div>
         <div className="scanner-confluence-row">
           <select
             className="input-field h-9"

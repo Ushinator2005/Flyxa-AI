@@ -372,7 +372,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
 
   const isTradeAccountAllocatable = useCallback((accountId: string) => {
     const account = accountById.get(accountId);
-    return Boolean(account && account.status !== 'Blown');
+    return Boolean(account && account.status !== 'Blown' && account.status !== 'Passed');
   }, [accountById]);
 
   const getDefaultTradeAccountId = useCallback(() => {

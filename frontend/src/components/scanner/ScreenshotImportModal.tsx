@@ -115,10 +115,11 @@ const DEFAULT_FOCUS_CROPS: CropPreset[] = [
 ];
 
 const ACCOUNT_STATUS_STYLES = {
-  Eval: 'border-blue-400/30 bg-blue-500/10 text-blue-300',
+  Eval:   'border-blue-400/30 bg-blue-500/10 text-blue-300',
   Funded: 'border-amber-400/30 bg-amber-500/10 text-amber-300',
-  Live: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300',
-  Blown: 'border-red-400/30 bg-red-500/10 text-red-300',
+  Live:   'border-purple-400/30 bg-purple-500/10 text-purple-300',
+  Passed: 'border-green-400/30 bg-green-500/10 text-green-300',
+  Blown:  'border-red-400/30 bg-red-500/10 text-red-300',
 } as const;
 
 function readScannerDraft(): Partial<Trade> | null {
@@ -850,7 +851,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     }
 
     if (!selectedTradeAccountIsAllocatable && tradeAccountId !== existingTradeAccountId) {
-      alert(`${selectedTradeAccount.name} is marked as Blown and cannot be allocated to a trade.`);
+      alert(`${selectedTradeAccount.name} is marked as ${selectedTradeAccount.status} and cannot be allocated to a trade.`);
       return;
     }
 
@@ -1117,9 +1118,9 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
                         <option
                           key={account.id}
                           value={account.id}
-                          disabled={account.status === 'Blown' && account.id !== tradeAccountId}
+                          disabled={(account.status === 'Blown' || account.status === 'Passed') && account.id !== tradeAccountId}
                         >
-                          {account.name}{account.status === 'Blown' ? ' (Blown)' : ''}
+                          {account.name}{account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : ''}
                         </option>
                       ))}
                     </select>
@@ -1130,14 +1131,14 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
                         </span>
                         {!selectedTradeAccountIsAllocatable && tradeAccountId !== existingTradeAccountId && (
                           <span className="text-xs text-red-300">
-                            Blown accounts can&apos;t be allocated to new trades.
+                            {selectedTradeAccount?.status === 'Passed' ? 'Passed accounts can\'t be allocated to new trades.' : 'Blown accounts can\'t be allocated to new trades.'}
                           </span>
                         )}
                       </div>
                     )}
                     {!hasAllocatableAccount && (
                       <p className="mt-2 text-xs text-red-300">
-                        Every account is marked as Blown right now. Change one account status before saving a trade.
+                        Every account is marked as Blown or Passed. Change one account status before saving a trade.
                       </p>
                     )}
                   </div>

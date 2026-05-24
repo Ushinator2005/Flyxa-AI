@@ -1254,6 +1254,7 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
   const confluences = normalizeConfluences(trade.confluences);
   const [local, setLocal] = useState(th);
   const [confluenceDraft, setConfluenceDraft] = useState('');
+  const navigate = useNavigate();
   useEffect(() => { setLocal(trade.thesis ?? { setup:'', invalidation:'', asymmetry:'', setupType:'' }); }, [trade.id]);
   useEffect(() => { setConfluenceDraft(''); }, [trade.id]);
 
@@ -1320,7 +1321,10 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
         ))}
       </div>
       <div style={{ padding:'10px 14px', borderTop:'1px solid var(--app-border)' }}>
-        <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8 }}>Confluences</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+          <span style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em' }}>Confluences</span>
+          <button type="button" onClick={() => navigate('/settings#journal')} style={{ background:'none', border:'none', padding:0, cursor:'pointer', fontSize:10, color:'var(--cobalt)', fontFamily:'var(--font-sans)' }}>Manage tags →</button>
+        </div>
         <div style={{ display:'flex', gap:6, marginBottom:8 }}>
           <input
             value={confluenceDraft}
@@ -1722,6 +1726,41 @@ export default function TradeJournal() {
   const setEntriesInStore = useFlyxaStore(state => state.setEntries);
   const rulesTemplate = useMemo(() => getRulesTemplate(), []);
   const entries = useMemo(() => normalizeEntries(persistedEntries, rulesTemplate), [persistedEntries, rulesTemplate]);
+
+  const behaviorCorrelations = useMemo(() => {
+    const groupStats = (dayEntries: JournalEntry[]) => {
+      const trades = dayEntries.flatMap(e => e.trades).filter(t => t.result !== 'open');
+      if (trades.length < 3) return null;
+      const wins = trades.filter(t => t.result === 'win').length;
+      return {
+        winRate: (wins / trades.length) * 100,
+        avgPnl: trades.reduce((s, t) => s + t.pnl, 0) / trades.length,
+        n: trades.length,
+      };
+    };
+
+    const sleepHigh = entries.filter(e => (e.physicalState?.sleep ?? 0) >= 4);
+    const sleepLow  = entries.filter(e => { const s = e.physicalState?.sleep ?? 0; return s > 0 && s <= 2; });
+
+    const energyHigh = entries.filter(e => (e.physicalState?.energy ?? 0) >= 4);
+    const energyLow  = entries.filter(e => { const s = e.physicalState?.energy ?? 0; return s > 0 && s <= 2; });
+
+    const getDayAvgDisc = (entry: JournalEntry) => {
+      const ts = entry.trades.filter(t => (t.psychologyRatings?.discipline ?? 0) > 0);
+      if (!ts.length) return 0;
+      return ts.reduce((s, t) => s + (t.psychologyRatings?.discipline ?? 0), 0) / ts.length;
+    };
+    const discHigh = entries.filter(e => getDayAvgDisc(e) >= 4);
+    const discLow  = entries.filter(e => { const d = getDayAvgDisc(e); return d > 0 && d <= 2; });
+
+    const items = [
+      { key: 'sleep',       label: 'Sleep quality', high: groupStats(sleepHigh),  low: groupStats(sleepLow)  },
+      { key: 'energy',      label: 'Energy',         high: groupStats(energyHigh), low: groupStats(energyLow) },
+      { key: 'discipline',  label: 'Discipline',     high: groupStats(discHigh),   low: groupStats(discLow)   },
+    ].filter(item => item.high !== null || item.low !== null);
+
+    return items;
+  }, [entries]);
 
   const [monthCursor, setMonthCursor] = useState(() => {
     const today = parseDate(getTodayIso());
@@ -2289,6 +2328,42 @@ export default function TradeJournal() {
             </div>
           </div>
         </div>
+
+        {/* Psychology → Performance Correlation Insights */}
+        {behaviorCorrelations.length > 0 && (
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)' }}>
+            <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--txt-3)', margin: '0 0 9px' }}>
+              Psychology Insights
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {behaviorCorrelations.map(item => (
+                <div key={item.key}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-2)', margin: '0 0 3px' }}>{item.label}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {item.high && (
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#34d399' }}>
+                        {item.high.winRate.toFixed(0)}% WR ↑
+                      </span>
+                    )}
+                    {item.high && item.low && (
+                      <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>vs</span>
+                    )}
+                    {item.low && (
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
+                        {item.low.winRate.toFixed(0)}% WR ↓
+                      </span>
+                    )}
+                    {item.high && item.low && (
+                      <span style={{ fontSize: 9, color: 'var(--txt-3)', marginLeft: 2 }}>
+                        ({Math.abs(item.high.winRate - item.low.winRate).toFixed(0)}pp gap)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="tj-search-row" data-tour-id="scanner-search">
           <Search size={13} color="var(--txt-3)" />

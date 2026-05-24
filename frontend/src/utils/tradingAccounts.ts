@@ -17,7 +17,7 @@ export function normalizeAccountStatus(
   status: unknown,
   fallbackStatus: TradingAccountStatus = 'Eval'
 ): TradingAccountStatus {
-  return status === 'Eval' || status === 'Funded' || status === 'Live' || status === 'Blown'
+  return status === 'Eval' || status === 'Funded' || status === 'Live' || status === 'Passed' || status === 'Blown'
     ? status
     : fallbackStatus;
 }
@@ -60,12 +60,14 @@ export function getAccountCreatedAtMs(account: TradingAccount): number {
 }
 
 export function resolveDefaultTradeAccountId(accounts: TradingAccount[]): string {
+  const isInactive = (s: TradingAccountStatus) => s === 'Blown' || s === 'Passed';
+
   const oldestRealAccount = accounts
-    .filter(account => account.id !== DEFAULT_ACCOUNT_ID && account.status !== 'Blown')
+    .filter(account => account.id !== DEFAULT_ACCOUNT_ID && !isInactive(account.status))
     .sort((a, b) => getAccountCreatedAtMs(a) - getAccountCreatedAtMs(b))[0];
 
   if (oldestRealAccount) return oldestRealAccount.id;
 
-  const builtInDefault = accounts.find(account => account.id === DEFAULT_ACCOUNT_ID && account.status !== 'Blown');
-  return builtInDefault?.id ?? accounts.find(account => account.status !== 'Blown')?.id ?? DEFAULT_ACCOUNT_ID;
+  const builtInDefault = accounts.find(account => account.id === DEFAULT_ACCOUNT_ID && !isInactive(account.status));
+  return builtInDefault?.id ?? accounts.find(account => !isInactive(account.status))?.id ?? DEFAULT_ACCOUNT_ID;
 }
