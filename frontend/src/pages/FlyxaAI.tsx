@@ -1551,6 +1551,7 @@ export default function FlyxaAI() {
           <nav className="mt-4 space-y-0.5">
             {[
               { key: 'weekly', label: 'Debrief', to: '/flyxa-ai', end: true },
+              { key: 'execution', label: 'Execution coach', to: '/flyxa-ai/execution-coach', end: false },
               { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
               { key: 'emotional', label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },
               { key: 'post-session', label: 'Post-session', to: '/flyxa-ai/post-session', end: false },

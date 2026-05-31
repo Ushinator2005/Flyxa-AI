@@ -36,6 +36,7 @@ export interface Trade {
   confidenceLevel?: number | null;
   reflection: TradeReflection;
   confluences?: string[];
+  timeframe?: string;
   account: string;
   createdAt: string;
 }

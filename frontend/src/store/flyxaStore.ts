@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { supabaseZustandStorage } from './supabaseStorage.js';
 import { lookupContract } from '../constants/futuresContracts.js';
@@ -177,7 +178,7 @@ function normalizeConfluences(value: unknown): string[] {
   const normalized: string[] = [];
   rawValues.forEach((entry) => {
     if (typeof entry !== 'string') return;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
+    const cleaned = normalizeConfluenceTag(entry.trim().replace(/\s+/g, ' '));
     if (!cleaned) return;
     const key = cleaned.toLowerCase();
     if (deduped.has(key)) return;

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Pie,
@@ -21,6 +23,7 @@ import { formatCurrency } from '../utils/calculations.js';
 import { getSessionKeyForTime, timeToMinutes } from '../utils/sessionTimes.js';
 import { getTradeRiskReward } from '../utils/tradeAnalytics.js';
 import { formatRiskRewardRatio } from '../utils/riskReward.js';
+import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 
 type PeriodKey = '1W' | '1M' | '3M' | 'YTD' | 'ALL';
 
@@ -173,12 +176,12 @@ function normalizeConfluences(value: unknown): string[] {
 
   for (const entry of rawValues) {
     if (typeof entry !== 'string') continue;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) continue;
-    const key = cleaned.toLowerCase();
+    const canonical = normalizeConfluenceTag(entry.trim().replace(/\s+/g, ' '));
+    if (!canonical) continue;
+    const key = canonical.toLowerCase();
     if (deduped.has(key)) continue;
     deduped.add(key);
-    normalized.push(cleaned);
+    normalized.push(canonical);
   }
 
   return normalized;
@@ -285,6 +288,7 @@ export default function Analytics() {
       winRate,
       profitFactor,
       avgWin,
+      avgLoss,
       avgPnL,
       expectedValue,
       avgRR,
@@ -320,6 +324,41 @@ export default function Analytics() {
         cumulative,
         breakeven: 0,
       };
+    });
+  }, [filteredTrades]);
+
+  const maxDrawdown = useMemo(() => {
+    if (equityCurveData.length === 0) return 0;
+    let peak = equityCurveData[0].cumulative;
+    let dd = 0;
+    for (const point of equityCurveData) {
+      if (point.cumulative > peak) peak = point.cumulative;
+      const current = peak - point.cumulative;
+      if (current > dd) dd = current;
+    }
+    return dd;
+  }, [equityCurveData]);
+
+  const pnlDistribution = useMemo(() => {
+    if (filteredTrades.length < 3) return [];
+    const pnls = filteredTrades.map(t => t.pnl);
+    const minVal = Math.min(...pnls);
+    const maxVal = Math.max(...pnls);
+    const range = maxVal - minVal;
+    if (range < 0.01) return [];
+    const BUCKETS = 10;
+    const bucketSize = range / BUCKETS;
+    return Array.from({ length: BUCKETS }, (_, i) => {
+      const low = minVal + i * bucketSize;
+      const high = low + bucketSize;
+      const midpoint = (low + high) / 2;
+      const count = pnls.filter(p =>
+        i === BUCKETS - 1 ? p >= low && p <= high : p >= low && p < high,
+      ).length;
+      const label = midpoint >= 0
+        ? `+${Math.round(midpoint)}`
+        : `${Math.round(midpoint)}`;
+      return { label, count, isPositive: midpoint >= 0 };
     });
   }, [filteredTrades]);
 
@@ -511,6 +550,64 @@ export default function Analytics() {
       .sort((a, b) => b.netPnL - a.netPnL);
   }, [filteredTrades]);
 
+  const behavioralFlagRows = useMemo(() => {
+    const FLAG_LABELS: Record<string, string> = {
+      'fomo': 'FOMO entry',
+      'exit-early': 'Exited too early',
+      'past-inval': 'Held past invalidation',
+      'off-playbook': 'Off-playbook setup',
+      'past-limit': 'Traded past daily limit',
+      'revenge': 'Revenge trade',
+      'oversize': 'Oversized position',
+      'move-stop': 'Moved stop against plan',
+    };
+    const grouped = new Map<string, { label: string; count: number; netPnL: number }>();
+
+    filteredTrades.forEach(trade => {
+      const flags = (trade as unknown as { behavioral_flags?: string[] }).behavioral_flags ?? [];
+      flags.forEach(flag => {
+        const key = flag.toLowerCase();
+        const current = grouped.get(key) ?? {
+          label: FLAG_LABELS[key] ?? flag,
+          count: 0,
+          netPnL: 0,
+        };
+        current.count += 1;
+        current.netPnL += trade.pnl;
+        grouped.set(key, current);
+      });
+    });
+
+    return Array.from(grouped.values())
+      .map(row => ({ ...row, avgPnL: row.count > 0 ? row.netPnL / row.count : 0 }))
+      .sort((a, b) => a.netPnL - b.netPnL);
+  }, [filteredTrades]);
+
+  const TF_ORDER = ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '1h', '2h', '4h', '1d'];
+  const timeframeRows = useMemo(() => {
+    const grouped = new Map<string, { trades: number; wins: number; netPnL: number }>();
+
+    filteredTrades.forEach(trade => {
+      const mins = trade.timeframe_minutes;
+      if (!mins || mins <= 0) return;
+      const label = mins >= 1440 ? '1d' : mins >= 240 ? '4h' : mins >= 120 ? '2h' : mins >= 60 ? '1h' : mins >= 30 ? '30m' : mins >= 15 ? '15m' : mins >= 10 ? '10m' : mins >= 5 ? '5m' : mins >= 3 ? '3m' : mins >= 2 ? '2m' : '1m';
+      const current = grouped.get(label) ?? { trades: 0, wins: 0, netPnL: 0 };
+      current.trades += 1;
+      current.netPnL += trade.pnl;
+      if (trade.pnl > 0) current.wins += 1;
+      grouped.set(label, current);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([label, data]) => ({
+        label,
+        ...data,
+        winRate: data.trades > 0 ? (data.wins / data.trades) * 100 : 0,
+        avgPnL: data.trades > 0 ? data.netPnL / data.trades : 0,
+      }))
+      .sort((a, b) => TF_ORDER.indexOf(a.label) - TF_ORDER.indexOf(b.label));
+  }, [filteredTrades]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -521,11 +618,14 @@ export default function Analytics() {
 
   const periodSubtitle = period === 'ALL' ? 'all time' : period === 'YTD' ? 'year to date' : period.toLowerCase();
   const winLossTotal = metrics.wins.length + metrics.losses.length;
-  const strongestConfluences = confluenceRows.filter(row => row.netPnL > 0).slice(0, 5);
-  const weakestConfluences = confluenceRows
-    .filter(row => row.netPnL < 0)
-    .sort((a, b) => a.netPnL - b.netPnL)
-    .slice(0, 5);
+  const strongestConfluences = useMemo(
+    () => confluenceRows.filter(row => row.netPnL > 0).slice(0, 5),
+    [confluenceRows],
+  );
+  const weakestConfluences = useMemo(
+    () => confluenceRows.filter(row => row.netPnL < 0).sort((a, b) => a.netPnL - b.netPnL).slice(0, 5),
+    [confluenceRows],
+  );
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -649,6 +749,40 @@ export default function Analytics() {
           valueClassName="text-[var(--app-text)]"
         />
       </div>
+
+      {/* Edge Metrics strip — Expectancy, Avg Win, Avg Loss, Max Drawdown */}
+      {filteredTrades.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Expectancy</p>
+            <p className={`mt-1.5 text-lg font-semibold ${metrics.expectedValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--'}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">avg edge per trade</p>
+          </div>
+          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg Win</p>
+            <p className="mt-1.5 text-lg font-semibold text-emerald-400">
+              {metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.wins.length} winning trade{metrics.wins.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg Loss</p>
+            <p className="mt-1.5 text-lg font-semibold text-red-400">
+              {metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.losses.length} losing trade{metrics.losses.length !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Max Drawdown</p>
+            <p className="mt-1.5 text-lg font-semibold text-red-400">
+              {maxDrawdown > 0 ? `-${formatCurrency(maxDrawdown)}` : '$0'}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">peak-to-trough loss</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
         <section data-tour-id="analytics-equity-curve" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
@@ -822,15 +956,18 @@ export default function Analytics() {
           <p className="mt-3 text-xs text-[var(--app-text-muted)]">Last 20 trades</p>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {streakStats.recent.map((outcome, index) => (
-              <span
-                key={`${outcome}-${index}`}
-                className="h-6 w-2 rounded-full"
-                style={{
-                  backgroundColor: outcome > 0 ? DASHBOARD_GREEN : outcome < 0 ? DASHBOARD_RED : '#334155',
-                }}
-              />
-            ))}
+            {filteredTrades.slice(-20).map((trade) => {
+              const outcome = trade.pnl > 0 ? 1 : trade.pnl < 0 ? -1 : 0;
+              return (
+                <span
+                  key={trade.id}
+                  className="h-6 w-2 rounded-full"
+                  style={{
+                    backgroundColor: outcome > 0 ? DASHBOARD_GREEN : outcome < 0 ? DASHBOARD_RED : '#334155',
+                  }}
+                />
+              );
+            })}
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-4 text-xs">
@@ -855,6 +992,61 @@ export default function Analytics() {
           </div>
         </section>
       </div>
+
+      {/* P&L Distribution histogram */}
+      {pnlDistribution.length > 0 && (
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L Distribution</h3>
+              <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">How your individual trade results are sized</p>
+            </div>
+            <div className="flex items-center gap-4 text-[11px] text-[var(--app-text-muted)]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: DASHBOARD_GREEN }} />
+                Wins
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: DASHBOARD_RED }} />
+                Losses
+              </span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={pnlDistribution} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+              <CartesianGrid stroke="var(--app-panel-strong)" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: 'var(--app-text-subtle)', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fill: 'var(--app-text-subtle)', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={28}
+              />
+              <Tooltip
+                contentStyle={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 10 }}
+                labelStyle={{ color: 'var(--app-text-muted)', fontSize: 12 }}
+                formatter={(value: number) => [value, 'Trades']}
+                labelFormatter={(label: string) => `P&L ≈ $${label}`}
+              />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {pnlDistribution.map((bucket) => (
+                  <Cell
+                    key={bucket.label}
+                    fill={bucket.isPositive ? DASHBOARD_GREEN : DASHBOARD_RED}
+                    fillOpacity={0.85}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+      )}
 
       <section data-tour-id="analytics-time-of-day" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
         <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
@@ -964,6 +1156,68 @@ export default function Analytics() {
           </div>
         )}
       </section>
+
+      {timeframeRows.length > 0 && (
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L by Timeframe</h3>
+              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">Performance breakdown across the timeframes you traded</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--app-border)]">
+                  {['Timeframe', 'Trades', 'Win Rate', 'Avg P&L', 'Net P&L'].map(h => (
+                    <th key={h} className="pb-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--app-text-subtle)]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {timeframeRows.map(row => (
+                  <tr key={row.label} className="border-b border-[var(--app-border)] last:border-0">
+                    <td className="py-2.5 font-mono text-[var(--app-text)]">{row.label}</td>
+                    <td className="py-2.5 text-[var(--app-text-muted)]">{row.trades}</td>
+                    <td className={`py-2.5 ${row.winRate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>{row.winRate.toFixed(0)}%</td>
+                    <td className={`py-2.5 tabular-nums ${row.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSignedCurrency(row.avgPnL)}</td>
+                    <td className={`py-2.5 font-medium tabular-nums ${row.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSignedCurrency(row.netPnL)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {behavioralFlagRows.length > 0 && (
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text)]">Behavioral Flag Impact</h3>
+              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">P&amp;L lost to discipline errors in this period</p>
+            </div>
+            <span className="rounded-md bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-400">
+              {behavioralFlagRows.reduce((sum, r) => sum + r.count, 0)} flag{behavioralFlagRows.reduce((sum, r) => sum + r.count, 0) !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {behavioralFlagRows.map(row => (
+              <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_64px_92px_92px] items-center gap-3 rounded-lg border border-white/5 bg-[var(--app-panel-strong)] px-3 py-2.5 text-sm">
+                <span className="truncate text-[var(--app-text)]">{row.label}</span>
+                <span className="text-center text-xs text-[var(--app-text-muted)]">{row.count}×</span>
+                <span className={`text-right text-xs tabular-nums ${row.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {formatSignedCurrency(row.avgPnL)} avg
+                </span>
+                <span className={`text-right text-xs font-medium tabular-nums ${row.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {formatSignedCurrency(row.netPnL)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-[var(--app-text-muted)]">Flags are set on individual trades in the Journal → Psychology tab.</p>
+        </section>
+      )}
     </div>
   );
 }

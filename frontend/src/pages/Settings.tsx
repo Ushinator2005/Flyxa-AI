@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, Scan, Tag, Trash2, User, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, Scan, Tag, Trash2, Upload, User, Wallet, X } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
@@ -8,6 +8,7 @@ import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsConte
 import { useRivals } from '../hooks/useRivals.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
+import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
@@ -116,52 +117,6 @@ const SESSION_COLORS: Record<SessionTimeKey, string> = {
   preMarket: '#a78bfa',
   newYork: '#34d399',
 };
-
-// ─── Confluence tag normalisation ────────────────────────────────────────────
-// Maps known abbreviations / variant spellings → one canonical label.
-// All keys must be lowercase; values are the display-canonical form.
-const CONFLUENCE_ALIASES: Array<[canonical: string, aliases: string[]]> = [
-  ['Liquidity sweep',        ['liq sweep', 'liq. sweep', 'liquidity sweeps', 'sweep liq', 'ssl sweep', 'bsl sweep', 'inducement sweep', 'sweep']],
-  ['Market structure shift', ['mss', 'ms shift', 'structure shift', 'msb', 'market structure break', 'market structure']],
-  ['Break of structure',     ['bos', 'break of str', 'structure break', 'break of struc']],
-  ['Change of character',    ['choch', 'cho ch', 'choc', 'change of char']],
-  ['Order block',            ['ob', 'ob retest', 'order block retest', 'ob tap', 'order block tap', 'obs', 'mitigation block']],
-  ['Breaker block',          ['breaker', 'bb', 'breaker ob']],
-  ['Fair value gap',         ['fvg', 'imbalance', 'imb', 'fair value gaps', 'price gap', 'inefficiency', 'gap']],
-  ['Rejection block',        ['rej block', 'rejection ob']],
-  ['VWAP reclaim',           ['vwap', 'vwap retest', 'vwap rejection', 'vwap reject', 'vwap level']],
-  ['HTF bias',               ['htf', 'htf bias', 'higher timeframe', 'higher tf', 'higher time frame', 'htf alignment', 'daily bias', 'weekly bias']],
-  ['LTF confirmation',       ['ltf', 'ltf entry', 'lower timeframe', 'lower tf']],
-  ['Session high/low sweep', ['session sweep', 'session high sweep', 'session low sweep', 'asia sweep', 'london sweep', 'ny sweep', 'session hl']],
-  ['Volume confirmation',    ['volume', 'vol', 'vol conf', 'volume spike', 'high volume']],
-  ['Kill zone',              ['killzone', 'kill zones', 'kz', 'ny kz', 'london kz', 'asia kz', 'ny killzone', 'london killzone']],
-  ['OTE',                    ['optimal trade entry', 'ote level', 'optimal entry']],
-  ['PD array',               ['pd arrays', 'pd', 'premium/discount', 'premium discount', 'premium array']],
-  ['Point of control',       ['poc', 'p.o.c', 'value area']],
-  ['Equilibrium',            ['eq', 'equilib', '50% level', 'midpoint']],
-  ['Supply zone',            ['supply', 'supply area', 'supply ob', 'supply level']],
-  ['Demand zone',            ['demand', 'demand area', 'demand ob', 'demand level']],
-  ['Trend alignment',        ['trend', 'with trend', 'trend follow', 'trend continuation']],
-  ['Key level',              ['key sr', 'key support', 'key resistance', 'key s/r', 'key level retest', 'strong level']],
-];
-
-const _CONFLUENCE_CANONICAL_MAP = (() => {
-  const map = new Map<string, string>();
-  for (const [canonical, aliases] of CONFLUENCE_ALIASES) {
-    map.set(canonical.toLowerCase(), canonical);
-    for (const alias of aliases) {
-      map.set(alias.toLowerCase(), canonical);
-    }
-  }
-  return map;
-})();
-
-/** Resolves a raw confluence tag to its canonical display name, or returns it unchanged if unknown. */
-function normalizeConfluenceTag(raw: string): string {
-  const trimmed = raw.trim();
-  return _CONFLUENCE_CANONICAL_MAP.get(trimmed.toLowerCase()) ?? trimmed;
-}
-// ─────────────────────────────────────────────────────────────────────────────
 
 const AMBER = '#f59e0b';
 const AMBER_DIM = 'rgba(245,158,11,0.1)';
@@ -564,6 +519,8 @@ export default function Settings() {
   const { theme, setTheme } = useTheme();
   const { profile, saveProfile } = useRivals();
   const journalEntries = useFlyxaStore(state => state.entries);
+  const deletedTradeIds = useFlyxaStore(state => state.deletedTradeIds);
+  const setEntries = useFlyxaStore(state => state.setEntries);
   const {
     accounts,
     defaultTradeAccountId,
@@ -604,7 +561,10 @@ export default function Settings() {
   const saveHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveToastReadyRef = useRef(false);
   const confluenceSyncedRef = useRef(false);
-  const loadedTradeCount = journalEntries.reduce((sum, entry) => sum + entry.trades.length, 0);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importFeedback, setImportFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+  const deletedSet = new Set(deletedTradeIds);
+  const loadedTradeCount = journalEntries.reduce((sum, entry) => sum + entry.trades.filter(t => !deletedSet.has(t.id)).length, 0);
   const backupStamp = new Date().toISOString().slice(0, 10);
 
   function downloadTextFile(filename: string, contents: string, type: string) {
@@ -620,15 +580,20 @@ export default function Settings() {
   }
 
   function handleExportJson() {
+    const deleted = new Set(deletedTradeIds);
+    const cleanEntries = journalEntries.map(entry => ({
+      ...entry,
+      trades: entry.trades.filter(t => !deleted.has(t.id)),
+    }));
     const payload = {
       version: 1,
       exportedAt: new Date().toISOString(),
       user: user ? { id: user.id, email: user.email ?? null } : null,
       summary: {
-        journalDays: journalEntries.length,
+        journalDays: cleanEntries.length,
         trades: loadedTradeCount,
       },
-      entries: journalEntries,
+      entries: cleanEntries,
     };
     downloadTextFile(`flyxa-trade-backup-${backupStamp}.json`, JSON.stringify(payload, null, 2), 'application/json');
   }
@@ -660,6 +625,31 @@ export default function Settings() {
       ...rows.map(row => headers.map(header => csvCell(row[header as keyof typeof row])).join(',')),
     ].join('\n');
     downloadTextFile(`flyxa-trades-${backupStamp}.csv`, csv, 'text/csv');
+  }
+
+  function handleImportJson(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!e.target) return;
+    e.target.value = '';            // reset so the same file can be re-selected
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const payload = JSON.parse(ev.target?.result as string ?? '');
+        if (payload?.version !== 1 || !Array.isArray(payload?.entries)) {
+          setImportFeedback({ ok: false, msg: 'Invalid backup file.' });
+          setTimeout(() => setImportFeedback(null), 4000);
+          return;
+        }
+        setEntries(payload.entries);
+        setImportFeedback({ ok: true, msg: `Restored ${payload.entries.length} day${payload.entries.length !== 1 ? 's' : ''}.` });
+        setTimeout(() => setImportFeedback(null), 4000);
+      } catch {
+        setImportFeedback({ ok: false, msg: 'Could not parse file.' });
+        setTimeout(() => setImportFeedback(null), 4000);
+      }
+    };
+    reader.readAsText(file);
   }
 
   const navSections = [
@@ -934,12 +924,13 @@ export default function Settings() {
           top: '8px',
           zIndex: 25,
           display: 'grid',
-          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+          gridTemplateColumns: 'repeat(6, minmax(130px, 1fr))',
           borderRadius: '8px',
           border: `1px solid ${BORDER}`,
           background: S1,
           backdropFilter: 'blur(8px)',
           overflow: 'hidden',
+          overflowX: 'auto',
         }}
       >
         {navSections.map((section, i) => {
@@ -1134,6 +1125,62 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Import / restore */}
+            <div>
+              <FieldLabel>Restore from backup</FieldLabel>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json"
+                style={{ display: 'none' }}
+                onChange={handleImportJson}
+              />
+              <button
+                type="button"
+                onClick={() => importFileRef.current?.click()}
+                style={{
+                  height: '38px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  paddingInline: '14px',
+                  borderRadius: '6px',
+                  border: `1px solid rgba(251,191,36,0.35)`,
+                  background: 'rgba(251,191,36,0.07)',
+                  color: '#fbbf24',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontFamily: SANS,
+                  cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLButtonElement;
+                  el.style.background = 'rgba(251,191,36,0.14)';
+                  el.style.borderColor = 'rgba(251,191,36,0.6)';
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLButtonElement;
+                  el.style.background = 'rgba(251,191,36,0.07)';
+                  el.style.borderColor = 'rgba(251,191,36,0.35)';
+                }}
+              >
+                <Upload size={13} />
+                Import JSON
+              </button>
+              {importFeedback && (
+                <p style={{
+                  marginTop: '8px',
+                  fontSize: '12px',
+                  color: importFeedback.ok ? '#4ade80' : '#f87171',
+                  fontFamily: SANS,
+                }}>
+                  {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
+                </p>
+              )}
             </div>
 
           </div>
@@ -1648,7 +1695,7 @@ export default function Settings() {
 
           {/* Account rows */}
           <div>
-            {accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID).map(account => (
+            {accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived).map(account => (
               <div key={account.id}>
                 <div
                   style={{
@@ -1736,19 +1783,40 @@ export default function Settings() {
                   />
 
                   {/* Actions */}
-                  <div>
-                    {account.id === DEFAULT_ACCOUNT_ID ? (
-                      <span
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {account.id !== DEFAULT_ACCOUNT_ID && (account.status === 'Blown' || account.status === 'Passed') && (
+                      <button
+                        type="button"
+                        onClick={() => updateAccount(account.id, { archived: true })}
+                        title="Hide from active account list. Trades remain accessible."
                         style={{
-                          display: 'inline-block',
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          color: T3,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'transparent',
+                          border: `1px solid rgba(107,114,128,0.3)`,
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          color: 'rgba(156,163,175,0.9)',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = 'rgba(107,114,128,0.12)';
+                          el.style.color = '#d1d5db';
+                        }}
+                        onMouseLeave={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = 'transparent';
+                          el.style.color = 'rgba(156,163,175,0.9)';
                         }}
                       >
-                        -
-                      </span>
-                    ) : (
+                        Archive
+                      </button>
+                    )}
+                    {account.id !== DEFAULT_ACCOUNT_ID && (
                       <button
                         type="button"
                         onClick={() => setDeleteTarget(account.id)}
@@ -1859,6 +1927,102 @@ export default function Settings() {
             <Plus size={13} />
             Add another account
           </button>
+
+          {/* Archived accounts */}
+          {accounts.some(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived) && (
+            <div style={{ marginTop: '20px', borderTop: `1px solid ${BSUB}`, paddingTop: '16px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: T3, marginBottom: '10px' }}>
+                Archived Accounts
+              </p>
+              {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived).map(account => (
+                <div key={account.id} style={{ marginBottom: '6px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      borderRadius: deleteTarget === account.id ? '6px 6px 0 0' : '6px',
+                      border: `1px solid ${BSUB}`,
+                      borderBottom: deleteTarget === account.id ? 'none' : `1px solid ${BSUB}`,
+                      background: 'rgba(255,255,255,0.02)',
+                      opacity: 0.75,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '12px', color: T1 }}>{account.name}</span>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        color: account.status === 'Blown' ? '#fca5a5' : '#86efac',
+                        background: account.status === 'Blown' ? 'rgba(239,68,68,0.08)' : 'rgba(74,222,128,0.08)',
+                        border: `1px solid ${account.status === 'Blown' ? 'rgba(239,68,68,0.25)' : 'rgba(74,222,128,0.25)'}`,
+                        borderRadius: '4px',
+                        padding: '2px 6px',
+                      }}>{account.status}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => updateAccount(account.id, { archived: false })}
+                        style={{
+                          fontSize: '11px',
+                          padding: '3px 10px',
+                          borderRadius: '5px',
+                          border: `1px solid rgba(96,165,250,0.25)`,
+                          background: 'transparent',
+                          color: 'rgba(147,197,253,0.9)',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(96,165,250,0.1)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                      >
+                        Unarchive
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(deleteTarget === account.id ? null : account.id)}
+                        style={{
+                          fontSize: '11px',
+                          padding: '3px 10px',
+                          borderRadius: '5px',
+                          border: '1px solid rgba(239,68,68,0.2)',
+                          background: 'transparent',
+                          color: 'rgba(252,165,165,0.8)',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.08)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  {deleteTarget === account.id && (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '0 0 6px 6px',
+                      border: `1px solid ${BSUB}`,
+                      borderTop: 'none',
+                      background: 'rgba(245,158,11,0.04)',
+                    }}>
+                      <p style={{ fontSize: '12px', color: '#fde68a', marginBottom: '8px' }}>
+                        Delete <strong style={{ color: '#fff' }}>{account.name}</strong>? Trades will fall back to {defaultTradeAccountName}.
+                      </p>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" onClick={() => { deleteAccount(account.id); setDeleteTarget(null); }} className="btn-danger" style={{ fontSize: '12px', padding: '5px 12px' }}>Confirm Delete</button>
+                        <button type="button" onClick={() => setDeleteTarget(null)} className="btn-secondary" style={{ fontSize: '12px', padding: '5px 12px' }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
       </section>
 

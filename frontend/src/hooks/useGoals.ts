@@ -4,6 +4,7 @@ import { useAllTrades, useActiveAccountEntries, useJournalStreak } from '../stor
 import { useAuth } from '../contexts/AuthContext.js';
 import { supabase } from '../services/api.js';
 import type { Goal } from '../types/goals.js';
+import type { Goal as StoreGoal } from '../store/types.js';
 import { pushToast } from '../store/toastStore.js';
 
 export type { Goal, GoalStep, GoalStatus } from '../types/goals.js';
@@ -101,7 +102,7 @@ export function useGoals() {
         const merged = [...remoteGoals, ...goals.filter((g) => !remoteGoals.find((r) => r.id === g.id))];
 
         if (newFromRemote.length > 0 || merged.length !== goals.length) {
-          hydrateSharedData({ goals: merged } as any);
+          hydrateSharedData({ goals: merged as unknown as StoreGoal[] });
         }
 
         // Push any local-only goals up to Supabase
@@ -143,7 +144,7 @@ export function useGoals() {
   }, [goals]);
 
   const addGoal = (goal: Goal) => {
-    addGoalToStore(goal as any);
+    addGoalToStore(goal as unknown as StoreGoal);
     if (user) {
       supabase.from('goals').insert({
         id: goal.id,
@@ -162,7 +163,7 @@ export function useGoals() {
   };
 
   const updateGoal = (goal: Goal) => {
-    updateGoalInStore(goal.id, goal as any);
+    updateGoalInStore(goal.id, goal as unknown as Partial<StoreGoal>);
     if (user) {
       supabase.from('goals').update({
         title: goal.title,

@@ -98,6 +98,14 @@
     box-sizing: border-box;
   }
 
+  /* Settings nav: hide scrollbar while keeping horizontal scroll on narrow screens */
+  [data-tour-id="settings-nav"] {
+    scrollbar-width: none;
+  }
+  [data-tour-id="settings-nav"]::-webkit-scrollbar {
+    display: none;
+  }
+
   a {
     color: inherit;
     text-decoration: none;

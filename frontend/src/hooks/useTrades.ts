@@ -155,13 +155,22 @@ function toApiTrade(trade: StoreTrade): ApiTrade {
     close_time: trade.exitTime,
     trade_length_seconds: trade.duration ? trade.duration * 60 : ((trade as unknown as { durationMinutes?: number | null }).durationMinutes ?? 0) * 60,
     candle_count: 0,
-    timeframe_minutes: 0,
+    timeframe_minutes: (() => {
+      const tf = (trade as StoreTrade & { timeframe?: string }).timeframe;
+      if (!tf) return 0;
+      const m = tf.match(/^(\d+)m$/i);
+      const h = tf.match(/^(\d+)h$/i);
+      if (m) return parseInt(m[1], 10);
+      if (h) return parseInt(h[1], 10) * 60;
+      return 0;
+    })(),
     emotional_state: emotionalState,
     confidence_level: confidenceLevel,
     pre_trade_notes: trade.reflection?.thesis,
     post_trade_notes: trade.reflection?.execution,
     confluences: normalizeConfluences((trade as StoreTrade).confluences),
     followed_plan: typeof followedPlan === 'boolean' ? followedPlan : null,
+    behavioral_flags: Array.isArray((trade as RichStoreTrade).behavioralFlags) ? (trade as RichStoreTrade).behavioralFlags : [],
     session,
     created_at: trade.createdAt,
   };

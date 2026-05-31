@@ -26,6 +26,7 @@ export interface Trade {
   post_trade_notes: string;
   confluences?: string[];
   followed_plan?: boolean | null;
+  behavioral_flags?: string[];
   session: 'Asia' | 'London' | 'Pre Market' | 'New York' | 'Other';
   created_at: string;
 }
@@ -187,6 +188,7 @@ export interface TradingAccount {
   color: string;
   createdAt: string;
   startingBalance?: number;
+  archived?: boolean;
 }
 
 export interface AppPreferences {

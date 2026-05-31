@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -26,6 +26,7 @@ import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
+import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
 import './TradeJournal.css';
 
 type RuleState = 'ok' | 'fail' | 'unchecked';
@@ -97,6 +98,7 @@ interface JournalTrade {
   stateOfMind?: Array<{ label: string; valence: 'positive' | 'caution' | 'negative' }>;
   processScore?: number;
   confluences?: string[];
+  timeframe?: string;
 }
 
 interface JournalEntry {
@@ -586,6 +588,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
             : undefined,
           processScore: typeof trade.processScore === 'number' ? trade.processScore : undefined,
           confluences: normalizeConfluences(trade.confluences),
+          timeframe: typeof trade.timeframe === 'string' && trade.timeframe ? trade.timeframe : undefined,
         };
         return withTradeDerivedValues(normalizedTrade);
       });
@@ -760,6 +763,7 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
         <option value="">— Select account —</option>
         {accounts.filter(account =>
           account.id !== DEFAULT_ACCOUNT_ID &&
+          !account.archived &&
           (account.status !== 'Blown' || account.id === trade.accountId)
         ).map(account => (
           <option key={account.id} value={account.id}>
@@ -775,6 +779,26 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
           <span className="tj-account-dot" style={{ background: dotColor }} title={selected.status} />
         );
       })()}
+    </div>
+  );
+}
+
+const TIMEFRAME_OPTIONS = ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '1h', '2h', '4h', '1d'] as const;
+
+function TimeframeBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
+  return (
+    <div className="tj-account-card">
+      <span className="tj-size-title">TIMEFRAME</span>
+      <select
+        className="tj-account-select"
+        value={trade.timeframe ?? ''}
+        onChange={event => onMutate({ timeframe: event.target.value || undefined })}
+      >
+        <option value="">— None —</option>
+        {TIMEFRAME_OPTIONS.map(tf => (
+          <option key={tf} value={tf}>{tf}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -1774,8 +1798,9 @@ export default function TradeJournal() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scanPreviewUrl, setScanPreviewUrl] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
   const [deleteTradeId, setDeleteTradeId] = useState<string | null>(null);
+  const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [deleteEntryConfirm, setDeleteEntryConfirm] = useState(false);
   const [isScreenshotFullscreen, setIsScreenshotFullscreen] = useState(false);
   const [isTradeDateEditorOpen, setIsTradeDateEditorOpen] = useState(false);
@@ -1795,7 +1820,6 @@ export default function TradeJournal() {
     });
   };
 
-  const scanInputRef = useRef<HTMLInputElement>(null);
   const screenshotInputRef = useRef<HTMLInputElement>(null);
   const screenshotSlotRef = useRef<number | null>(null);
   const tradeDateEditInputRef = useRef<HTMLInputElement>(null);
@@ -2198,24 +2222,6 @@ export default function TradeJournal() {
     }
   }, [applyScannedTrade, preferences.scannerColors, selectedEntry?.date]);
 
-  const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    setIsDragging(false);
-    const file = event.dataTransfer.files?.[0];
-    if (file) void handleScanFile(file);
-  }, [handleScanFile]);
-
-  const onDragOver = useCallback((event: DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const onDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
-    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-    setIsDragging(false);
-  }, []);
-
-
   const deleteEntry = useCallback(() => {
     if (!selectedEntry) return;
     mutateEntries(prev => prev.filter(e => e.id !== selectedEntry.id));
@@ -2257,17 +2263,6 @@ export default function TradeJournal() {
 
   return (
     <div className="tj-shell">
-      <input
-        ref={scanInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        style={{ display: 'none' }}
-        onChange={event => {
-          const file = event.target.files?.[0];
-          if (file) void handleScanFile(file);
-          event.target.value = '';
-        }}
-      />
       <input
         ref={screenshotInputRef}
         type="file"
@@ -2579,9 +2574,59 @@ export default function TradeJournal() {
               </button>
 
               <div className="tj-section-head">
-                <span className="tj-section-title">Trades</span>
-                <button type="button" className="tj-section-action" onClick={addManualTrade}>Add trade</button>
+                <span className="tj-section-title">
+                  Trades
+                  {selectedTradeIds.size > 0 && (
+                    <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--amber)', fontWeight: 600 }}>
+                      {selectedTradeIds.size} selected
+                    </span>
+                  )}
+                </span>
+                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {selectedTradeIds.size > 0 && !bulkDeleteConfirm && (
+                    <button
+                      type="button"
+                      className="tj-mini-btn red"
+                      onClick={() => setBulkDeleteConfirm(true)}
+                    >
+                      Delete {selectedTradeIds.size}
+                    </button>
+                  )}
+                  {selectedTradeIds.size > 0 && (
+                    <button
+                      type="button"
+                      className="tj-mini-btn"
+                      onClick={() => { setSelectedTradeIds(new Set()); setBulkDeleteConfirm(false); }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button type="button" className="tj-section-action" onClick={addManualTrade}>Add trade</button>
+                </span>
               </div>
+              {bulkDeleteConfirm && selectedTradeIds.size > 0 && (
+                <div className="tj-delete-row">
+                  <span className="tj-delete-text">Delete {selectedTradeIds.size} trade{selectedTradeIds.size !== 1 ? 's' : ''}?</span>
+                  <span className="tj-delete-actions">
+                    <button type="button" className="tj-mini-btn" onClick={() => setBulkDeleteConfirm(false)}>Cancel</button>
+                    <button
+                      type="button"
+                      className="tj-mini-btn red"
+                      onClick={async () => {
+                        const ids = Array.from(selectedTradeIds);
+                        for (const id of ids) {
+                          await deleteTradeEverywhere(id);
+                        }
+                        setSelectedTradeIds(new Set());
+                        setBulkDeleteConfirm(false);
+                        setDeleteTradeId(null);
+                      }}
+                    >
+                      Confirm
+                    </button>
+                  </span>
+                </div>
+              )}
               <div className="tj-trade-list" data-tour-id="scanner-trade-list">
                 {selectedEntry.trades.map(trade => (
                   deleteTradeId === trade.id ? (
@@ -2604,10 +2649,42 @@ export default function TradeJournal() {
                   ) : (
                     <div
                       key={trade.id}
-                      className={`tj-trade-card ${trade.result}${activeTradeId === trade.id ? ' active' : ''}`}
+                      className={`tj-trade-card ${trade.result}${activeTradeId === trade.id ? ' active' : ''}${selectedTradeIds.has(trade.id) ? ' tj-trade-selected' : ''}`}
                       onClick={() => setActiveTradeId(trade.id)}
                       aria-current={activeTradeId === trade.id ? 'true' : undefined}
                     >
+                      <button
+                        type="button"
+                        className="tj-check-btn"
+                        aria-label={selectedTradeIds.has(trade.id) ? 'Deselect trade' : 'Select trade'}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedTradeIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(trade.id)) next.delete(trade.id);
+                            else next.add(trade.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 14,
+                            height: 14,
+                            borderRadius: 3,
+                            border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--app-border)'}`,
+                            background: selectedTradeIds.has(trade.id) ? 'var(--amber-dim)' : 'transparent',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {selectedTradeIds.has(trade.id) && (
+                            <span style={{ fontSize: 9, color: 'var(--amber)', lineHeight: 1 }}>✓</span>
+                          )}
+                        </span>
+                      </button>
                       {(() => {
                         const s = computeProcessScore(trade);
                         const letter = scoreToGradeLetter(s);
@@ -2637,6 +2714,10 @@ export default function TradeJournal() {
                     onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
                   />
                   <ContractSizingBlock
+                    trade={activeTrade}
+                    onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                  />
+                  <TimeframeBlock
                     trade={activeTrade}
                     onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
                   />
@@ -2746,53 +2827,13 @@ export default function TradeJournal() {
             </div>
           </>
         ) : (
-          <div
-            data-tour-id="scanner-upload"
-            className="tj-empty-entry"
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-          >
-            <div className="tj-empty-wrap">
-              <div className={`tj-empty-card ${isDragging ? 'drag' : ''}`}>
-                <span className="tj-empty-badge"><Upload size={20} /></span>
-                <p className="tj-empty-title">Drop a Chart Screenshot</p>
-                <p className="tj-empty-text">
-                  Flyxa reads your <span style={{ color: 'var(--amber)' }}>entry</span>, <span style={{ color: 'var(--amber)' }}>stop loss</span>, <span style={{ color: 'var(--amber)' }}>take profit</span>, and <span style={{ color: 'var(--amber)' }}>exit</span>
-                  <br />
-                  automatically in seconds.
-                </p>
-                {scanError && <p className="tj-empty-text tj-empty-error">{scanError}</p>}
-                {isScanning && (
-                  <div className="tj-scan-stage" role="status" aria-live="polite">
-                    {scanPreviewUrl && (
-                      <div className="tj-scan-preview">
-                        <img src={scanPreviewUrl} alt="Chart being scanned" />
-                        <div className="tj-scan-overlay">
-                          <span className="tj-scan-overlay-label">Scanning</span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="tj-scan-status">
-                      <span className="tj-scan-dot" />
-                      <span className="tj-scan-dot" />
-                      <span className="tj-scan-dot" />
-                    </div>
-                    <p className="tj-empty-text">Patience is expensive, but revenge is costlier.</p>
-                  </div>
-                )}
-                <div className="tj-empty-actions">
-                  <button type="button" className="tj-btn-primary" onClick={() => scanInputRef.current?.click()} disabled={isScanning}>
-                    Upload File
-                  </button>
-                  <button type="button" className="tj-btn-ghost" onClick={addBlankDay} disabled={isScanning}>
-                    Start Blank Day
-                  </button>
-                </div>
-              </div>
-              <div className="tj-empty-meta">PNG, JPG, or WEBP · Max 10 MB</div>
-            </div>
-          </div>
+          <ScannerDropZone
+            isScanning={isScanning}
+            scanError={scanError}
+            scanPreviewUrl={scanPreviewUrl}
+            onScanFile={(file) => { void handleScanFile(file); }}
+            onAddBlankDay={addBlankDay}
+          />
         )}
       </section>
 

@@ -355,7 +355,7 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
   });
 
   // ── Session patterns ─────────────────────────────────────────────
-  const sessionGroups = groupBy(filtered, t => ((t.session ?? 'Other') as string) as any);
+  const sessionGroups = groupBy(filtered, t => (t.session ?? 'Other') as string);
   // Count meaningful sessions (enough trades, not Other)
   const meaningfulSessionCount = Array.from(sessionGroups.entries())
     .filter(([sess, g]) => sess !== 'Other' && g.length >= 5).length;
@@ -408,7 +408,7 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
   });
 
   // ── Emotional state patterns ─────────────────────────────────────
-  const stateGroups = groupBy(filtered, t => (t.emotional_state || 'Unspecified') as any);
+  const stateGroups = groupBy(filtered, t => t.emotional_state || 'Unspecified');
   stateGroups.forEach((group, state) => {
     if (group.length < 3 || state === 'Unspecified') return;
     const s = summariseGroup(group);
@@ -452,7 +452,7 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
   const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dowGroups = groupBy(filtered, t => {
     const d = t.trade_date ? new Date(`${t.trade_date}T00:00:00`) : null;
-    return (d ? DOW_NAMES[d.getDay()] : 'Unknown') as any;
+    return d ? (DOW_NAMES[d.getDay()] ?? 'Unknown') : 'Unknown';
   });
   const meaningfulDowCount = Array.from(dowGroups.entries())
     .filter(([day, g]) => day !== 'Unknown' && g.length >= 4).length;
@@ -490,10 +490,10 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
 
   // ── Time-of-day patterns ─────────────────────────────────────────
   const hourGroups = groupBy(filtered, t => {
-    if (!t.trade_time) return 'Unknown' as any;
+    if (!t.trade_time) return 'Unknown';
     const h = parseInt(t.trade_time.split(':')[0], 10);
-    if (!Number.isFinite(h)) return 'Unknown' as any;
-    return (`${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`) as any;
+    if (!Number.isFinite(h)) return 'Unknown';
+    return `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`;
   });
   const meaningfulHourCount = Array.from(hourGroups.entries())
     .filter(([h, g]) => h !== 'Unknown' && g.length >= 4).length;
@@ -519,7 +519,7 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
   }
 
   // ── Overtrading detection ─────────────────────────────────────────
-  const tradesByDate = groupBy(filtered, t => (t.trade_date ?? now) as any);
+  const tradesByDate = groupBy(filtered, t => t.trade_date ?? now);
   const dayStats = Array.from(tradesByDate.entries()).map(([date, ts]) => ({
     date,
     count: ts.length,

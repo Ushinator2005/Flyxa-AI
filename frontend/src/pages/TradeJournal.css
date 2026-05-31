@@ -756,6 +756,26 @@
   color: var(--amber);
 }
 
+.tj-check-btn {
+  border: none;
+  background: transparent;
+  padding: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 3px;
+  transition: opacity 0.15s;
+}
+.tj-check-btn:hover {
+  opacity: 0.8;
+}
+.tj-trade-selected {
+  background: rgba(245, 158, 11, 0.06) !important;
+  border-color: rgba(245, 158, 11, 0.22) !important;
+}
+
 .tj-trash-btn {
   border: none;
   background: transparent;

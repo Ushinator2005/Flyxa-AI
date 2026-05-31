@@ -794,13 +794,12 @@ export default function Goals() {
         <div className="goals-hero-glow" aria-hidden="true" />
         <div className="goals-hero-inner">
           <div className="goals-hero-copy">
-            <p className="goals-eyebrow">Vision Board</p>
+            <p className="goals-eyebrow">Goals</p>
             <h1>
-              Your <span>why</span> lives here.
+              Goal tracking
             </h1>
             <p>
-              Every funded account, every car, every freedom — set the target, break it into steps, and come back on{' '}
-              <strong>hard days</strong> to remember what all the discipline is actually for.
+              Track the trading targets, routines, and milestones that should influence your daily execution.
             </p>
             <div className="goals-hero-chips">
               <span><i className="is-amber" />{heroStats.active} active goals</span>
@@ -823,10 +822,9 @@ export default function Goals() {
       <section className="goals-reminder" data-tour-id="goals-reminder">
         <div className="goals-reminder-bar" />
         <p>
-          Every losing day you journal is a brick between you and the trader who quit. You're{' '}
-          <strong>still here</strong>. Keep building.
+          Keep long-term objectives close to the trading data so progress, discipline, and review stay connected.
         </p>
-        <span>Flyxa · daily reminder</span>
+        <span>Flyxa · goals</span>
       </section>
 
       <section className="goals-content">

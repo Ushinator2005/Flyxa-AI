@@ -218,6 +218,8 @@ function StatCard({ color, label, value, badgeLabel, badgeTone = 'neutral', valu
   );
 }
 
+const GAUGE_ARC = Math.PI * 40;
+
 // ── Main component ────────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -314,17 +316,46 @@ export default function Dashboard() {
     });
   }, [weekOffset]);
 
-  const wins   = filteredTrades.filter(t => t.pnl > 0).length;
-  const losses = filteredTrades.filter(t => t.pnl < 0).length;
-  const winRingData = wins + losses > 0
-    ? [{ v: wins, c: GREEN }, { v: losses, c: 'rgba(255,255,255,0.06)' }]
-    : [{ v: 1, c: 'rgba(255,255,255,0.06)' }];
-  const GAUGE_ARC = Math.PI * 40;
-  const gaugeScored = wins + losses;
-  const gaugeWinArc  = gaugeScored > 0 ? (wins   / gaugeScored) * GAUGE_ARC : 0;
-  const gaugeLossArc = gaugeScored > 0 ? (losses / gaugeScored) * GAUGE_ARC : 0;
+  const { wins, losses, winRingData, gaugeScored, gaugeWinArc, gaugeLossArc } = useMemo(() => {
+    const w = filteredTrades.filter(t => t.pnl > 0).length;
+    const l = filteredTrades.filter(t => t.pnl < 0).length;
+    const scored = w + l;
+    return {
+      wins: w,
+      losses: l,
+      winRingData: scored > 0
+        ? [{ v: w, c: GREEN }, { v: l, c: 'rgba(255,255,255,0.06)' }]
+        : [{ v: 1, c: 'rgba(255,255,255,0.06)' }],
+      gaugeScored: scored,
+      gaugeWinArc:  scored > 0 ? (w / scored) * GAUGE_ARC : 0,
+      gaugeLossArc: scored > 0 ? (l / scored) * GAUGE_ARC : 0,
+    };
+  }, [filteredTrades]);
 
-  const todayPnL    = todayTrades.reduce((s, t) => s + t.pnl, 0);
+  const todayPnL = useMemo(
+    () => todayTrades.reduce((s, t) => s + t.pnl, 0),
+    [todayTrades],
+  );
+
+  const avgComparison = useMemo(() => {
+    if (todayTrades.length === 0) return null;
+    const historicalTrades = filteredTrades.filter(t => t.trade_date !== todayStr);
+    const historicalDays = new Set(historicalTrades.map(t => t.trade_date)).size;
+    if (historicalDays === 0) return null;
+    const histPnL       = historicalTrades.reduce((s, t) => s + t.pnl, 0);
+    const avgDailyPnL   = histPnL / historicalDays;
+    const histWins      = historicalTrades.filter(t => t.pnl > 0).length;
+    const histScored    = historicalTrades.filter(t => t.pnl !== 0).length;
+    const avgWinRate    = histScored > 0 ? (histWins / histScored) * 100 : 0;
+    const avgTradesPerDay = historicalTrades.length / historicalDays;
+    const todayWins     = todayTrades.filter(t => t.pnl > 0).length;
+    const todayScored   = todayTrades.filter(t => t.pnl !== 0).length;
+    const todayWinRate  = todayScored > 0 ? (todayWins / todayScored) * 100 : 0;
+    return {
+      today: { pnl: todayPnL, winRate: todayWinRate, tradeCount: todayTrades.length },
+      avg:   { pnl: avgDailyPnL, winRate: avgWinRate, tradeCount: avgTradesPerDay },
+    };
+  }, [filteredTrades, todayTrades, todayStr, todayPnL]);
   // TradingAccount (from context) has no balance; use store Account which does.
   const selectedStoreAcct = selectedAccountId !== ALL_ACCOUNTS_ID
     ? storeAccounts.find(a => a.id === selectedAccountId)
@@ -386,7 +417,7 @@ export default function Dashboard() {
                 onBlur={e =>  { e.currentTarget.style.borderColor = BORDER; }}
               >
                 <option value={ALL_ACCOUNTS_ID}>All Accounts</option>
-                {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID).map(a => (
+                {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived).map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
@@ -485,6 +516,78 @@ export default function Dashboard() {
             valueTone="neutral"
           />
         </div>
+
+        {/* Today vs Your Average strip */}
+        {avgComparison && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2,
+            borderRadius: 8, overflow: 'hidden', border: `1px solid ${BORDER}`,
+            background: S1, flexShrink: 0,
+          }}>
+            {/* Header row spanning all 3 */}
+            <div style={{ gridColumn: '1 / -1', padding: '9px 16px 8px', borderBottom: `1px solid rgba(255,255,255,0.04)`, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: T3 }}>Today vs your average</span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)' }}>·</span>
+              <span style={{ fontSize: 10, color: T3 }}>based on {new Set(filteredTrades.filter(t => t.trade_date !== todayStr).map(t => t.trade_date)).size} prior trading days</span>
+            </div>
+            {/* P&L */}
+            {(() => {
+              const diff = avgComparison.today.pnl - avgComparison.avg.pnl;
+              const ahead = diff > 0;
+              return (
+                <div style={{ padding: '10px 16px 12px', borderRight: `1px solid rgba(255,255,255,0.04)` }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3, margin: '0 0 6px' }}>P&amp;L</p>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 18, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: avgComparison.today.pnl >= 0 ? GREEN : RED }}>
+                      {fmtUSD(avgComparison.today.pnl)}
+                    </span>
+                    <span style={{ fontSize: 10, color: ahead ? GREEN : RED, fontFamily: MONO }}>
+                      {ahead ? '▲' : '▼'} {fmtUSD(Math.abs(diff))}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11, color: T3, margin: '3px 0 0', fontFamily: MONO }}>avg {fmtUSD(avgComparison.avg.pnl)}</p>
+                </div>
+              );
+            })()}
+            {/* Win Rate */}
+            {(() => {
+              const diff = avgComparison.today.winRate - avgComparison.avg.winRate;
+              const ahead = diff > 0;
+              return (
+                <div style={{ padding: '10px 16px 12px', borderRight: `1px solid rgba(255,255,255,0.04)` }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3, margin: '0 0 6px' }}>Win Rate</p>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 18, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1 }}>
+                      {avgComparison.today.winRate.toFixed(0)}%
+                    </span>
+                    <span style={{ fontSize: 10, color: Math.abs(diff) < 1 ? T3 : ahead ? GREEN : RED, fontFamily: MONO }}>
+                      {ahead ? '▲' : '▼'} {Math.abs(diff).toFixed(0)}pp
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11, color: T3, margin: '3px 0 0', fontFamily: MONO }}>avg {avgComparison.avg.winRate.toFixed(0)}%</p>
+                </div>
+              );
+            })()}
+            {/* Trades */}
+            {(() => {
+              const diff = avgComparison.today.tradeCount - avgComparison.avg.tradeCount;
+              return (
+                <div style={{ padding: '10px 16px 12px' }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3, margin: '0 0 6px' }}>Trades</p>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 18, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1 }}>
+                      {avgComparison.today.tradeCount}
+                    </span>
+                    <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>
+                      {diff >= 0 ? '+' : ''}{diff.toFixed(1)} vs avg
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11, color: T3, margin: '3px 0 0', fontFamily: MONO }}>avg {avgComparison.avg.tradeCount.toFixed(1)}/day</p>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Pre-session brief prompt */}
         {!preSessionDone && (
@@ -849,7 +952,7 @@ export default function Dashboard() {
                           <div style={{ fontSize: 12, fontWeight: released ? 500 : 600, color: released ? T2 : T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.event}</div>
                           {released ? (
                             <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>
-                              <span style={{ color: ev.actual && ev.forecast && ev.actual >= ev.forecast ? GREEN : RED, fontFamily: MONO, fontWeight: 600 }}>{ev.actual}</span>
+                              <span style={{ color: ev.actual && ev.forecast && parseFloat(String(ev.actual)) >= parseFloat(String(ev.forecast)) ? GREEN : RED, fontFamily: MONO, fontWeight: 600 }}>{ev.actual}</span>
                               {ev.forecast && <span style={{ color: T3 }}> · est {ev.forecast}</span>}
                             </div>
                           ) : (
