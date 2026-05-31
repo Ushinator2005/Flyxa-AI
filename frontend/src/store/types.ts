@@ -38,6 +38,7 @@ export interface Trade {
   confluences?: string[];
   timeframe?: string;
   account: string;
+  accountIds?: string[];
   createdAt: string;
 }
 

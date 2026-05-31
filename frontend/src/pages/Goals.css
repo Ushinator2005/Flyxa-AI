@@ -388,7 +388,7 @@
 .goals-card,
 .goals-ghost-card {
   min-height: 286px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface-1);
 }
 
@@ -396,41 +396,40 @@
   overflow: hidden;
   border: 1px solid var(--border);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .goals-card:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: var(--surface-2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.goals-card-financial {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: color-mix(in srgb, var(--amber) 4%, var(--surface-1));
+}
+
+.goals-card-discipline {
+  border-color: rgba(96, 165, 250, 0.22);
+  background: color-mix(in srgb, var(--cobalt) 4%, var(--surface-1));
+}
+
+.goals-card-lifestyle {
+  border-color: rgba(16, 185, 129, 0.22);
+  background: color-mix(in srgb, var(--emerald) 4%, var(--surface-1));
+}
+
+.goals-card-skill {
+  border-color: rgba(168, 85, 247, 0.22);
+  background: color-mix(in srgb, var(--purple) 4%, var(--surface-1));
+}
+
+.goals-card-achieved {
+  border-color: rgba(52, 211, 153, 0.22);
+  background: color-mix(in srgb, var(--green) 4%, var(--surface-1));
 }
 
 .goals-card-body {
-  padding: 15px;
-}
-
-.goals-card-stripe {
-  height: 2px;
-  width: 100%;
-}
-
-.goals-stripe-financial {
-  background: linear-gradient(to right, var(--amber), rgba(245, 166, 35, 0.15));
-}
-
-.goals-stripe-discipline {
-  background: linear-gradient(to right, var(--cobalt), rgba(30, 111, 255, 0.15));
-}
-
-.goals-stripe-lifestyle {
-  background: linear-gradient(to right, var(--emerald), rgba(16, 185, 129, 0.15));
-}
-
-.goals-stripe-skill {
-  background: linear-gradient(to right, var(--purple), rgba(168, 85, 247, 0.15));
-}
-
-.goals-stripe-achieved {
-  background: linear-gradient(to right, var(--green), rgba(34, 197, 94, 0.15));
+  padding: 16px;
 }
 
 .goals-card-header {
@@ -441,15 +440,15 @@
 }
 
 .goals-icon-badge {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 15px;
+  border-radius: 9px;
+  font-size: 17px;
 }
 
 .goals-badge-financial {
@@ -493,7 +492,7 @@
 .goals-card-info h3 {
   margin: 0;
   color: var(--txt);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -537,103 +536,87 @@
   line-height: 1.6;
 }
 
-.goals-progress-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.goals-progress-block {
   margin-bottom: 12px;
 }
 
-.goals-ring {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  flex-shrink: 0;
+.goals-progress-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.goals-ring-svg {
-  width: 52px;
-  height: 52px;
-  transform: rotate(-90deg);
+.goals-pct {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.goals-ring-bg,
-.goals-ring-fill {
-  fill: none;
-  stroke-width: 4;
+.goals-pct-label {
+  color: var(--txt-3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
-.goals-ring-bg {
-  stroke: var(--surface-3);
+.goals-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
 }
 
-.goals-ring-fill {
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.6s ease;
+.goals-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
 }
 
-.goals-ring-fill.goals-tone-financial { stroke: var(--amber); }
-.goals-ring-fill.goals-tone-discipline { stroke: var(--cobalt); }
-.goals-ring-fill.goals-tone-lifestyle { stroke: var(--emerald); }
-.goals-ring-fill.goals-tone-skill { stroke: var(--purple); }
-.goals-ring-fill.goals-tone-achieved { stroke: var(--green); }
+.goals-fill-financial { background: var(--amber); }
+.goals-fill-discipline { background: var(--cobalt); }
+.goals-fill-lifestyle { background: var(--emerald); }
+.goals-fill-skill { background: var(--purple); }
+.goals-fill-achieved { background: var(--green); }
 
-.goals-ring-label {
-  position: absolute;
-  inset: 0;
+.goals-stats-row {
+  display: flex;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-sub);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.goals-stat-chip {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  padding: 8px 6px;
+  text-align: center;
+  border-right: 1px solid var(--border-sub);
 }
 
-.goals-ring-label strong {
+.goals-stat-chip:last-child {
+  border-right: none;
+}
+
+.goals-stat-chip strong {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-}
-
-.goals-card-financial .goals-ring-label strong { color: var(--amber); }
-.goals-card-discipline .goals-ring-label strong { color: var(--cobalt-text); }
-.goals-card-lifestyle .goals-ring-label strong { color: var(--emerald); }
-.goals-card-skill .goals-ring-label strong { color: var(--purple); }
-.goals-card-achieved .goals-ring-label strong { color: var(--green); }
-
-.goals-ring-label small {
-  color: var(--txt-3);
-  font-size: 8px;
-}
-
-.goals-stats-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.goals-stat-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.goals-stat-line span {
-  color: var(--txt-3);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.goals-stat-line strong {
   color: var(--txt);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+}
+
+.goals-stat-chip span {
+  color: var(--txt-3);
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .goals-milestones {
@@ -798,6 +781,7 @@
   justify-content: center;
   gap: 7px;
   border: 1px dashed var(--border);
+  border-radius: 10px;
   color: var(--txt-3);
   padding: 40px 20px;
   cursor: pointer;

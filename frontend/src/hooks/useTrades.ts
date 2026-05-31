@@ -85,6 +85,20 @@ function normalizeConfluences(value: unknown): string[] {
   return normalized;
 }
 
+function normalizeAccountIds(value: unknown, fallback?: string): string[] {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? [value]
+      : [];
+  const normalized = rawValues
+    .map(entry => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter(Boolean);
+  const deduped = Array.from(new Set(normalized));
+  if (deduped.length > 0) return deduped;
+  return fallback ? [fallback] : [];
+}
+
 function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: string): StoreTrade {
   const direction = data.direction === 'Short' ? 'SHORT' : 'LONG';
   const entry = typeof data.entry_price === 'number' ? data.entry_price : 0;
@@ -122,7 +136,8 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     emotionalState: normalizeEmotion(data.emotional_state),
     confidenceLevel: typeof data.confidence_level === 'number' && Number.isFinite(data.confidence_level) ? data.confidence_level : null,
     confluences: normalizeConfluences(data.confluences),
-    account: data.accountId ?? data.account_id ?? accountId,
+    account: data.accountId ?? data.account_id ?? data.accountIds?.[0] ?? accountId,
+    accountIds: normalizeAccountIds(data.accountIds, data.accountId ?? data.account_id ?? accountId),
     createdAt: data.created_at ?? new Date().toISOString(),
   };
 }
@@ -141,6 +156,7 @@ function toApiTrade(trade: StoreTrade): ApiTrade {
     screenshot_url: trade.scannedImageUrl ?? (trade as unknown as { screenshotUrl?: string }).screenshotUrl ?? (Array.isArray(trade.screenshots) ? trade.screenshots[0] : undefined),
     accountId: trade.account,
     account_id: trade.account,
+    accountIds: normalizeAccountIds(trade.accountIds, trade.account),
     direction: trade.direction === 'SHORT' ? 'Short' : 'Long',
     entry_price: trade.entry,
     exit_price: trade.exit ?? trade.entry,
@@ -233,7 +249,7 @@ export function useTrades() {
 
         legacyTrades.forEach((trade) => {
           const date = trade.trade_date ?? new Date().toISOString().slice(0, 10);
-          const accountId = trade.accountId ?? trade.account_id ?? activeAccountId ?? DEFAULT_ACCOUNT_ID;
+          const accountId = trade.accountIds?.[0] ?? trade.accountId ?? trade.account_id ?? activeAccountId ?? DEFAULT_ACCOUNT_ID;
           const key = `${date}::${accountId}`;
           let entry = grouped.get(key);
 
@@ -258,7 +274,7 @@ export function useTrades() {
 
   const createTrade = useCallback(async (data: Partial<ApiTrade>): Promise<ApiTrade> => {
     const tradeDate = data.trade_date ?? new Date().toISOString().slice(0, 10);
-    const accountId = data.accountId ?? data.account_id ?? activeAccountId ?? DEFAULT_ACCOUNT_ID;
+    const accountId = data.accountIds?.[0] ?? data.accountId ?? data.account_id ?? activeAccountId ?? DEFAULT_ACCOUNT_ID;
     let entry = entries.find((candidate) => candidate.date === tradeDate && candidate.account === accountId);
 
     if (!entry) {
@@ -288,7 +304,8 @@ export function useTrades() {
       time: data.trade_time,
       exitTime: typeof data.close_time === 'string' ? data.close_time : undefined,
       duration: typeof data.trade_length_seconds === 'number' ? Math.round(data.trade_length_seconds / 60) : undefined,
-      account: data.accountId ?? data.account_id,
+      account: data.accountIds?.[0] ?? data.accountId ?? data.account_id,
+      accountIds: data.accountIds,
       scannedImageUrl: data.screenshot_url,
       reflection: {
         thesis: data.pre_trade_notes ?? '',

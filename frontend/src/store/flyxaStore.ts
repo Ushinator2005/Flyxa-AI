@@ -310,6 +310,11 @@ function normalizeTradeUnknown(input: unknown, entryId: string, date: string, ac
     : typeof input.confidence_level === 'number' && Number.isFinite(input.confidence_level)
       ? input.confidence_level
       : null;
+  const primaryAccount = asString(input.account || input.accountId, accountId);
+  const accountIds = Array.from(new Set([
+    ...(Array.isArray(input.accountIds) ? input.accountIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []),
+    primaryAccount,
+  ]));
   const trade: Trade = {
     // Spread all input fields first so rich JournalTrade fields (preEntry, thesis,
     // executionReview, psychologyRatings, etc.) survive a page reload.
@@ -367,7 +372,8 @@ function normalizeTradeUnknown(input: unknown, entryId: string, date: string, ac
     confluences: normalizeConfluences(input.confluences),
     // `account` is the store field; `accountId` is the JournalTrade field.
     // Accept either so trades normalised from TradeJournal mutations keep their account.
-    account: asString(input.account || input.accountId, accountId),
+    account: primaryAccount,
+    accountIds,
     createdAt: asString(input.createdAt, new Date().toISOString()),
   };
   return trade;
@@ -444,7 +450,11 @@ function ensureAccount(entries: unknown[], accountId: string): JournalEntry[] {
     .map((entry) => ({
       ...entry,
       account: entry.account || accountId,
-      trades: entry.trades.map((trade) => ({ ...trade, account: trade.account || entry.account || accountId })),
+      trades: entry.trades.map((trade) => {
+        const primaryAccount = trade.account || entry.account || accountId;
+        const accountIds = Array.from(new Set([...(trade.accountIds ?? []), primaryAccount]));
+        return { ...trade, account: primaryAccount, accountIds };
+      }),
     }));
 }
 

@@ -61,6 +61,8 @@ const DEFAULT_CONFLUENCE_OPTIONS = [
   'Volume confirmation',
 ];
 
+type TradeAccountMap = Record<string, string | string[]>;
+
 function normalizeConfluenceOption(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().replace(/\s+/g, ' ');
@@ -84,6 +86,27 @@ function normalizeConfluenceOptions(values: unknown): string[] {
   }
 
   return normalized.length ? normalized : [...DEFAULT_CONFLUENCE_OPTIONS];
+}
+
+function dedupeAccountIds(ids: unknown[], validAccountIds: Set<string>, fallback: string): string[] {
+  const next: string[] = [];
+  ids.forEach(value => {
+    if (typeof value !== 'string') return;
+    if (!value || value === DEFAULT_ACCOUNT_ID || !validAccountIds.has(value)) return;
+    if (!next.includes(value)) next.push(value);
+  });
+
+  return next.length > 0 ? next : [fallback];
+}
+
+function normalizeTradeAccountMap(raw: unknown, validAccountIds: Set<string>, fallback: string): TradeAccountMap {
+  if (!raw || typeof raw !== 'object') return {};
+
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .map(([tradeId, value]) => [tradeId, dedupeAccountIds(Array.isArray(value) ? value : [value], validAccountIds, fallback)] as const)
+      .filter(([, ids]) => ids.length > 0)
+  );
 }
 
 function normalizeSessionTimes(raw: unknown): AppPreferences['sessionTimes'] {
@@ -134,10 +157,11 @@ interface AppSettingsContextValue {
   updatePreferences: (updates: Partial<AppPreferences>) => void;
   getDefaultTradeAccountId: () => string;
   resolveTradeAccountId: (trade: Partial<Trade>) => string;
+  resolveTradeAccountIds: (trade: Partial<Trade>) => string[];
   isTradeAccountAllocatable: (accountId: string) => boolean;
   decorateTrades: (trades: Trade[]) => Trade[];
   filterTradesBySelectedAccount: (trades: Trade[]) => Trade[];
-  persistTradeAccount: (tradeId: string, accountId?: string) => void;
+  persistTradeAccount: (tradeId: string, accountId?: string | string[]) => void;
   removeTradeAccount: (tradeId: string) => void;
 }
 
@@ -154,7 +178,7 @@ interface AppSettingsRow {
   accounts?: TradingAccount[];
   preferences?: Partial<AppPreferences>;
   selectedAccountId?: string;
-  tradeAccounts?: Record<string, string>;
+  tradeAccounts?: TradeAccountMap;
   confluenceOptions?: string[];
 }
 
@@ -259,7 +283,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   const [preferences, setPreferences] = useState<AppPreferences>(DEFAULT_PREFERENCES);
   const [confluenceOptions, setConfluenceOptions] = useState<string[]>([...DEFAULT_CONFLUENCE_OPTIONS]);
   const [selectedAccountId, setSelectedAccountIdState] = useState<string>(ALL_ACCOUNTS_ID);
-  const [tradeAccounts, setTradeAccounts] = useState<Record<string, string>>({});
+  const [tradeAccounts, setTradeAccounts] = useState<TradeAccountMap>({});
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDone = useRef(false);
 
@@ -302,13 +326,11 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       setAccounts(nextAccounts);
       setPreferences(parsePreferences(row.preferences));
       setConfluenceOptions(normalizeConfluenceOptions(row.confluenceOptions));
-      setTradeAccounts(
-        row.tradeAccounts && typeof row.tradeAccounts === 'object'
-          ? Object.fromEntries(Object.entries(row.tradeAccounts).filter((e): e is [string, string] => typeof e[1] === 'string'))
-          : {}
-      );
       const stored = row.selectedAccountId ?? ALL_ACCOUNTS_ID;
       setSelectedAccountIdState(stored === ALL_ACCOUNTS_ID || nextAccounts.some(a => a.id === stored) ? stored : ALL_ACCOUNTS_ID);
+      const nextValidAccountIds = new Set(nextAccounts.map(account => account.id));
+      const nextDefaultTradeAccountId = resolveDefaultTradeAccountId(nextAccounts);
+      setTradeAccounts(normalizeTradeAccountMap(row.tradeAccounts, nextValidAccountIds, nextDefaultTradeAccountId));
       initialLoadDone.current = true;
     })();
   }, [user]);
@@ -387,27 +409,33 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     return defaultTradeAccountId;
   }, [defaultTradeAccountId, isTradeAccountAllocatable, selectedAccountId, validAccountIds]);
 
-  const resolveTradeAccountId = useCallback((trade: Partial<Trade>) => {
+  const resolveTradeAccountIds = useCallback((trade: Partial<Trade>) => {
     // Check all field names used across the codebase:
     // `accountId` / `account_id` are the API-layer fields set by toApiTrade();
     // `account` is the raw store field on StoreTrade / JournalTrade.
-    const accountCandidate = trade.accountId || trade.account_id
-      || (trade as unknown as { account?: string }).account
-      || (trade.id ? tradeAccounts[trade.id] : undefined);
+    const mappedAccounts = trade.id ? tradeAccounts[trade.id] : undefined;
+    const rawIds = [
+      ...(Array.isArray(trade.accountIds) ? trade.accountIds : []),
+      ...(Array.isArray(mappedAccounts) ? mappedAccounts : [mappedAccounts]),
+      trade.accountId,
+      trade.account_id,
+      (trade as unknown as { account?: string }).account,
+    ];
     // DEFAULT_ACCOUNT_ID is a placeholder for "no account assigned" — treat it the same as
     // missing so these trades fall through to defaultTradeAccountId (the user's real primary account).
-    if (accountCandidate && accountCandidate !== DEFAULT_ACCOUNT_ID && validAccountIds.has(accountCandidate)) {
-      return accountCandidate;
-    }
-
-    return defaultTradeAccountId;
+    return dedupeAccountIds(rawIds, validAccountIds, defaultTradeAccountId);
   }, [defaultTradeAccountId, tradeAccounts, validAccountIds]);
+
+  const resolveTradeAccountId = useCallback((trade: Partial<Trade>) => (
+    resolveTradeAccountIds(trade)[0] ?? defaultTradeAccountId
+  ), [defaultTradeAccountId, resolveTradeAccountIds]);
 
   const decorateTrades = useCallback((trades: Trade[]) => trades.map(trade => ({
     ...trade,
+    accountIds: resolveTradeAccountIds(trade),
     accountId: resolveTradeAccountId(trade),
     session: deriveTradeSessionLabel(trade, preferences.sessionTimes),
-  })), [preferences.sessionTimes, resolveTradeAccountId]);
+  })), [preferences.sessionTimes, resolveTradeAccountId, resolveTradeAccountIds]);
 
   const filterTradesBySelectedAccount = useCallback((trades: Trade[]) => {
     const decorated = decorateTrades(trades);
@@ -415,7 +443,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       return decorated;
     }
 
-    return decorated.filter(trade => trade.accountId === selectedAccountId);
+    return decorated.filter(trade => trade.accountIds?.includes(selectedAccountId) || trade.accountId === selectedAccountId);
   }, [decorateTrades, selectedAccountId]);
 
   const setSelectedAccountId = useCallback((accountId: string) => {
@@ -488,10 +516,11 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
 
     setAccounts(nextAccounts);
     setTradeAccounts(current => Object.fromEntries(
-      Object.entries(current).map(([tradeId, mappedAccountId]) => [
-        tradeId,
-        mappedAccountId === accountId ? nextDefaultTradeAccountId : mappedAccountId,
-      ])
+      Object.entries(current).map(([tradeId, mappedAccountIds]) => {
+        const rawIds = Array.isArray(mappedAccountIds) ? mappedAccountIds : [mappedAccountIds];
+        const nextIds = rawIds.filter(mappedAccountId => mappedAccountId !== accountId);
+        return [tradeId, nextIds.length > 0 ? nextIds : [nextDefaultTradeAccountId]];
+      })
     ));
     setSelectedAccountIdState(current => current === accountId ? ALL_ACCOUNTS_ID : current);
     if (user) {
@@ -530,11 +559,11 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
-  const persistTradeAccount = useCallback((tradeId: string, accountId?: string) => {
+  const persistTradeAccount = useCallback((tradeId: string, accountId?: string | string[]) => {
     if (!accountId) return;
     setTradeAccounts(current => ({
       ...current,
-      [tradeId]: validAccountIds.has(accountId) ? accountId : defaultTradeAccountId,
+      [tradeId]: dedupeAccountIds(Array.isArray(accountId) ? accountId : [accountId], validAccountIds, defaultTradeAccountId),
     }));
   }, [defaultTradeAccountId, validAccountIds]);
 
@@ -562,6 +591,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     updatePreferences,
     getDefaultTradeAccountId,
     resolveTradeAccountId,
+    resolveTradeAccountIds,
     isTradeAccountAllocatable,
     decorateTrades,
     filterTradesBySelectedAccount,
@@ -582,6 +612,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     updatePreferences,
     getDefaultTradeAccountId,
     resolveTradeAccountId,
+    resolveTradeAccountIds,
     isTradeAccountAllocatable,
     decorateTrades,
     filterTradesBySelectedAccount,

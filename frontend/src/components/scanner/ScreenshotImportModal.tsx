@@ -508,6 +508,11 @@ interface Props {
 
 export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTrade, prefillTrade, initialImageFile }: Props) {
   const { accounts, preferences, getDefaultTradeAccountId, isTradeAccountAllocatable, resolveTradeAccountId } = useAppSettings();
+  const normalizeTradeAccountIds = useCallback((trade: Partial<Trade> | null | undefined) => {
+    const rawIds = Array.isArray(trade?.accountIds) ? trade.accountIds : [];
+    const primary = trade ? resolveTradeAccountId(trade) : getDefaultTradeAccountId();
+    return Array.from(new Set([...rawIds, primary].filter((id): id is string => typeof id === 'string' && id.length > 0)));
+  }, [getDefaultTradeAccountId, resolveTradeAccountId]);
   const getInitialTradeAccountId = useCallback(() => {
     const baseTrade = editTrade ?? prefillTrade ?? null;
     if (baseTrade?.accountId || baseTrade?.account_id || baseTrade?.id) {
@@ -615,7 +620,8 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       : draftData.contract_size;
     const persistedDraft: Partial<Trade> = {
       ...draftData,
-      accountId: tradeAccountId || getDefaultTradeAccountId(),
+      accountId: (draftData.accountIds?.[0] ?? draftData.accountId ?? tradeAccountId) || getDefaultTradeAccountId(),
+      accountIds: draftData.accountIds ?? [tradeAccountId || getDefaultTradeAccountId()],
       contract_size: contractSize,
       trade_date: currentDate || draftData.trade_date,
       trade_time: currentTime || draftData.trade_time,
@@ -766,6 +772,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       const mapped: Partial<Trade> = {
         ...baseTrade,
         accountId: tradeAccountId || getDefaultTradeAccountId(),
+        accountIds: normalizeTradeAccountIds(baseTrade).length > 0 ? normalizeTradeAccountIds(baseTrade) : [tradeAccountId || getDefaultTradeAccountId()],
         trade_date: fileTradeDate || currentDate || undefined,
         trade_time: currentTime || undefined,
         contract_size: Math.max(1, Number(formData?.contract_size ?? prefillTrade?.contract_size ?? editTrade?.contract_size ?? 1)),
@@ -845,13 +852,19 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
   }, [editTrade, handleImageSelected, initialImageFile, isOpen]);
 
   const handleSave = async (data: Partial<Trade>) => {
-    if (!tradeAccountId || !selectedTradeAccount) {
+    const selectedAccountIds = Array.from(new Set((data.accountIds?.length ? data.accountIds : [data.accountId ?? tradeAccountId]).filter((id): id is string => typeof id === 'string' && id.length > 0)));
+
+    if (selectedAccountIds.length === 0) {
       alert('Select an account before saving this trade.');
       return;
     }
 
-    if (!selectedTradeAccountIsAllocatable && tradeAccountId !== existingTradeAccountId) {
-      alert(`${selectedTradeAccount.name} is marked as ${selectedTradeAccount.status} and cannot be allocated to a trade.`);
+    const invalidAccount = selectedAccountIds
+      .map(accountId => accountById.get(accountId))
+      .find(account => account && !isTradeAccountAllocatable(account.id) && account.id !== existingTradeAccountId);
+
+    if (invalidAccount) {
+      alert(`${invalidAccount.name} is marked as ${invalidAccount.status} and cannot be allocated to a trade.`);
       return;
     }
 
@@ -859,7 +872,9 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     try {
       await onSave({
         ...data,
-        accountId: tradeAccountId || getDefaultTradeAccountId(),
+        accountId: selectedAccountIds[0] || getDefaultTradeAccountId(),
+        account_id: selectedAccountIds[0] || getDefaultTradeAccountId(),
+        accountIds: selectedAccountIds,
         screenshot_url: imagePreview ?? editTrade?.screenshot_url ?? undefined,
       });
       localStorage.removeItem(DRAFT_KEY);

@@ -6,6 +6,7 @@ export interface Trade {
   symbol: string;
   screenshot_url?: string;
   account_id?: string;
+  accountIds?: string[];
   direction: 'Long' | 'Short';
   entry_price: number;
   exit_price: number;

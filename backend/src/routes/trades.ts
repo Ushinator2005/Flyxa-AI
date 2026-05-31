@@ -96,6 +96,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       screenshot_url,
       accountId,
       account_id,
+      accountIds,
       direction,
       entry_price,
       sl_price,
@@ -155,7 +156,9 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       user_id: req.userId!,
       symbol,
       screenshot_url: typeof screenshot_url === 'string' ? screenshot_url : '',
-      account_id: typeof accountId === 'string'
+      account_id: Array.isArray(accountIds) && typeof accountIds[0] === 'string'
+        ? accountIds[0]
+        : typeof accountId === 'string'
         ? accountId
         : typeof account_id === 'string'
           ? account_id
@@ -284,7 +287,11 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
     if (typeof nextUpdateData.accountId === 'string' && !('account_id' in nextUpdateData)) {
       nextUpdateData.account_id = nextUpdateData.accountId;
     }
+    if (Array.isArray(nextUpdateData.accountIds) && typeof nextUpdateData.accountIds[0] === 'string') {
+      nextUpdateData.account_id = nextUpdateData.accountIds[0];
+    }
     delete nextUpdateData.accountId;
+    delete nextUpdateData.accountIds;
     const existingRecord = existing as Record<string, unknown>;
     const shouldPersistConfluences = 'confluences' in updateData || Array.isArray(existingRecord.confluences);
     if (shouldPersistConfluences) {

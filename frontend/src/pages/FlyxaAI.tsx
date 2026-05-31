@@ -132,15 +132,17 @@ function getPeriodWindow(tf: TimeFrame, weekOffset = 0) {
     };
   }
   if (tf === '1M') {
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    const monthStart = new Date(today.getFullYear(), today.getMonth() - weekOffset, 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() - weekOffset + 1, 0);
+    const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - weekOffset - 1, 1);
+    const prevMonthEnd = new Date(today.getFullYear(), today.getMonth() - weekOffset, 0);
+    const periodEnd = weekOffset === 0 ? now : (() => { const e = new Date(monthEnd); e.setHours(23, 59, 59, 999); return e; })();
+    const periodLabel = weekOffset === 0 ? 'this month' : monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     return {
-      periodStart: monthStart, periodEnd: now,
+      periodStart: monthStart, periodEnd,
       displayStart: monthStart, displayEnd: monthEnd,
       prevStart: prevMonthStart, prevEnd: prevMonthEnd,
-      periodLabel: 'this month', prevLabel: 'prev month', headerLabel: 'Monthly debrief',
+      periodLabel, prevLabel: 'prev month', headerLabel: 'Monthly debrief',
     };
   }
   if (tf === '3M') {
@@ -465,11 +467,26 @@ function renderBodyWithHighlights(body: string, keyPhrases: string[]) {
   if (!keyPhrases.length) return body;
   const lookup = new Set(keyPhrases.map(k => k.toLowerCase()));
   const pattern = new RegExp(`(${keyPhrases.map(escapeRegExp).join('|')})`, 'gi');
-  return body.split(pattern).map((segment, idx) => (
-    <span key={`${segment}-${idx}`} style={{ color: lookup.has(segment.toLowerCase()) ? colors.t0 : colors.t1 }}>
-      {segment}
-    </span>
-  ));
+  return body.split(pattern).map((segment, idx) =>
+    lookup.has(segment.toLowerCase()) ? (
+      <mark
+        key={`${segment}-${idx}`}
+        style={{
+          color: colors.t0,
+          backgroundColor: 'rgba(255,255,255,0.07)',
+          borderRadius: 3,
+          padding: '1px 4px',
+          fontWeight: 500,
+        }}
+      >
+        {segment}
+      </mark>
+    ) : (
+      <span key={`${segment}-${idx}`} style={{ color: colors.t1 }}>
+        {segment}
+      </span>
+    )
+  );
 }
 
 
@@ -1600,14 +1617,14 @@ export default function FlyxaAI() {
                         </button>
                       ))}
                     </div>
-                    {timeframe === '1W' && (
+                    {(timeframe === '1W' || timeframe === '1M') && (
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => setWeekOffset(w => w + 1)}
                           className="rounded-[3px] px-2 py-[3px] text-[12px] transition-colors hover:bg-white/[0.06]"
                           style={{ color: colors.t1, border: `1px solid ${colors.b0}` }}
-                          title="Previous week"
+                          title={timeframe === '1W' ? 'Previous week' : 'Previous month'}
                         >←</button>
                         {weekOffset > 0 && (
                           <button
@@ -1615,7 +1632,7 @@ export default function FlyxaAI() {
                             onClick={() => setWeekOffset(0)}
                             className="rounded-[3px] px-2 py-[3px] text-[10px] transition-colors hover:bg-white/[0.06]"
                             style={{ color: colors.acc, border: `1px solid ${colors.b0}`, fontFamily: colors.mono }}
-                          >This week</button>
+                          >{timeframe === '1W' ? 'This week' : 'This month'}</button>
                         )}
                         <button
                           type="button"
@@ -1627,7 +1644,7 @@ export default function FlyxaAI() {
                             border: `1px solid ${colors.b0}`,
                             opacity: weekOffset === 0 ? 0.4 : 1,
                           }}
-                          title="Next week"
+                          title={timeframe === '1W' ? 'Next week' : 'Next month'}
                         >→</button>
                       </div>
                     )}
@@ -1841,28 +1858,39 @@ export default function FlyxaAI() {
 
               <section className="mt-4" data-tour-id="flyxa-ai-insights">
                 <p style={tinyMetaLabelStyle}>AI insights &middot; {displayedInsights.length} found &middot; {getPeriodWindow(timeframe).periodLabel}</p>
-                <div className="mt-2 space-y-2">
+                <div className="mt-2 space-y-2.5">
                   {displayedInsights.map(insight => {
                     const style = insightTypeStyles[insight.type];
                     return (
-                      <article key={insight.title} className="overflow-hidden rounded-[8px] border transition-colors hover:[border-color:var(--b1)]" style={{ borderColor: colors.b0 }}>
-                        <div className="h-[2px]" style={{ backgroundColor: style.accent }} />
-                        <div className="px-[14px] py-3" style={{ backgroundColor: colors.d2 }}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className="rounded-[4px] px-[7px] py-[2px] text-[9.5px] font-bold uppercase tracking-[0.05em]"
-                              style={{ color: style.accent, backgroundColor: `color-mix(in srgb, ${style.accent} 10%, transparent)` }}
-                            >
-                              {insight.badge}
-                            </span>
-                            <span className="text-[10.5px]" style={{ color: colors.t2 }}>
-                              {insight.frequency}
-                            </span>
-                          </div>
-                          <h3 className="mb-1 mt-1 text-[14px] font-semibold leading-snug" style={{ color: colors.t0 }}>{insight.title}</h3>
-                          <p className="mb-2 text-[12px] leading-relaxed" style={{ color: colors.t1 }}>
+                      <article
+                        key={insight.title}
+                        className="overflow-hidden rounded-[10px] border transition-all"
+                        style={{
+                          borderColor: `color-mix(in srgb, ${style.accent} 22%, rgba(255,255,255,0.06))`,
+                          backgroundColor: `color-mix(in srgb, ${style.accent} 4%, ${colors.d2})`,
+                        }}
+                      >
+                        <div className="px-4 py-[14px]">
+                          {/* Type badge pill */}
+                          <span
+                            className="inline-flex items-center rounded-full px-[9px] py-[3px] text-[9px] font-bold uppercase tracking-[0.08em]"
+                            style={{ color: style.accent, backgroundColor: `color-mix(in srgb, ${style.accent} 15%, transparent)` }}
+                          >
+                            {insight.badge}
+                          </span>
+                          {/* Title */}
+                          <h3 className="mt-[9px] text-[15px] font-semibold leading-snug" style={{ color: colors.t0 }}>
+                            {insight.title}
+                          </h3>
+                          {/* Frequency — subtitle under title */}
+                          <p className="mt-[3px] mb-[10px] text-[10.5px]" style={{ color: colors.t2 }}>
+                            {insight.frequency}
+                          </p>
+                          {/* Body */}
+                          <p className="mb-3 text-[12.5px] leading-[1.65]" style={{ color: colors.t1 }}>
                             {renderBodyWithHighlights(insight.body, insight.keyPhrases)}
                           </p>
+                          {/* Footer: tags + action */}
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex flex-wrap gap-1.5">
                               {insight.tags.map(tag => (
@@ -1873,8 +1901,8 @@ export default function FlyxaAI() {
                             </div>
                             <button
                               type="button"
-                              className="shrink-0 cursor-pointer text-[11px] opacity-75 transition-opacity hover:opacity-100 flex items-center gap-0.5"
-                              style={{ color: colors.acc }}
+                              className="shrink-0 cursor-pointer text-[11px] opacity-70 transition-opacity hover:opacity-100"
+                              style={{ color: style.accent }}
                               onClick={() => {
                                 const label = insight.actionLabel.toLowerCase();
                                 if (label.includes('pre-session')) navigate('/pre-session');

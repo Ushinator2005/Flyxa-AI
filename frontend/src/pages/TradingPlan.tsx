@@ -18,7 +18,13 @@ import {
   Sparkles,
   Target,
 } from 'lucide-react';
+import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import { useTrades } from '../hooks/useTrades.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import type { Trade } from '../types/index.js';
+import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
+import { formatRiskRewardRatio } from '../utils/riskReward.js';
+import { getTradeRiskReward } from '../utils/tradeAnalytics.js';
 import './TradingPlan.css';
 
 type TradingPlanTab = 'trading-plan' | 'risk-rules' | 'playbook' | 'prop-firm-rules' | 'pre-session-checklist';
@@ -51,6 +57,24 @@ interface Setup {
   avgRR: string;
   confluences: string[];
   isExpanded: boolean;
+}
+
+interface SetupEdgeScore {
+  setupId: string;
+  matchedTrades: Trade[];
+  tradeCount: number;
+  edgeScore: number | null;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'Learning';
+  status: 'Scale' | 'Active' | 'Watch' | 'Bench' | 'Needs data';
+  statusTone: 'green' | 'amber' | 'cobalt' | 'red' | 'neutral';
+  netPnL: number;
+  winRate: number;
+  avgPnL: number;
+  avgRR: number | null;
+  planRate: number | null;
+  tiltCount: number;
+  tiltRate: number;
+  action: string;
 }
 
 interface PropFirmParam {
@@ -173,8 +197,158 @@ function toneClass(tone: ColorTone): string {
   return 'tp-tone-neutral';
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatMoney(value: number, symbol: string): string {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}${symbol}${Math.abs(value).toLocaleString('en-US', {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+function normalizeSetupConfluences(setup: Setup): string[] {
+  const values = setup.confluences
+    .map(value => normalizeConfluenceTag(value))
+    .filter(Boolean);
+  return Array.from(new Set(values));
+}
+
+function normalizeTradeConfluences(trade: Trade): Set<string> {
+  return new Set((trade.confluences ?? []).map(value => normalizeConfluenceTag(value)).filter(Boolean));
+}
+
+function isTiltTrade(trade: Trade): boolean {
+  const state = (trade.emotional_state ?? '').toLowerCase();
+  const flags = trade.behavioral_flags ?? [];
+  return trade.followed_plan === false
+    || flags.length > 0
+    || /tilt|revenge|fomo|angry|frustrated|impulsive|rushed/.test(state);
+}
+
+function scoreSetupEdge(setup: Setup, trades: Trade[]): SetupEdgeScore {
+  const setupKeys = normalizeSetupConfluences(setup);
+
+  if (setupKeys.length === 0) {
+    return {
+      setupId: setup.id,
+      matchedTrades: [],
+      tradeCount: 0,
+      edgeScore: null,
+      grade: 'Learning',
+      status: 'Needs data',
+      statusTone: 'neutral',
+      netPnL: 0,
+      winRate: 0,
+      avgPnL: 0,
+      avgRR: null,
+      planRate: null,
+      tiltCount: 0,
+      tiltRate: 0,
+      action: 'Add confluence rules to this setup so Flyxa can match journal trades against it.',
+    };
+  }
+
+  const matchedTrades = trades.filter(trade => {
+    const tradeKeys = normalizeTradeConfluences(trade);
+    return setupKeys.some(key => tradeKeys.has(key));
+  });
+
+  const tradeCount = matchedTrades.length;
+  if (tradeCount === 0) {
+    return {
+      setupId: setup.id,
+      matchedTrades,
+      tradeCount,
+      edgeScore: null,
+      grade: 'Learning',
+      status: 'Needs data',
+      statusTone: 'neutral',
+      netPnL: 0,
+      winRate: 0,
+      avgPnL: 0,
+      avgRR: null,
+      planRate: null,
+      tiltCount: 0,
+      tiltRate: 0,
+      action: 'No matching journal trades yet. Tag future trades with these confluences to start scoring.',
+    };
+  }
+
+  const wins = matchedTrades.filter(trade => trade.pnl > 0);
+  const losses = matchedTrades.filter(trade => trade.pnl < 0);
+  const scoredTrades = wins.length + losses.length;
+  const netPnL = matchedTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+  const avgPnL = netPnL / tradeCount;
+  const winRate = scoredTrades > 0 ? (wins.length / scoredTrades) * 100 : 0;
+  const grossProfit = wins.reduce((sum, trade) => sum + trade.pnl, 0);
+  const grossLoss = Math.abs(losses.reduce((sum, trade) => sum + trade.pnl, 0));
+  const profitFactor = grossLoss === 0 ? (grossProfit > 0 ? 3 : 1) : grossProfit / grossLoss;
+  const rrValues = matchedTrades.map(getTradeRiskReward).filter((value): value is number => value !== null);
+  const avgRR = rrValues.length > 0 ? rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length : null;
+  const planTagged = matchedTrades.filter(trade => typeof trade.followed_plan === 'boolean');
+  const planRate = planTagged.length > 0
+    ? (planTagged.filter(trade => trade.followed_plan).length / planTagged.length) * 100
+    : null;
+  const tiltCount = matchedTrades.filter(isTiltTrade).length;
+  const tiltRate = (tiltCount / tradeCount) * 100;
+  const sampleConfidence = clamp(tradeCount / 20, 0, 1);
+
+  const edgeScore = Math.round(clamp(
+    45
+      + clamp((winRate - 50) * 0.35, -18, 18)
+      + clamp((profitFactor - 1) * 16, -18, 22)
+      + clamp(((avgRR ?? 1) - 1.2) * 8, -8, 12)
+      + (planRate === null ? 0 : clamp((planRate - 70) * 0.16, -10, 10))
+      - clamp(tiltRate * 0.18, 0, 14)
+      + sampleConfidence * 8,
+    0,
+    100
+  ));
+
+  const grade = tradeCount < 5 ? 'Learning' : edgeScore >= 82 ? 'A+' : edgeScore >= 70 ? 'A' : edgeScore >= 58 ? 'B' : 'C';
+  const status = tradeCount < 5 ? 'Needs data' : edgeScore >= 76 ? 'Scale' : edgeScore >= 62 ? 'Active' : edgeScore >= 50 ? 'Watch' : 'Bench';
+  const statusTone = status === 'Scale'
+    ? 'green'
+    : status === 'Active'
+      ? 'cobalt'
+      : status === 'Watch' || status === 'Needs data'
+        ? 'amber'
+        : 'red';
+  const action = status === 'Scale'
+    ? 'Best current edge. Prioritize this setup when context is clean and size only inside risk rules.'
+    : status === 'Active'
+      ? 'Keep in rotation. The edge is positive, but wait for the full checklist before pressing.'
+      : status === 'Watch'
+        ? 'Trade smaller or collect more examples. Review losers for the repeated leak before scaling.'
+        : status === 'Bench'
+          ? 'Pause live execution until the rules are tighter or backtest evidence improves.'
+          : 'Collect at least five clean tagged examples before making a sizing decision.';
+
+  return {
+    setupId: setup.id,
+    matchedTrades,
+    tradeCount,
+    edgeScore,
+    grade,
+    status,
+    statusTone,
+    netPnL,
+    winRate,
+    avgPnL,
+    avgRR,
+    planRate,
+    tiltCount,
+    tiltRate,
+    action,
+  };
+}
+
 export default function TradingPlan() {
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
+  const { trades } = useTrades();
+  const { filterTradesBySelectedAccount, preferences } = useAppSettings();
 
   const [activeTab, setActiveTab] = useState<TradingPlanTab>('trading-plan');
   const [planBlocks, setPlanBlocks] = useState<PlanBlock[]>(() => {
@@ -193,6 +367,14 @@ export default function TradingPlan() {
 
   const [setups, setSetups] = useState<Setup[]>(() => {
     const stored = useFlyxaStore.getState().setupPlaybook;
+    if (stored.length > 0) {
+      return stored.map(setup => ({
+        ...setup,
+        rank: setup.rank === 'A+' || setup.rank === 'A' || setup.rank === 'B' ? setup.rank : 'B',
+        confluences: Array.isArray(setup.confluences) ? setup.confluences : [],
+        isExpanded: typeof setup.isExpanded === 'boolean' ? setup.isExpanded : false,
+      }));
+    }
     const storedMap = new Map(stored.map(setup => [setup.id, setup]));
     return INITIAL_SETUPS.map(setup => {
       const persisted = storedMap.get(setup.id);
@@ -252,6 +434,40 @@ export default function TradingPlan() {
   }, [persistState, checklist, planBlocks, setups]);
 
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSaved, now), [lastSaved, now]);
+  const accountTrades = useMemo(
+    () => filterTradesBySelectedAccount(trades),
+    [filterTradesBySelectedAccount, trades]
+  );
+  const setupEdgeScores = useMemo(
+    () => setups.map(setup => scoreSetupEdge(setup, accountTrades)),
+    [accountTrades, setups]
+  );
+  const setupEdgeScoreMap = useMemo(
+    () => new Map(setupEdgeScores.map(score => [score.setupId, score])),
+    [setupEdgeScores]
+  );
+  const scoredSetups = useMemo(
+    () => setupEdgeScores.filter(score => score.edgeScore !== null),
+    [setupEdgeScores]
+  );
+  const strongestEdge = useMemo(
+    () => [...scoredSetups].sort((a, b) => (b.edgeScore ?? 0) - (a.edgeScore ?? 0))[0] ?? null,
+    [scoredSetups]
+  );
+  const weakestEdge = useMemo(
+    () => [...scoredSetups].sort((a, b) => (a.edgeScore ?? 0) - (b.edgeScore ?? 0))[0] ?? null,
+    [scoredSetups]
+  );
+  const totalMatchedTrades = useMemo(
+    () => new Set(setupEdgeScores.flatMap(score => score.matchedTrades.map(trade => trade.id))).size,
+    [setupEdgeScores]
+  );
+  const avgEdgeScore = useMemo(
+    () => scoredSetups.length > 0
+      ? Math.round(scoredSetups.reduce((sum, score) => sum + (score.edgeScore ?? 0), 0) / scoredSetups.length)
+      : null,
+    [scoredSetups]
+  );
   const completedBlocks = useMemo(() => planBlocks.filter(block => block.content.trim().length > 0).length, [planBlocks]);
   const strategyCoverage = useMemo(
     () => Math.round((completedBlocks / Math.max(1, planBlocks.length)) * 100),
@@ -517,38 +733,109 @@ export default function TradingPlan() {
           <section className="tp-panel">
             <div className="tp-section-head">
               <h2>Setup Playbook</h2>
-              <p>Only execute setups that are already defined here with clear confluence criteria.</p>
+              <p>Only execute setups that are already defined here with clear confluence criteria and measured journal evidence.</p>
+            </div>
+
+            <div className="tp-edge-grid">
+              <article className="tp-edge-kpi">
+                <p>Average Edge</p>
+                <strong className="num">{avgEdgeScore === null ? '--' : avgEdgeScore}</strong>
+                <span>{scoredSetups.length} scored setups</span>
+              </article>
+              <article className="tp-edge-kpi">
+                <p>Strongest Setup</p>
+                <strong>{strongestEdge ? setups.find(setup => setup.id === strongestEdge.setupId)?.name : 'No data yet'}</strong>
+                <span>{strongestEdge ? `${strongestEdge.status} / ${strongestEdge.tradeCount} trades` : 'Tag trades with confluences'}</span>
+              </article>
+              <article className="tp-edge-kpi">
+                <p>Weakest Setup</p>
+                <strong>{weakestEdge ? setups.find(setup => setup.id === weakestEdge.setupId)?.name : 'No data yet'}</strong>
+                <span>{weakestEdge ? `${weakestEdge.status} / ${formatMoney(weakestEdge.netPnL, preferences.currencySymbol)}` : 'Needs journal history'}</span>
+              </article>
+              <article className="tp-edge-kpi">
+                <p>Matched Trades</p>
+                <strong className="num">{totalMatchedTrades}</strong>
+                <span>{accountTrades.length} trades in selected account</span>
+              </article>
             </div>
 
             <div className="tp-stack">
-              {setups.map(setup => (
-                <article key={setup.id} className="tp-card">
-                  <button type="button" className="tp-card-head" onClick={() => toggleSetup(setup.id)}>
-                    <span className="tp-card-title-wrap">
-                      <span className={`tp-rank ${setup.rank === 'B' ? 'b' : 'a'}`}>{setup.rank}</span>
-                      <span>
-                        <span className="tp-card-title">{setup.name}</span>
-                        <span className="tp-card-sub">{setup.description}</span>
-                      </span>
-                    </span>
-                    <ChevronDown size={14} className={setup.isExpanded ? 'tp-chevron open' : 'tp-chevron'} />
-                  </button>
-
-                  <div className="tp-setup-meta">
-                    <span className="num">{setup.timeframe}</span>
-                    <span className="num">{setup.market}</span>
-                    <span className="num tp-rr-pill">Avg {setup.avgRR}</span>
+              {setups.length === 0 ? (
+                <article className="tp-empty-state">
+                  <Target size={15} />
+                  <div>
+                    <h3>No setups in the playbook yet</h3>
+                    <p>Add named setups with confluence criteria, then Flyxa will score which ones deserve more size and which ones should be benched.</p>
                   </div>
-
-                  {setup.isExpanded && (
-                    <div className="tp-card-body tp-confluence-list">
-                      {setup.confluences.map(confluence => (
-                        <p key={`${setup.id}-${confluence}`}>{confluence}</p>
-                      ))}
-                    </div>
-                  )}
                 </article>
-              ))}
+              ) : setups.map(setup => {
+                const score = setupEdgeScoreMap.get(setup.id);
+                return (
+                  <article key={setup.id} className="tp-card">
+                    <button type="button" className="tp-card-head" onClick={() => toggleSetup(setup.id)}>
+                      <span className="tp-card-title-wrap">
+                        <span className={`tp-rank ${setup.rank === 'B' ? 'b' : 'a'}`}>{setup.rank}</span>
+                        <span>
+                          <span className="tp-card-title">{setup.name}</span>
+                          <span className="tp-card-sub">{setup.description}</span>
+                        </span>
+                      </span>
+                      <span className="tp-edge-head">
+                        <span className={`tp-edge-status ${score?.statusTone ?? 'neutral'}`}>{score?.status ?? 'Needs data'}</span>
+                        <span className="tp-edge-score num">{score?.edgeScore ?? '--'}</span>
+                        <ChevronDown size={14} className={setup.isExpanded ? 'tp-chevron open' : 'tp-chevron'} />
+                      </span>
+                    </button>
+
+                    <div className="tp-setup-meta">
+                      <span className="num">{setup.timeframe}</span>
+                      <span className="num">{setup.market}</span>
+                      <span className="num tp-rr-pill">Plan {setup.avgRR}</span>
+                      <span className="num tp-edge-pill">{score?.tradeCount ?? 0} trades</span>
+                      <span className="num">{score?.grade ?? 'Learning'}</span>
+                      <span className={`num ${(score?.netPnL ?? 0) >= 0 ? 'tp-edge-positive' : 'tp-edge-negative'}`}>
+                        {formatMoney(score?.netPnL ?? 0, preferences.currencySymbol)}
+                      </span>
+                    </div>
+
+                    {setup.isExpanded && (
+                      <div className="tp-card-body">
+                        <div className="tp-edge-detail-grid">
+                          <div>
+                            <p>Win Rate</p>
+                            <strong className="num">{score ? `${Math.round(score.winRate)}%` : '--'}</strong>
+                          </div>
+                          <div>
+                            <p>Avg P&L</p>
+                            <strong className="num">{formatMoney(score?.avgPnL ?? 0, preferences.currencySymbol)}</strong>
+                          </div>
+                          <div>
+                            <p>Avg R:R</p>
+                            <strong className="num">{score?.avgRR === null || !score ? '--' : `${formatRiskRewardRatio(score.avgRR)}R`}</strong>
+                          </div>
+                          <div>
+                            <p>Plan Follow</p>
+                            <strong className="num">{score?.planRate === null || !score ? '--' : `${Math.round(score.planRate)}%`}</strong>
+                          </div>
+                          <div>
+                            <p>Tilt Flags</p>
+                            <strong className="num">{score?.tiltCount ?? 0}</strong>
+                          </div>
+                        </div>
+                        <div className="tp-edge-action">
+                          <BarChart3 size={13} />
+                          <p>{score?.action}</p>
+                        </div>
+                        <div className="tp-confluence-list">
+                          {setup.confluences.map(confluence => (
+                            <p key={`${setup.id}-${confluence}`}>{confluence}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}

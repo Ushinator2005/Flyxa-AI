@@ -552,14 +552,18 @@ export default function Analytics() {
 
   const behavioralFlagRows = useMemo(() => {
     const FLAG_LABELS: Record<string, string> = {
-      'fomo': 'FOMO entry',
-      'exit-early': 'Exited too early',
-      'past-inval': 'Held past invalidation',
-      'off-playbook': 'Off-playbook setup',
-      'past-limit': 'Traded past daily limit',
-      'revenge': 'Revenge trade',
-      'oversize': 'Oversized position',
-      'move-stop': 'Moved stop against plan',
+      'chased-entry':    'Chased entry',
+      'no-confirmation': 'Jumped in early',
+      'fomo':            'FOMO trade',
+      'off-playbook':    'Off-playbook setup',
+      'sized-up':        'Oversized position',
+      'added-losing':    'Added to losing position',
+      'moved-stop':      'Widened stop loss',
+      'exit-early':      'Exited too early',
+      'moved-target':    'Moved / ignored TP',
+      'past-inval':      'Held past invalidation',
+      'revenge':         'Revenge trade',
+      'past-limit':      'Traded past daily limit',
     };
     const grouped = new Map<string, { label: string; count: number; netPnL: number }>();
 
@@ -581,31 +585,6 @@ export default function Analytics() {
     return Array.from(grouped.values())
       .map(row => ({ ...row, avgPnL: row.count > 0 ? row.netPnL / row.count : 0 }))
       .sort((a, b) => a.netPnL - b.netPnL);
-  }, [filteredTrades]);
-
-  const TF_ORDER = ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '1h', '2h', '4h', '1d'];
-  const timeframeRows = useMemo(() => {
-    const grouped = new Map<string, { trades: number; wins: number; netPnL: number }>();
-
-    filteredTrades.forEach(trade => {
-      const mins = trade.timeframe_minutes;
-      if (!mins || mins <= 0) return;
-      const label = mins >= 1440 ? '1d' : mins >= 240 ? '4h' : mins >= 120 ? '2h' : mins >= 60 ? '1h' : mins >= 30 ? '30m' : mins >= 15 ? '15m' : mins >= 10 ? '10m' : mins >= 5 ? '5m' : mins >= 3 ? '3m' : mins >= 2 ? '2m' : '1m';
-      const current = grouped.get(label) ?? { trades: 0, wins: 0, netPnL: 0 };
-      current.trades += 1;
-      current.netPnL += trade.pnl;
-      if (trade.pnl > 0) current.wins += 1;
-      grouped.set(label, current);
-    });
-
-    return Array.from(grouped.entries())
-      .map(([label, data]) => ({
-        label,
-        ...data,
-        winRate: data.trades > 0 ? (data.wins / data.trades) * 100 : 0,
-        avgPnL: data.trades > 0 ? data.netPnL / data.trades : 0,
-      }))
-      .sort((a, b) => TF_ORDER.indexOf(a.label) - TF_ORDER.indexOf(b.label));
   }, [filteredTrades]);
 
   if (isLoading) {
@@ -688,6 +667,18 @@ export default function Analytics() {
           }
           valueClassName={metrics.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
         />
+        <MetricCard
+          label="Expectancy"
+          value={metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--'}
+          subtitle="avg edge per trade"
+          valueClassName={metrics.expectedValue >= 0 ? 'text-emerald-400' : 'text-red-400'}
+        />
+        <MetricCard
+          label="Max Drawdown"
+          value={maxDrawdown > 0 ? `-${formatCurrency(maxDrawdown)}` : '$0'}
+          subtitle="peak-to-trough loss"
+          valueClassName={maxDrawdown > 0 ? 'text-red-400' : 'text-[var(--app-text)]'}
+        />
         {/* Win Rate card with gauge */}
         <div className="min-h-[112px] rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
           <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Win Rate</p>
@@ -731,18 +722,6 @@ export default function Analytics() {
           valueClassName={metrics.profitFactor >= 1 ? 'text-[var(--accent)]' : 'text-[#f87171]'}
         />
         <MetricCard
-          label="Avg PL"
-          value={formatSignedCurrency(metrics.avgPnL)}
-          subtitle={`${metrics.totalTrades} trade${metrics.totalTrades === 1 ? '' : 's'} average`}
-          valueClassName={metrics.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
-        />
-        <MetricCard
-          label="Avg RR"
-          value={metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'}
-          subtitle={metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'}
-          valueClassName="text-[var(--app-text)]"
-        />
-        <MetricCard
           label="Total Trades"
           value={String(metrics.totalTrades)}
           subtitle={`${metrics.tradesPerDay.toFixed(1)}/ day avg`}
@@ -754,11 +733,11 @@ export default function Analytics() {
       {filteredTrades.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Expectancy</p>
-            <p className={`mt-1.5 text-lg font-semibold ${metrics.expectedValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--'}
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg P/L</p>
+            <p className={`mt-1.5 text-lg font-semibold ${metrics.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {formatSignedCurrency(metrics.avgPnL)}
             </p>
-            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">avg edge per trade</p>
+            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.totalTrades} trade{metrics.totalTrades === 1 ? '' : 's'} average</p>
           </div>
           <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
             <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg Win</p>
@@ -775,11 +754,13 @@ export default function Analytics() {
             <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.losses.length} losing trade{metrics.losses.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Max Drawdown</p>
-            <p className="mt-1.5 text-lg font-semibold text-red-400">
-              {maxDrawdown > 0 ? `-${formatCurrency(maxDrawdown)}` : '$0'}
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg RR</p>
+            <p className="mt-1.5 text-lg font-semibold text-[var(--app-text)]">
+              {metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'}
             </p>
-            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">peak-to-trough loss</p>
+            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">
+              {metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'}
+            </p>
           </div>
         </div>
       )}
@@ -1029,8 +1010,16 @@ export default function Analytics() {
                 width={28}
               />
               <Tooltip
-                contentStyle={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 10 }}
-                labelStyle={{ color: 'var(--app-text-muted)', fontSize: 12 }}
+                cursor={{ fill: 'rgba(255,255,255,0.05)', stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1, radius: 4 }}
+                contentStyle={{
+                  background: 'rgba(12,12,14,0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  padding: '8px 12px',
+                }}
+                labelStyle={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, marginBottom: 4 }}
+                itemStyle={{ color: '#fff', fontSize: 12, fontWeight: 500 }}
                 formatter={(value: number) => [value, 'Trades']}
                 labelFormatter={(label: string) => `P&L ≈ $${label}`}
               />
@@ -1111,113 +1100,128 @@ export default function Analytics() {
       </section>
 
       <section data-tour-id="analytics-confluence" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-[var(--app-text)]">Confluence Performance</h3>
-          <p className="text-xs text-[var(--app-text-muted)]">Ranked by net P&amp;L contribution</p>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--app-text)]">Confluence Performance</h3>
+            <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Which setups are helping vs. hurting your P&amp;L</p>
+          </div>
+          <span className="shrink-0 rounded-md bg-[var(--app-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--app-text-muted)]">
+            {confluenceRows.length} confluence{confluenceRows.length !== 1 ? 's' : ''}
+          </span>
         </div>
 
         {confluenceRows.length === 0 ? (
           <p className="text-sm text-[var(--app-text-muted)]">Add confluences on trades to unlock this breakdown.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-emerald-300">Most Profitable</p>
-              <div className="mt-3 space-y-2.5">
-                {strongestConfluences.length > 0 ? strongestConfluences.map(row => (
-                  <div key={row.label} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-[var(--app-panel)] px-3 py-2">
-                    <div>
-                      <p className="text-sm text-[var(--app-text)]">{row.label}</p>
-                      <p className="text-xs text-[var(--app-text-muted)]">{row.trades} trades | {row.winRate.toFixed(0)}% win</p>
-                    </div>
-                    <p className="text-sm font-semibold text-emerald-400">{formatSignedCurrency(row.netPnL)}</p>
-                  </div>
-                )) : (
-                  <p className="text-xs text-[var(--app-text-muted)]">No profitable confluences in this period.</p>
-                )}
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {/* Most Profitable */}
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-400">Most Profitable</p>
               </div>
+              {strongestConfluences.length > 0 ? (
+                <div className="space-y-1">
+                  {strongestConfluences.map((row, i) => {
+                    const maxPnL = strongestConfluences[0]?.netPnL ?? 1;
+                    const fillPct = Math.max(6, (row.netPnL / maxPnL) * 100);
+                    return (
+                      <div key={row.label} className="group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2.5">
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-500"
+                          style={{ width: `${fillPct}%`, background: 'rgba(52,211,153,0.08)' }}
+                        />
+                        <span className="relative z-10 w-4 shrink-0 text-center text-[10px] font-mono font-semibold text-emerald-500/50">{i + 1}</span>
+                        <div className="relative z-10 flex-1 min-w-0">
+                          <p className="truncate text-sm text-[var(--app-text)]">{row.label}</p>
+                          <p className="text-[11px] text-[var(--app-text-muted)]">{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
+                        </div>
+                        <p className="relative z-10 shrink-0 text-sm font-semibold tabular-nums text-emerald-400">{formatSignedCurrency(row.netPnL)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="py-4 text-center text-xs text-[var(--app-text-muted)]">No profitable confluences this period.</p>
+              )}
             </div>
 
-            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-red-300">Most Costly</p>
-              <div className="mt-3 space-y-2.5">
-                {weakestConfluences.length > 0 ? weakestConfluences.map(row => (
-                  <div key={row.label} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-[var(--app-panel)] px-3 py-2">
-                    <div>
-                      <p className="text-sm text-[var(--app-text)]">{row.label}</p>
-                      <p className="text-xs text-[var(--app-text-muted)]">{row.trades} trades | {row.winRate.toFixed(0)}% win</p>
-                    </div>
-                    <p className="text-sm font-semibold text-red-400">{formatSignedCurrency(row.netPnL)}</p>
-                  </div>
-                )) : (
-                  <p className="text-xs text-[var(--app-text-muted)]">No losing confluences in this period.</p>
-                )}
+            {/* Most Costly */}
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-400">Most Costly</p>
               </div>
+              {weakestConfluences.length > 0 ? (
+                <div className="space-y-1">
+                  {weakestConfluences.map((row, i) => {
+                    const maxLoss = Math.abs(weakestConfluences[0]?.netPnL ?? 1);
+                    const fillPct = Math.max(6, (Math.abs(row.netPnL) / maxLoss) * 100);
+                    return (
+                      <div key={row.label} className="group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2.5">
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-500"
+                          style={{ width: `${fillPct}%`, background: 'rgba(248,113,113,0.08)' }}
+                        />
+                        <span className="relative z-10 w-4 shrink-0 text-center text-[10px] font-mono font-semibold text-red-500/50">{i + 1}</span>
+                        <div className="relative z-10 flex-1 min-w-0">
+                          <p className="truncate text-sm text-[var(--app-text)]">{row.label}</p>
+                          <p className="text-[11px] text-[var(--app-text-muted)]">{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
+                        </div>
+                        <p className="relative z-10 shrink-0 text-sm font-semibold tabular-nums text-red-400">{formatSignedCurrency(row.netPnL)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="py-4 text-center text-xs text-[var(--app-text-muted)]">No losing confluences this period.</p>
+              )}
             </div>
           </div>
         )}
       </section>
 
-      {timeframeRows.length > 0 && (
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L by Timeframe</h3>
-              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">Performance breakdown across the timeframes you traded</p>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--app-border)]">
-                  {['Timeframe', 'Trades', 'Win Rate', 'Avg P&L', 'Net P&L'].map(h => (
-                    <th key={h} className="pb-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--app-text-subtle)]">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {timeframeRows.map(row => (
-                  <tr key={row.label} className="border-b border-[var(--app-border)] last:border-0">
-                    <td className="py-2.5 font-mono text-[var(--app-text)]">{row.label}</td>
-                    <td className="py-2.5 text-[var(--app-text-muted)]">{row.trades}</td>
-                    <td className={`py-2.5 ${row.winRate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>{row.winRate.toFixed(0)}%</td>
-                    <td className={`py-2.5 tabular-nums ${row.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSignedCurrency(row.avgPnL)}</td>
-                    <td className={`py-2.5 font-medium tabular-nums ${row.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSignedCurrency(row.netPnL)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {behavioralFlagRows.length > 0 && (
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--app-text)]">Behavioral Flag Impact</h3>
-              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">P&amp;L lost to discipline errors in this period</p>
-            </div>
-            <span className="rounded-md bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-400">
-              {behavioralFlagRows.reduce((sum, r) => sum + r.count, 0)} flag{behavioralFlagRows.reduce((sum, r) => sum + r.count, 0) !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {behavioralFlagRows.map(row => (
-              <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_64px_92px_92px] items-center gap-3 rounded-lg border border-white/5 bg-[var(--app-panel-strong)] px-3 py-2.5 text-sm">
-                <span className="truncate text-[var(--app-text)]">{row.label}</span>
-                <span className="text-center text-xs text-[var(--app-text-muted)]">{row.count}×</span>
-                <span className={`text-right text-xs tabular-nums ${row.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {formatSignedCurrency(row.avgPnL)} avg
+      {behavioralFlagRows.length > 0 && (() => {
+        const totalCost = behavioralFlagRows.reduce((s, r) => s + r.netPnL, 0);
+        const totalOccurrences = behavioralFlagRows.reduce((s, r) => s + r.count, 0);
+        return (
+          <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--app-text)]">Behavioral Flag Impact</h3>
+                <p className="text-xs text-[var(--app-text-muted)] mt-0.5">P&amp;L cost of discipline errors this period</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="rounded-md bg-[var(--app-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--app-text-muted)]">
+                  {totalOccurrences}×
                 </span>
-                <span className={`text-right text-xs font-medium tabular-nums ${row.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {formatSignedCurrency(row.netPnL)}
+                <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold tabular-nums ${totalCost >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                  {formatSignedCurrency(totalCost)}
                 </span>
               </div>
-            ))}
-          </div>
-          <p className="mt-3 text-[11px] text-[var(--app-text-muted)]">Flags are set on individual trades in the Journal → Psychology tab.</p>
-        </section>
-      )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {behavioralFlagRows.map(row => {
+                const isPos = row.netPnL >= 0;
+                return (
+                  <div key={row.label} className="relative overflow-hidden rounded-lg border border-red-500/15 bg-red-500/5 p-3">
+                    <div className="mb-2.5 flex items-start justify-between gap-1.5">
+                      <p className="text-xs leading-snug text-[var(--app-text)]">{row.label}</p>
+                      <span className="shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-400">
+                        {row.count}×
+                      </span>
+                    </div>
+                    <p className={`text-lg font-bold tabular-nums leading-none ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {formatSignedCurrency(row.netPnL)}
+                    </p>
+                    <p className="mt-1 text-[10px] text-[var(--app-text-muted)]">{formatSignedCurrency(row.avgPnL)} avg</p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })()}
     </div>
   );
 }

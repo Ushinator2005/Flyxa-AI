@@ -1,493 +1,303 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
-import { AlertTriangle, Brain, CalendarDays, CheckCircle2, Heart, LineChart as LineChartIcon, Save } from 'lucide-react';
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { format, parseISO } from 'date-fns';
-import { psychologyApi, tradesApi } from '../services/api.js';
-import { PsychologyLog, Trade } from '../types/index.js';
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Brain, ClipboardList, LineChart as LineChartIcon, Moon, Target, Zap } from 'lucide-react';
+import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import { useTrades } from '../hooks/useTrades.js';
+import useFlyxaStore from '../store/flyxaStore.js';
+import type { JournalEntry, Trade as StoreTrade } from '../store/types.js';
 import { formatCurrency } from '../utils/calculations.js';
-import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import './PsychologyTracker.css';
 
-const MOODS = ['Excellent', 'Good', 'Neutral', 'Below Average', 'Poor'] as const;
-type MoodValue = (typeof MOODS)[number];
+type Tone = 'green' | 'amber' | 'red' | 'cobalt' | 'neutral';
 
-function getMoodTone(mood: string): 'green' | 'amber' | 'red' | 'neutral' {
-  if (mood === 'Excellent' || mood === 'Good') return 'green';
-  if (mood === 'Neutral') return 'neutral';
-  if (mood === 'Below Average') return 'amber';
+type RichTrade = StoreTrade & {
+  preEntry?: {
+    confidenceAtEntry?: number;
+    emotionalState?: string;
+    hesitated?: boolean | null;
+  };
+  executionReview?: Record<string, boolean | null | string | undefined>;
+  psychologyRatings?: {
+    setupQuality?: number;
+    discipline?: number;
+    execution?: number;
+    patience?: number;
+    riskManagement?: number;
+    emotionalControl?: number;
+  };
+  behavioralFlags?: string[];
+  stateOfMind?: Array<{ label: string; valence: 'positive' | 'caution' | 'negative' }>;
+  processScore?: number;
+};
+
+const RISK_EMOTIONS = ['revenge', 'fomo', 'fearful', 'frustrated', 'bored', 'impatient', 'overconfident', 'distracted'];
+const FLAG_LABELS: Record<string, string> = {
+  'chased-entry':    'Chased entry',
+  'no-confirmation': 'Jumped in early',
+  'fomo':            'FOMO trade',
+  'off-playbook':    'Off playbook',
+  'sized-up':        'Oversized',
+  'added-losing':    'Added to loser',
+  'moved-stop':      'Widened stop',
+  'exit-early':      'Exited early',
+  'moved-target':    'Moved / ignored TP',
+  'past-inval':      'Held past invalidation',
+  'revenge':         'Revenge trade',
+  'past-limit':      'Past daily limit',
+};
+
+function toneForPct(value: number): Tone {
+  if (value >= 75) return 'green';
+  if (value >= 55) return 'amber';
   return 'red';
 }
 
-function getScoreTone(score: number): 'green' | 'amber' | 'red' {
-  if (score >= 8) return 'green';
-  if (score >= 5) return 'amber';
+function scoreTone(score: number | null): Tone {
+  if (score === null) return 'neutral';
+  if (score >= 75) return 'green';
+  if (score >= 55) return 'amber';
   return 'red';
 }
 
-function dayDiffIso(a: string, b: string): number {
-  const aDate = parseISO(`${a}T00:00:00`);
-  const bDate = parseISO(`${b}T00:00:00`);
-  const delta = Math.abs(aDate.getTime() - bDate.getTime());
-  return Math.round(delta / 86400000);
+function computeProcessScore(trade: RichTrade): number | null {
+  if (typeof trade.processScore === 'number' && trade.processScore > 0) return trade.processScore;
+
+  const ratings = trade.psychologyRatings;
+  const scores = ratings
+    ? [ratings.setupQuality, ratings.discipline, ratings.execution, ratings.patience, ratings.riskManagement, ratings.emotionalControl]
+        .filter((value): value is number => typeof value === 'number' && value > 0)
+    : [];
+
+  if (scores.length === 0) return null;
+  const avg = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+  const flagPenalty = (trade.behavioralFlags?.length ?? 0) * 8;
+  return Math.max(0, Math.min(100, Math.round(avg * 20 - flagPenalty)));
 }
 
-function buildCurrentStreak(logs: PsychologyLog[]): number {
-  const uniqueDates = Array.from(new Set(logs.map(log => log.date))).sort((a, b) => b.localeCompare(a));
-  if (uniqueDates.length === 0) return 0;
-  let streak = 1;
-  for (let index = 1; index < uniqueDates.length; index += 1) {
-    if (dayDiffIso(uniqueDates[index - 1], uniqueDates[index]) !== 1) break;
-    streak += 1;
-  }
-  return streak;
+function hasRiskEmotion(trade: RichTrade): boolean {
+  const state = trade.preEntry?.emotionalState?.toLowerCase() ?? '';
+  const tags = trade.stateOfMind ?? [];
+  return RISK_EMOTIONS.some(label => state.includes(label))
+    || tags.some(tag => tag.valence === 'negative' || tag.valence === 'caution');
 }
 
-function DailyLogForm({ existing, onSaved }: { existing: PsychologyLog | null; onSaved: () => void }) {
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const [form, setForm] = useState({
-    date: today,
-    mood: (existing?.mood || 'Neutral') as MoodValue,
-    pre_session_notes: existing?.pre_session_notes || '',
-    post_session_notes: existing?.post_session_notes || '',
-    mindset_score: existing?.mindset_score || 7,
-  });
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+function getTradeDateTime(trade: RichTrade): string {
+  return `${trade.date ?? ''} ${trade.time ?? ''}`;
+}
 
-  useEffect(() => {
-    if (!existing) {
-      setForm({
-        date: today,
-        mood: 'Neutral',
-        pre_session_notes: '',
-        post_session_notes: '',
-        mindset_score: 7,
-      });
-      return;
-    }
+function pct(numerator: number, denominator: number): number {
+  return denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
+}
 
-    setForm({
-      date: existing.date,
-      mood: (existing.mood || 'Neutral') as MoodValue,
-      pre_session_notes: existing.pre_session_notes || '',
-      post_session_notes: existing.post_session_notes || '',
-      mindset_score: existing.mindset_score || 7,
-    });
-  }, [existing, today]);
+function avg(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
-  async function save() {
-    setSaving(true);
-    try {
-      if (existing) {
-        await psychologyApi.update(existing.id, form as Record<string, unknown>);
-      } else {
-        await psychologyApi.create(form as Record<string, unknown>);
-      }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
-      onSaved();
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setSaving(false);
-    }
-  }
+function compareTradeGroups(label: string, strongTrades: RichTrade[], weakTrades: RichTrade[]) {
+  const describe = (trades: RichTrade[]) => {
+    const closed = trades.filter(trade => trade.result !== 'open');
+    return {
+      count: closed.length,
+      pnl: closed.reduce((sum, trade) => sum + trade.pnl, 0),
+      winRate: pct(closed.filter(trade => trade.result === 'win').length, closed.length),
+    };
+  };
 
-  const scoreTone = getScoreTone(form.mindset_score);
+  const strong = describe(strongTrades);
+  const weak = describe(weakTrades);
+  if (strong.count < 2 && weak.count < 2) return null;
 
+  return {
+    label,
+    strong,
+    weak,
+    delta: strong.count > 0 && weak.count > 0 ? strong.pnl / strong.count - weak.pnl / weak.count : null,
+  };
+}
+
+function KpiCard({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: Tone }) {
   return (
-    <section className="psy-card">
-      <div className="psy-card-head">
-        <h2>
-          <Heart size={16} />
-          Daily Psychology Log
-        </h2>
-        <span className="psy-head-tag">{existing ? 'Today logged' : 'New log'}</span>
-      </div>
-
-      <div className="psy-form-grid">
-        <div className="psy-field">
-          <label>Date</label>
-          <input
-            type="date"
-            value={form.date}
-            onChange={event => setForm(current => ({ ...current, date: event.target.value }))}
-          />
-        </div>
-
-        <div className="psy-field">
-          <label>Overall Mood</label>
-          <div className="psy-mood-row">
-            {MOODS.map(mood => {
-              const active = form.mood === mood;
-              return (
-                <button
-                  key={mood}
-                  type="button"
-                  className={`psy-mood-pill ${active ? `active ${getMoodTone(mood)}` : ''}`}
-                  onClick={() => setForm(current => ({ ...current, mood }))}
-                >
-                  {mood}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="psy-score-wrap">
-        <div className="psy-score-line">
-          <span>Mindset Score</span>
-          <strong className={scoreTone}>{form.mindset_score}/10</strong>
-        </div>
-        <input
-          type="range"
-          min="1"
-          max="10"
-          value={form.mindset_score}
-          onChange={event => setForm(current => ({ ...current, mindset_score: Number.parseInt(event.target.value, 10) }))}
-        />
-        <div className="psy-range-meta">
-          <span>1 - off-plan</span>
-          <span>5 - neutral</span>
-          <span>10 - locked in</span>
-        </div>
-      </div>
-
-      <div className="psy-note-grid">
-        <div className="psy-field">
-          <label>Pre-Session Notes</label>
-          <textarea
-            rows={4}
-            value={form.pre_session_notes}
-            placeholder="How are you showing up today? Intentions, concerns, focus checkpoints..."
-            onChange={event => setForm(current => ({ ...current, pre_session_notes: event.target.value }))}
-          />
-        </div>
-        <div className="psy-field">
-          <label>Post-Session Notes</label>
-          <textarea
-            rows={4}
-            value={form.post_session_notes}
-            placeholder="What happened emotionally? What to repeat and what to avoid tomorrow..."
-            onChange={event => setForm(current => ({ ...current, post_session_notes: event.target.value }))}
-          />
-        </div>
-      </div>
-
-      <div className="psy-form-actions">
-        <button type="button" className="psy-btn psy-btn-primary" onClick={save} disabled={saving}>
-          {saved ? (
-            <>
-              <CheckCircle2 size={14} />
-              Saved
-            </>
-          ) : saving ? (
-            <>
-              <Save size={14} />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save size={14} />
-              Save Log
-            </>
-          )}
-        </button>
-      </div>
-    </section>
+    <article className="psy-kpi">
+      <p>{label}</p>
+      <strong className={tone}>{value}</strong>
+      <span>{sub}</span>
+    </article>
   );
 }
 
-function MindsetChart({ logs, trades }: { logs: PsychologyLog[]; trades: Trade[] }) {
-  const tradesByDate = trades.reduce<Record<string, number[]>>((acc, trade) => {
-    if (!acc[trade.trade_date]) acc[trade.trade_date] = [];
-    acc[trade.trade_date].push(trade.pnl);
-    return acc;
-  }, {});
-
-  const chartData = [...logs]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map(log => {
-      const dayTrades = tradesByDate[log.date] || [];
-      const avgPnL = dayTrades.length > 0 ? dayTrades.reduce((sum, value) => sum + value, 0) / dayTrades.length : null;
-      return {
-        dateLabel: format(parseISO(`${log.date}T00:00:00`), 'MMM d'),
-        mindset: log.mindset_score,
-        avgPnL,
-      };
-    });
-
+function InsightCard({ title, body, tone, icon: Icon }: { title: string; body: string; tone: Tone; icon: typeof Brain }) {
   return (
-    <section className="psy-card">
-      <div className="psy-card-head">
-        <h2>
-          <LineChartIcon size={16} />
-          Mindset vs Daily P&L
-        </h2>
+    <article className={`psy-insight ${tone}`}>
+      <Icon size={15} />
+      <div>
+        <h3>{title}</h3>
+        <p>{body}</p>
       </div>
-
-      {chartData.length === 0 ? (
-        <div className="psy-empty">
-          <p>No psychology logs yet. Start logging daily to unlock trend tracking.</p>
-        </div>
-      ) : (
-        <div className="psy-chart-wrap">
-          <ResponsiveContainer width="100%" height={272}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-sub)" />
-              <XAxis dataKey="dateLabel" tick={{ fill: 'var(--txt-3)', fontSize: 11 }} />
-              <YAxis
-                yAxisId="left"
-                domain={[0, 10]}
-                tick={{ fill: 'var(--txt-3)', fontSize: 11 }}
-                label={{ value: 'Mindset', angle: -90, position: 'insideLeft', fill: 'var(--txt-3)', fontSize: 10 }}
-              />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--txt-3)', fontSize: 11 }} tickFormatter={value => `$${value}`} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--surface-2)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  color: 'var(--txt)',
-                }}
-                labelStyle={{ color: 'var(--txt-2)' }}
-                itemStyle={{ color: 'var(--txt)' }}
-                formatter={(value: number, name: string) => (name === 'Avg P&L' ? [formatCurrency(value), name] : [value, name])}
-              />
-              <Legend wrapperStyle={{ color: 'var(--txt-2)', fontSize: 12 }} />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="mindset"
-                stroke="var(--cobalt)"
-                strokeWidth={2}
-                dot={{ fill: 'var(--cobalt)', r: 3 }}
-                activeDot={{ r: 5 }}
-                name="Mindset Score"
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="avgPnL"
-                stroke="var(--green)"
-                strokeWidth={2}
-                dot={{ fill: 'var(--green)', r: 3 }}
-                activeDot={{ r: 5 }}
-                name="Avg P&L"
-                connectNulls={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TiltDetector({ trades }: { trades: Trade[] }) {
-  const sorted = [...trades].sort((a, b) => `${b.trade_date}${b.trade_time}`.localeCompare(`${a.trade_date}${a.trade_time}`));
-
-  let consecutiveLosses = 0;
-  for (const trade of sorted) {
-    if (trade.pnl < 0) consecutiveLosses += 1;
-    else break;
-  }
-
-  const emotionCounts = trades.reduce<Record<string, number>>((acc, trade) => {
-    if (trade.emotional_state) {
-      acc[trade.emotional_state] = (acc[trade.emotional_state] || 0) + 1;
-    }
-    return acc;
-  }, {});
-
-  const tiltStates = ['Revenge Trading', 'FOMO', 'Anxious', 'Overconfident'];
-  const tiltCount = tiltStates.reduce((sum, state) => sum + (emotionCounts[state] || 0), 0);
-  const totalTradesWithEmotion = trades.filter(trade => trade.emotional_state).length;
-  const tiltPct = totalTradesWithEmotion > 0 ? Math.round((tiltCount / totalTradesWithEmotion) * 100) : 0;
-
-  const tiltLevel: 'normal' | 'caution' | 'tilt' =
-    consecutiveLosses >= 3 || tiltPct >= 40 ? 'tilt' : consecutiveLosses >= 2 || tiltPct >= 20 ? 'caution' : 'normal';
-
-  const config = {
-    normal: {
-      label: 'Stable',
-      text: 'No strong tilt signals. Keep process discipline steady.',
-      badgeClass: 'psy-status-normal',
-    },
-    caution: {
-      label: 'Caution',
-      text: 'Warning signs detected. Reduce size and increase selectivity.',
-      badgeClass: 'psy-status-caution',
-    },
-    tilt: {
-      label: 'Tilt Detected',
-      text: 'Pause trading and reset. Emotional pressure is elevated.',
-      badgeClass: 'psy-status-tilt',
-    },
-  }[tiltLevel];
-
-  return (
-    <section className="psy-card">
-      <div className="psy-card-head">
-        <h2>
-          <AlertTriangle size={16} />
-          Tilt Detector
-        </h2>
-      </div>
-
-      <div className={`psy-status ${config.badgeClass}`}>
-        <p>{config.label}</p>
-        <span>{config.text}</span>
-      </div>
-
-      <div className="psy-tilt-grid">
-        <article>
-          <p>Losing Streak</p>
-          <strong className={consecutiveLosses >= 3 ? 'red' : consecutiveLosses >= 2 ? 'amber' : 'green'}>
-            {consecutiveLosses}
-          </strong>
-          <span>consecutive losing trades</span>
-        </article>
-        <article>
-          <p>Tilt-State Rate</p>
-          <strong className={tiltPct >= 40 ? 'red' : tiltPct >= 20 ? 'amber' : 'green'}>
-            {tiltPct}%
-          </strong>
-          <span>trades in tilt emotions</span>
-        </article>
-      </div>
-
-      {Object.keys(emotionCounts).length > 0 && (
-        <div className="psy-emotion-stack">
-          {Object.entries(emotionCounts)
-            .sort((a, b) => b[1] - a[1])
-            .map(([state, count]) => {
-              const pct = trades.length > 0 ? Math.round((count / trades.length) * 100) : 0;
-              const isTiltState = tiltStates.includes(state);
-              return (
-                <div key={state} className="psy-emotion-row">
-                  <span className={isTiltState ? 'tilt' : ''}>{state}</span>
-                  <div className="psy-emotion-bar">
-                    <div className={isTiltState ? 'tilt' : ''} style={{ width: `${pct}%` }} />
-                  </div>
-                  <em>{count} ({pct}%)</em>
-                </div>
-              );
-            })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function RecentLogs({ logs }: { logs: PsychologyLog[] }) {
-  const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
-  if (sorted.length === 0) {
-    return (
-      <section className="psy-card">
-        <div className="psy-card-head">
-          <h2>
-            <CalendarDays size={16} />
-            Recent Logs
-          </h2>
-        </div>
-        <div className="psy-empty">
-          <p>No entries yet. Save your first daily psychology log above.</p>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="psy-card">
-      <div className="psy-card-head">
-        <h2>
-          <CalendarDays size={16} />
-          Recent Logs
-        </h2>
-      </div>
-      <div className="psy-recent-list">
-        {sorted.map(log => (
-          <article key={log.id}>
-            <div>
-              <p>{format(parseISO(`${log.date}T00:00:00`), 'MMM d, yyyy')}</p>
-              <span>{log.pre_session_notes || 'No pre-session note'}</span>
-            </div>
-            <div className="psy-recent-meta">
-              <strong className={getScoreTone(log.mindset_score)}>{log.mindset_score}</strong>
-              <em className={getMoodTone(log.mood)}>{log.mood}</em>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
+    </article>
   );
 }
 
 export default function PsychologyTracker() {
-  const [logs, setLogs] = useState<PsychologyLog[]>([]);
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const { trades } = useTrades();
+  const { filterTradesBySelectedAccount } = useAppSettings();
+  const entries = useFlyxaStore(state => state.entries) as JournalEntry[];
 
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const todayLog = logs.find(log => log.date === today) || null;
+  const accountTrades = useMemo(
+    () => filterTradesBySelectedAccount(trades),
+    [filterTradesBySelectedAccount, trades]
+  );
+  const selectedIds = useMemo(() => new Set(accountTrades.map(trade => trade.id)), [accountTrades]);
+  const richTrades = useMemo(
+    () => entries
+      .flatMap(entry => entry.trades.map(trade => ({ ...trade, date: trade.date || entry.date } as RichTrade)))
+      .filter(trade => selectedIds.has(trade.id))
+      .sort((a, b) => getTradeDateTime(a).localeCompare(getTradeDateTime(b))),
+    [entries, selectedIds]
+  );
+  const selectedEntries = useMemo(
+    () => entries.filter(entry => entry.trades.some(trade => selectedIds.has(trade.id))),
+    [entries, selectedIds]
+  );
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [psychologyLogs, allTrades] = await Promise.all([psychologyApi.getAll(), tradesApi.getAll()]);
-      setLogs(psychologyLogs as PsychologyLog[]);
-      setTrades(allTrades as Trade[]);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const summary = useMemo(() => {
-    const avgMindset = logs.length ? logs.reduce((sum, log) => sum + log.mindset_score, 0) / logs.length : 0;
-    const recent = [...logs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
-    const recentAvg = recent.length ? recent.reduce((sum, log) => sum + log.mindset_score, 0) / recent.length : 0;
-    const streak = buildCurrentStreak(logs);
-    const bestMood = logs.length
-      ? Object.entries(
-          logs.reduce<Record<string, number>>((acc, log) => {
-            acc[log.mood] = (acc[log.mood] || 0) + 1;
-            return acc;
-          }, {})
-        ).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
-      : 'N/A';
+  const metrics = useMemo(() => {
+    const closed = richTrades.filter(trade => trade.result !== 'open');
+    const withProcess = richTrades
+      .map(computeProcessScore)
+      .filter((value): value is number => value !== null);
+    const avgProcess = avg(withProcess);
+    const flaggedTrades = richTrades.filter(trade => (trade.behavioralFlags?.length ?? 0) > 0);
+    const riskEmotionTrades = richTrades.filter(hasRiskEmotion);
+    const followedPlanTrades = richTrades.filter(trade => typeof trade.reflection?.followedPlan === 'boolean');
+    const planRate = pct(followedPlanTrades.filter(trade => trade.reflection.followedPlan).length, followedPlanTrades.length);
+    const hesitationTrades = richTrades.filter(trade => trade.preEntry?.hesitated === true);
+    const confidenceTrades = richTrades.filter(trade => (trade.preEntry?.confidenceAtEntry ?? 0) > 0);
+    const highConfidence = confidenceTrades.filter(trade => (trade.preEntry?.confidenceAtEntry ?? 0) >= 4);
+    const highConfidenceLosses = highConfidence.filter(trade => trade.result === 'loss');
 
     return {
-      avgMindset,
-      recentAvg,
-      streak,
-      bestMood,
-      totalLogs: logs.length,
+      closed,
+      avgProcess,
+      flaggedTrades,
+      riskEmotionTrades,
+      planRate,
+      planSample: followedPlanTrades.length,
+      hesitationRate: pct(hesitationTrades.length, confidenceTrades.length || richTrades.length),
+      highConfidenceLossRate: pct(highConfidenceLosses.length, highConfidence.length),
     };
-  }, [logs]);
+  }, [richTrades]);
 
-  if (loading) {
-    return (
-      <div className="psy-loading">
-        <LoadingSpinner size="lg" label="Loading psychology data..." />
-      </div>
-    );
-  }
+  const correlations = useMemo(() => {
+    const highSleepEntries = selectedEntries.filter(entry => (entry.physicalState?.sleep ?? 0) >= 4);
+    const lowSleepEntries = selectedEntries.filter(entry => {
+      const sleep = entry.physicalState?.sleep ?? 0;
+      return sleep > 0 && sleep <= 2;
+    });
+    const highEnergyEntries = selectedEntries.filter(entry => (entry.physicalState?.energy ?? 0) >= 4);
+    const lowEnergyEntries = selectedEntries.filter(entry => {
+      const energy = entry.physicalState?.energy ?? 0;
+      return energy > 0 && energy <= 2;
+    });
+
+    const byEntry = (source: JournalEntry[]) => source.flatMap(entry => entry.trades as RichTrade[]).filter(trade => selectedIds.has(trade.id));
+    const disciplineHigh = richTrades.filter(trade => (trade.psychologyRatings?.discipline ?? 0) >= 4);
+    const disciplineLow = richTrades.filter(trade => {
+      const value = trade.psychologyRatings?.discipline ?? 0;
+      return value > 0 && value <= 2;
+    });
+
+    return [
+      compareTradeGroups('Sleep quality', byEntry(highSleepEntries), byEntry(lowSleepEntries)),
+      compareTradeGroups('Energy', byEntry(highEnergyEntries), byEntry(lowEnergyEntries)),
+      compareTradeGroups('Discipline', disciplineHigh, disciplineLow),
+    ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }, [richTrades, selectedEntries, selectedIds]);
+
+  const flagRows = useMemo(() => {
+    const rows = new Map<string, { label: string; count: number; pnl: number }>();
+    richTrades.forEach(trade => {
+      (trade.behavioralFlags ?? []).forEach(flag => {
+        const row = rows.get(flag) ?? { label: FLAG_LABELS[flag] ?? flag, count: 0, pnl: 0 };
+        row.count += 1;
+        row.pnl += trade.pnl;
+        rows.set(flag, row);
+      });
+    });
+    return [...rows.values()].sort((a, b) => a.pnl - b.pnl).slice(0, 8);
+  }, [richTrades]);
+
+  const emotionRows = useMemo(() => {
+    const rows = new Map<string, { label: string; count: number; pnl: number }>();
+    richTrades.forEach(trade => {
+      const labels = new Set<string>();
+      if (trade.preEntry?.emotionalState) labels.add(trade.preEntry.emotionalState);
+      (trade.stateOfMind ?? []).forEach(tag => labels.add(tag.label));
+      labels.forEach(label => {
+        const row = rows.get(label) ?? { label, count: 0, pnl: 0 };
+        row.count += 1;
+        row.pnl += trade.pnl;
+        rows.set(label, row);
+      });
+    });
+    return [...rows.values()].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)).slice(0, 10);
+  }, [richTrades]);
+
+  const recentFlags = useMemo(() => {
+    const sorted = [...richTrades].sort((a, b) => getTradeDateTime(b).localeCompare(getTradeDateTime(a)));
+    let losses = 0;
+    for (const trade of sorted) {
+      if (trade.result === 'loss') losses += 1;
+      else break;
+    }
+    return {
+      losses,
+      lastRiskTrade: sorted.find(hasRiskEmotion),
+      lastFlaggedTrade: sorted.find(trade => (trade.behavioralFlags?.length ?? 0) > 0),
+    };
+  }, [richTrades]);
+
+  const guidance = useMemo(() => {
+    const items: Array<{ title: string; body: string; tone: Tone; icon: typeof Brain }> = [];
+    if (metrics.flaggedTrades.length > 0) {
+      const cost = metrics.flaggedTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+      items.push({
+        title: 'Behavioral Cost',
+        body: `${metrics.flaggedTrades.length} flagged trade${metrics.flaggedTrades.length !== 1 ? 's' : ''} total ${formatCurrency(cost)}. Review the top flag before your next session.`,
+        tone: cost < 0 ? 'red' : 'amber',
+        icon: AlertTriangle,
+      });
+    }
+    if (metrics.highConfidenceLossRate >= 35) {
+      items.push({
+        title: 'Confidence Leak',
+        body: `${metrics.highConfidenceLossRate}% of high-confidence trades are losses. Require one extra confirmation before sizing up.`,
+        tone: 'amber',
+        icon: Zap,
+      });
+    }
+    if (metrics.planSample > 0 && metrics.planRate < 70) {
+      items.push({
+        title: 'Plan Adherence',
+        body: `Plan follow rate is ${metrics.planRate}%. The journal should be used as a pre-trade blocker, not just a post-trade review.`,
+        tone: 'red',
+        icon: ClipboardList,
+      });
+    }
+    if (items.length === 0) {
+      items.push({
+        title: 'Journal More Context',
+        body: 'Add pre-entry state, process ratings, and behavioral flags in Trade Journal to unlock stronger behavioral insights.',
+        tone: 'cobalt',
+        icon: Target,
+      });
+    }
+    return items.slice(0, 3);
+  }, [metrics]);
+
+  const maxEmotionImpact = Math.max(...emotionRows.map(row => Math.abs(row.pnl)), 1);
+  const positiveEmotionTotal = emotionRows.filter(row => row.pnl > 0).reduce((sum, row) => sum + row.pnl, 0);
+  const negativeEmotionTotal = emotionRows.filter(row => row.pnl < 0).reduce((sum, row) => sum + row.pnl, 0);
 
   return (
     <div className="psy-page animate-fade-in">
@@ -495,43 +305,194 @@ export default function PsychologyTracker() {
         <div>
           <h1>
             <Brain size={22} />
-            Psychology Tracker
+            Behavioral Edge
           </h1>
-          <p>Track emotional execution quality, monitor tilt pressure, and tighten mental consistency.</p>
+          <p>Psychology now lives in Trade Journal. This page reads those entries and shows the emotional patterns that are helping or hurting execution.</p>
         </div>
+        <button type="button" className="psy-journal-btn" onClick={() => navigate('/journal')}>
+          Open Trade Journal
+        </button>
       </header>
 
       <section className="psy-kpi-grid">
-        <article className="psy-kpi">
-          <p>Average Mindset</p>
-          <strong className={getScoreTone(Math.round(summary.avgMindset))}>{summary.avgMindset.toFixed(1)}</strong>
-          <span>all logged sessions</span>
-        </article>
-        <article className="psy-kpi">
-          <p>7-Day Average</p>
-          <strong className={getScoreTone(Math.round(summary.recentAvg))}>{summary.recentAvg.toFixed(1)}</strong>
-          <span>recent emotional form</span>
-        </article>
-        <article className="psy-kpi">
-          <p>Logging Streak</p>
-          <strong className="cobalt">{summary.streak}</strong>
-          <span>days tracked consecutively</span>
-        </article>
-        <article className="psy-kpi">
-          <p>Most Common Mood</p>
-          <strong className="amber">{summary.bestMood}</strong>
-          <span>{summary.totalLogs} total logs</span>
-        </article>
+        <KpiCard
+          label="Process Score"
+          value={metrics.avgProcess === null ? '--' : String(Math.round(metrics.avgProcess))}
+          sub={`${metrics.closed.length} closed trades analyzed`}
+          tone={scoreTone(metrics.avgProcess)}
+        />
+        <KpiCard
+          label="Plan Follow"
+          value={metrics.planSample === 0 ? '--' : `${metrics.planRate}%`}
+          sub={`${metrics.planSample} trade${metrics.planSample !== 1 ? 's' : ''} with plan data`}
+          tone={metrics.planSample === 0 ? 'neutral' : toneForPct(metrics.planRate)}
+        />
+        <KpiCard
+          label="Risk Emotion Rate"
+          value={`${pct(metrics.riskEmotionTrades.length, richTrades.length)}%`}
+          sub={`${metrics.riskEmotionTrades.length} emotional-risk trades`}
+          tone={metrics.riskEmotionTrades.length === 0 ? 'green' : pct(metrics.riskEmotionTrades.length, richTrades.length) >= 30 ? 'red' : 'amber'}
+        />
+        <KpiCard
+          label="Hesitation Rate"
+          value={`${metrics.hesitationRate}%`}
+          sub="from pre-entry journal fields"
+          tone={metrics.hesitationRate >= 35 ? 'amber' : 'green'}
+        />
+      </section>
+
+      <section className="psy-insight-grid">
+        {guidance.map(item => (
+          <InsightCard key={item.title} {...item} />
+        ))}
       </section>
 
       <main className="psy-layout">
         <div className="psy-stack">
-          <DailyLogForm existing={todayLog} onSaved={fetchData} />
-          <MindsetChart logs={logs} trades={trades} />
+          <section className="psy-card">
+            <div className="psy-card-head">
+              <h2>
+                <LineChartIcon size={16} />
+                Emotion Impact
+              </h2>
+              <span className="psy-head-tag">Trade Journal source</span>
+            </div>
+            {emotionRows.length === 0 ? (
+              <div className="psy-empty">
+                <p>No emotion tags yet. Add pre-entry state or state-of-mind tags in Trade Journal.</p>
+              </div>
+            ) : (
+              <div className="psy-impact">
+                <div className="psy-impact-summary">
+                  <article>
+                    <span>Positive emotion edge</span>
+                    <strong className="green">{formatCurrency(positiveEmotionTotal)}</strong>
+                  </article>
+                  <article>
+                    <span>Negative emotion cost</span>
+                    <strong className="red">{formatCurrency(negativeEmotionTotal)}</strong>
+                  </article>
+                </div>
+                <div className="psy-impact-list">
+                  {emotionRows.map(row => {
+                    const width = Math.max(5, Math.round((Math.abs(row.pnl) / maxEmotionImpact) * 100));
+                    const tone = row.pnl >= 0 ? 'green' : 'red';
+                    return (
+                      <article key={row.label} className={`psy-impact-row ${tone}`}>
+                        <div className="psy-impact-label">
+                          <strong>{row.label}</strong>
+                          <span>{row.count} trade{row.count !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="psy-impact-track" aria-hidden="true">
+                          <div style={{ width: `${width}%` }} />
+                        </div>
+                        <span className="psy-impact-value">{formatCurrency(row.pnl)}</span>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="psy-card">
+            <div className="psy-card-head">
+              <h2>
+                <Moon size={16} />
+                Physical State Correlations
+              </h2>
+            </div>
+            {correlations.length === 0 ? (
+              <div className="psy-empty">
+                <p>Add sleep, stress, energy, and discipline ratings in Trade Journal to compare conditions.</p>
+              </div>
+            ) : (
+              <div className="psy-correlation-list">
+                {correlations.map(item => (
+                  <article key={item.label}>
+                    <div>
+                      <h3>{item.label}</h3>
+                      <p>{item.strong.count} strong-signal trades vs {item.weak.count} weak-signal trades</p>
+                    </div>
+                    <div className="psy-correlation-metrics">
+                      <span className={item.strong.pnl >= 0 ? 'green' : 'red'}>{formatCurrency(item.strong.pnl)}</span>
+                      <span className={item.weak.pnl >= 0 ? 'green' : 'red'}>{formatCurrency(item.weak.pnl)}</span>
+                      <em>{item.delta === null ? 'Need both samples' : `${formatCurrency(item.delta)} / trade edge`}</em>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
+
         <div className="psy-stack">
-          <TiltDetector trades={trades} />
-          <RecentLogs logs={logs} />
+          {/* ── Tilt Monitor ── */}
+          <section className="psy-card">
+            <div className="psy-card-head">
+              <h2><AlertTriangle size={16} />Tilt Monitor</h2>
+            </div>
+
+            {/* Loss streak dots */}
+            <div className="psy-streak-block">
+              <div className="psy-streak-dots">
+                {Array.from({ length: Math.max(5, recentFlags.losses) }).map((_, i) => {
+                  const filled = i < recentFlags.losses;
+                  const tone = recentFlags.losses >= 3 ? 'red' : recentFlags.losses >= 2 ? 'amber' : 'green';
+                  return <div key={i} className={`psy-streak-dot${filled ? ` psy-streak-dot--${tone}` : ''}`} />;
+                })}
+              </div>
+              <div className="psy-streak-text">
+                <span className={`psy-streak-label psy-streak-label--${recentFlags.losses >= 3 ? 'red' : recentFlags.losses >= 2 ? 'amber' : 'green'}`}>
+                  {recentFlags.losses >= 3 ? 'Tilt Risk' : recentFlags.losses >= 2 ? 'Caution' : 'Stable'}
+                </span>
+                <p>
+                  {recentFlags.losses} consecutive loss{recentFlags.losses !== 1 ? 'es' : ''} —{' '}
+                  {recentFlags.losses >= 2
+                    ? 'reduce size and require full checklist confirmation'
+                    : 'no active loss-streak pressure detected'}
+                </p>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="psy-tilt-stats">
+              <div className="psy-tilt-stat">
+                <strong className={metrics.flaggedTrades.length > 0 ? 'amber' : 'green'}>{metrics.flaggedTrades.length}</strong>
+                <span>flagged trades</span>
+              </div>
+              <div className="psy-tilt-stat-sep" />
+              <div className="psy-tilt-stat">
+                <strong className={metrics.highConfidenceLossRate >= 35 ? 'red' : 'green'}>{metrics.highConfidenceLossRate}%</strong>
+                <span>high-confidence loss rate</span>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Costliest Behavioral Flags ── */}
+          <section className="psy-card">
+            <div className="psy-card-head">
+              <h2><ClipboardList size={16} />Costliest Behavioral Flags</h2>
+            </div>
+            {flagRows.length === 0 ? (
+              <div className="psy-empty">
+                <p>No behavioral flags logged yet. Mark mistakes directly on trades in the Journal.</p>
+              </div>
+            ) : (
+              <div className="psy-flag-rows">
+                {flagRows.map((row, i) => (
+                  <div key={row.label} className="psy-flag-row">
+                    <span className="psy-flag-rank">{i + 1}</span>
+                    <div className="psy-flag-info">
+                      <span className="psy-flag-name">{row.label}</span>
+                      <span className="psy-flag-meta">{row.count}× triggered</span>
+                    </div>
+                    <span className={`psy-flag-pnl ${row.pnl >= 0 ? 'green' : 'red'}`}>{formatCurrency(row.pnl)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </main>
     </div>

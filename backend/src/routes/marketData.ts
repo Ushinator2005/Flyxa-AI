@@ -177,6 +177,46 @@ function parseForexFactoryXml(xml: string): Array<Record<string, unknown>> {
   return events;
 }
 
+function getCalendarEventKey(event: Record<string, unknown>): string {
+  return [
+    String(event.date ?? ''),
+    String(event.time ?? ''),
+    String(event.country ?? ''),
+    String(event.title ?? event.event ?? ''),
+  ].join('|').toLowerCase();
+}
+
+function dedupeCalendarEvents(events: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const seen = new Set<string>();
+  const deduped: Array<Record<string, unknown>> = [];
+
+  for (const event of events) {
+    const key = getCalendarEventKey(event);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(event);
+  }
+
+  return deduped;
+}
+
+async function fetchForexFactoryJson(url: string): Promise<Array<Record<string, unknown>>> {
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+  });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return Array.isArray(payload) ? payload as Array<Record<string, unknown>> : [];
+}
+
+async function fetchForexFactoryXml(url: string): Promise<Array<Record<string, unknown>>> {
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/xml,text/xml,*/*' },
+  });
+  if (!response.ok) return [];
+  return parseForexFactoryXml(await response.text());
+}
+
 router.get('/chart', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const symbol = String(req.query.symbol ?? '').trim();
@@ -227,7 +267,7 @@ router.get('/chart', authMiddleware, async (req: Request, res: Response, next: N
 
 router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const sources = [
+    const jsonSources = [
       'https://nfs.faireconomy.media/ff_calendar_thisweek.json',
       'https://nfs.faireconomy.media/ff_calendar_nextweek.json',
       'http://nfs.faireconomy.media/ff_calendar_thisweek.json',
@@ -235,28 +275,30 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
     ];
 
     const settled = await Promise.allSettled(
-      sources.map((url) =>
-        fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } })
-          .then((response) => (response.ok ? response.json() : []))
-      )
+      jsonSources.map(fetchForexFactoryJson)
     );
 
-    const combined = settled.flatMap((result) => (
+    const combinedJson = settled.flatMap((result) => (
       result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []
     ));
 
-    if (combined.length > 0) {
-      return res.json(combined);
+    if (combinedJson.length > 0) {
+      return res.json(dedupeCalendarEvents(combinedJson));
     }
 
     // Fallback: XML export is often available even when JSON is rate-limited.
-    const xmlResponse = await fetch('http://nfs.faireconomy.media/ff_calendar_thisweek.xml', {
-      headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/xml,text/xml,*/*' },
-    });
-    if (xmlResponse.ok) {
-      const xmlText = await xmlResponse.text();
-      const parsed = parseForexFactoryXml(xmlText);
-      if (parsed.length > 0) return res.json(parsed);
+    const xmlSources = [
+      'https://nfs.faireconomy.media/ff_calendar_thisweek.xml',
+      'https://nfs.faireconomy.media/ff_calendar_nextweek.xml',
+      'http://nfs.faireconomy.media/ff_calendar_thisweek.xml',
+      'http://nfs.faireconomy.media/ff_calendar_nextweek.xml',
+    ];
+    const settledXml = await Promise.allSettled(xmlSources.map(fetchForexFactoryXml));
+    const combinedXml = settledXml.flatMap((result) => (
+      result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []
+    ));
+    if (combinedXml.length > 0) {
+      return res.json(dedupeCalendarEvents(combinedXml));
     }
 
     return res.json([]);

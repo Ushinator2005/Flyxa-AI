@@ -52,6 +52,7 @@ interface JournalTrade {
   priceLevelsSource?: 'ai' | 'manual';
   priceLevelsEdited?: boolean;
   accountId?: string;
+  accountIds?: string[];
   contracts: number;
   rr: number;
   pnl: number;
@@ -565,6 +566,10 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           result,
           screenshotUrl: typeof trade.screenshotUrl === 'string' ? trade.screenshotUrl : typeof trade.scannedImageUrl === 'string' ? trade.scannedImageUrl : undefined,
           accountId: typeof trade.accountId === 'string' && trade.accountId ? trade.accountId : typeof trade.account === 'string' && trade.account ? trade.account : undefined,
+          accountIds: Array.from(new Set([
+            ...(Array.isArray(trade.accountIds) ? trade.accountIds.filter((id): id is string => typeof id === 'string' && id.length > 0) : []),
+            typeof trade.accountId === 'string' && trade.accountId ? trade.accountId : typeof trade.account === 'string' && trade.account ? trade.account : '',
+          ].filter(Boolean))),
           reflection: tradeRef,
           preEntry: trade.preEntry && typeof trade.preEntry === 'object' ? trade.preEntry as JournalTrade['preEntry'] : undefined,
           thesis: trade.thesis && typeof trade.thesis === 'object' ? trade.thesis as JournalTrade['thesis'] : undefined,
@@ -748,31 +753,35 @@ const ACCOUNT_STATUS_DOT: Record<string, string> = {
 
 function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
   const { accounts } = useAppSettings();
+  const selectedAccountIds = Array.from(new Set([...(trade.accountIds ?? []), trade.accountId].filter((id): id is string => typeof id === 'string' && id.length > 0)));
+  const toggleAccount = (accountId: string, checked: boolean) => {
+    const nextIds = checked
+      ? Array.from(new Set([...selectedAccountIds, accountId]))
+      : selectedAccountIds.filter(id => id !== accountId);
+    onMutate({ accountIds: nextIds, accountId: nextIds[0], account: nextIds[0] } as Partial<JournalTrade>);
+  };
 
   return (
     <div className="tj-account-card">
-      <span className="tj-size-title">ACCOUNT</span>
-      <select
-        className="tj-account-select"
-        value={trade.accountId ?? ''}
-        onChange={event => {
-          const val = event.target.value || undefined;
-          onMutate({ accountId: val, account: val } as Partial<JournalTrade>);
-        }}
-      >
-        <option value="">— Select account —</option>
+      <span className="tj-size-title">ACCOUNTS</span>
+      <div className="tj-account-check-list">
         {accounts.filter(account =>
           account.id !== DEFAULT_ACCOUNT_ID &&
           !account.archived &&
-          (account.status !== 'Blown' || account.id === trade.accountId)
+          (account.status !== 'Blown' || selectedAccountIds.includes(account.id))
         ).map(account => (
-          <option key={account.id} value={account.id}>
-            {account.name}{account.status === 'Blown' ? ' (Blown)' : ''}
-          </option>
+          <label key={account.id} className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''}`}>
+            <input
+              type="checkbox"
+              checked={selectedAccountIds.includes(account.id)}
+              onChange={event => toggleAccount(account.id, event.target.checked)}
+            />
+            <span>{account.name}{account.status === 'Blown' ? ' (Blown)' : ''}</span>
+          </label>
         ))}
-      </select>
+      </div>
       {(() => {
-        const selected = accounts.find(a => a.id === trade.accountId);
+        const selected = accounts.find(a => a.id === selectedAccountIds[0]);
         if (!selected) return null;
         const dotColor = ACCOUNT_STATUS_DOT[selected.status] ?? '#888';
         return (
@@ -783,25 +792,6 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
   );
 }
 
-const TIMEFRAME_OPTIONS = ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '1h', '2h', '4h', '1d'] as const;
-
-function TimeframeBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
-  return (
-    <div className="tj-account-card">
-      <span className="tj-size-title">TIMEFRAME</span>
-      <select
-        className="tj-account-select"
-        value={trade.timeframe ?? ''}
-        onChange={event => onMutate({ timeframe: event.target.value || undefined })}
-      >
-        <option value="">— None —</option>
-        {TIMEFRAME_OPTIONS.map(tf => (
-          <option key={tf} value={tf}>{tf}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
   const entry = getTradeEntry(trade);
@@ -1501,18 +1491,20 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
 
 // ── F — BehavioralFlagsBlock ──────────────────────────────────────────────────
 const BEHAVIORAL_FLAGS_LEFT = [
-  { id:'moved-stop', label:'Moved stop loss after entry' },
-  { id:'sized-up', label:'Sized up from original plan' },
-  { id:'outside-window', label:'Took trade outside planned window' },
-  { id:'no-confirmation', label:'Entered before confirmation' },
-  { id:'added-losing', label:'Added to a losing position' },
+  { id:'chased-entry',    label:'Chased entry — outside the zone' },
+  { id:'no-confirmation', label:'Jumped in before confirmation' },
+  { id:'fomo',            label:'FOMO — not in original plan' },
+  { id:'off-playbook',    label:'Setup not in playbook' },
+  { id:'sized-up',        label:'Oversized position' },
+  { id:'added-losing',    label:'Added to a losing position' },
 ];
 const BEHAVIORAL_FLAGS_RIGHT = [
-  { id:'exit-early', label:'Exited too early (fear)' },
-  { id:'past-inval', label:'Held past invalidation' },
-  { id:'off-playbook', label:'Took setup not in playbook' },
-  { id:'past-limit', label:'Traded after hitting daily limit' },
-  { id:'revenge', label:'Revenge trade after a loss' },
+  { id:'moved-stop',   label:'Widened stop loss after entry' },
+  { id:'exit-early',   label:'Exited too early (fear)' },
+  { id:'moved-target', label:'Moved or ignored take profit' },
+  { id:'past-inval',   label:'Held past invalidation' },
+  { id:'revenge',      label:'Revenge trade after a loss' },
+  { id:'past-limit',   label:'Traded after hitting daily limit' },
 ];
 
 function BehavioralFlagsBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
@@ -2717,10 +2709,7 @@ export default function TradeJournal() {
                     trade={activeTrade}
                     onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
                   />
-                  <TimeframeBlock
-                    trade={activeTrade}
-                    onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                  />
+
                 </>
               )}
 

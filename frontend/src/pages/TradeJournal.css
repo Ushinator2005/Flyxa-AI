@@ -1423,6 +1423,40 @@
   border-color: var(--txt-3);
 }
 
+.tj-account-check-list {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tj-account-check {
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--txt-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tj-account-check.selected {
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+  color: var(--txt);
+}
+
+.tj-account-check input {
+  accent-color: var(--accent);
+}
+
 .tj-account-dot {
   width: 8px;
   height: 8px;

@@ -55,6 +55,20 @@ function normalizeConfluences(value: unknown): string[] {
   return normalized;
 }
 
+function normalizeAccountIds(value: unknown, fallback?: string): string[] {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? [value]
+      : [];
+  const normalized = rawValues
+    .map(entry => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter(Boolean);
+  const deduped = Array.from(new Set(normalized));
+  if (deduped.length > 0) return deduped;
+  return fallback ? [fallback] : [];
+}
+
 function encodeStructuredValue(value: string): string {
   return value.replace(/\n/g, '\\n').trim();
 }
@@ -126,9 +140,11 @@ const defaultForm: Partial<Trade> = {
 };
 
 function buildFormState(initialData?: Partial<Trade>): Partial<Trade> {
+  const primaryAccount = initialData?.accountId ?? initialData?.account_id;
   return {
     ...defaultForm,
     ...initialData,
+    accountIds: normalizeAccountIds(initialData?.accountIds, primaryAccount),
     confluences: normalizeConfluences(initialData?.confluences),
   };
 }
@@ -321,9 +337,27 @@ export default function TradeForm({
   ]);
 
   useEffect(() => {
-    if (form.accountId) return;
-    setForm(current => ({ ...current, accountId: getDefaultTradeAccountId() }));
-  }, [form.accountId, getDefaultTradeAccountId]);
+    if (form.accountIds?.length || form.accountId) return;
+    const defaultAccountId = getDefaultTradeAccountId();
+    setForm(current => ({ ...current, accountId: defaultAccountId, accountIds: [defaultAccountId] }));
+  }, [form.accountId, form.accountIds?.length, getDefaultTradeAccountId]);
+
+  const setAccountIds = (accountId: string, checked: boolean) => {
+    setSubmitError('');
+    setForm(current => {
+      const currentIds = normalizeAccountIds(current.accountIds, current.accountId);
+      const nextIds = checked
+        ? Array.from(new Set([...currentIds, accountId]))
+        : currentIds.filter(id => id !== accountId);
+      const finalIds = nextIds.length > 0 ? nextIds : [getDefaultTradeAccountId()];
+      return {
+        ...current,
+        accountIds: finalIds,
+        accountId: finalIds[0],
+        account_id: finalIds[0],
+      };
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -350,6 +384,9 @@ export default function TradeForm({
 
     onSubmit({
       ...form,
+      accountId: normalizeAccountIds(form.accountIds, form.accountId)[0],
+      account_id: normalizeAccountIds(form.accountIds, form.accountId)[0],
+      accountIds: normalizeAccountIds(form.accountIds, form.accountId),
       confluences: normalizeConfluences(form.confluences),
       trade_date: tradeDate,
       trade_time: tradeTime,
@@ -621,18 +658,43 @@ export default function TradeForm({
               </div>
             )}
             <div>
-              <label className="label">Account</label>
-              <select
-                className="input-field h-9"
-                value={form.accountId || getDefaultTradeAccountId()}
-                onChange={e => set('accountId', e.target.value)}
-              >
-                {accounts.filter(a => a.status !== 'Blown' && a.id !== DEFAULT_ACCOUNT_ID).map(account => (
-                  <option key={account.id} value={account.id}>
-                    {account.name} · {account.status}
-                  </option>
-                ))}
-              </select>
+              <label className="label">Accounts</label>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {accounts.filter(a => a.status !== 'Blown' && a.id !== DEFAULT_ACCOUNT_ID).map(account => {
+                  const selectedAccountIds = normalizeAccountIds(form.accountIds, form.accountId || getDefaultTradeAccountId());
+                  const checked = selectedAccountIds.includes(account.id);
+                  return (
+                    <label
+                      key={account.id}
+                      style={{
+                        minHeight: 34,
+                        borderRadius: 6,
+                        border: `1px solid ${checked ? AMBER_BD : BD}`,
+                        background: checked ? AMBER_DIM : P2,
+                        color: checked ? T1 : T2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '7px 9px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={event => setAccountIds(account.id, event.target.checked)}
+                        style={{ accentColor: AMBER }}
+                      />
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {account.name}
+                      </span>
+                      <span style={{ color: T3, fontSize: 10 }}>{account.status}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p style={{ marginTop: 5, fontSize: 10, color: T3 }}>Copy trades can be linked to every account that took the same execution.</p>
             </div>
           </div>
         </div>

@@ -897,6 +897,7 @@ export default function Backtest() {
     const fmtCurrency = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
     const fmtOpened = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+
     // New session config form
     if (showNewSessionForm) {
       return (
@@ -1150,6 +1151,7 @@ export default function Backtest() {
               </div>
             ))}
           </div>
+
 
           <div
             data-tour-id="backtest-current-focus"

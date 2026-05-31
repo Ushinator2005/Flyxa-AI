@@ -77,7 +77,6 @@ const CATEGORY_META: Record<GoalCategory, {
 
 const CATEGORY_ORDER: GoalCategory[] = ['financial', 'discipline', 'lifestyle', 'skill'];
 const EMOJI_OPTIONS = ['💰', '🎯', '🚗', '📊', '🏆', '📚', '💪', '🧊'];
-const RING_CIRCUMFERENCE = 125.6;
 
 const LEGACY_CATEGORY_MAP: Record<string, GoalCategory> = {
   Profitability: 'financial',
@@ -307,32 +306,23 @@ function getStats(goal: NormalizedGoal) {
   ];
 }
 
-function ProgressRing({ progress, category, sub }: { progress: number; category: GoalCategory | 'achieved'; sub: string }) {
-  const [animatedProgress, setAnimatedProgress] = useState(0);
-  const offset = RING_CIRCUMFERENCE * (1 - animatedProgress / 100);
+function ProgressBlock({ progress, tone }: { progress: number; tone: GoalCategory | 'achieved' }) {
+  const [animated, setAnimated] = useState(0);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setAnimatedProgress(progress));
+    const frame = window.requestAnimationFrame(() => setAnimated(progress));
     return () => window.cancelAnimationFrame(frame);
   }, [progress]);
 
   return (
-    <div className="goals-ring">
-      <svg className="goals-ring-svg" viewBox="0 0 52 52" aria-hidden="true">
-        <circle cx="26" cy="26" r="20" className="goals-ring-bg" />
-        <circle
-          cx="26"
-          cy="26"
-          r="20"
-          className={`goals-ring-fill goals-tone-${category}`}
-          strokeDasharray={RING_CIRCUMFERENCE}
-          strokeDashoffset={offset}
-        />
-      </svg>
-      <span className="goals-ring-label">
-        <strong>{Math.round(progress)}%</strong>
-        <small>{sub}</small>
-      </span>
+    <div className="goals-progress-block">
+      <div className="goals-progress-head">
+        <span className={`goals-pct goals-text-${tone}`}>{Math.round(progress)}%</span>
+        <span className="goals-pct-label">complete</span>
+      </div>
+      <div className="goals-progress-track">
+        <div className={`goals-progress-fill goals-fill-${tone}`} style={{ width: `${animated}%` }} />
+      </div>
     </div>
   );
 }
@@ -361,13 +351,11 @@ function GoalCard({
   const remainingMilestones = Math.max(0, goal.milestones.length - visibleMilestones.length);
   const daysRemaining = getDaysRemaining(goal.targetDate);
   const deadlineTone = getDeadlineTone(daysRemaining);
-  const ringSub = goal.category === 'financial' || goal.category === 'lifestyle' ? 'saved' : 'done';
   const stats = getStats(goal);
   const showManualAdjust = goal.status !== 'achieved';
 
   return (
     <article className={`goals-card goals-card-${tone}`} onClick={onToggleExpanded}>
-      <div className={`goals-card-stripe goals-stripe-${tone}`} />
       <div className="goals-card-body">
         <header className="goals-card-header">
           <div className={`goals-icon-badge goals-badge-${tone}`}>{goal.icon}</div>
@@ -382,17 +370,16 @@ function GoalCard({
 
         {goal.description ? <p className="goals-card-description">{goal.description}</p> : null}
 
-        <section className="goals-progress-row">
-          <ProgressRing progress={progress} category={goal.status === 'achieved' ? 'achieved' : goal.category} sub={ringSub} />
-          <div className="goals-stats-column">
-            {stats.map(stat => (
-              <div key={stat.label} className="goals-stat-line">
-                <span>{stat.label}</span>
-                <strong className={stat.primary ? `goals-text-${tone}` : undefined}>{stat.value}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
+        <ProgressBlock progress={progress} tone={tone} />
+
+        <div className="goals-stats-row">
+          {stats.map(stat => (
+            <div key={stat.label} className="goals-stat-chip">
+              <strong className={stat.primary ? `goals-text-${tone}` : undefined}>{stat.value}</strong>
+              <span>{stat.label}</span>
+            </div>
+          ))}
+        </div>
 
         <section className="goals-milestones">
           <header>
