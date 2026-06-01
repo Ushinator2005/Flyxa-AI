@@ -555,7 +555,7 @@ export default function Analytics() {
       'chased-entry':    'Chased entry',
       'no-confirmation': 'Jumped in early',
       'fomo':            'FOMO trade',
-      'off-playbook':    'Off-playbook setup',
+      'off-playbook':    'Off-plan trade',
       'sized-up':        'Oversized position',
       'added-losing':    'Added to losing position',
       'moved-stop':      'Widened stop loss',
@@ -586,6 +586,29 @@ export default function Analytics() {
       .map(row => ({ ...row, avgPnL: row.count > 0 ? row.netPnL / row.count : 0 }))
       .sort((a, b) => a.netPnL - b.netPnL);
   }, [filteredTrades]);
+
+  const mistakeCost = useMemo(() => {
+    const rows = behavioralFlagRows
+      .map(row => ({
+        ...row,
+        cost: Math.max(0, -row.netPnL),
+        recovered: Math.max(0, row.netPnL),
+      }))
+      .sort((a, b) => b.cost - a.cost || b.count - a.count);
+
+    const avoidableCost = rows.reduce((sum, row) => sum + row.cost, 0);
+    const topLeak = rows.find(row => row.cost > 0) ?? null;
+    const profitableFlags = rows.filter(row => row.recovered > 0).reduce((sum, row) => sum + row.recovered, 0);
+    const netIfFixed = metrics.netPnL + avoidableCost;
+
+    return {
+      rows,
+      avoidableCost,
+      topLeak,
+      profitableFlags,
+      netIfFixed,
+    };
+  }, [behavioralFlagRows, metrics.netPnL]);
 
   if (isLoading) {
     return (
@@ -1103,7 +1126,7 @@ export default function Analytics() {
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-[var(--app-text)]">Confluence Performance</h3>
-            <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Which setups are helping vs. hurting your P&amp;L</p>
+            <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Which conditions are helping vs. hurting your P&amp;L</p>
           </div>
           <span className="shrink-0 rounded-md bg-[var(--app-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--app-text-muted)]">
             {confluenceRows.length} confluence{confluenceRows.length !== 1 ? 's' : ''}
@@ -1181,7 +1204,90 @@ export default function Analytics() {
         )}
       </section>
 
-      {behavioralFlagRows.length > 0 && (() => {
+      {mistakeCost.rows.length > 0 && (() => {
+        const totalOccurrences = mistakeCost.rows.reduce((s, r) => s + r.count, 0);
+        const maxCost = Math.max(1, ...mistakeCost.rows.map(row => row.cost));
+        return (
+          <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--app-text)]">Mistake Cost Dashboard</h3>
+                <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">What repeat behavior is costing during this period</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-md bg-[var(--app-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--app-text-muted)]">
+                  {totalOccurrences}x
+                </span>
+                <span className="rounded-md bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-red-400">
+                  -{formatCurrency(mistakeCost.avoidableCost)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+              <article className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-red-300">Avoidable cost</p>
+                <p className="mt-1.5 text-xl font-bold tabular-nums text-red-400">-{formatCurrency(mistakeCost.avoidableCost)}</p>
+                <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">sum of flagged losing behaviors</p>
+              </article>
+              <article className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Top leak</p>
+                <p className={`mt-1.5 truncate text-sm font-semibold ${mistakeCost.topLeak ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {mistakeCost.topLeak ? mistakeCost.topLeak.label : 'No losing mistake'}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">
+                  {mistakeCost.topLeak ? `${mistakeCost.topLeak.count} occurrence${mistakeCost.topLeak.count !== 1 ? 's' : ''}` : 'flagged trades were net positive'}
+                </p>
+              </article>
+              <article className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-300">If fixed</p>
+                <p className={`mt-1.5 text-xl font-bold tabular-nums ${mistakeCost.netIfFixed >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {formatSignedCurrency(mistakeCost.netIfFixed)}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">period net without flagged losses</p>
+              </article>
+            </div>
+
+            <div className="space-y-2">
+              {mistakeCost.rows.map((row, index) => {
+                const width = Math.max(6, (row.cost / maxCost) * 100);
+                const hasCost = row.cost > 0;
+                const recoveredWidth = Math.max(8, Math.min(100, (row.recovered / Math.max(1, mistakeCost.profitableFlags)) * 100));
+                return (
+                  <div key={row.label} className={`grid grid-cols-[24px_minmax(0,1fr)_96px] items-center gap-3 rounded-lg border px-3 py-2.5 ${hasCost ? 'border-red-500/15 bg-red-500/5' : 'border-emerald-500/15 bg-emerald-500/5'}`}>
+                    <span className={`font-mono text-[10px] font-semibold ${hasCost ? 'text-red-400/70' : 'text-emerald-400/70'}`}>
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-medium text-[var(--app-text)]">{row.label}</p>
+                        <span className="shrink-0 font-mono text-[10px] text-[var(--app-text-muted)]">{row.count}x</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--app-panel-strong)]">
+                        <div
+                          className={`h-full rounded-full ${hasCost ? 'bg-red-400' : 'bg-emerald-400'}`}
+                          style={{ width: `${hasCost ? width : recoveredWidth}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">
+                        {formatSignedCurrency(row.avgPnL)} avg per flagged trade
+                      </p>
+                    </div>
+                    <p className={`text-right text-sm font-bold tabular-nums ${hasCost ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {hasCost ? `-${formatCurrency(row.cost)}` : formatSignedCurrency(row.recovered)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-[11px] text-[var(--app-text-muted)]">
+              Cost is calculated only from flagged behaviors with negative net P&amp;L, so profitable flagged trades do not hide the real leak.
+            </p>
+          </section>
+        );
+      })()}
+
+      {false && behavioralFlagRows.length > 0 && (() => {
         const totalCost = behavioralFlagRows.reduce((s, r) => s + r.netPnL, 0);
         const totalOccurrences = behavioralFlagRows.reduce((s, r) => s + r.count, 0);
         return (

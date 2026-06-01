@@ -98,7 +98,7 @@ function analyzeBySession(trades: Trade[]): Omit<AskResponse, 'question'> {
     rows,
     action: worst.netPnl < 0
       ? `Consider cutting or reducing size in the ${worst.label} session — it's cost you ${fmtPnl(Math.abs(worst.netPnl))}.`
-      : `Keep concentrating A+ setups in ${best.label} session.`,
+      : `Keep concentrating your best trades in ${best.label} session.`,
     confidence: conf(trades.length), sampleSize: trades.length,
   };
 }
@@ -127,7 +127,7 @@ function analyzeByDayOfWeek(trades: Trade[], q: string): Omit<AskResponse, 'ques
     answer: `${best.label} is your best day (${fmtPct(best.winRate)} WR, ${fmtPnl(best.netPnl)}). ${worst.label} is your worst (${fmtPct(worst.winRate)} WR, ${fmtPnl(worst.netPnl)}).`,
     detail: `Your overall WR is ${fmtPct(wr(trades))}. ${best.label} beats it by ${fmtPct(best.winRate - wr(trades))}. ${worst.label} lags by ${fmtPct(wr(trades) - worst.winRate)}.`,
     rows,
-    action: worst.netPnl < -100 ? `Consider sitting out ${worst.label}s — they've cost you ${fmtPnl(Math.abs(worst.netPnl))}.` : `${best.label} is your edge day. Concentrate your best setups then.`,
+    action: worst.netPnl < -100 ? `Consider sitting out ${worst.label}s — they've cost you ${fmtPnl(Math.abs(worst.netPnl))}.` : `${best.label} is your edge day. Concentrate your best trades then.`,
     confidence: conf(trades.length), sampleSize: trades.length,
   };
 }
@@ -327,7 +327,7 @@ function analyzeTrend(trades: Trade[]): Omit<AskResponse, 'question'> {
     action: improving
       ? `Trend is positive — document what changed and double down on it.`
       : declining
-        ? `Review what changed recently. Compare your current setups against your earlier winning trades.`
+        ? `Review what changed recently. Compare your current entries against your earlier winning trades.`
         : `Work on reducing losing days. Consistency compounds faster than chasing bigger wins.`,
     confidence: conf(trades.length), sampleSize: trades.length,
   };
@@ -365,7 +365,7 @@ function analyzeConfluences(trades: Trade[]): Omit<AskResponse, 'question'> {
   const withConf = trades.filter(t => Array.isArray(t.confluences) && t.confluences.length > 0);
   if (withConf.length < 6) return {
     answer: 'Not enough confluence data.',
-    detail: `Only ${withConf.length} trades have confluences tagged. Tag your setups consistently to identify your real edge.`,
+    detail: `Only ${withConf.length} trades have confluences tagged. Tag them consistently to identify your real edge.`,
     confidence: 'low', sampleSize: withConf.length, noData: withConf.length < 3,
   };
   const confMap: Record<string, Trade[]> = {};
@@ -382,7 +382,7 @@ function analyzeConfluences(trades: Trade[]): Omit<AskResponse, 'question'> {
     answer: `Best confluence: "${best.label}" (${fmtPct(best.winRate)} WR, ${fmtPnl(best.netPnl)} net across ${best.trades} trades).`,
     detail: `Analysed ${rows.length} confluence tags across ${withConf.length} trades. "${worst.label}" is your weakest tag at ${fmtPct(worst.winRate)} WR and ${fmtPnl(worst.netPnl)} net.`,
     rows,
-    action: `Focus on setups stacking "${best.label}". Consider removing "${worst.label}" as a standalone entry trigger.`,
+    action: `Focus on trades stacking "${best.label}". Consider removing "${worst.label}" as a standalone entry trigger.`,
     confidence: conf(withConf.length), sampleSize: withConf.length,
   };
 }
@@ -465,7 +465,7 @@ function analyzeByDirection(trades: Trade[]): Omit<AskResponse, 'question'> {
     answer: `You perform better ${best.label === 'Long' ? 'Long' : 'Short'} (${fmtPct(best.winRate)} WR, ${fmtPnl(best.netPnl)}) vs ${worst.label} (${fmtPct(worst.winRate)} WR, ${fmtPnl(worst.netPnl)}).`,
     detail: `${best.label}: ${best.trades} trades, ${fmtPct(best.winRate)} WR, avg ${fmtPnl(best.avgPnl)}/trade. ${worst.label}: ${worst.trades} trades, ${fmtPct(worst.winRate)} WR, avg ${fmtPnl(worst.avgPnl)}/trade.`,
     rows,
-    action: worst.netPnl < -300 ? `Reduce size or screen more carefully on ${worst.label} trades — the data suggests a directional bias.` : `Both directions are competitive. Keep trading the setup, not the bias.`,
+    action: worst.netPnl < -300 ? `Reduce size or screen more carefully on ${worst.label} trades — the data suggests a directional bias.` : `Both directions are competitive. Keep trading the plan, not the bias.`,
     confidence: conf(trades.length), sampleSize: trades.length,
   };
 }
@@ -541,7 +541,7 @@ export function parseAndRespond(question: string, trades: Trade[]): AskResponse 
   if (matchesAny(q, ['improv', 'getting better', 'progress', 'trend', 'better over time', 'worse over time', 'decline', 'recent', 'lately', 'am i getting']))
     return wrap(analyzeTrend(trades));
 
-  if (matchesAny(q, ['confluence', 'setup', 'what setup', 'best setup', 'what signal', 'edge', 'catalyst']))
+  if (matchesAny(q, ['confluence', 'what signal', 'edge', 'catalyst', 'condition']))
     return wrap(analyzeConfluences(trades));
 
   if (matchesAny(q, ['how long', 'duration', 'hold', 'time in trade', 'trade length', 'holding time', 'how quickly', 'how fast']))
@@ -559,7 +559,7 @@ export function parseAndRespond(question: string, trades: Trade[]): AskResponse 
   return {
     question,
     answer: "I couldn't parse that question.",
-    detail: "Try asking: 'When do I trade best?', 'Do I follow my plan?', 'How does my emotion affect trading?', 'Am I overtrading?', 'Am I getting better?', 'What's my best setup?', or 'Give me a summary'.",
+    detail: "Try asking: 'When do I trade best?', 'Do I follow my plan?', 'How does my emotion affect trading?', 'Am I overtrading?', 'Am I getting better?', 'Which confluences work?', or 'Give me a summary'.",
     confidence: 'low',
     sampleSize: trades.length,
     noData: true,
@@ -573,7 +573,7 @@ export const QUICK_QUESTIONS = [
   'Am I overtrading?',
   'Am I getting better?',
   'How do I trade after a loss?',
-  'What\'s my best setup?',
+  'Which confluences work?',
   'What\'s my best instrument?',
   'Give me a summary',
   'What\'s my win rate?',

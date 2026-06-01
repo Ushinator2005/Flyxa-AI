@@ -194,11 +194,40 @@ export default function Achievements() {
 
   const progress = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
   const progressLabel = `${Math.round(progress)}%`;
-  const strongestStreak = Math.max(
-    stats.currentWinStreak,
-    stats.currentDisciplineStreak,
-    stats.currentGreenDayStreak,
-  );
+
+  const focusContent = useMemo(() => {
+    const { currentWinStreak, currentDisciplineStreak, currentGreenDayStreak } = stats;
+    const d = currentDisciplineStreak;
+    const w = currentWinStreak;
+    const g = currentGreenDayStreak;
+
+    if (d > 0 && d >= w && d >= g) {
+      return {
+        heading: `${d} disciplined ${d === 1 ? 'entry' : 'entries'} in a row`,
+        body: 'Process is your edge right now. One more clean session extends it — focus on plan adherence, not the P&L.',
+        icon: <ShieldCheck size={26} />,
+      };
+    }
+    if (w > 0 && w >= g) {
+      return {
+        heading: `${w} win run`,
+        body: "Execution is clicking. Stay size-appropriate and let the edge play out — don't force entries to keep the streak alive.",
+        icon: <Flame size={26} />,
+      };
+    }
+    if (g > 0) {
+      return {
+        heading: `${g} green ${g === 1 ? 'day' : 'days'} running`,
+        body: 'Daily consistency is building. Protect it by sticking to your risk limits — a clean loss beats a blown day.',
+        icon: <TrendingUp size={26} />,
+      };
+    }
+    return {
+      heading: 'Build the first run',
+      body: 'Start with process, not outcome. One session with full plan adherence and a completed journal is the first brick.',
+      icon: <Trophy size={26} />,
+    };
+  }, [stats]);
 
   return (
     <div className="achv-page animate-fade-in">
@@ -224,11 +253,11 @@ export default function Achievements() {
         <article className="achv-focus-card">
           <div>
             <span className="achv-focus-label">Current focus</span>
-            <h2>{strongestStreak > 0 ? `${strongestStreak} session run` : 'Build the first run'}</h2>
-            <p>Keep the next session measurable: plan adherence, journal completion, and clean execution before outcome.</p>
+            <h2>{focusContent.heading}</h2>
+            <p>{focusContent.body}</p>
           </div>
           <div className="achv-focus-mark">
-            <Trophy size={26} />
+            {focusContent.icon}
           </div>
         </article>
 

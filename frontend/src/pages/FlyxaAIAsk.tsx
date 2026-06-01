@@ -404,7 +404,7 @@ export default function FlyxaAIAsk() {
               { topic: 'Overtrading', examples: ['Am I overtrading?', 'Do more trades hurt me?'] },
               { topic: 'Post-loss', examples: ['How do I trade after a loss?', 'Do I revenge trade?'] },
               { topic: 'Progress', examples: ['Am I improving?', 'How have I done lately?'] },
-              { topic: 'Setups', examples: ['What\'s my best setup?', 'Which confluences work?'] },
+              { topic: 'Signals', examples: ['Which confluences work?', 'What conditions work best?'] },
               { topic: 'Instruments', examples: ['What\'s my best instrument?', 'How do I do on NQ?'] },
               { topic: 'Duration', examples: ['How long do I hold trades?', 'Do I let losers run?'] },
               { topic: 'Streaks', examples: ['What\'s my longest win streak?', 'Consecutive losses?'] },

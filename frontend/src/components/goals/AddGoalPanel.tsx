@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, Check, GripVertical, Plus, Target, X } from 'lucide-react';
 import type { Goal, GoalCategory, GoalColor, GoalInput, GoalStep } from '../../types/goals.js';
+import DatePicker from '../common/DatePicker.js';
 import './AddGoalPanel.css';
 
 interface Props {
@@ -160,7 +161,7 @@ export default function AddGoalPanel({ isOpen, onClose, editGoal, onSave }: Prop
                   <CalendarDays size={12} />
                   Horizon date
                 </label>
-                <input type="date" value={form.horizon} onChange={event => setField('horizon', event.target.value)} />
+                <DatePicker value={form.horizon} onChange={value => setField('horizon', value)} fullWidth align="left" placeholder="No deadline" />
               </div>
 
               <div className="goal-field">

@@ -59,10 +59,17 @@ const fmtSignedCompactUSD = (v: number) => {
 };
 
 function wallTimeToUtcMs(dateSlice: string, timeHHMM: string, tz: string): number | null {
-  const local = new Date(`${dateSlice}T${timeHHMM}:00`);
-  if (Number.isNaN(local.getTime())) return null;
-
   try {
+    const [yearS, monthS, dayS] = dateSlice.split('-');
+    const [hourS, minuteS] = timeHHMM.split(':');
+    const year = Number(yearS), month = Number(monthS), day = Number(dayS);
+    const hour = Number(hourS), minute = Number(minuteS);
+    if ([year, month, day, hour, minute].some(Number.isNaN)) return null;
+
+    // Use Date.UTC as the base so the browser's local timezone never contaminates the math.
+    const utcGuess = Date.UTC(year, month - 1, day, hour, minute, 0);
+
+    // Find what wall time this UTC instant shows in the target timezone.
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       year: 'numeric',
@@ -72,18 +79,15 @@ function wallTimeToUtcMs(dateSlice: string, timeHHMM: string, tz: string): numbe
       minute: '2-digit',
       second: '2-digit',
       hourCycle: 'h23',
-    }).formatToParts(local);
+    }).formatToParts(new Date(utcGuess));
     const get = (type: string) => Number(parts.find(part => part.type === type)?.value ?? 0);
-    const zonedAsUtc = Date.UTC(
-      get('year'),
-      get('month') - 1,
-      get('day'),
-      get('hour'),
-      get('minute'),
-      get('second'),
-    );
-    const offsetMs = zonedAsUtc - local.getTime();
-    return local.getTime() - offsetMs;
+
+    // UTC epoch of the displayed tz time — diff gives the true tz offset.
+    const shownAsUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+    const tzOffsetMs = shownAsUtc - utcGuess;
+
+    // Actual UTC for the wall time = utcGuess minus the tz offset.
+    return utcGuess - tzOffsetMs;
   } catch {
     return null;
   }
@@ -253,7 +257,14 @@ export default function Dashboard() {
   );
   useBreakingNewsAlert(handleNewsAlert);
 
+  // Live clock for countdown timers — ticks every second.
   // Read today's high-impact calendar events from the local cache.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   interface CachedCalEvent { event: string; date: string; time: string; impact: string; country?: string; actual?: string; forecast?: string; previous?: string; }
   const [todayHighImpact, setTodayHighImpact] = useState<CachedCalEvent[]>([]);
   const [calendarTimeZone, setCalendarTimeZone] = useState(preferences?.timezone ?? 'America/New_York');
@@ -914,56 +925,93 @@ export default function Dashboard() {
             </Card>
 
             {/* High-impact economic events today */}
-            <Card style={{ padding: 16, flexShrink: 0, border: `1px solid rgba(248,113,113,0.25)`, boxShadow: '0 0 18px rgba(248,113,113,0.07)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: RED, boxShadow: `0 0 6px ${RED}`, flexShrink: 0 }} />
-                  <p style={{ fontSize: 13, fontWeight: 700, color: T1, margin: 0 }}>High Impact Today</p>
+            <Card style={{ padding: 0, flexShrink: 0, border: `1px solid rgba(248,113,113,0.28)`, boxShadow: '0 0 24px rgba(248,113,113,0.09)', overflow: 'hidden' }}>
+              {/* Accent bar */}
+              <div style={{ height: 3, background: 'linear-gradient(90deg, #f87171, rgba(248,113,113,0.1))' }} />
+              <div style={{ padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: RED, boxShadow: `0 0 8px ${RED}`, flexShrink: 0 }} />
+                    <p style={{ fontSize: 12, fontWeight: 700, color: T1, margin: 0, letterSpacing: '0.01em' }}>High Impact Today</p>
+                  </div>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 3, color: RED, background: RED_DIM, border: `1px solid rgba(248,113,113,0.3)` }}>USD</span>
                 </div>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 3, color: RED, background: RED_DIM, border: `1px solid rgba(248,113,113,0.3)` }}>USD</span>
-              </div>
-              {todayHighImpact.length === 0 ? (
-                <p style={{ fontSize: 11, color: T3, margin: 0, padding: '6px 0' }}>No high-impact events today.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {todayHighImpact.map((ev, i) => {
-                    const released = Boolean(ev.actual);
-                    const eventTimeMs = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
-                    const hasPassed = eventTimeMs !== null && eventTimeMs <= Date.now();
-                    return (
-                      <div key={i} style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 6, background: hasPassed || released ? 'rgba(255,255,255,0.03)' : 'rgba(248,113,113,0.10)', borderLeft: `3px solid ${hasPassed || released ? 'rgba(255,255,255,0.12)' : RED}` }}>
-                        {hasPassed && (
-                          <span
-                            aria-hidden="true"
+                {todayHighImpact.length === 0 ? (
+                  <p style={{ fontSize: 11, color: T3, margin: 0, padding: '6px 0' }}>No high-impact events today.</p>
+                ) : (() => {
+                  const nextUpIndex = todayHighImpact.findIndex(ev => {
+                    const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
+                    return t !== null && t > now && !Boolean(ev.actual);
+                  });
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {todayHighImpact.map((ev, i) => {
+                        const released = Boolean(ev.actual);
+                        const eventTimeMs = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
+                        const hasPassed = eventTimeMs !== null && eventTimeMs <= now;
+                        const isUpNext = i === nextUpIndex;
+                        const secsLeft = isUpNext && eventTimeMs !== null ? Math.max(0, Math.floor((eventTimeMs - now) / 1000)) : null;
+                        const countdown = secsLeft !== null
+                          ? secsLeft >= 3600
+                            ? `${Math.floor(secsLeft / 3600)}h ${Math.floor((secsLeft % 3600) / 60)}m`
+                            : secsLeft >= 60
+                              ? `${Math.floor(secsLeft / 60)}m ${secsLeft % 60}s`
+                              : `${secsLeft}s`
+                          : null;
+                        return (
+                          <div
+                            key={i}
                             style={{
-                              position: 'absolute',
-                              left: 8,
-                              right: 8,
-                              top: '50%',
-                              height: 1,
-                              background: '#fff',
-                              opacity: 0.75,
-                              pointerEvents: 'none',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 8,
+                              padding: '7px 9px',
+                              borderRadius: 6,
+                              background: hasPassed ? 'transparent' : isUpNext ? 'rgba(248,113,113,0.11)' : 'rgba(255,255,255,0.03)',
+                              borderLeft: `3px solid ${hasPassed ? 'rgba(255,255,255,0.07)' : isUpNext ? RED : 'rgba(248,113,113,0.3)'}`,
+                              opacity: hasPassed ? 0.38 : 1,
                             }}
-                          />
-                        )}
-                        <span style={{ fontSize: 12, fontFamily: MONO, color: released ? T2 : T1, fontWeight: 500, flexShrink: 0, paddingTop: 1, minWidth: 40 }}>{ev.time}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: released ? 500 : 600, color: released ? T2 : T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.event}</div>
-                          {released ? (
-                            <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>
-                              <span style={{ color: ev.actual && ev.forecast && parseFloat(String(ev.actual)) >= parseFloat(String(ev.forecast)) ? GREEN : RED, fontFamily: MONO, fontWeight: 600 }}>{ev.actual}</span>
-                              {ev.forecast && <span style={{ color: T3 }}> · est {ev.forecast}</span>}
+                          >
+                            <span style={{ fontSize: 11, fontFamily: MONO, color: T2, fontWeight: 500, flexShrink: 0, paddingTop: 1, minWidth: 40 }}>{ev.time}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontSize: 12,
+                                fontWeight: isUpNext ? 600 : 500,
+                                color: hasPassed ? T3 : isUpNext ? T1 : T2,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                textDecoration: hasPassed ? 'line-through' : 'none',
+                                textDecorationColor: 'rgba(255,255,255,0.18)',
+                              }}>{ev.event}</div>
+                              {released ? (
+                                <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>
+                                  <span style={{ color: ev.actual && ev.forecast && parseFloat(String(ev.actual)) >= parseFloat(String(ev.forecast)) ? GREEN : RED, fontFamily: MONO, fontWeight: 600 }}>{ev.actual}</span>
+                                  {ev.forecast && <span style={{ color: T3 }}> · est {ev.forecast}</span>}
+                                </div>
+                              ) : (
+                                ev.forecast && <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>Est {ev.forecast}</div>
+                              )}
                             </div>
-                          ) : (
-                            ev.forecast && <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>Est {ev.forecast}</div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                            {countdown !== null && (
+                              <span style={{
+                                fontSize: 10,
+                                fontWeight: 600,
+                                fontFamily: MONO,
+                                color: secsLeft !== null && secsLeft < 60 ? RED : RED,
+                                opacity: secsLeft !== null && secsLeft < 60 ? 1 : 0.75,
+                                flexShrink: 0,
+                                alignSelf: 'center',
+                                letterSpacing: '0.03em',
+                              }}>{countdown}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             </Card>
 
             {/* Daily trade log */}

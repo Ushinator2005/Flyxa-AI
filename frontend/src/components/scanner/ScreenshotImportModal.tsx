@@ -6,6 +6,7 @@ import { Trade } from '../../types/index.js';
 import { lookupContract } from '../../constants/futuresContracts.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { scanChart } from '../../utils/scanChart.js';
+import DatePicker from '../common/DatePicker.js';
 
 const DRAFT_KEY = 'tw_scanner_draft';
 const DRAFT_IMAGE_KEY = 'tw_scanner_draft_image';
@@ -989,12 +990,12 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
                   <CalendarDays size={14} />
                   Trade Date
                 </span>
-                <input
-                  type="date"
+                <DatePicker
                   className={topInputClass}
                   value={currentDate}
-                  onChange={e => setCurrentDate(e.target.value)}
-                  required
+                  onChange={setCurrentDate}
+                  fullWidth
+                  align="left"
                 />
               </label>
               <label className="space-y-1.5">

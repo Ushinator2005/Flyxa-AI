@@ -8,6 +8,7 @@ import { riskApi } from '../services/api.js';
 import { RiskSettings, Trade } from '../types/index.js';
 import { PatternItem } from './FlyxaAIPatterns.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -41,14 +42,14 @@ const emotions = ['Frustrated', 'Anxious', 'Neutral', 'Focused', 'Confident'] as
 const biasOptions: BiasValue[] = ['Bull', 'Bear', 'Neutral'];
 
 const preTradeReminderItems = [
-  'The goal is not to trade. The goal is to protect capital and execute only when the setup is clean.',
+  'The goal is not to trade. The goal is to protect capital and execute only when conditions are clean.',
   'No screenshot, plan, or confirmation means no trade.',
   'A missed trade is acceptable. A forced trade is not.',
   'After a loss, the next decision must be slower, smaller, and cleaner.',
 ];
 
 const oathChecklistItems: ChecklistItem[] = [
-  { id: 'oath-plan-only', label: 'I will only trade a setup that matches my plan' },
+  { id: 'oath-plan-only', label: 'I will only take trades that match my plan' },
   { id: 'oath-no-revenge', label: 'I will not trade to recover, prove, or force a green day' },
   { id: 'oath-risk-stop', label: 'I will respect my max loss, max trades, and size limits' },
   { id: 'oath-no-trade-valid', label: 'I accept that no trade is a successful session outcome' },
@@ -315,6 +316,11 @@ export default function FlyxaAIPreSession() {
     };
   }, [accountTrades]);
 
+  const priorFlow = useMemo(
+    () => getMostRecentDailyFlowBefore(accountTrades, now.toISOString().slice(0, 10)),
+    [accountTrades, now]
+  );
+
   const riskLimits = useMemo(() => {
     const dailyLoss = Number.isFinite(settings?.daily_loss_limit) ? settings?.daily_loss_limit : storedRiskSettings.daily_loss_limit;
     const maxTrades = Number.isFinite(settings?.max_trades_per_day) ? settings?.max_trades_per_day : storedRiskSettings.max_trades_per_day;
@@ -449,12 +455,17 @@ export default function FlyxaAIPreSession() {
     const recentPlanDrag = recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80;
     const recentEmotionDrag = recentBehavior.revengeTagged > 0;
     return [
+      ...(priorFlow ? [{
+        id: 'tomorrow-rule',
+        source: 'Hard stop' as const,
+        rule: priorFlow.tomorrowRule,
+      }] : []),
       {
         id: 'focus',
         source: 'Primary focus',
         rule: topEdge
-          ? `Prioritize ${topEdge.session} setups in ${topEdge.instrument}; this is your highest-confidence edge window today.`
-          : 'Prioritize your cleanest A+ continuation setup window and skip marginal entries.',
+          ? `Prioritize ${topEdge.session} entries in ${topEdge.instrument}; this is your highest-confidence edge window today.`
+          : 'Prioritize your cleanest A+ continuation window and skip marginal entries.',
       },
       {
         id: 'avoid',
@@ -462,7 +473,7 @@ export default function FlyxaAIPreSession() {
         rule: topRisk
           ? `Avoid ${topRisk.title.toLowerCase()} by pausing after the first loss and requiring full checklist confirmation.`
           : recentEmotionDrag
-            ? 'Do not chase recovery trades. If frustration shows up, step away before taking another setup.'
+            ? 'Do not chase recovery trades. If frustration shows up, step away before taking another entry.'
             : recentPlanDrag
               ? 'Do not take trades that skip your plan confirmation; recent execution drift says this matters today.'
               : 'Avoid unplanned entries and keep the session narrow enough to protect your best execution.',
@@ -473,7 +484,7 @@ export default function FlyxaAIPreSession() {
         rule: `Walk away for the day at ${formatCurrency(-riskLimits.maxDailyLoss)} or after ${riskLimits.maxTrades} trades, whichever comes first.`,
       },
     ];
-  }, [activeRiskPatterns, confirmedEdgePatterns, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
+  }, [activeRiskPatterns, confirmedEdgePatterns, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
 
   const rthTiming = useMemo(() => getRthTiming(now), [now]);
   const emotionLogged = emotion.trim().length > 0;
@@ -629,6 +640,286 @@ export default function FlyxaAIPreSession() {
   }
 
   const readinessColor = readiness.status === 'Ready' ? C.grn : readiness.status === 'Caution' ? C.acc : C.red;
+  const oathCompleted = activeOathItems.filter(item => Boolean(checklistState[item.id])).length;
+  const mentalCompleted = mentalChecklistWithAdaptiveItems.filter(item => item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id])).length;
+  const technicalCompleted = technicalChecklistItems.filter(item => Boolean(checklistState[item.id])).length;
+  const primaryPlanRows = sessionPlan.filter(row => row.source === 'Primary focus').slice(0, 2);
+  const protectionPlanRows = sessionPlan.filter(row => row.source !== 'Primary focus').slice(0, 3);
+  const visiblePatterns = [...activeRiskPatterns.slice(0, 2), ...confirmedEdgePatterns.slice(0, 2)];
+
+  return (
+    <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <header data-tour-id="pre-session-header" style={{ padding: '13px 20px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Pre-Session</p>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: C.t0, letterSpacing: '-0.02em', marginTop: 2 }}>Session Command Center</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: 11, color: C.t1 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: rthTiming.marketOpenToday ? C.grn : C.t2, flexShrink: 0 }} />
+          <span>{rthTiming.marketOpenToday ? 'RTH open' : `RTH in ${formatDuration(rthTiming.minutesUntilOpen)}`}</span>
+          <span style={{ color: C.t2 }}>·</span>
+          <span>{etDateLabel(now)}</span>
+        </div>
+      </header>
+
+      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)', gap: 14, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <section style={{ border: `1px solid ${readinessColor}30`, backgroundColor: `${readinessColor}09`, borderRadius: 10, padding: 16, display: 'grid', gridTemplateColumns: 'minmax(170px, 0.45fr) minmax(0, 1fr)', gap: 16, alignItems: 'center' }}>
+              <div>
+                <p style={{ fontSize: 10, color: readinessColor, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800 }}>{readiness.status}</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 42, fontWeight: 800, color: C.t0, lineHeight: 1 }}>{readiness.score}</span>
+                  <span style={{ fontSize: 12, color: C.t2 }}>/100</span>
+                </div>
+                <p style={{ marginTop: 7, fontSize: 12, color: C.t1, lineHeight: 1.55 }}>{readiness.summary}</p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+                {[
+                  { label: 'Checks', value: `${checklistTotals.completed}/${checklistTotals.total}`, color: checklistTotals.completed === checklistTotals.total ? C.grn : C.acc },
+                  { label: 'Oath', value: `${oathCompleted}/${activeOathItems.length}`, color: oathCompleted === activeOathItems.length ? C.grn : C.acc },
+                  { label: 'Plan', value: String(sessionPlan.length), color: C.t0 },
+                  { label: 'Last', value: lastSession ? formatSignedCurrency(lastSession.netPnl) : '--', color: lastSession && lastSession.netPnl < 0 ? C.red : C.grn },
+                ].map(item => (
+                  <article key={item.label} style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, padding: '10px 11px' }}>
+                    <p style={{ fontSize: 10, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</p>
+                    <p style={{ marginTop: 6, fontFamily: 'monospace', fontSize: 16, color: item.color, fontWeight: 800 }}>{item.value}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section data-tour-id="pre-session-begin" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 14, alignItems: 'center' }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 800, color: C.t0 }}>Today&apos;s operating mode</p>
+                <p style={{ marginTop: 4, fontSize: 12, color: C.t1, lineHeight: 1.6 }}>
+                  {readiness.status === 'Ready'
+                    ? 'Green light only for planned trades. Keep execution narrow and measurable.'
+                    : readiness.status === 'Caution'
+                      ? 'Trade smaller and slower. One clean trade is better than a busy session.'
+                      : 'Stand down until the blockers are cleared. Capital protection is the win condition.'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={startSession} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.acc}`, backgroundColor: C.acc, color: '#0e0d0d', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                  Accept oath - begin
+                </button>
+                <button type="button" onClick={() => navigate('/')} style={{ height: 36, padding: '0 14px', borderRadius: 6, border: `1px solid ${C.b1}`, backgroundColor: 'transparent', color: C.t1, fontSize: 12, cursor: 'pointer' }}>
+                  Dashboard
+                </button>
+              </div>
+            </section>
+
+            {priorFlow && (
+              <section style={{ border: `1px solid ${priorFlow.biggestLeak ? `${C.red}55` : `${C.grn}44`}`, borderRadius: 10, backgroundColor: priorFlow.biggestLeak ? 'rgba(239,68,68,0.075)' : 'rgba(34,197,94,0.065)', padding: 14 }}>
+                <p style={{ fontSize: 10, color: priorFlow.biggestLeak ? C.red : C.grn, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800 }}>Tomorrow&apos;s Rule</p>
+                <p style={{ marginTop: 7, fontSize: 15, fontWeight: 800, color: C.t0, lineHeight: 1.45 }}>{priorFlow.tomorrowRule}</p>
+                <p style={{ marginTop: 6, fontSize: 12, color: C.t1, lineHeight: 1.55 }}>
+                  From {priorFlow.date}: {priorFlow.summary}
+                  {priorFlow.worstState && priorFlow.bestState && priorFlow.worstState.label !== priorFlow.bestState.label
+                    ? ` Best state was ${priorFlow.bestState.label}; weakest was ${priorFlow.worstState.label}.`
+                    : ''}
+                </p>
+              </section>
+            )}
+
+            <section data-tour-id="pre-session-checklist" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 14 }}>
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                  <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0 }}>Readiness Checks</h2>
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: C.t2 }}>{mentalCompleted + technicalCompleted}/{mentalChecklistWithAdaptiveItems.length + technicalChecklistItems.length}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { label: 'Mental', items: mentalChecklistWithAdaptiveItems },
+                    { label: 'Technical', items: technicalChecklistItems },
+                  ].map(group => (
+                    <div key={group.label}>
+                      <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7, fontWeight: 700 }}>{group.label}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {group.items.map(item => {
+                          const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
+                          return (
+                            <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
+                              display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px',
+                              borderRadius: 6, border: `1px solid ${checked ? 'rgba(34,214,138,0.22)' : C.b0}`, backgroundColor: checked ? 'rgba(34,214,138,0.05)' : C.d2,
+                              cursor: 'pointer', textAlign: 'left', width: '100%',
+                            }}>
+                              {customCheckbox(checked)}
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ fontSize: 11.5, color: checked ? C.t0 : C.t1, lineHeight: 1.4 }}>{item.label}</p>
+                                {(item.autoFromEmotion || item.source) && <p style={{ fontSize: 9.5, color: C.t2, marginTop: 1 }}>{item.autoFromEmotion ? 'auto-linked to emotion' : item.source}</p>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Session Plan</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {primaryPlanRows.map(row => (
+                    <article key={row.id} style={{ border: '1px solid rgba(34,214,138,0.22)', backgroundColor: 'rgba(34,214,138,0.06)', borderRadius: 8, padding: 11 }}>
+                      <span style={{ ...sourceBadgeStyle(row.source), borderRadius: 4, padding: '3px 7px', fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{row.source}</span>
+                      <p style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.t0 }}>{row.rule}</p>
+                    </article>
+                  ))}
+                  {protectionPlanRows.map(row => (
+                    <article key={row.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 9, alignItems: 'start', border: `1px solid ${C.b0}`, backgroundColor: C.d2, borderRadius: 8, padding: 10 }}>
+                      <span style={{ ...sourceBadgeStyle(row.source), borderRadius: 4, padding: '3px 6px', fontSize: 8.5, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{row.source}</span>
+                      <p style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>{row.rule}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section style={{ display: 'grid', gridTemplateColumns: visiblePatterns.length > 0 ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)', gap: 14 }}>
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Before You Trade</h2>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {preTradeReminderItems.slice(0, 4).map((item, idx) => (
+                    <div key={item} style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 8, padding: '8px 9px', borderRadius: 7, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 10, color: C.acc }}>{String(idx + 1).padStart(2, '0')}</span>
+                      <p style={{ fontSize: 11.5, lineHeight: 1.5, color: C.t1 }}>{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {visiblePatterns.length > 0 && (
+                <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+                  <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Pattern Watch</h2>
+                  <div style={{ display: 'grid', gap: 7 }}>
+                    {visiblePatterns.map(p => {
+                      const risk = activeRiskPatterns.some(item => item.id === p.id);
+                      return (
+                        <article key={p.id} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', borderRadius: 7, overflow: 'hidden', border: `1px solid ${risk ? 'rgba(240,82,82,0.22)' : 'rgba(34,214,138,0.22)'}` }}>
+                          <div style={{ backgroundColor: risk ? C.red : C.grn }} />
+                          <div style={{ padding: '9px 10px', backgroundColor: C.d2 }}>
+                            <p style={{ fontSize: 12, fontWeight: 800, color: risk ? C.red : C.grn }}>{risk ? 'Watch' : 'Lean in'}: {p.title}</p>
+                            <p style={{ fontSize: 11, color: C.t1, marginTop: 2, lineHeight: 1.45 }}>{buildPatternInstruction(p, risk ? 'watch' : 'protect')}</p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <aside data-tour-id="pre-session-inputs" style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 0 }}>
+            <section data-tour-id="pre-session-mindset" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>State of mind</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 4 }}>
+                {emotions.map(em => {
+                  const sel = emotion === em;
+                  const ec = em === 'Frustrated' ? C.red : em === 'Anxious' ? '#f97316' : em === 'Confident' ? C.grn : C.acc;
+                  return (
+                    <button key={em} type="button" onClick={() => setEmotionAndPersist(em)} style={{
+                      minHeight: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 3px', borderRadius: 6,
+                      border: `1px solid ${sel ? ec + '50' : C.b0}`, backgroundColor: sel ? ec + '12' : 'transparent',
+                      color: sel ? ec : C.t1, fontSize: 10.5, fontWeight: sel ? 800 : 500, cursor: 'pointer', textAlign: 'center', width: '100%',
+                    }}>
+                      {em}
+                    </button>
+                  );
+                })}
+              </div>
+              <textarea
+                id="presession-note" value={note}
+                onChange={e => setNoteAndPersist(e.target.value)}
+                style={{ marginTop: 8, width: '100%', height: 58, resize: 'none', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t0, fontSize: 12, padding: '7px 10px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                placeholder="One thing to watch before entry..."
+              />
+            </section>
+
+            <section data-tour-id="pre-session-risk" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 10 }}>Market bias</p>
+              {(['ES', 'NQ'] as const).map(instrument => (
+                <div key={instrument} style={{ marginBottom: 10 }}>
+                  <p style={{ fontSize: 10, fontFamily: 'monospace', color: C.t2, marginBottom: 5, letterSpacing: '0.06em' }}>{instrument}</p>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    {biasOptions.map(opt => {
+                      const sel = bias[instrument] === opt;
+                      const oc = opt === 'Bull' ? C.grn : opt === 'Bear' ? C.red : C.acc;
+                      return (
+                        <button key={opt} type="button" onClick={() => setBiasAndPersist(instrument, opt)} style={{ flex: 1, padding: '5px 0', borderRadius: 4, border: `1px solid ${sel ? oc + '55' : C.b0}`, backgroundColor: sel ? oc + '18' : 'transparent', fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? oc : C.t2, cursor: 'pointer' }}>{opt}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <section style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800 }}>Risk limits</p>
+                <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor} style={{ fontSize: 10, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{riskEditOpen ? 'cancel' : 'edit'}</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {[
+                  { label: 'max loss', value: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
+                  { label: 'max trades', value: String(riskLimits.maxTrades), color: C.t0 },
+                  { label: 'contracts', value: String(riskLimits.maxContracts), color: C.t0 },
+                  { label: 'target', value: formatCurrency(riskLimits.target), color: C.grn },
+                ].map(stat => (
+                  <div key={stat.label} style={{ padding: '8px 10px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                    <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: stat.color }}>{stat.value}</p>
+                    <p style={{ fontSize: 10, color: C.t2, marginTop: 2 }}>{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+              {riskEditOpen && (
+                <div style={{ marginTop: 8, padding: 12, borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {([
+                      ['daily_loss_limit', 'Max loss', '$'],
+                      ['max_trades_per_day', 'Max trades', ''],
+                      ['max_contracts_per_trade', 'Contracts', ''],
+                      ['account_size', 'Account size', '$'],
+                      ['risk_percentage', 'Risk %', '%'],
+                    ] as const).map(([field, label, suffix]) => (
+                      <label key={field} style={{ fontSize: 10, color: C.t2 }}>
+                        {label}
+                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 7px' }}>
+                          {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
+                          <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }} />
+                          {suffix === '%' && <span style={{ color: C.t2, fontSize: 11 }}>%</span>}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginTop: 5 }}>{riskSaveError}</p>}
+                  <button type="button" onClick={saveRiskLimits} disabled={riskSaving} style={{ marginTop: 8, width: '100%', padding: '6px 0', borderRadius: 4, border: `1px solid rgba(245,158,11,0.3)`, backgroundColor: 'rgba(245,158,11,0.09)', color: C.acc, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{riskSaving ? 'Saving...' : 'Save limits'}</button>
+                </div>
+              )}
+            </section>
+
+            <section data-tour-id="pre-session-behavior" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 10 }}>Behavior scan</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {[
+                  { label: 'Plan adherence', value: recentBehavior.planAdherence === null ? '-' : `${recentBehavior.planAdherence}%`, color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 },
+                  { label: 'Revenge tags', value: String(recentBehavior.revengeTagged), color: recentBehavior.revengeTagged > 0 ? C.red : C.t0 },
+                  { label: 'Checks done', value: `${checklistTotals.completed}/${checklistTotals.total}`, color: C.t0 },
+                ].map(row => (
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: C.t2 }}>{row.label}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: row.color }}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+  );
 
   return (
     <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -648,7 +939,7 @@ export default function FlyxaAIPreSession() {
             {lastSession && (
               <>
                 <span style={{ color: C.t2 }}>·</span>
-                <span style={{ color: lastSession.netPnl >= 0 ? C.grn : C.red }}>last {formatSignedCurrency(lastSession.netPnl)}</span>
+                <span style={{ color: (lastSession?.netPnl ?? 0) >= 0 ? C.grn : C.red }}>last {formatSignedCurrency(lastSession?.netPnl ?? 0)}</span>
               </>
             )}
           </div>
@@ -795,7 +1086,7 @@ export default function FlyxaAIPreSession() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: C.t2 }}>Plan adherence</span>
-                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: recentBehavior.planAdherence !== null && (recentBehavior.planAdherence ?? 0) < 80 ? C.acc : C.t0 }}>
                   {recentBehavior.planAdherence === null ? '—' : `${recentBehavior.planAdherence}%`}
                 </span>
               </div>

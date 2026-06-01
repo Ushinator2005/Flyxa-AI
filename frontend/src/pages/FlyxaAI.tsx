@@ -564,7 +564,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
         avgLoser: { label: 'Avg Loser', value: '$0.00', subLabel: 'Need trade samples', tone: 'neutral' },
         processScore: { label: 'Process Score', value: '0/100', subLabel: 'Builds from journal behavior', tone: 'info' },
       },
-      question: `What single setup will you execute with discipline ${periodLabel}?`,
+      question: `What single plan will you execute with discipline ${periodLabel}?`,
       insights: [{
         type: 'risk',
         badge: 'Risk Flag',
@@ -583,7 +583,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
       ],
       confluences: [],
       focusItems: [
-        'Log every trade with setup, emotional state, and followed_plan status.',
+        'Log every trade with thesis, emotional state, and followed_plan status.',
         'Use consistent position sizing so process scoring can stabilize.',
         'Capture post-loss behavior with notes for deeper AI feedback.',
       ],
@@ -885,9 +885,9 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
         const edgeStatus = wr >= 55 && netPnl > 0
           ? `Edge is confirming on ${topSymbolName}. Keep conditions tight and risk consistent.`
           : wr < 45 && netPnl < 0
-            ? `Win rate and P&L are both pointing the wrong way. Review your ${topSymbolName} setups — either the edge has shifted or execution is breaking down.`
+            ? `Win rate and P&L are both pointing the wrong way. Review your ${topSymbolName} entries — either the edge has shifted or execution is breaking down.`
             : isBreakeven
-              ? `No clear edge showing yet on ${topSymbolName}. Focus on setup quality over trade frequency.`
+              ? `No clear edge showing yet on ${topSymbolName}. Focus on trade quality over trade frequency.`
               : `Mixed signals on ${topSymbolName} — monitor over the next ${Math.max(5, count)} trades before drawing conclusions.`;
         return {
           type: (wr < 45 && netPnl < 0 ? 'risk' : netPnl > 0 ? 'edge' : 'pattern') as InsightType,
@@ -901,7 +901,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
             { label: `${wr}% win rate`, tone: (wr >= 50 ? 'positive' : 'negative') as TagTone },
             { label: `${count} trades`, tone: 'neutral' as TagTone },
           ],
-          actionLabel: 'Review setups ->',
+          actionLabel: 'Review entries ->',
         };
       }
 
@@ -936,7 +936,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
       const addendum = wr >= 60 && netPnl > 50
         ? ` Edge is confirming on ${topSymbolName}. Keep conditions tight and risk consistent.`
         : wr < 45 && netPnl < 0
-          ? ` Despite being your most-traded instrument, ${topSymbolName} is underperforming. Review setups before sizing up.`
+          ? ` Despite being your most-traded instrument, ${topSymbolName} is underperforming. Review entries before sizing up.`
           : '';
       return {
         type: (netPnl >= 0 ? 'edge' : 'pattern') as InsightType,
@@ -1075,7 +1075,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
         title: isConfirmed
           ? `${session} is your strongest edge window ${periodLabel}`
           : `${session} leads by volume but edge isn't confirmed yet`,
-        body: `${session}: ${wr}% win rate, ${formatSignedCurrency(summary.netPnl)} net across ${count} trade${count !== 1 ? 's' : ''} (${formatSignedCurrency(summary.netPnl / Math.max(1, count))}/trade avg). ${isConfirmed ? `Clear session edge — prioritise ${session} setups and let the other sessions come to you.` : `Win rate and/or P&L needs to improve before this qualifies as a confirmed edge.`}`,
+        body: `${session}: ${wr}% win rate, ${formatSignedCurrency(summary.netPnl)} net across ${count} trade${count !== 1 ? 's' : ''} (${formatSignedCurrency(summary.netPnl / Math.max(1, count))}/trade avg). ${isConfirmed ? `Clear session edge — prioritise ${session} entries and let the other sessions come to you.` : `Win rate and/or P&L needs to improve before this qualifies as a confirmed edge.`}`,
         keyPhrases: [session, formatSignedCurrency(summary.netPnl), `${wr}%`],
         tags: [
           { label: `${formatSignedCurrency(summary.netPnl)} net`, tone: (summary.netPnl >= 0 ? 'positive' : 'negative') as TagTone },
@@ -1162,7 +1162,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
       const gap = Math.abs(confirmedAvg - earlyAvg);
       focusItems.push(`Entry patience scored ${entryScore}/100. Your ${earlyEntries.length} early entries averaged ${formatSignedCurrency(earlyAvg)} per trade compared to ${formatSignedCurrency(confirmedAvg)} for entries placed after the opening window settled — a ${formatSignedCurrency(gap)} gap per trade. That difference is the measurable cost of anticipating rather than confirming.`);
     } else {
-      focusItems.push(`Entry patience is at ${entryScore}/100 — entries are being placed before the opening structure has formed. Define the specific price action condition that needs to appear at each setup type before the order goes in, and treat anything that doesn't meet it as a pass, not a delayed entry.`);
+      focusItems.push(`Entry patience is at ${entryScore}/100 — entries are being placed before the opening structure has formed. Define the specific price action condition that needs to appear before the order goes in, and treat anything that doesn't meet it as a pass, not a delayed entry.`);
     }
   }
 
@@ -1170,7 +1170,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
   const postLossItem = periodProcess.items.find(i => i.label === 'Post-loss mgmt');
   if (postLossItem && !postLossItem.noData && postLossItem.value < 65) {
     const lossCount = periodTrades.filter(t => Number(t.pnl ?? 0) < 0).length;
-    focusItems.push(`Post-loss management scored ${postLossItem.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this period. The data suggests re-entries are happening too quickly after losses — before sizing has reset or before the reactive state has cleared. Compound losses, where one bad trade leads immediately into another, are almost always a pacing problem, not a setup problem.`);
+    focusItems.push(`Post-loss management scored ${postLossItem.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this period. The data suggests re-entries are happening too quickly after losses — before sizing has reset or before the reactive state has cleared. Compound losses, where one bad trade leads immediately into another, are almost always a pacing problem, not an edge problem.`);
   }
 
   // Plan adherence
@@ -1188,7 +1188,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
   // Size discipline
   const sizeScore = byLabel.get('Size discipline') ?? 0;
   if (sizeScore < 75) {
-    focusItems.push(`Size discipline scored ${sizeScore}/100. Discretionary size changes typically happen when conviction is high — but confidence peaks right before a setup fails as often as right before it works. At ${Math.round(periodSummary.winRate)}% win rate this period, consistency in sizing does more for your P&L than trying to optimise which trades get more size.`);
+    focusItems.push(`Size discipline scored ${sizeScore}/100. Discretionary size changes typically happen when conviction is high — but confidence peaks right before a trade fails as often as right before it works. At ${Math.round(periodSummary.winRate)}% win rate this period, consistency in sizing does more for your P&L than trying to optimise which trades get more size.`);
   }
 
   // Weakest confluence
@@ -1517,12 +1517,12 @@ export default function FlyxaAI() {
     const wp = weakestProcess;
 
     if (wp?.label === 'Entry patience') {
-      items.push(`Entry patience at ${wp.value}/100 — the setup is there but the timing is costing edge. The gap between anticipating a move and waiting for it to confirm is where this score lives. Until there's a specific condition defined for each setup that triggers the entry, you're relying on feel rather than criteria.`);
+      items.push(`Entry patience at ${wp.value}/100 — the trade idea is there but the timing is costing edge. The gap between anticipating a move and waiting for it to confirm is where this score lives. Until there's a specific condition defined that triggers the entry, you're relying on feel rather than criteria.`);
     } else if (wp?.label === 'Post-loss mgmt') {
       const lossCount = wt.filter(t => Number(t.pnl ?? 0) < 0).length;
       items.push(`Post-loss management at ${wp.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this week. The first loss is rarely the problem — it's what happens in the 30 minutes after it. Re-entering before you've reset the emotional state or the position sizing is where the real damage gets done. A loss doesn't clear itself by winning the next trade.`);
     } else if (wp?.label === 'Size discipline') {
-      items.push(`Size discipline at ${wp.value}/100. If the conditions for sizing up aren't defined in advance and objective, the decisions are being made on confidence — and confidence tends to peak right before a setup fails just as often as right before it works. The edge in sizing comes from criteria, not from feel.`);
+      items.push(`Size discipline at ${wp.value}/100. If the conditions for sizing up aren't defined in advance and objective, the decisions are being made on confidence — and confidence tends to peak right before a trade fails just as often as right before it works. The edge in sizing comes from criteria, not from feel.`);
     } else if (wp?.label === 'Plan adherence') {
       const violations = wt.filter(t => t.followed_plan === false);
       const violPnl = violations.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
@@ -1541,7 +1541,7 @@ export default function FlyxaAI() {
     const edgeInsight = displayedInsights.find(i => i.type === 'edge');
     if (edgeInsight) {
       const firstSentence = edgeInsight.body.split(/[.!?]/)[0];
-      items.push(`${firstSentence}. That's the working edge right now — it deserves priority in terms of preparation and setup selection.`);
+      items.push(`${firstSentence}. That's the working edge right now — it deserves priority in terms of preparation and entry selection.`);
     }
 
     dedupedFocusItems.forEach(item => items.push(item));
@@ -1568,6 +1568,7 @@ export default function FlyxaAI() {
           <nav className="mt-4 space-y-0.5">
             {[
               { key: 'weekly', label: 'Debrief', to: '/flyxa-ai', end: true },
+              { key: 'weekly-report', label: 'Weekly report', to: '/flyxa-ai/weekly-report', end: false },
               { key: 'execution', label: 'Execution coach', to: '/flyxa-ai/execution-coach', end: false },
               { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
               { key: 'emotional', label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },

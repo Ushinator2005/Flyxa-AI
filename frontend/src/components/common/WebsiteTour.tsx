@@ -108,7 +108,7 @@ const STEPS: TourStep[] = [
     targetId: 'pre-session-checklist',
     path: '/pre-session',
     title: 'Pre-session checklist',
-    body: 'This is split into mental and technical checks. Complete it before taking trades so your setup is deliberate, not rushed.',
+    body: 'This is split into mental and technical checks. Complete it before taking trades so your decision is deliberate, not rushed.',
     action: 'Next',
   },
   {
@@ -196,7 +196,7 @@ const STEPS: TourStep[] = [
     targetId: 'analytics',
     path: '/analytics',
     title: 'Analytics tab',
-    body: 'Analytics turns your logged trades into patterns. Use it once you have enough trades to compare sessions, setups, symbols, and behavior.',
+    body: 'Analytics turns your logged trades into patterns. Use it once you have enough trades to compare sessions, symbols, conditions, and behavior.',
     action: 'Open Analytics',
   },
   {
@@ -308,7 +308,7 @@ const STEPS: TourStep[] = [
     targetId: 'trading-plan-kpis',
     path: '/trading-plan',
     title: 'Plan readiness',
-    body: 'These KPIs show whether the plan, checklist, setup playbook, and guardrails are filled in enough to be useful.',
+    body: 'These KPIs show whether the plan, checklist, and guardrails are filled in enough to be useful.',
     action: 'Next',
   },
   {
@@ -316,7 +316,7 @@ const STEPS: TourStep[] = [
     targetId: 'trading-plan-tabs',
     path: '/trading-plan',
     title: 'Plan sections',
-    body: 'Use these tabs to switch between core strategy, risk rules, setup playbook, prop firm rules, and your pre-session checklist.',
+    body: 'Use these tabs to switch between core strategy, risk rules, prop firm rules, and your pre-session checklist.',
     action: 'Next',
   },
   {
@@ -324,7 +324,7 @@ const STEPS: TourStep[] = [
     targetId: 'trading-plan-core',
     path: '/trading-plan',
     title: 'Core strategy blocks',
-    body: 'This is where you write market selection, setup criteria, execution rules, trade management, and review process.',
+    body: 'This is where you write market selection, entry criteria, execution rules, trade management, and review process.',
     action: 'Next',
   },
   {

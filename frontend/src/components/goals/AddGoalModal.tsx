@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Goal, GoalCategory, GoalColor, GoalStep } from '../../types/goals.js';
 import { goalColorMap } from '../../lib/goalColors.js';
+import DatePicker from '../common/DatePicker.js';
 
 interface AddGoalModalProps {
   isOpen: boolean;
@@ -209,7 +210,7 @@ export default function AddGoalModal({ isOpen, onClose, onAddGoal, editGoal }: A
               style={inputStyle}
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Only take A-grade setups"
+              placeholder="e.g. Only take planned trades"
               required
             />
           </div>
@@ -272,11 +273,13 @@ export default function AddGoalModal({ isOpen, onClose, onAddGoal, editGoal }: A
           {/* Horizon */}
           <div>
             <label style={labelStyle}>Target date</label>
-            <input
-              type="date"
+            <DatePicker
               style={inputStyle}
               value={horizon}
-              onChange={e => setHorizon(e.target.value)}
+              onChange={setHorizon}
+              fullWidth
+              align="left"
+              placeholder="No target date"
             />
           </div>
 

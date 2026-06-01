@@ -5,6 +5,8 @@ import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { PreSessionData } from '../store/types.js';
+import { buildDailyFlowInsight } from '../utils/dailyFlow.js';
+import DatePicker from '../components/common/DatePicker.js';
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -105,6 +107,10 @@ export default function FlyxaAIPostSession() {
   const wins = dayTrades.filter(t => Number(t.pnl ?? 0) > 0).length;
   const losses = dayTrades.filter(t => Number(t.pnl ?? 0) < 0).length;
   const winRate = dayTrades.length ? Math.round((wins / dayTrades.length) * 100) : 0;
+  const dailyFlow = useMemo(
+    () => buildDailyFlowInsight(safeTrades, selectedDate),
+    [safeTrades, selectedDate]
+  );
 
   const planAdherence = useMemo((): number | null => {
     const withPlan = dayTrades.filter(t => typeof t.followed_plan === 'boolean');
@@ -179,10 +185,9 @@ export default function FlyxaAIPostSession() {
                   {ps ? ' · Pre-session recorded' : ' · No pre-session data'}
                 </p>
               </div>
-              <input
-                type="date"
+              <DatePicker
                 value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
+                onChange={setSelectedDate}
                 className="rounded-[6px] px-3 py-2 text-[12px]"
                 style={{
                   backgroundColor: C.d3, color: C.t0,
@@ -346,6 +351,19 @@ export default function FlyxaAIPostSession() {
                 </div>
               ) : (
                 <>
+                  <div className="rounded-[8px] p-4" style={{ border: `1px solid ${dailyFlow.biggestLeak ? `${C.red}55` : `${C.grn}44`}`, backgroundColor: dailyFlow.biggestLeak ? 'rgba(239,68,68,0.075)' : 'rgba(34,197,94,0.065)' }}>
+                    <p style={{ ...SECTION_LABEL, color: dailyFlow.biggestLeak ? C.red : C.grn }}>Tomorrow&apos;s rule</p>
+                    <p className="mt-2 text-[15px] font-bold leading-snug" style={{ color: C.t0 }}>
+                      {dailyFlow.tomorrowRule}
+                    </p>
+                    <p className="mt-2 text-[12px] leading-relaxed" style={{ color: C.t1 }}>
+                      {dailyFlow.summary}
+                      {dailyFlow.worstState && dailyFlow.bestState && dailyFlow.worstState.label !== dailyFlow.bestState.label
+                        ? ` Best state: ${dailyFlow.bestState.label}. Weakest state: ${dailyFlow.worstState.label}.`
+                        : ''}
+                    </p>
+                  </div>
+
                   {/* P&L summary */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
@@ -590,6 +608,18 @@ export default function FlyxaAIPostSession() {
                       </div>
                     </div>
                   )}
+
+                  <div className="flex items-start gap-3">
+                    <span
+                      className="mt-[2px] shrink-0 text-[9.5px] uppercase tracking-[0.1em]"
+                      style={{ color: C.t2, fontFamily: C.mono, minWidth: 100 }}
+                    >
+                      Next rule
+                    </span>
+                    <span className="text-[12.5px]" style={{ color: C.t0 }}>
+                      {dailyFlow.tomorrowRule}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

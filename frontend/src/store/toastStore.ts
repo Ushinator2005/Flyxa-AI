@@ -15,9 +15,14 @@ interface ToastState {
   dismissToast: (id: string) => void;
 }
 
+function shouldSuppressToast() {
+  return typeof window !== 'undefined' && window.location.pathname === '/trade-check';
+}
+
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   pushToast: (toast) => {
+    if (shouldSuppressToast()) return '';
     const id = crypto.randomUUID();
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
     return id;

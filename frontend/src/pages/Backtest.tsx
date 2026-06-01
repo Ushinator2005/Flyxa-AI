@@ -881,7 +881,7 @@ export default function Backtest() {
     Number.isFinite(targetValue) && Number.isFinite(quantityValue) && quantityValue > 0 && !simulation.activeTrade
   );
 
-  // Library + setup screens
+  // Library and session screens
   if (!session) {
     const S: React.CSSProperties = {}; // namespace helper (unused, just for reference)
     void S;
@@ -1006,7 +1006,7 @@ export default function Backtest() {
       {
         label: 'Total Sessions',
         value: String(totalSessions),
-        sub: 'saved replay setups',
+        sub: 'saved replay sessions',
         Icon: Layers3,
         badgeBg: 'var(--amber-dim)',
         badgeColor: 'var(--amber)',
@@ -1210,7 +1210,7 @@ export default function Backtest() {
                 </>
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                {['TradingView replay shell', 'Saved setup history', 'One-click session resume'].map(chip => (
+                {['TradingView replay shell', 'Saved session history', 'One-click session resume'].map(chip => (
                   <span
                     key={chip}
                     style={{
@@ -1769,7 +1769,7 @@ export default function Backtest() {
                   disabled={!!simulation.activeTrade}
                   onChange={e => updateDraft('notes', e.target.value)}
                   className="input-field resize-none text-[13px]"
-                  placeholder="Setup, context..."
+                  placeholder="Context, notes..."
                 />
               </div>
 

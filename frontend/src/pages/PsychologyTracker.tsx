@@ -35,7 +35,7 @@ const FLAG_LABELS: Record<string, string> = {
   'chased-entry':    'Chased entry',
   'no-confirmation': 'Jumped in early',
   'fomo':            'FOMO trade',
-  'off-playbook':    'Off playbook',
+  'off-playbook':    'Off plan',
   'sized-up':        'Oversized',
   'added-losing':    'Added to loser',
   'moved-stop':      'Widened stop',

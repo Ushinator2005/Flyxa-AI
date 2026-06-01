@@ -6,6 +6,9 @@ export interface MascotStats {
   tradingJournalScore: number;
   backtestSessions: number;
   processScore: number;
+  // Trading performance — only computed for the local user; rivals default to null.
+  winRate?: number | null;
+  avgR?: number | null;
 }
 
 export interface Mascot {
@@ -26,4 +29,4 @@ export interface Rival {
   isMe?: boolean;
 }
 
-export type LeaderboardMetric = 'dailyJournal' | 'tradingJournal' | 'backtest' | 'processScore';
+export type LeaderboardMetric = 'dailyJournal' | 'tradingJournal' | 'backtest' | 'processScore' | 'winRate' | 'avgR';

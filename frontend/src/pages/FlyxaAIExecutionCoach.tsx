@@ -185,7 +185,7 @@ function buildMistakeRows(trades: Trade[]): MistakeRow[] {
       'Off-plan trades',
       'Trades where the plan flag was logged as false.',
       trades.filter(trade => trade.followed_plan === false),
-      'No new position until the setup matches the written playbook.',
+      'No new position until the trade matches the written plan.',
     ),
     makeRow(
       'tilt',
@@ -199,7 +199,7 @@ function buildMistakeRows(trades: Trade[]): MistakeRow[] {
       'Trade 3+ in a day',
       'Trades taken after the first two entries of the same trading day.',
       trades.filter(trade => overtradeIds.has(trade.id)),
-      'After two trades, require an A+ setup or stop for the session.',
+      'After two trades, require a clean planned entry or stop for the session.',
     ),
     makeRow(
       'postLoss',
@@ -354,7 +354,7 @@ export default function FlyxaAIExecutionCoach() {
   const gateCopy = gate.status === 'blocked'
     ? { label: 'Blocked', color: C.red, icon: CircleSlash, detail: 'Do not take another trade until this condition resets.' }
     : gate.status === 'caution'
-      ? { label: 'Caution', color: C.acc, icon: AlertTriangle, detail: 'Trade only if the setup is clean and the rule below is satisfied.' }
+      ? { label: 'Caution', color: C.acc, icon: AlertTriangle, detail: 'Trade only if the plan is clean and the rule below is satisfied.' }
       : { label: 'Clear', color: C.grn, icon: CheckCircle2, detail: 'No major execution blockers detected from current data.' };
   const GateIcon = gateCopy.icon;
 

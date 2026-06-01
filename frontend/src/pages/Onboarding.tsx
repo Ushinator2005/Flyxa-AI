@@ -28,7 +28,7 @@ const TRADER_OPTIONS: Array<{ label: string; value: ProfitabilityStatus }> = [
 ];
 
 const RULE_OPTIONS = [
-  'I only take A+ setups',
+  'I only take planned trades',
   'I respect my stop loss',
   "I don't revenge trade",
   'I stop after 2 losses',
@@ -43,10 +43,10 @@ const FINAL_BULLETS = [
 ];
 
 const GOAL_RESPONSE: Record<string, string> = {
-  'Stop overtrading': "Got it - we'll help you reduce impulsive trades and focus on higher quality setups.",
+  'Stop overtrading': "Got it - we'll help you reduce impulsive trades and focus on higher quality decisions.",
   'Become consistently profitable': "Perfect - we'll focus on building repeatable execution and consistency.",
   'Improve discipline': "Great target - we'll tighten your process and reduce rule breaks.",
-  'Refine my strategy': "Love that - we'll expose what works and what should be removed from your playbook.",
+  'Refine my strategy': "Love that - we'll expose what works and what should be removed from your plan.",
   'Track performance properly': "Excellent - we'll structure your journal so your edge is measurable.",
 };
 
@@ -227,7 +227,7 @@ export default function Onboarding() {
     appendMessage('user', choice);
     setSelectedGoal(choice);
     setStep('boot');
-    await sendFlyxa(GOAL_RESPONSE[choice] ?? "Great - we'll personalize your setup around that.");
+    await sendFlyxa(GOAL_RESPONSE[choice] ?? "Great - we'll personalize your plan around that.");
     await sendFlyxa('Which trader are you right now?');
     setLockedSingle(null);
     setShowOtherInput(false);

@@ -6,6 +6,7 @@ export interface Trade {
   accountId?: string;
   account_id?: string;
   accountIds?: string[];
+  account_ids?: string[];
   direction: 'Long' | 'Short';
   entry_price: number;
   exit_price: number;
@@ -40,17 +41,6 @@ export interface PsychologyLog {
   pre_session_notes: string;
   post_session_notes: string;
   mindset_score: number;
-  created_at: string;
-}
-
-export interface PlaybookEntry {
-  id: string;
-  user_id: string;
-  setup_name: string;
-  description: string;
-  rules: string;
-  ideal_conditions: string;
-  screenshot_url: string;
   created_at: string;
 }
 

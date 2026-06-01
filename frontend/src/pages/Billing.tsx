@@ -18,6 +18,7 @@ import {
 import { billingApi, type BillingLivePricesResponse } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
+import DatePicker from '../components/common/DatePicker.js';
 
 type AccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
 
@@ -1201,7 +1202,13 @@ export default function Billing() {
               {/* Purchase date */}
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Purchase Date</label>
-                <input className="billing-modal-field" type="date" value={form.purchaseDate} onChange={e => setFormField('purchaseDate', e.target.value)} />
+                <DatePicker
+                  className="billing-modal-field"
+                  value={form.purchaseDate}
+                  onChange={value => setFormField('purchaseDate', value)}
+                  fullWidth
+                  align="left"
+                />
               </div>
 
               {/* Status — 6-option grid */}
@@ -1241,7 +1248,14 @@ export default function Billing() {
                             <span aria-hidden="true" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>$</span>
                             <input className="billing-modal-field" type="number" min={0} step="0.01" value={p.amount || ''} onChange={e => updatePayout(p.id, 'amount', e.target.value)} style={{ fontFamily: 'var(--font-mono)', paddingLeft: 22 }} placeholder="0.00" />
                           </div>
-                          <input className="billing-modal-field" type="date" value={p.date} onChange={e => updatePayout(p.id, 'date', e.target.value)} />
+                          <DatePicker
+                            className="billing-modal-field"
+                            value={p.date}
+                            onChange={value => updatePayout(p.id, 'date', value)}
+                            fullWidth
+                            align="right"
+                            compact
+                          />
                           <button type="button" onClick={() => removePayout(p.id)} style={{ width: 28, height: 38, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--txt-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                             <X size={12} />
                           </button>

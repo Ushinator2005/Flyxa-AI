@@ -7,6 +7,7 @@ export interface Trade {
   screenshot_url?: string;
   account_id?: string;
   accountIds?: string[];
+  account_ids?: string[];
   direction: 'Long' | 'Short';
   entry_price: number;
   exit_price: number;
@@ -27,6 +28,7 @@ export interface Trade {
   post_trade_notes: string;
   confluences?: string[];
   followed_plan: boolean;
+  behavioral_flags?: string[];
   session: 'Asia' | 'London' | 'New York' | 'Other';
   created_at: string;
 }

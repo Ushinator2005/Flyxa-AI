@@ -414,8 +414,10 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     // `accountId` / `account_id` are the API-layer fields set by toApiTrade();
     // `account` is the raw store field on StoreTrade / JournalTrade.
     const mappedAccounts = trade.id ? tradeAccounts[trade.id] : undefined;
+    const apiAccountIds = (trade as unknown as { account_ids?: string[] }).account_ids;
     const rawIds = [
       ...(Array.isArray(trade.accountIds) ? trade.accountIds : []),
+      ...(Array.isArray(apiAccountIds) ? apiAccountIds : []),
       ...(Array.isArray(mappedAccounts) ? mappedAccounts : [mappedAccounts]),
       trade.accountId,
       trade.account_id,

@@ -154,7 +154,6 @@ export const aiApi = {
   weeklyReport: (weekStart: string, weekEnd: string) =>
     api.post('/api/ai/weekly-report', { weekStart, weekEnd }),
   psychologyReport: () => api.post('/api/ai/psychology-report', {}),
-  playbookCheck: (tradeId: string) => api.post(`/api/ai/playbook-check/${tradeId}`, {}),
   flyxaChat: (
     question: string,
     history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
@@ -188,13 +187,6 @@ export const psychologyApi = {
   update: (id: string, data: Record<string, unknown>) => api.put(`/api/psychology/${id}`, data),
   delete: (id: string) => api.delete(`/api/psychology/${id}`),
   getMindsetChart: () => api.get('/api/psychology/mindset-chart'),
-};
-
-export const playbookApi = {
-  getAll: () => api.get('/api/playbook'),
-  create: (data: Record<string, unknown>) => api.post('/api/playbook', data),
-  update: (id: string, data: Record<string, unknown>) => api.put(`/api/playbook/${id}`, data),
-  delete: (id: string) => api.delete(`/api/playbook/${id}`),
 };
 
 export const journalApi = {

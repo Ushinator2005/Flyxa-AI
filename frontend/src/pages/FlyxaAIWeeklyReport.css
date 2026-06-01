@@ -1,0 +1,16 @@
+/* ── Slide transitions ───────────────────────────────────────── */
+@keyframes wkr-enter-right {
+  from { opacity: 0; transform: translateX(56px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+@keyframes wkr-enter-left {
+  from { opacity: 0; transform: translateX(-56px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+
+.wkr-enter-fwd {
+  animation: wkr-enter-right 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wkr-enter-bwd {
+  animation: wkr-enter-left 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

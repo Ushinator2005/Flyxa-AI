@@ -26,6 +26,7 @@ import { AnalyticsSummary } from '../types/index.js';
 import { formatCurrency } from '../utils/calculations.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { ChartHistoryRecord } from '../store/types.js';
+import DatePicker from '../components/common/DatePicker.js';
 
 declare global {
   interface Window {
@@ -564,7 +565,7 @@ export default function Chart() {
         {/* Stat cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
           {([
-            { label: 'Total Sessions',      value: String(dashboardStats.totalSessions), sub: 'saved replay setups' },
+            { label: 'Total Sessions',      value: String(dashboardStats.totalSessions), sub: 'saved replay sessions' },
             { label: 'Markets Tested',       value: String(dashboardStats.uniqueMarkets), sub: 'unique symbols' },
             { label: 'Avg Starting Balance', value: dashboardStats.totalSessions ? formatCurrency(dashboardStats.averageBalance) : '—', sub: 'across sessions' },
             { label: 'Most Used Timeframe',  value: dashboardStats.favoriteTimeframe, sub: 'by frequency' },
@@ -688,14 +689,14 @@ export default function Chart() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-5 py-8">
             <button
               type="button"
-              aria-label="Close setup"
+              aria-label="Close backtest session"
               onClick={() => setIsSetupOpen(false)}
               className="absolute inset-0 cursor-default"
             />
             <div style={{ position: 'relative', zIndex: 10, width: '100%', maxWidth: 720, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--txt-3)', marginBottom: 4 }}>Backtest Setup</p>
+                  <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--txt-3)', marginBottom: 4 }}>Backtest Session</p>
                   <h2 style={{ fontSize: 22, fontWeight: 600, color: 'var(--txt)', fontFamily: "'Instrument Serif', Georgia, serif", margin: 0 }}>Configure Your Backtest</h2>
                   <p style={{ fontSize: 13, color: 'var(--txt-3)', maxWidth: 500 }}>
                     Choose the asset, timeframe, backtest window, and account balance. The chart will open with those settings applied.
@@ -764,21 +765,23 @@ export default function Chart() {
                 <div className="grid gap-5 md:grid-cols-2">
                   <label className="space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Backtest Start</span>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={setupStartDate}
-                      onChange={event => setSetupStartDate(event.target.value)}
+                      onChange={setSetupStartDate}
                       className="h-12 w-full rounded-2xl border border-[#222] bg-[#151515] px-4 text-base text-slate-100 outline-none"
+                      fullWidth
+                      align="left"
                     />
                   </label>
 
                   <label className="space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Backtest End</span>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={setupEndDate}
-                      onChange={event => setSetupEndDate(event.target.value)}
+                      onChange={setSetupEndDate}
                       className="h-12 w-full rounded-2xl border border-[#222] bg-[#151515] px-4 text-base text-slate-100 outline-none"
+                      fullWidth
+                      align="right"
                     />
                   </label>
                 </div>
@@ -1101,11 +1104,12 @@ export default function Chart() {
                   <div className="mt-4 space-y-3">
                     <label className="block">
                       <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-slate-500">Date</span>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={jumpDate}
-                        onChange={event => setJumpDate(event.target.value)}
+                        onChange={setJumpDate}
                         className="h-10 w-full rounded-xl border border-[#222] bg-[#141414] px-3 text-sm text-slate-100 outline-none"
+                        fullWidth
+                        align="left"
                       />
                     </label>
                     <p className="text-xs text-slate-500">

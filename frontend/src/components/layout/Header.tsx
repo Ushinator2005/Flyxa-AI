@@ -1,31 +1,9 @@
-import { Settings, ChevronDown, Menu, X, LayoutDashboard, Brain, BarChart2, Target, Heart, FileText, Crosshair, Swords, Trophy, ScanLine, Newspaper, ClipboardCheck, CreditCard } from 'lucide-react';
+import { Settings, ChevronDown, ShieldCheck } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { useLocation, useNavigate, NavLink } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
 import { ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import MarketClock from './MarketClock.js';
-
-const AMBER      = '#f59e0b';
-const AMBER_DIM  = 'rgba(245,158,11,0.10)';
-const AMBER_BORD = 'rgba(245,158,11,0.20)';
-
-const mobileNavItems = [
-  { path: '/',              icon: LayoutDashboard, label: 'Dashboard',     exact: true },
-  { path: '/pre-session',   icon: ClipboardCheck,  label: 'Pre-Session'             },
-  { path: '/scanner',       icon: ScanLine,        label: 'Trade Scanner'           },
-  { path: '/journal',       icon: FileText,        label: 'Daily Journal'           },
-  { path: '/market-news',   icon: Newspaper,       label: 'Market News'             },
-  { path: '/flyxa-ai',      icon: Brain,           label: 'Flyxa AI'                },
-  { path: '/analytics',     icon: BarChart2,       label: 'Analytics'               },
-  { path: '/backtest',      icon: Target,          label: 'Backtest'                },
-  { path: '/trading-plan',  icon: FileText,        label: 'Trading Plan'            },
-  { path: '/psychology',    icon: Heart,           label: 'Psychology'              },
-  { path: '/goals',         icon: Crosshair,       label: 'Goals'                   },
-  { path: '/rivals',        icon: Swords,          label: 'Rivals'                  },
-  { path: '/achievements',  icon: Trophy,          label: 'Achievements'            },
-  { path: '/billing',       icon: CreditCard,      label: 'Billing'                 },
-  { path: '/settings',      icon: Settings,        label: 'Settings'                },
-];
 
 function accountStatusColor(status: string): string {
   const s = status.toLowerCase();
@@ -54,6 +32,7 @@ const pageNames: Record<string, string> = {
   '/rivals': 'Rivals',
   '/billing': 'Billing',
   '/settings': 'Settings',
+  '/trade-check': 'Trade Check',
 };
 
 export default function Header() {
@@ -62,13 +41,7 @@ export default function Header() {
   const { accounts, selectedAccountId, setSelectedAccountId, preferences } = useAppSettings();
   const pageName = pageNames[location.pathname] || 'Flyxa';
   const [open, setOpen] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close mobile nav on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -83,85 +56,12 @@ export default function Header() {
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
   const selectedColor = selectedAccount ? accountStatusColor(selectedAccount.status) : null;
   const selectedLabel = selectedAccount?.name ?? 'All Accounts';
+  const openTradeCheck = () => {
+    window.dispatchEvent(new Event('flyxa:open-trade-check'));
+  };
 
   return (
     <>
-    {/* Mobile nav drawer */}
-    {mobileOpen && (
-      <div
-        style={{
-          position: 'fixed', inset: 0, zIndex: 1300,
-          display: 'flex',
-        }}
-        onClick={() => setMobileOpen(false)}
-      >
-        {/* Backdrop */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(10,8,6,0.72)',
-          backdropFilter: 'blur(4px)',
-        }} />
-        {/* Drawer */}
-        <nav
-          onClick={e => e.stopPropagation()}
-          style={{
-            position: 'relative', zIndex: 1,
-            width: 260, height: '100%',
-            background: 'var(--app-panel)',
-            borderRight: '1px solid var(--app-border)',
-            display: 'flex', flexDirection: 'column',
-            overflowY: 'auto',
-          }}
-        >
-          {/* Drawer header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '16px 16px 12px',
-            borderBottom: '1px solid rgba(255,255,255,0.04)',
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--app-text)', fontFamily: 'var(--font-sans)' }}>
-              fly<span style={{ color: AMBER }}>x</span>a
-            </span>
-            <button
-              type="button"
-              onClick={() => setMobileOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--app-text-subtle)', padding: 4, display: 'flex' }}
-              aria-label="Close menu"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          {/* Nav links */}
-          <div style={{ flex: 1, padding: '10px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {mobileNavItems.map(({ path, icon: Icon, label, exact }) => {
-              const pathName = path.split('?')[0];
-              const isActive = exact
-                ? location.pathname === pathName
-                : location.pathname === pathName || location.pathname.startsWith(pathName + '/');
-              return (
-                <NavLink
-                  key={path}
-                  to={path}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 12px', borderRadius: 6,
-                    fontSize: 14, fontWeight: isActive ? 500 : 400,
-                    textDecoration: 'none', fontFamily: 'var(--font-sans)',
-                    color: isActive ? AMBER : 'var(--app-text-muted)',
-                    background: isActive ? AMBER_DIM : 'transparent',
-                    border: isActive ? `1px solid ${AMBER_BORD}` : '1px solid transparent',
-                  }}
-                >
-                  <Icon size={17} strokeWidth={1.5} />
-                  <span>{label}</span>
-                </NavLink>
-              );
-            })}
-          </div>
-        </nav>
-      </div>
-    )}
-
     <header
       style={{
         height: 52,
@@ -174,25 +74,7 @@ export default function Header() {
         flexShrink: 0,
       }}
     >
-      {/* Mobile hamburger — only visible on small screens */}
-      <button
-        type="button"
-        className="md:hidden"
-        onClick={() => setMobileOpen(o => !o)}
-        aria-label="Open navigation"
-        style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 34, height: 34, borderRadius: 6,
-          border: '1px solid var(--app-border)',
-          background: 'var(--app-bg)',
-          color: 'var(--app-text-muted)',
-          cursor: 'pointer', marginRight: 10,
-        }}
-      >
-        <Menu size={16} />
-      </button>
-
-      <h1 style={{
+<h1 style={{
         fontSize: 13,
         fontWeight: 600,
         letterSpacing: '0.08em',
@@ -305,6 +187,31 @@ export default function Header() {
             </div>
           )}
         </div>
+        <button
+          type="button"
+          onClick={openTradeCheck}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 7,
+            height: 34,
+            padding: '0 11px',
+            borderRadius: 6,
+            border: '1px solid rgba(245,158,11,0.24)',
+            background: 'rgba(245,158,11,0.09)',
+            color: 'var(--amber)',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 650,
+            fontFamily: 'var(--font-sans)',
+          }}
+          aria-label="Open in-session trade check"
+          title="Open in-session trade check"
+        >
+          <ShieldCheck size={14} />
+          Check
+        </button>
         <ThemeToggle compact />
         <button
           type="button"

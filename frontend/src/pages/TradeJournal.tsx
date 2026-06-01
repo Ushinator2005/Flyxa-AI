@@ -27,6 +27,7 @@ import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
+import DatePicker from '../components/common/DatePicker.js';
 import './TradeJournal.css';
 
 type RuleState = 'ok' | 'fail' | 'unchecked';
@@ -143,7 +144,7 @@ interface JournalEntry {
 
 const DEFAULT_RULES = [
   'Followed daily loss limit',
-  'Only traded A/B setups',
+  'Only took planned trades',
   'Respected position sizing rules',
   'No trading during lunch window',
   'Stopped after 3 consecutive losses',
@@ -1039,7 +1040,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
     onMutateEntry({ dailyReflection: { ...dr, ...patch } });
   };
 
-  const LESSON_CATS = ['Entry Timing','Exit Management','Sizing','Patience','Risk Management','Setup Selection','Emotional Control','Rule Following','Market Reading'];
+  const LESSON_CATS = ['Entry Timing','Exit Management','Sizing','Patience','Risk Management','Entry Selection','Emotional Control','Rule Following','Market Reading'];
   const GRADES = ['A+','A','B+','B','C+','C'];
   const biasOptions: Array<{ v: 'bullish'|'neutral'|'bearish'; label: string }> = [{ v:'bullish', label:'BULLISH' },{ v:'neutral', label:'NEUTRAL' },{ v:'bearish', label:'BEARISH' }];
   const newsOptions: Array<{ v: 'clear'|'caution'|'avoid'; label: string }> = [{ v:'clear', label:'CLEAR' },{ v:'caution', label:'CAUTION' },{ v:'avoid', label:'AVOID' }];
@@ -1060,7 +1061,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
             value={localPre}
             onChange={e => setLocalPre(e.target.value)}
             onBlur={e => update({ pre: e.target.value })}
-            placeholder="Game plan, key levels, bias, setups you're watching. Write this BEFORE the open."
+            placeholder="Game plan, key levels, bias, and conditions you're watching. Write this BEFORE the open."
           />
           <div style={{ display:'flex', gap:12, padding:'10px 14px', borderTop:'1px solid var(--app-border)', flexWrap:'wrap' }}>
             <div>
@@ -1299,13 +1300,9 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
     };
   }, []);
 
-  const setups: string[] = useMemo(() => {
-    try { const raw = localStorage.getItem('flyxa_setups'); return raw ? (JSON.parse(raw) as string[]) : []; } catch { return []; }
-  }, []);
-
   const COLS: Array<{ key: 'setup'|'invalidation'|'asymmetry'; title: string; sub: string; placeholder: string }> = [
-    { key:'setup', title:'Setup Thesis', sub:'What specific edge did you see?', placeholder:"Which setup was this? What confluences were present? Why this level, this direction, right now?" },
-    { key:'invalidation', title:'Invalidation', sub:'What would prove you wrong?', placeholder:"If price does X, the setup is invalid and I should be out. What specific price action kills this thesis?" },
+    { key:'setup', title:'Trade Thesis', sub:'What specific edge did you see?', placeholder:"What conditions were present? Why this level, this direction, right now?" },
+    { key:'invalidation', title:'Invalidation', sub:'What would prove you wrong?', placeholder:"If price does X, the trade is invalid and I should be out. What specific price action kills this thesis?" },
     { key:'asymmetry', title:'Why this R:R?', sub:'Is the risk worth the reward?', placeholder:"Where is price likely going? What liquidity target makes this trade worth taking at this R:R?" },
   ];
 
@@ -1321,17 +1318,6 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
             <textarea value={local[col.key]} onChange={e => setLocal(p => ({ ...p, [col.key]: e.target.value }))} onBlur={e => commit(col.key, e.target.value)} placeholder={col.placeholder}
               style={{ width:'100%', minHeight:72, padding:'10px 12px', fontSize:11, fontFamily:'var(--font-sans)', background:'transparent', border:'none', outline:'none', resize:'none', color:'var(--app-text-muted)', boxSizing:'border-box' }} />
           </div>
-        ))}
-      </div>
-      <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-        <span style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', flexShrink:0 }}>Setup Type</span>
-        {setups.length === 0 ? (
-          <span style={{ fontSize:11, color:'var(--cobalt)', cursor:'pointer' }}>+ Add setups in Trading Plan →</span>
-        ) : setups.map(s => (
-          <button key={s} type="button" onClick={() => update({ setupType: th.setupType === s ? '' : s })}
-            style={{ padding:'3px 8px', fontSize:10, borderRadius:3, border:`1px solid ${th.setupType===s?'var(--amber-border)':'var(--app-border)'}`, background:th.setupType===s?'var(--amber-dim)':'transparent', color:th.setupType===s?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)' }}>
-            {s}
-          </button>
         ))}
       </div>
       <div style={{ padding:'10px 14px', borderTop:'1px solid var(--app-border)' }}>
@@ -1494,7 +1480,7 @@ const BEHAVIORAL_FLAGS_LEFT = [
   { id:'chased-entry',    label:'Chased entry — outside the zone' },
   { id:'no-confirmation', label:'Jumped in before confirmation' },
   { id:'fomo',            label:'FOMO — not in original plan' },
-  { id:'off-playbook',    label:'Setup not in playbook' },
+  { id:'off-playbook',    label:'Off-plan trade' },
   { id:'sized-up',        label:'Oversized position' },
   { id:'added-losing',    label:'Added to a losing position' },
 ];
@@ -1618,7 +1604,7 @@ function PhysicalStateBlock({ entry, onMutateEntry }: { entry: JournalEntry; onM
   const update = (patch: Partial<typeof ps>) => onMutateEntry({ physicalState: { ...ps, ...patch } });
 
   const DISTRACTIONS = ['Phone','Other screen','People','Noise','None'];
-  const ENVIRONMENTS = ['Home','Office','Travelling','Unusual setup'];
+  const ENVIRONMENTS = ['Home','Office','Travelling','Unusual environment'];
 
   const PipRow = ({ label, value, field, colorFn }: { label: string; value: number; field: keyof typeof ps; colorFn: (v: number) => string }) => (
     <div style={{ minWidth:80 }}>
@@ -1814,7 +1800,6 @@ export default function TradeJournal() {
 
   const screenshotInputRef = useRef<HTMLInputElement>(null);
   const screenshotSlotRef = useRef<number | null>(null);
-  const tradeDateEditInputRef = useRef<HTMLInputElement>(null);
 
   const mutateEntries = useCallback((updater: (prev: JournalEntry[]) => JournalEntry[]) => {
     const current = normalizeEntries(useFlyxaStore.getState().entries as unknown[], rulesTemplate);
@@ -2451,13 +2436,6 @@ export default function TradeJournal() {
                       onClick={() => {
                         setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
                         setIsTradeDateEditorOpen(true);
-                        requestAnimationFrame(() => {
-                          const input = tradeDateEditInputRef.current;
-                          if (!input) return;
-                          input.focus();
-                          const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
-                          pickerInput.showPicker?.();
-                        });
                       }}
                     >
                       Edit trade date
@@ -2466,12 +2444,12 @@ export default function TradeJournal() {
                 )}
                 {isTradeDateEditorOpen && activeTrade && !deleteEntryConfirm && (
                   <div className="tj-date-edit-row">
-                    <input
-                      ref={tradeDateEditInputRef}
-                      type="date"
+                    <DatePicker
                       className="tj-date-edit-input"
                       value={tradeDateDraft}
-                      onChange={event => setTradeDateDraft(event.target.value)}
+                      onChange={setTradeDateDraft}
+                      compact
+                      align="left"
                       max={getTodayIso()}
                     />
                     <button type="button" className="tj-mini-btn" onClick={saveTradeDate}>Save</button>

@@ -6,6 +6,7 @@ import { formatCurrency } from '../../utils/calculations.js';
 import { formatRiskRewardRatio } from '../../utils/riskReward.js';
 import { lookupContract, FuturesContract } from '../../constants/futuresContracts.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
+import DatePicker from '../common/DatePicker.js';
 
 interface Props {
   initialData?: Partial<Trade>;
@@ -595,11 +596,13 @@ export default function TradeForm({
             <div className="scanner-chart-meta">
               <div>
                 <label className="label">Trade Date</label>
-                <input
-                  type="date"
+                <DatePicker
                   className="input-field h-9"
                   value={tradeDate}
-                  onChange={event => onTradeDateChange?.(event.target.value)}
+                  onChange={value => onTradeDateChange?.(value)}
+                  fullWidth
+                  align="left"
+                  compact
                 />
               </div>
               <div>
@@ -892,11 +895,11 @@ export default function TradeForm({
           <div style={sub}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
               <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: '#34d399' }}>Pre-trade Thesis</p>
-              <p style={{ fontSize: 11, color: T3 }}>Capture setup logic before outcome bias creeps in.</p>
+              <p style={{ fontSize: 11, color: T3 }}>Capture trade logic before outcome bias creeps in.</p>
             </div>
             <div className="scanner-three-col">
               <div>
-                <label className="label">Setup Thesis</label>
+                <label className="label">Trade Thesis</label>
                 <textarea className="input-field resize-none" rows={2} value={thesisSetup} onChange={e => setThesisSetup(e.target.value)} placeholder="What edge did you see?" />
               </div>
               <div>

@@ -71,6 +71,37 @@ function normalizeConfluences(value: unknown): string[] {
   return normalized;
 }
 
+function normalizeStringArray(value: unknown, fallback: string[] = [], maxItems = 12): string[] {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : fallback;
+  const deduped = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const entry of rawValues) {
+    if (typeof entry !== 'string') continue;
+    const cleaned = entry.trim().replace(/\s+/g, ' ');
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (deduped.has(key)) continue;
+    deduped.add(key);
+    normalized.push(cleaned.slice(0, 64));
+    if (normalized.length >= maxItems) break;
+  }
+
+  return normalized;
+}
+
+function normalizeAccountIds(value: unknown, fallback?: string): string[] {
+  return normalizeStringArray(value, fallback ? [fallback] : [], 20);
+}
+
+function normalizeBehavioralFlags(value: unknown): string[] {
+  return normalizeStringArray(value, [], 20);
+}
+
 // GET all trades for user
 router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -97,6 +128,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       accountId,
       account_id,
       accountIds,
+      account_ids,
       direction,
       entry_price,
       sl_price,
@@ -115,6 +147,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       post_trade_notes,
       confluences,
       followed_plan,
+      behavioral_flags,
     } = req.body;
 
     const isBreakeven = exit_reason === 'BE';
@@ -151,18 +184,27 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
     // Determine session
     const session = getSession(trade_time);
     const normalizedConfluences = normalizeConfluences(confluences);
+    const primaryAccountId = Array.isArray(accountIds) && typeof accountIds[0] === 'string'
+      ? accountIds[0]
+      : Array.isArray(account_ids) && typeof account_ids[0] === 'string'
+        ? account_ids[0]
+        : typeof accountId === 'string'
+          ? accountId
+          : typeof account_id === 'string'
+            ? account_id
+            : '';
+    const normalizedAccountIds = normalizeAccountIds(
+      Array.isArray(accountIds) && accountIds.length > 0 ? accountIds : account_ids,
+      primaryAccountId
+    );
+    const normalizedBehavioralFlags = normalizeBehavioralFlags(behavioral_flags);
 
     const insertPayload = {
       user_id: req.userId!,
       symbol,
       screenshot_url: typeof screenshot_url === 'string' ? screenshot_url : '',
-      account_id: Array.isArray(accountIds) && typeof accountIds[0] === 'string'
-        ? accountIds[0]
-        : typeof accountId === 'string'
-        ? accountId
-        : typeof account_id === 'string'
-          ? account_id
-          : '',
+      account_id: primaryAccountId,
+      ...(normalizedAccountIds.length > 0 ? { account_ids: normalizedAccountIds } : {}),
       direction,
       entry_price,
       exit_price: normalizedExitPrice,
@@ -183,6 +225,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       post_trade_notes: post_trade_notes || '',
       ...(normalizedConfluences.length > 0 ? { confluences: normalizedConfluences } : {}),
       followed_plan: followed_plan !== undefined ? followed_plan : true,
+      behavioral_flags: normalizedBehavioralFlags,
       session,
     };
 
@@ -198,13 +241,17 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       (
         isMissingColumnError(error, 'screenshot_url') ||
         isMissingColumnError(error, 'account_id') ||
-        isMissingColumnError(error, 'confluences')
+        isMissingColumnError(error, 'account_ids') ||
+        isMissingColumnError(error, 'confluences') ||
+        isMissingColumnError(error, 'behavioral_flags')
       )
     ) {
       const {
         screenshot_url: _ignoredScreenshotUrl,
         account_id: _ignoredAccountId,
+        account_ids: _ignoredAccountIds,
         confluences: _ignoredConfluences,
+        behavioral_flags: _ignoredBehavioralFlags,
         ...fallbackInsertPayload
       } = insertPayload;
       ({ data, error } = await supabase
@@ -287,11 +334,23 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
     if (typeof nextUpdateData.accountId === 'string' && !('account_id' in nextUpdateData)) {
       nextUpdateData.account_id = nextUpdateData.accountId;
     }
+    if (Array.isArray(nextUpdateData.account_ids) && typeof nextUpdateData.account_ids[0] === 'string' && !('account_id' in nextUpdateData)) {
+      nextUpdateData.account_id = nextUpdateData.account_ids[0];
+    }
     if (Array.isArray(nextUpdateData.accountIds) && typeof nextUpdateData.accountIds[0] === 'string') {
       nextUpdateData.account_id = nextUpdateData.accountIds[0];
     }
+    const accountIdSource = Array.isArray(nextUpdateData.accountIds) && nextUpdateData.accountIds.length > 0
+      ? nextUpdateData.accountIds
+      : Array.isArray(nextUpdateData.account_ids) && nextUpdateData.account_ids.length > 0
+        ? nextUpdateData.account_ids
+        : (merged as Record<string, unknown>).account_ids;
+    nextUpdateData.account_ids = normalizeAccountIds(accountIdSource, nextUpdateData.account_id as string | undefined);
     delete nextUpdateData.accountId;
     delete nextUpdateData.accountIds;
+    if ('behavioral_flags' in nextUpdateData) {
+      nextUpdateData.behavioral_flags = normalizeBehavioralFlags(nextUpdateData.behavioral_flags);
+    }
     const existingRecord = existing as Record<string, unknown>;
     const shouldPersistConfluences = 'confluences' in updateData || Array.isArray(existingRecord.confluences);
     if (shouldPersistConfluences) {
@@ -316,14 +375,18 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
       (
         (isMissingColumnError(error, 'screenshot_url') && 'screenshot_url' in nextUpdateData) ||
         (isMissingColumnError(error, 'account_id') && ('account_id' in nextUpdateData || 'accountId' in nextUpdateData)) ||
-        (isMissingColumnError(error, 'confluences') && 'confluences' in nextUpdateData)
+        (isMissingColumnError(error, 'account_ids') && 'account_ids' in nextUpdateData) ||
+        (isMissingColumnError(error, 'confluences') && 'confluences' in nextUpdateData) ||
+        (isMissingColumnError(error, 'behavioral_flags') && 'behavioral_flags' in nextUpdateData)
       )
     ) {
       const {
         screenshot_url: _ignoredScreenshotUrl,
         account_id: _ignoredAccountId,
+        account_ids: _ignoredAccountIds,
         accountId: _ignoredAccountIdAlias,
         confluences: _ignoredConfluences,
+        behavioral_flags: _ignoredBehavioralFlags,
         ...fallbackUpdateData
       } = nextUpdateData;
       ({ data, error } = await supabase

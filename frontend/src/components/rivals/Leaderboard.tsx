@@ -1,6 +1,6 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import type { LeaderboardMetric, Rival } from '../../types/rivals.js';
-import { getRivalMetricValue } from '../../lib/mascotProgression.js';
+import { getRivalMetricValue, rivalHasMetricData } from '../../lib/mascotProgression.js';
 
 interface LeaderboardProps {
   rivals: Rival[];
@@ -16,12 +16,16 @@ const STAGE_LABELS: Record<string, string> = {
   apex: 'Apex',
 };
 
-const TABS: { key: LeaderboardMetric; label: string; unit: string }[] = [
-  { key: 'processScore', label: 'Process Score', unit: 'pts' },
-  { key: 'dailyJournal', label: 'Daily Journal', unit: 'days' },
-  { key: 'tradingJournal', label: 'Trading Journal', unit: '%' },
-  { key: 'backtest', label: 'Backtesting', unit: 'sessions' },
+const TABS: { key: LeaderboardMetric; label: string; unit: string; performanceOnly?: boolean }[] = [
+  { key: 'processScore', label: 'Process', unit: 'pts' },
+  { key: 'dailyJournal', label: 'Daily Journal', unit: 'pts' },
+  { key: 'tradingJournal', label: 'Trade Journal', unit: '%' },
+  { key: 'backtest', label: 'Backtesting', unit: 'sess' },
+  { key: 'winRate', label: 'Win Rate', unit: '%', performanceOnly: true },
+  { key: 'avgR', label: 'Avg R', unit: 'R', performanceOnly: true },
 ];
+
+const PERFORMANCE_METRICS = new Set<LeaderboardMetric>(['winRate', 'avgR']);
 
 function rankClass(rank: number) {
   if (rank === 1) return 'gold';
@@ -38,12 +42,29 @@ function barColor(rank: number, isMe: boolean, avatarColor: string) {
   return avatarColor;
 }
 
+function formatValue(value: number, metric: LeaderboardMetric): string {
+  if (metric === 'avgR') return value.toFixed(2);
+  return String(value);
+}
+
 export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'processScore' }: LeaderboardProps) {
   const [metric, setMetric] = useState<LeaderboardMetric>(defaultMetric);
   const activeTab = TABS.find(tab => tab.key === metric) ?? TABS[0];
+  const isPerformanceMetric = PERFORMANCE_METRICS.has(metric);
 
-  const sorted = [...rivals].sort((a, b) => getRivalMetricValue(b, metric) - getRivalMetricValue(a, metric));
-  const maxVal = Math.max(...sorted.map(rival => getRivalMetricValue(rival, metric)), 1);
+  // For performance metrics, sort: rivals with data first (by value), then no-data rivals.
+  const sorted = [...rivals].sort((a, b) => {
+    const aHas = rivalHasMetricData(a, metric);
+    const bHas = rivalHasMetricData(b, metric);
+    if (aHas && !bHas) return -1;
+    if (!aHas && bHas) return 1;
+    return getRivalMetricValue(b, metric) - getRivalMetricValue(a, metric);
+  });
+
+  const maxVal = Math.max(
+    ...sorted.filter(r => rivalHasMetricData(r, metric)).map(r => Math.max(0, getRivalMetricValue(r, metric))),
+    1,
+  );
 
   return (
     <div className="rv-card">
@@ -67,11 +88,19 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'pr
         ))}
       </div>
 
+      {isPerformanceMetric && (
+        <p style={{ fontSize: 10, color: 'var(--rv-text-3)', padding: '0 12px 8px', margin: 0, fontStyle: 'italic' }}>
+          Trading data is private — only your stats are shown for rivals.
+        </p>
+      )}
+
       {sorted.map((rival, index) => {
-        const rank = index + 1;
-        const value = getRivalMetricValue(rival, metric);
-        const pct = Math.max(2, Math.round((value / maxVal) * 100));
         const isMe = rival.id === currentUserId || rival.isMe;
+        const hasData = rivalHasMetricData(rival, metric);
+        const value = getRivalMetricValue(rival, metric);
+        const barPct = hasData ? Math.max(2, Math.round((Math.max(0, value) / maxVal) * 100)) : 0;
+        const rank = index + 1;
+
         return (
           <div key={rival.id} className={`rv-lb-row ${isMe ? 'me' : ''}`}>
             <span className={`rv-rank ${rankClass(rank)}`}>{String(rank).padStart(2, '0')}</span>
@@ -93,11 +122,20 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'pr
               <p>{STAGE_LABELS[rival.mascot.stage]}</p>
             </span>
             <span className="rv-progress">
-              <span style={{ width: `${pct}%`, background: barColor(rank, Boolean(isMe), rival.avatarColor) }} />
+              {hasData
+                ? <span style={{ width: `${barPct}%`, background: barColor(rank, Boolean(isMe), rival.avatarColor) }} />
+                : <span style={{ width: '100%', background: 'rgba(255,255,255,0.04)', borderRadius: 2 }} />
+              }
             </span>
             <span className="rv-value">
-              <strong className={isMe ? 'is-me' : undefined}>{value}</strong>
-              <small>{activeTab.unit}</small>
+              {hasData ? (
+                <>
+                  <strong className={isMe ? 'is-me' : undefined}>{formatValue(value, metric)}</strong>
+                  <small>{activeTab.unit}</small>
+                </>
+              ) : (
+                <strong style={{ color: 'var(--rv-text-3)', fontSize: 11 }}>—</strong>
+              )}
             </span>
           </div>
         );
@@ -105,4 +143,3 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'pr
     </div>
   );
 }
-

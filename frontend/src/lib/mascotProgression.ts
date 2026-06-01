@@ -83,5 +83,14 @@ export function getRivalMetricValue(rival: Rival, metric: LeaderboardMetric): nu
     case 'tradingJournal': return rival.mascot.stats.tradingJournalScore;
     case 'backtest': return rival.mascot.stats.backtestSessions;
     case 'processScore': return rival.mascot.stats.processScore;
+    case 'winRate': return rival.mascot.stats.winRate ?? 0;
+    case 'avgR': return rival.mascot.stats.avgR ?? 0;
   }
+}
+
+/** Returns true when a rival has actual data for a trading-performance metric. */
+export function rivalHasMetricData(rival: Rival, metric: LeaderboardMetric): boolean {
+  if (metric === 'winRate') return rival.mascot.stats.winRate != null;
+  if (metric === 'avgR') return rival.mascot.stats.avgR != null;
+  return true;
 }

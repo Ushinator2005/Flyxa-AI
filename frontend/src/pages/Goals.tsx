@@ -4,6 +4,7 @@ import { useAllTrades } from '../store/selectors.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { useGoals } from '../hooks/useGoals.js';
 import type { Goal, GoalStatus } from '../types/goals.js';
+import DatePicker from '../components/common/DatePicker.js';
 import './Goals.css';
 
 type GoalCategory = 'financial' | 'discipline' | 'lifestyle' | 'skill';
@@ -612,11 +613,13 @@ function AddGoalModal({
           <div className="goals-date-row">
             <label className="goals-field">
               <span>Target date</span>
-              <input
-                type="date"
+              <DatePicker
                 value={draft.targetDate ?? ''}
                 disabled={noDeadline}
-                onChange={event => updateDraft({ targetDate: event.target.value || null })}
+                onChange={value => updateDraft({ targetDate: value || null })}
+                fullWidth
+                align="left"
+                placeholder="No hard deadline"
               />
             </label>
             <label className="goals-checkbox-label">

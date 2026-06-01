@@ -81,7 +81,7 @@ ${recent.map(trade =>
 PSYCHOLOGY TREND (last 7 days):
 ${psych.map(entry =>
 `  ${entry.date}: Discipline ${entry.psychology.discipline}/5,
-   Setup Quality ${entry.psychology.setupQuality}/5,
+   Trade Quality ${entry.psychology.setupQuality}/5,
    Execution ${entry.psychology.execution}/5`
 ).join('\n')}
 

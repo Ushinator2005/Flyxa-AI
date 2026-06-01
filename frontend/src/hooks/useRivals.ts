@@ -267,6 +267,15 @@ export function useRivals() {
     const ruleFollowing = computeRuleFollowingScore(entries, entries.flatMap(entry => entry.trades));
     const processScore = computeProcessScore(dailyJournalEntries, dailyJournalStreak, tradingJournalScore, ruleFollowing);
 
+    const allTrades = entries.flatMap(entry => entry.trades).filter(t => t.result === 'win' || t.result === 'loss');
+    const winTrades = allTrades.filter(t => t.result === 'win');
+    const lossTrades = allTrades.filter(t => t.result === 'loss');
+    const winRate = allTrades.length > 0 ? Math.round((winTrades.length / allTrades.length) * 100) : null;
+    // Avg R: winning trades contribute their rr, losing trades cost 1R.
+    const avgR = allTrades.length > 0
+      ? Math.round(((winTrades.reduce((sum, t) => sum + t.rr, 0) - lossTrades.length) / allTrades.length) * 100) / 100
+      : null;
+
     const me: Rival = {
       id: 'rival-me',
       username: 'you',
@@ -284,6 +293,8 @@ export function useRivals() {
           tradingJournalScore,
           backtestSessions: backtestSessions.length,
           processScore,
+          winRate,
+          avgR,
         },
         xp: 0,
       },

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Brain, BarChart2, Target,
-  Heart, FileText, Crosshair, Swords, Trophy,
+  FileText, Crosshair, Swords, Trophy,
   Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.js';
@@ -40,7 +40,7 @@ const navItems = [
   { path: '/analytics',                icon: BarChart2,       label: 'Analytics'       },
   { path: '/backtest',                 icon: Target,          label: 'Backtest'        },
   { path: '/trading-plan',             icon: FileText,        label: 'Trading Plan'    },
-  { path: '/psychology',               icon: Heart,           label: 'Psychology'      },
+  { path: '/psychology',               icon: Brain,           label: 'Psychology'      },
   { path: '/goals',                    icon: Crosshair,       label: 'Goals'           },
   { path: '/rivals',                   icon: Swords,          label: 'Rivals'          },
   { path: '/achievements',             icon: Trophy,          label: 'Achievements'    },

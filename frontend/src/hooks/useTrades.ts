@@ -137,7 +137,8 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     confidenceLevel: typeof data.confidence_level === 'number' && Number.isFinite(data.confidence_level) ? data.confidence_level : null,
     confluences: normalizeConfluences(data.confluences),
     account: data.accountId ?? data.account_id ?? data.accountIds?.[0] ?? accountId,
-    accountIds: normalizeAccountIds(data.accountIds, data.accountId ?? data.account_id ?? accountId),
+    accountIds: normalizeAccountIds(data.accountIds ?? data.account_ids, data.accountId ?? data.account_id ?? accountId),
+    behavioralFlags: Array.isArray(data.behavioral_flags) ? data.behavioral_flags : [],
     createdAt: data.created_at ?? new Date().toISOString(),
   };
 }
@@ -157,6 +158,7 @@ function toApiTrade(trade: StoreTrade): ApiTrade {
     accountId: trade.account,
     account_id: trade.account,
     accountIds: normalizeAccountIds(trade.accountIds, trade.account),
+    account_ids: normalizeAccountIds(trade.accountIds, trade.account),
     direction: trade.direction === 'SHORT' ? 'Short' : 'Long',
     entry_price: trade.entry,
     exit_price: trade.exit ?? trade.entry,

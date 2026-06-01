@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext.js';
 import Layout from './components/layout/Layout.js';
 import LoadingSpinner from './components/common/LoadingSpinner.js';
@@ -22,6 +22,7 @@ const FlyxaAIAsk = lazy(() => import('./pages/FlyxaAIAsk.js'));
 const FlyxaAIPreSession = lazy(() => import('./pages/FlyxaAIPreSession.js'));
 const FlyxaAIEmotionalFingerprint = lazy(() => import('./pages/FlyxaAIEmotionalFingerprint.js'));
 const FlyxaAIPostSession = lazy(() => import('./pages/FlyxaAIPostSession.js'));
+const FlyxaAIWeeklyReport = lazy(() => import('./pages/FlyxaAIWeeklyReport.js'));
 const Analytics = lazy(() => import('./pages/Analytics.js'));
 const Achievements = lazy(() => import('./pages/Achievements.js'));
 const Backtest = lazy(() => import('./pages/Backtest.js'));
@@ -32,6 +33,7 @@ const Journal = lazy(() => import('./pages/Journal.js'));
 const Goals = lazy(() => import('./pages/Goals.js'));
 const Rivals = lazy(() => import('./pages/Rivals.js'));
 const Settings = lazy(() => import('./pages/Settings.js'));
+const TradeCheck = lazy(() => import('./pages/TradeCheck.js'));
 
 function RouteFallback() {
   return (
@@ -217,10 +219,12 @@ function ProtectedLayout() {
 
 export default function App() {
   const { user, loading, isPasswordRecovery } = useAuth();
+  const location = useLocation();
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
   const hasWarned80 = useRef(false);
   const hasWarnedHit = useRef(false);
   const dailyLoss = useDailyLossUsed();
+  const isTradeCheckRoute = location.pathname === '/trade-check';
 
   // Silently poll Finnhub every 5 min; write AI-confirmed breaking news to
   // flyxa_breaking_cache_v1 so the Dashboard bubble fires without the user
@@ -316,7 +320,7 @@ export default function App() {
 
 
   useEffect(() => {
-    if (dailyLoss.limit <= 0) return;
+    if (dailyLoss.limit <= 0 || isTradeCheckRoute) return;
 
     if (dailyLoss.pct >= 100 && !hasWarnedHit.current) {
       pushToast({
@@ -342,7 +346,7 @@ export default function App() {
       hasWarned80.current = false;
       hasWarnedHit.current = false;
     }
-  }, [dailyLoss.limit, dailyLoss.pct, dailyLoss.remaining]);
+  }, [dailyLoss.limit, dailyLoss.pct, dailyLoss.remaining, isTradeCheckRoute]);
 
   if (loading) {
     return (
@@ -360,6 +364,7 @@ export default function App() {
           <Route path="/landing" element={<Navigate to={user ? '/' : '/auth'} replace />} />
 
           <Route element={<ProtectedRoute />}>
+            <Route path="/trade-check" element={<TradeCheck />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/scanner" element={<TradeScanner />} />
@@ -372,6 +377,7 @@ export default function App() {
               <Route path="/flyxa-ai/pre-session" element={<Navigate to="/pre-session" replace />} />
               <Route path="/flyxa-ai/emotional-fingerprint" element={<FlyxaAIEmotionalFingerprint />} />
               <Route path="/flyxa-ai/post-session" element={<FlyxaAIPostSession />} />
+              <Route path="/flyxa-ai/weekly-report" element={<FlyxaAIWeeklyReport />} />
               <Route path="/coach" element={<Navigate to="/flyxa-ai/execution-coach" replace />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/achievements" element={<Achievements />} />
@@ -392,7 +398,7 @@ export default function App() {
           <Route path="*" element={<Navigate to={user ? '/' : '/auth'} replace />} />
         </Routes>
       </Suspense>
-      <ToastStack />
+      {!isTradeCheckRoute && <ToastStack />}
       {isPasswordRecovery && <PasswordRecoveryModal />}
     </>
   );

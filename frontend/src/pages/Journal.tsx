@@ -19,6 +19,7 @@ import { journalApi } from '../services/api.js';
 import { JournalBackupPayload, JournalEntry } from '../types/index.js';
 import Modal from '../components/common/Modal.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
+import DatePicker from '../components/common/DatePicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
@@ -923,18 +924,17 @@ export default function Journal() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={selected.date}
-                    onChange={e => void handleDateChange(e.target.value)}
+                    onChange={value => void handleDateChange(value)}
+                    compact
                     style={{
                       background: S2,
                       border: `1px solid ${BORDER}`,
                       borderRadius: '6px',
-                      padding: '5px 10px',
+                      padding: '0 10px',
                       fontSize: '12px',
                       color: T2,
-                      colorScheme: 'dark',
                       outline: 'none',
                       cursor: 'pointer',
                     }}
