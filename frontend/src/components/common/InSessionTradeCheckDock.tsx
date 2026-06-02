@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, GripHorizontal, Minus, ShieldCheck, X } from 'lucide-react';
 
 const STORAGE_KEY = 'flyxa.trade-check-dock.position';
-const W = 200;
-const H_FULL = 256; // header + iframe
+const W = 186;
+const H_FULL = 210; // header + iframe
 const H_MIN = 28;
 
 declare global {
@@ -56,6 +56,14 @@ export default function InSessionTradeCheckDock() {
     };
     window.addEventListener('flyxa:open-trade-check', handler);
     return () => window.removeEventListener('flyxa:open-trade-check', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if ((e.data as { type?: string })?.type === 'flyxa:close-dock') setOpen(false);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   useEffect(() => {
@@ -126,13 +134,13 @@ export default function InSessionTradeCheckDock() {
         top: position.y,
         width: W,
         zIndex: 1600,
-        border: '1px solid rgba(245,158,11,0.07)',
-        background: 'rgba(12,11,11,0.16)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(4,3,3,0.03)',
         borderRadius: 8,
         overflow: 'hidden',
-        boxShadow: '0 2px 14px rgba(0,0,0,0.22)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        boxShadow: '0 1px 10px rgba(0,0,0,0.05)',
+        backdropFilter: 'blur(7px)',
+        WebkitBackdropFilter: 'blur(7px)',
         fontFamily: 'var(--font-sans)',
       }}
     >
@@ -157,9 +165,9 @@ export default function InSessionTradeCheckDock() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-          <ShieldCheck size={11} color="rgba(245,158,11,0.7)" />
-          <span style={{ fontSize: 10.5, fontWeight: 650, color: 'rgba(232,227,220,0.75)', letterSpacing: '0.02em' }}>Trade Check</span>
-          <GripHorizontal size={11} color="rgba(92,87,81,0.5)" />
+          <ShieldCheck size={11} color="rgba(245,158,11,0.40)" />
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(232,227,220,0.45)', letterSpacing: '0.02em' }}>Trade Check</span>
+          <GripHorizontal size={11} color="rgba(92,87,81,0.30)" />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <button type="button" onClick={openExternal} title="Open as window" aria-label="Open as window" style={iconBtnStyle}>
@@ -191,7 +199,7 @@ const iconBtnStyle = {
   borderRadius: 4,
   border: 'none',
   background: 'transparent',
-  color: 'rgba(138,129,120,0.6)',
+  color: 'rgba(138,129,120,0.38)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',

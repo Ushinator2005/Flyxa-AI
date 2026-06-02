@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { LeaderboardMetric, Rival } from '../../types/rivals.js';
-import { getRivalMetricValue, rivalHasMetricData } from '../../lib/mascotProgression.js';
+import type { Rival } from '../../types/rivals.js';
+import { getRivalMetricValue } from '../../lib/mascotProgression.js';
+import type { LeaderboardMetric } from '../../types/rivals.js';
 
 interface LeaderboardProps {
   rivals: Rival[];
@@ -8,66 +9,80 @@ interface LeaderboardProps {
   defaultMetric?: LeaderboardMetric;
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  seed: 'Seed',
-  rookie: 'Rookie',
-  veteran: 'Veteran',
-  elite: 'Elite',
-  apex: 'Apex',
-};
+type CompMetric = 'processScore' | 'dailyJournal' | 'tradingJournal' | 'backtest';
+type SortDir = 'desc' | 'asc';
 
-const TABS: { key: LeaderboardMetric; label: string; unit: string; performanceOnly?: boolean }[] = [
-  { key: 'processScore', label: 'Process', unit: 'pts' },
-  { key: 'dailyJournal', label: 'Daily Journal', unit: 'pts' },
-  { key: 'tradingJournal', label: 'Trade Journal', unit: '%' },
-  { key: 'backtest', label: 'Backtesting', unit: 'sess' },
-  { key: 'winRate', label: 'Win Rate', unit: '%', performanceOnly: true },
-  { key: 'avgR', label: 'Avg R', unit: 'R', performanceOnly: true },
+const COLS: { key: CompMetric; label: string; unit: string }[] = [
+  { key: 'processScore',   label: 'Process',  unit: 'pts' },
+  { key: 'dailyJournal',   label: 'Daily J',  unit: 'pts' },
+  { key: 'tradingJournal', label: 'Trade J',  unit: '%'   },
+  { key: 'backtest',       label: 'Tests',    unit: ''    },
 ];
 
-const PERFORMANCE_METRICS = new Set<LeaderboardMetric>(['winRate', 'avgR']);
+const STAGE_LABELS: Record<string, string> = {
+  seed: 'Seed', rookie: 'Rookie', veteran: 'Veteran', elite: 'Elite', apex: 'Apex',
+};
 
-function rankClass(rank: number) {
+function rankClass(rank: number): string {
   if (rank === 1) return 'gold';
   if (rank === 2) return 'silver';
   if (rank === 3) return 'bronze';
   return 'regular';
 }
 
-function barColor(rank: number, isMe: boolean, avatarColor: string) {
-  if (isMe) return 'var(--rv-blue)';
-  if (rank === 1) return 'var(--rv-gold)';
-  if (rank === 2) return 'var(--rv-silver)';
-  if (rank === 3) return 'var(--rv-bronze)';
-  return avatarColor;
+function metricColor(key: CompMetric, value: number): string {
+  if (key === 'processScore') {
+    if (value >= 75) return 'var(--rv-green)';
+    if (value >= 50) return 'var(--rv-amber)';
+    return 'var(--rv-text-2)';
+  }
+  if (key === 'tradingJournal') {
+    if (value >= 80) return 'var(--rv-green)';
+    if (value >= 50) return 'var(--rv-amber)';
+    return 'var(--rv-text-2)';
+  }
+  if (key === 'dailyJournal') {
+    if (value >= 70) return 'var(--rv-blue)';
+    if (value >= 40) return 'var(--rv-text-2)';
+    return 'var(--rv-text-3)';
+  }
+  // backtest — just neutral
+  return value > 0 ? 'var(--rv-text-2)' : 'var(--rv-text-3)';
 }
 
-function formatValue(value: number, metric: LeaderboardMetric): string {
-  if (metric === 'avgR') return value.toFixed(2);
-  return String(value);
-}
+export default function Leaderboard({ rivals, currentUserId, defaultMetric }: LeaderboardProps) {
+  const initSort: CompMetric =
+    (defaultMetric === 'dailyJournal' || defaultMetric === 'tradingJournal' ||
+     defaultMetric === 'backtest'     || defaultMetric === 'processScore')
+      ? defaultMetric
+      : 'processScore';
 
-export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'processScore' }: LeaderboardProps) {
-  const [metric, setMetric] = useState<LeaderboardMetric>(defaultMetric);
-  const activeTab = TABS.find(tab => tab.key === metric) ?? TABS[0];
-  const isPerformanceMetric = PERFORMANCE_METRICS.has(metric);
+  const [sortBy,  setSortBy]  = useState<CompMetric>(initSort);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // For performance metrics, sort: rivals with data first (by value), then no-data rivals.
+  const me = rivals.find(r => r.isMe || r.id === currentUserId);
+  const myWinRate = me?.mascot.stats.winRate ?? null;
+  const myAvgR    = me?.mascot.stats.avgR    ?? null;
+  const hasMyStats = myWinRate != null || myAvgR != null;
+
   const sorted = [...rivals].sort((a, b) => {
-    const aHas = rivalHasMetricData(a, metric);
-    const bHas = rivalHasMetricData(b, metric);
-    if (aHas && !bHas) return -1;
-    if (!aHas && bHas) return 1;
-    return getRivalMetricValue(b, metric) - getRivalMetricValue(a, metric);
+    const av = getRivalMetricValue(a, sortBy);
+    const bv = getRivalMetricValue(b, sortBy);
+    return sortDir === 'desc' ? bv - av : av - bv;
   });
 
-  const maxVal = Math.max(
-    ...sorted.filter(r => rivalHasMetricData(r, metric)).map(r => Math.max(0, getRivalMetricValue(r, metric))),
-    1,
-  );
+  function handleColClick(col: CompMetric) {
+    if (sortBy === col) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortBy(col);
+      setSortDir('desc');
+    }
+  }
 
   return (
     <div className="rv-card">
+      {/* Header */}
       <div className="rv-section-head" style={{ borderBottom: 'none' }}>
         <div>
           <div className="rv-section-kicker">Competitive Board</div>
@@ -75,41 +90,41 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'pr
         </div>
       </div>
 
-      <div className="rv-tabs">
-        {TABS.map(tab => (
+      {/* Column headers */}
+      <div className="rv-comp-head">
+        <span />
+        <span />
+        <span className="rv-comp-col-label" style={{ textAlign: 'left' }}>Trader</span>
+        {COLS.map(col => (
           <button
-            key={tab.key}
+            key={col.key}
             type="button"
-            className={`rv-tab ${metric === tab.key ? 'active' : ''}`}
-            onClick={() => setMetric(tab.key)}
+            className={`rv-comp-col-btn ${sortBy === col.key ? 'active' : ''}`}
+            onClick={() => handleColClick(col.key)}
           >
-            {tab.label}
+            {col.label}
+            {sortBy === col.key && (
+              <span className="rv-sort-arrow">{sortDir === 'desc' ? ' ↓' : ' ↑'}</span>
+            )}
           </button>
         ))}
       </div>
 
-      {isPerformanceMetric && (
-        <p style={{ fontSize: 10, color: 'var(--rv-text-3)', padding: '0 12px 8px', margin: 0, fontStyle: 'italic' }}>
-          Trading data is private — only your stats are shown for rivals.
-        </p>
-      )}
-
-      {sorted.map((rival, index) => {
-        const isMe = rival.id === currentUserId || rival.isMe;
-        const hasData = rivalHasMetricData(rival, metric);
-        const value = getRivalMetricValue(rival, metric);
-        const barPct = hasData ? Math.max(2, Math.round((Math.max(0, value) / maxVal) * 100)) : 0;
-        const rank = index + 1;
+      {/* Rows */}
+      {sorted.map((rival, idx) => {
+        const isMe = rival.isMe || rival.id === currentUserId;
+        const rank = idx + 1;
 
         return (
-          <div key={rival.id} className={`rv-lb-row ${isMe ? 'me' : ''}`}>
-            <span className={`rv-rank ${rankClass(rank)}`}>{String(rank).padStart(2, '0')}</span>
+          <div key={rival.id} className={`rv-comp-row ${isMe ? 'me' : ''}`}>
+            <span className={`rv-rank ${rankClass(rank)}`}>
+              {String(rank).padStart(2, '0')}
+            </span>
             <span
               className="rv-avatar"
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: 9,
+                width: 28, height: 28, borderRadius: 8,
+                fontSize: 9,
                 background: `${rival.avatarColor}14`,
                 border: `1px solid ${rival.avatarColor}38`,
                 color: rival.avatarColor,
@@ -119,27 +134,50 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric = 'pr
             </span>
             <span className="rv-name">
               <h4 className={isMe ? 'is-me' : undefined}>{rival.displayName}</h4>
-              <p>{STAGE_LABELS[rival.mascot.stage]}</p>
+              <p>{STAGE_LABELS[rival.mascot.stage] ?? rival.mascot.stage}</p>
             </span>
-            <span className="rv-progress">
-              {hasData
-                ? <span style={{ width: `${barPct}%`, background: barColor(rank, Boolean(isMe), rival.avatarColor) }} />
-                : <span style={{ width: '100%', background: 'rgba(255,255,255,0.04)', borderRadius: 2 }} />
-              }
-            </span>
-            <span className="rv-value">
-              {hasData ? (
-                <>
-                  <strong className={isMe ? 'is-me' : undefined}>{formatValue(value, metric)}</strong>
-                  <small>{activeTab.unit}</small>
-                </>
-              ) : (
-                <strong style={{ color: 'var(--rv-text-3)', fontSize: 11 }}>—</strong>
-              )}
-            </span>
+            {COLS.map(col => {
+              const value = getRivalMetricValue(rival, col.key);
+              const isSort = sortBy === col.key;
+              return (
+                <span
+                  key={col.key}
+                  className={`rv-comp-cell ${isSort ? 'sorted' : ''}`}
+                  style={{ color: isMe ? 'var(--rv-blue)' : metricColor(col.key, value) }}
+                >
+                  <strong>{value}{col.unit === '%' ? '%' : ''}</strong>
+                  {col.unit && col.unit !== '%' && <small>{col.unit}</small>}
+                </span>
+              );
+            })}
           </div>
         );
       })}
+
+      {/* My Trading Stats — private footer */}
+      {hasMyStats && (
+        <div className="rv-my-stats">
+          <span className="rv-my-stats-kicker">Your trading stats · private</span>
+          <div className="rv-my-stats-row">
+            {myWinRate != null && (
+              <div className="rv-my-stat">
+                <span>Win Rate</span>
+                <strong style={{ color: myWinRate >= 50 ? 'var(--rv-green)' : 'var(--rv-red)' }}>
+                  {myWinRate}%
+                </strong>
+              </div>
+            )}
+            {myAvgR != null && (
+              <div className="rv-my-stat">
+                <span>Avg R</span>
+                <strong style={{ color: myAvgR >= 0 ? 'var(--rv-green)' : 'var(--rv-red)' }}>
+                  {myAvgR >= 0 ? '+' : ''}{myAvgR.toFixed(2)}R
+                </strong>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
