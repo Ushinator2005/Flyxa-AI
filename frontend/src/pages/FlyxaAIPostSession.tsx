@@ -1,4 +1,4 @@
-import { CSSProperties, useMemo, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -67,11 +67,29 @@ function adherenceColor(pct: number): string {
   return C.red;
 }
 
+type InsightType = 'good' | 'warn' | 'bad' | 'neutral';
+interface Insight { type: InsightType; text: string; }
+
+function insightColor(type: InsightType) {
+  if (type === 'good')    return C.grn;
+  if (type === 'warn')    return C.amb;
+  if (type === 'bad')     return C.red;
+  return C.t1;
+}
+
+function insightDot(type: InsightType) {
+  if (type === 'good')    return C.grn;
+  if (type === 'warn')    return C.amb;
+  if (type === 'bad')     return C.red;
+  return C.t2;
+}
+
 export default function FlyxaAIPostSession() {
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount } = useAppSettings();
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
+  const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
 
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
@@ -142,6 +160,110 @@ export default function FlyxaAIPostSession() {
     const checked = oathKeys.filter(k => checklistState[k]).length;
     return { checked, total: oathKeys.length };
   }, [checklistState]);
+
+  // Reflection note — synced when date or ps changes
+  const [postNote, setPostNote] = useState(() => ps?.postSessionNote ?? '');
+  const [noteSaved, setNoteSaved] = useState(false);
+  useEffect(() => { setPostNote(ps?.postSessionNote ?? ''); setNoteSaved(false); }, [ps]);
+
+  const saveNote = () => {
+    const base: PreSessionData = ps ?? {
+      emotion: '', note: '', bias: {}, checklistState: {}, startedAt: null,
+    };
+    setPreSessionForDate(selectedDate, { ...base, postSessionNote: postNote });
+    setNoteSaved(true);
+  };
+
+  // AI debrief — client-side rule-based observations
+  const aiInsights = useMemo((): Insight[] => {
+    if (!dayTrades.length) return [];
+    const insights: Insight[] = [];
+    const sessionMaxLoss = (ps as PreSessionData & { sessionMaxLoss?: number | null })?.sessionMaxLoss ?? null;
+    const dailyTarget    = (ps as PreSessionData & { dailyTarget?: number | null })?.dailyTarget ?? null;
+
+    // P&L vs target
+    if (dailyTarget && dailyTarget > 0) {
+      if (netPnl >= dailyTarget)
+        insights.push({ type: 'good', text: `Profit target of ${fmtCurrency(dailyTarget)} was reached — session closed at ${fmtSigned(netPnl)}.` });
+      else if (netPnl > 0)
+        insights.push({ type: 'neutral', text: `Profitable but fell $${Math.round(dailyTarget - netPnl)} short of the ${fmtCurrency(dailyTarget)} target.` });
+      else
+        insights.push({ type: 'bad', text: `Target was ${fmtCurrency(dailyTarget)} but session ended at ${fmtSigned(netPnl)} — a ${fmtCurrency(Math.abs(dailyTarget - netPnl))} miss.` });
+    }
+
+    // Loss limit
+    if (sessionMaxLoss && sessionMaxLoss > 0 && netPnl < 0) {
+      const pct = Math.round((Math.abs(netPnl) / sessionMaxLoss) * 100);
+      if (pct >= 100)
+        insights.push({ type: 'bad', text: `Session max loss of ${fmtCurrency(sessionMaxLoss)} was breached — final loss ${fmtSigned(netPnl)}.` });
+      else if (pct >= 80)
+        insights.push({ type: 'warn', text: `Came close to the ${fmtCurrency(sessionMaxLoss)} loss limit — used ${pct}% of allowed risk.` });
+    }
+
+    // Plan adherence
+    if (planAdherence !== null) {
+      const offCount = dayTrades.filter(t => t.followed_plan === false).length;
+      if (planAdherence === 100)
+        insights.push({ type: 'good', text: 'Every trade followed the plan — clean, disciplined execution.' });
+      else if (planAdherence >= 80)
+        insights.push({ type: 'good', text: `${planAdherence}% plan adherence — ${offCount} trade${offCount !== 1 ? 's' : ''} deviated from the plan.` });
+      else if (planAdherence >= 50)
+        insights.push({ type: 'warn', text: `${planAdherence}% plan adherence — ${offCount} trade${offCount !== 1 ? 's' : ''} went off-plan.` });
+      else
+        insights.push({ type: 'bad', text: `Only ${planAdherence}% plan adherence — most trades were off-plan.` });
+    }
+
+    // Off-plan P&L vs on-plan
+    const offPlanTrades = dayTrades.filter(t => t.followed_plan === false);
+    const onPlanTrades  = dayTrades.filter(t => t.followed_plan === true);
+    if (offPlanTrades.length > 0 && onPlanTrades.length > 0) {
+      const offPnl = offPlanTrades.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      const onPnl  = onPlanTrades.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
+      if (offPnl < 0 && onPnl >= 0)
+        insights.push({ type: 'bad', text: `On-plan trades: ${fmtSigned(onPnl)}. Off-plan trades: ${fmtSigned(offPnl)} — the deviations were the only losing trades.` });
+      else if (offPnl < onPnl / Math.max(onPlanTrades.length, 1) * offPlanTrades.length)
+        insights.push({ type: 'warn', text: `Off-plan trades underperformed planned trades — ${fmtSigned(onPnl)} vs ${fmtSigned(offPnl)}.` });
+    }
+
+    // Bias alignment
+    biasAdherence.forEach(({ instrument, direction, total, aligned }) => {
+      if (total === 0) return;
+      const pct = Math.round((aligned / total) * 100);
+      if (pct === 100)
+        insights.push({ type: 'good', text: `All ${instrument} trades were ${direction}-aligned, matching the pre-session bias.` });
+      else if (pct < 50)
+        insights.push({ type: 'warn', text: `Pre-session bias was ${direction} on ${instrument} but only ${pct}% of trades were directionally aligned.` });
+    });
+
+    // Emotion vs outcome
+    if (ps?.emotion) {
+      const isTilt = /frustrated|anxious/i.test(ps.emotion);
+      if (isTilt && netPnl < 0)
+        insights.push({ type: 'warn', text: `Session started ${ps.emotion} and ended with a loss — ${ps.emotion.toLowerCase()} days may warrant reduced size or skipping altogether.` });
+      else if (isTilt && netPnl > 0)
+        insights.push({ type: 'good', text: `Despite starting ${ps.emotion.toLowerCase()}, the session was profitable — strong execution discipline.` });
+    }
+
+    // Pre-session readiness vs result
+    if (ps?.readiness) {
+      if (ps.readiness.status === 'Stand Down' && netPnl > 0)
+        insights.push({ type: 'neutral', text: `Pre-session was Stand Down but the session was profitable — consider whether the rules still applied.` });
+      else if (ps.readiness.status === 'Ready' && netPnl < 0)
+        insights.push({ type: 'neutral', text: `High readiness score but still a losing session — review whether the plan held or external conditions changed.` });
+    }
+
+    // Session plan rule review
+    if (ps?.sessionPlan) {
+      const hardStop = ps.sessionPlan.find(r => r.source === 'Hard stop');
+      if (hardStop && netPnl < 0)
+        insights.push({ type: 'neutral', text: `Hard stop rule was: "${hardStop.rule}" — verify this was respected.` });
+      const avoidRule = ps.sessionPlan.find(r => r.source === 'Avoid today');
+      if (avoidRule)
+        insights.push({ type: 'neutral', text: `Rule to avoid: "${avoidRule.rule}" — did the session stay clear of this pattern?` });
+    }
+
+    return insights;
+  }, [ps, dayTrades, netPnl, planAdherence, biasAdherence]);
 
   const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -504,6 +626,98 @@ export default function FlyxaAIPostSession() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+
+          {/* AI Debrief — always shown if there are trades */}
+          {dayTrades.length > 0 && (
+            <div className="px-6 pb-6">
+              <p style={SECTION_LABEL}>AI debrief</p>
+              <div className="mt-3 rounded-[8px] overflow-hidden" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
+                {aiInsights.length === 0 ? (
+                  <div className="p-5">
+                    <p className="text-[12.5px]" style={{ color: C.t2 }}>
+                      Not enough data to generate observations — tag trades with plan adherence to unlock deeper analysis.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y" style={{ borderColor: C.b0 }}>
+                    {aiInsights.map((insight, i) => (
+                      <div key={i} className="flex items-start gap-3 px-5 py-3.5"
+                        style={{ backgroundColor: i % 2 === 0 ? 'transparent' : `${C.d1}` }}>
+                        <span style={{
+                          width: 6, height: 6, borderRadius: '50%',
+                          backgroundColor: insightDot(insight.type),
+                          flexShrink: 0, marginTop: 6,
+                        }} />
+                        <p className="text-[12.5px] leading-relaxed" style={{ color: insightColor(insight.type) }}>
+                          {insight.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* User reflection */}
+          <div className="px-6 pb-8">
+            <div className="flex items-center justify-between mb-3">
+              <p style={SECTION_LABEL}>Your reflection</p>
+              {ps?.postSessionNote && !noteSaved && (
+                <span className="text-[10px]" style={{ color: C.t2 }}>saved</span>
+              )}
+            </div>
+            <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
+              {ps?.sessionPlan && ps.sessionPlan.length > 0 && (
+                <div className="mb-3 space-y-1">
+                  <p className="text-[10px] uppercase tracking-[0.1em]" style={{ color: C.t2 }}>Pre-session rules to compare against</p>
+                  {ps.sessionPlan.slice(0, 3).map(row => (
+                    <p key={row.id} className="text-[11px] leading-relaxed" style={{ color: C.t2 }}>
+                      <span style={{
+                        color: row.source === 'Primary focus' ? C.grn : row.source === 'Avoid today' ? C.amb : C.red,
+                        fontWeight: 600,
+                      }}>{row.source}: </span>
+                      {row.rule}
+                    </p>
+                  ))}
+                </div>
+              )}
+              <textarea
+                value={postNote}
+                onChange={e => { setPostNote(e.target.value); setNoteSaved(false); }}
+                placeholder="How close was the actual session to what you planned? What matched, what deviated, and what's the one thing to carry forward?"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  minHeight: 110, resize: 'vertical',
+                  background: C.d3, border: `1px solid ${C.b0}`,
+                  borderRadius: 6, color: C.t0, fontSize: 12.5,
+                  lineHeight: 1.65, padding: '10px 12px',
+                  outline: 'none', fontFamily: 'inherit',
+                }}
+              />
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-[11px]" style={{ color: C.t2 }}>
+                  {noteSaved ? (
+                    <span style={{ color: C.grn }}>Saved</span>
+                  ) : postNote.trim() ? 'Unsaved changes' : 'Write your post-session reflection above'}
+                </p>
+                <button
+                  type="button"
+                  onClick={saveNote}
+                  disabled={!postNote.trim()}
+                  style={{
+                    height: 30, padding: '0 14px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                    border: `1px solid ${C.acc}44`,
+                    background: postNote.trim() ? `${C.acc}12` : 'transparent',
+                    color: postNote.trim() ? C.acc : C.t2,
+                    cursor: postNote.trim() ? 'pointer' : 'default',
+                  }}
+                >
+                  Save reflection
+                </button>
+              </div>
             </div>
           </div>
 

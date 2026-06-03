@@ -59,6 +59,19 @@ function extractEntries(value: string): Record<string, unknown>[] {
   }
 }
 
+function extractPreSessionHistory(value: string): Array<{ id: string; data: Record<string, unknown> }> {
+  try {
+    const parsed = JSON.parse(value) as { state?: { preSessionHistory?: Record<string, unknown> } };
+    const history = parsed?.state?.preSessionHistory;
+    if (!history || typeof history !== 'object') return [];
+    return Object.entries(history)
+      .filter(([id, data]) => typeof id === 'string' && data != null && typeof data === 'object')
+      .map(([id, data]) => ({ id, data: data as Record<string, unknown> }));
+  } catch {
+    return [];
+  }
+}
+
 function deletedTradeIdsFromBlob(blob: unknown): Set<string> {
   const ids = (blob as { state?: { deletedTradeIds?: unknown[] } } | null)?.state?.deletedTradeIds;
   return new Set((Array.isArray(ids) ? ids : []).filter((id): id is string => typeof id === 'string'));
@@ -180,6 +193,17 @@ function clearLegacyKeys(): void {
 // Supabase helpers
 // ---------------------------------------------------------------------------
 
+async function syncPreSessionsToTable(userId: string, sessions: Array<{ id: string; data: Record<string, unknown> }>): Promise<void> {
+  if (sessions.length === 0) return;
+  const rows = sessions.map(s => ({
+    id: s.id,
+    user_id: userId,
+    data: s.data,
+    updated_at: new Date().toISOString(),
+  }));
+  await supabase.from('pre_sessions').upsert(rows, { onConflict: 'user_id,id' });
+}
+
 async function syncEntriesToTable(userId: string, entries: Record<string, unknown>[]): Promise<void> {
   if (entries.length === 0) return;
 
@@ -245,6 +269,9 @@ async function flushSave(userId: string, value: string): Promise<void> {
   const entries = extractEntries(sanitizedValue);
   await syncEntriesToTable(userId, entries);
   mirrorLocalEntriesSafe(entries, userId);
+
+  const preSessions = extractPreSessionHistory(sanitizedValue);
+  await syncPreSessionsToTable(userId, preSessions);
 }
 
 async function flushSaveWithRetry(userId: string, value: string, attempt = 0): Promise<void> {

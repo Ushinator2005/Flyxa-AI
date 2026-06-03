@@ -9,6 +9,7 @@ import { RiskSettings, Trade } from '../types/index.js';
 import { PatternItem } from './FlyxaAIPatterns.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
+import { getTimeZoneParts } from '../utils/calendarTime.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -234,7 +235,7 @@ function customCheckbox(checked: boolean) {
 export default function FlyxaAIPreSession() {
   const navigate = useNavigate();
   const { trades, loading } = useTrades();
-  const { filterTradesBySelectedAccount } = useAppSettings();
+  const { filterTradesBySelectedAccount, preferences } = useAppSettings();
   const { settings, refreshSettings } = useRisk();
 
   const storedPreSession = useFlyxaStore(state => state.preSession);
@@ -244,6 +245,7 @@ export default function FlyxaAIPreSession() {
   const setOathItemsAction = useFlyxaStore(state => state.setOathItems);
 
   const [now, setNow] = useState(() => new Date());
+  const todayIso = useMemo(() => getTimeZoneParts(now, preferences.timezone).date, [now, preferences.timezone]);
   const [emotion, setEmotion] = useState<string>(() => (storedPreSession?.emotion ?? ''));
   const [note, setNote] = useState<string>(() => (storedPreSession?.note ?? ''));
   const [bias, setBias] = useState<BiasState>(() => (storedPreSession?.bias as BiasState ?? { ES: 'Neutral', NQ: 'Neutral' }));
@@ -323,8 +325,8 @@ export default function FlyxaAIPreSession() {
   }, [accountTrades]);
 
   const priorFlow = useMemo(
-    () => getMostRecentDailyFlowBefore(accountTrades, now.toISOString().slice(0, 10)),
-    [accountTrades, now]
+    () => getMostRecentDailyFlowBefore(accountTrades, todayIso),
+    [accountTrades, todayIso]
   );
 
   const riskLimits = useMemo(() => {
@@ -577,7 +579,7 @@ export default function FlyxaAIPreSession() {
       dailyTarget: 'dailyTarget' in updates ? updates.dailyTarget : (isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : null),
     };
     setPreSessionAction(data);
-    setPreSessionForDate(now.toISOString().slice(0, 10), data);
+    setPreSessionForDate(todayIso, data);
   };
 
   const setEmotionAndPersist = (nextEmotion: string) => {
@@ -620,8 +622,8 @@ export default function FlyxaAIPreSession() {
 
   const sessionAlreadyStarted = useMemo(() => {
     if (!storedPreSession?.startedAt) return false;
-    return storedPreSession.startedAt.slice(0, 10) === now.toISOString().slice(0, 10);
-  }, [storedPreSession?.startedAt, now]);
+    return getTimeZoneParts(new Date(storedPreSession.startedAt), preferences.timezone).date === todayIso;
+  }, [storedPreSession?.startedAt, todayIso, preferences.timezone]);
 
   const startSession = () => {
     if (sessionAlreadyStarted) { navigate('/journal'); return; }
@@ -649,7 +651,7 @@ export default function FlyxaAIPreSession() {
       dailyTarget: isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : null,
     };
     setPreSessionAction(sessionData);
-    setPreSessionForDate(now.toISOString().slice(0, 10), sessionData);
+    setPreSessionForDate(todayIso, sessionData);
     navigate('/journal');
   };
 

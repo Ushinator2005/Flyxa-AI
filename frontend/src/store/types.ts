@@ -251,6 +251,7 @@ export interface PreSessionData {
   };
   sessionMaxLoss?: number | null;
   dailyTarget?: number | null;
+  postSessionNote?: string;
 }
 
 export interface ChartHistoryRecord {
