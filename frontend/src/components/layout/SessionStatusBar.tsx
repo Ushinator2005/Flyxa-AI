@@ -36,9 +36,12 @@ export default function SessionStatusBar() {
   const tradesLeft = dailyStatus
     ? Math.max(0, dailyStatus.maxTradesPerDay - dailyStatus.tradesCount)
     : null;
-  const lossRemaining = dailyStatus
-    ? Math.max(0, dailyStatus.dailyLossLimit + Math.min(0, dailyStatus.todayPnL))
+  // Prefer session-specific max loss set in pre-session over DB risk settings
+  const effectiveLossLimit = (preSession as unknown as { sessionMaxLoss?: number | null })?.sessionMaxLoss ?? dailyStatus?.dailyLossLimit ?? 0;
+  const lossRemaining = effectiveLossLimit > 0
+    ? Math.max(0, effectiveLossLimit + Math.min(0, dailyStatus?.todayPnL ?? 0))
     : null;
+  const profitTarget = (preSession as unknown as { dailyTarget?: number | null })?.dailyTarget ?? null;
 
   const startedTime = preSession.startedAt
     ? new Date(preSession.startedAt).toLocaleTimeString('en-US', {
@@ -46,7 +49,7 @@ export default function SessionStatusBar() {
       })
     : null;
 
-  const lossIsLow = lossRemaining !== null && lossRemaining < (dailyStatus?.dailyLossLimit ?? Infinity) * 0.25;
+  const lossIsLow = lossRemaining !== null && effectiveLossLimit > 0 && lossRemaining < effectiveLossLimit * 0.25;
   const tradesLow = tradesLeft !== null && tradesLeft <= 2;
 
   return (
@@ -126,6 +129,18 @@ export default function SessionStatusBar() {
             ${lossRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 })}
           </span>
         </span>
+      )}
+
+      {profitTarget !== null && (
+        <>
+          <SEP />
+          <span style={{ fontSize: 10, color: '#5c5751', flexShrink: 0 }}>
+            target{' '}
+            <span style={{ fontWeight: 600, color: '#22d68a' }}>
+              ${profitTarget.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+            </span>
+          </span>
+        </>
       )}
 
       {tradesLeft !== null && (

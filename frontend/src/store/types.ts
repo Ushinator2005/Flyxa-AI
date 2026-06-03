@@ -249,6 +249,8 @@ export interface PreSessionData {
       rule: string;
     }>;
   };
+  sessionMaxLoss?: number | null;
+  dailyTarget?: number | null;
 }
 
 export interface ChartHistoryRecord {

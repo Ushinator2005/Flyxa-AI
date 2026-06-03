@@ -298,6 +298,11 @@ export default function PsychologyTracker() {
   const maxEmotionImpact = Math.max(...emotionRows.map(row => Math.abs(row.pnl)), 1);
   const positiveEmotionTotal = emotionRows.filter(row => row.pnl > 0).reduce((sum, row) => sum + row.pnl, 0);
   const negativeEmotionTotal = emotionRows.filter(row => row.pnl < 0).reduce((sum, row) => sum + row.pnl, 0);
+  const bestEmotion = emotionRows.find(row => row.pnl > 0);
+  const worstEmotion = emotionRows.find(row => row.pnl < 0);
+  const topEmotionRows = emotionRows
+    .filter(row => row.label !== bestEmotion?.label && row.label !== worstEmotion?.label)
+    .slice(0, 4);
 
   return (
     <div className="psy-page animate-fade-in">
@@ -363,18 +368,21 @@ export default function PsychologyTracker() {
               </div>
             ) : (
               <div className="psy-impact">
-                <div className="psy-impact-summary">
-                  <article>
-                    <span>Positive emotion edge</span>
-                    <strong className="green">{formatCurrency(positiveEmotionTotal)}</strong>
+                <div className="psy-impact-hero">
+                  <article className="green">
+                    <span>Best state</span>
+                    <strong>{bestEmotion?.label ?? 'No winning state yet'}</strong>
+                    <em>{bestEmotion ? `${formatCurrency(bestEmotion.pnl)} across ${bestEmotion.count} trade${bestEmotion.count !== 1 ? 's' : ''}` : formatCurrency(positiveEmotionTotal)}</em>
                   </article>
-                  <article>
-                    <span>Negative emotion cost</span>
-                    <strong className="red">{formatCurrency(negativeEmotionTotal)}</strong>
+                  <article className="red">
+                    <span>Costly state</span>
+                    <strong>{worstEmotion?.label ?? 'No costly state yet'}</strong>
+                    <em>{worstEmotion ? `${formatCurrency(worstEmotion.pnl)} across ${worstEmotion.count} trade${worstEmotion.count !== 1 ? 's' : ''}` : formatCurrency(negativeEmotionTotal)}</em>
                   </article>
                 </div>
-                <div className="psy-impact-list">
-                  {emotionRows.map(row => {
+                {topEmotionRows.length > 0 && (
+                  <div className="psy-impact-list">
+                    {topEmotionRows.map(row => {
                     const width = Math.max(5, Math.round((Math.abs(row.pnl) / maxEmotionImpact) * 100));
                     const tone = row.pnl >= 0 ? 'green' : 'red';
                     return (
@@ -389,8 +397,9 @@ export default function PsychologyTracker() {
                         <span className="psy-impact-value">{formatCurrency(row.pnl)}</span>
                       </article>
                     );
-                  })}
-                </div>
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </section>

@@ -249,6 +249,12 @@ export default function FlyxaAIPreSession() {
   const [bias, setBias] = useState<BiasState>(() => (storedPreSession?.bias as BiasState ?? { ES: 'Neutral', NQ: 'Neutral' }));
   const [checklistState, setChecklistState] = useState<ChecklistState>(() => (storedPreSession?.checklistState as ChecklistState ?? {}));
   const [storedRiskSettings] = useState(() => parseRiskSettingsFromStorage());
+  const [sessionMaxLoss, setSessionMaxLoss] = useState<string>(() =>
+    storedPreSession?.sessionMaxLoss != null ? String(storedPreSession.sessionMaxLoss) : ''
+  );
+  const [sessionTarget, setSessionTarget] = useState<string>(() =>
+    storedPreSession?.dailyTarget != null ? String(storedPreSession.dailyTarget) : ''
+  );
   const [oathEditOpen, setOathEditOpen] = useState(false);
   const [oathDraft, setOathDraft] = useState<Array<{ id: string; label: string }>>([]);
   const [riskEditOpen, setRiskEditOpen] = useState(false);
@@ -364,24 +370,26 @@ export default function FlyxaAIPreSession() {
   };
 
   const saveRiskLimits = async () => {
-    const next = {
-      daily_loss_limit: Number(riskDraft.daily_loss_limit),
-      max_trades_per_day: Number(riskDraft.max_trades_per_day),
-      max_contracts_per_trade: Number(riskDraft.max_contracts_per_trade),
-      account_size: Number(riskDraft.account_size),
-      risk_percentage: Number(riskDraft.risk_percentage),
-    };
+    const loss     = Number(riskDraft.daily_loss_limit);
+    const trades   = Number(riskDraft.max_trades_per_day);
 
-    if (
-      !Number.isFinite(next.daily_loss_limit) || next.daily_loss_limit <= 0 ||
-      !Number.isFinite(next.max_trades_per_day) || next.max_trades_per_day <= 0 ||
-      !Number.isFinite(next.max_contracts_per_trade) || next.max_contracts_per_trade <= 0 ||
-      !Number.isFinite(next.account_size) || next.account_size <= 0 ||
-      !Number.isFinite(next.risk_percentage) || next.risk_percentage <= 0
-    ) {
-      setRiskSaveError('Enter positive numbers for every risk limit.');
+    // Only daily loss limit and max trades are required
+    if (!Number.isFinite(loss) || loss <= 0 || !Number.isFinite(trades) || trades <= 0) {
+      setRiskSaveError('Enter a positive number for max loss and max trades.');
       return;
     }
+
+    const next: Record<string, number> = { daily_loss_limit: loss, max_trades_per_day: trades };
+
+    // Optional fields — include only when a valid positive number is provided
+    const contracts = Number(riskDraft.max_contracts_per_trade);
+    if (Number.isFinite(contracts) && contracts > 0) next.max_contracts_per_trade = contracts;
+
+    const size = Number(riskDraft.account_size);
+    if (Number.isFinite(size) && size > 0) next.account_size = size;
+
+    const pct = Number(riskDraft.risk_percentage);
+    if (Number.isFinite(pct) && pct > 0) next.risk_percentage = pct;
 
     setRiskSaving(true);
     setRiskSaveError('');
@@ -553,7 +561,9 @@ export default function FlyxaAIPreSession() {
     } as const;
   }, [checklistTotals.completed, checklistTotals.pct, checklistTotals.total, emotion, emotionLogged, lastSession, recentBehavior.planAdherence, recentBehavior.revengeTagged]);
 
-  const persistPreSession = (updates: Partial<{ emotion: string; note: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null }>) => {
+  const persistPreSession = (updates: Partial<{ emotion: string; note: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null; sessionMaxLoss: number | null; dailyTarget: number | null }>) => {
+    const parsedLoss = parseFloat(sessionMaxLoss);
+    const parsedTarget = parseFloat(sessionTarget);
     const data = {
       emotion: updates.emotion ?? emotion,
       note: updates.note ?? note,
@@ -563,6 +573,8 @@ export default function FlyxaAIPreSession() {
       readiness,
       sessionPlan,
       commitment: storedPreSession?.commitment,
+      sessionMaxLoss: 'sessionMaxLoss' in updates ? updates.sessionMaxLoss : (isFinite(parsedLoss) && parsedLoss > 0 ? parsedLoss : null),
+      dailyTarget: 'dailyTarget' in updates ? updates.dailyTarget : (isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : null),
     };
     setPreSessionAction(data);
     setPreSessionForDate(now.toISOString().slice(0, 10), data);
@@ -606,8 +618,16 @@ export default function FlyxaAIPreSession() {
     });
   };
 
+  const sessionAlreadyStarted = useMemo(() => {
+    if (!storedPreSession?.startedAt) return false;
+    return storedPreSession.startedAt.slice(0, 10) === now.toISOString().slice(0, 10);
+  }, [storedPreSession?.startedAt, now]);
+
   const startSession = () => {
+    if (sessionAlreadyStarted) { navigate('/journal'); return; }
     const committedAt = new Date().toISOString();
+    const parsedLoss = parseFloat(sessionMaxLoss);
+    const parsedTarget = parseFloat(sessionTarget);
     const sessionData = {
       emotion,
       note,
@@ -625,6 +645,8 @@ export default function FlyxaAIPreSession() {
         readiness,
         sessionPlan,
       },
+      sessionMaxLoss: isFinite(parsedLoss) && parsedLoss > 0 ? parsedLoss : null,
+      dailyTarget: isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : null,
     };
     setPreSessionAction(sessionData);
     setPreSessionForDate(now.toISOString().slice(0, 10), sessionData);
@@ -701,9 +723,15 @@ export default function FlyxaAIPreSession() {
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={startSession} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.acc}`, backgroundColor: C.acc, color: '#0e0d0d', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                  Accept oath - begin
-                </button>
+                {sessionAlreadyStarted ? (
+                  <button type="button" onClick={() => navigate('/journal')} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.grn}55`, backgroundColor: `${C.grn}12`, color: C.grn, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                    Session open — continue →
+                  </button>
+                ) : (
+                  <button type="button" onClick={startSession} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.acc}`, backgroundColor: C.acc, color: '#0e0d0d', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                    Accept oath — begin
+                  </button>
+                )}
                 <button type="button" onClick={() => navigate('/')} style={{ height: 36, padding: '0 14px', borderRadius: 6, border: `1px solid ${C.b1}`, backgroundColor: 'transparent', color: C.t1, fontSize: 12, cursor: 'pointer' }}>
                   Dashboard
                 </button>
@@ -878,17 +906,17 @@ export default function FlyxaAIPreSession() {
                 <div style={{ marginTop: 8, padding: 12, borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {([
-                      ['daily_loss_limit', 'Max loss', '$'],
-                      ['max_trades_per_day', 'Max trades', ''],
-                      ['max_contracts_per_trade', 'Contracts', ''],
-                      ['account_size', 'Account size', '$'],
-                      ['risk_percentage', 'Risk %', '%'],
-                    ] as const).map(([field, label, suffix]) => (
+                      ['daily_loss_limit',       'Max loss',     '$', true ],
+                      ['max_trades_per_day',      'Max trades',   '',  true ],
+                      ['max_contracts_per_trade', 'Contracts',    '',  false],
+                      ['account_size',            'Account size', '$', false],
+                      ['risk_percentage',         'Risk %',       '%', false],
+                    ] as const).map(([field, label, suffix, required]) => (
                       <label key={field} style={{ fontSize: 10, color: C.t2 }}>
-                        {label}
+                        {label}{!required && <span style={{ opacity: 0.5 }}> (opt)</span>}
                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 7px' }}>
                           {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
-                          <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }} />
+                          <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} placeholder={required ? '' : 'skip'} value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }} />
                           {suffix === '%' && <span style={{ color: C.t2, fontSize: 11 }}>%</span>}
                         </div>
                       </label>
@@ -1028,19 +1056,50 @@ export default function FlyxaAIPreSession() {
           {/* Risk limits */}
           <div style={{ marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>Risk limits</p>
+              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>Today's limits</p>
               <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor}
                 style={{ fontSize: 10, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-              >{riskEditOpen ? 'cancel' : 'edit'}</button>
+              >{riskEditOpen ? 'cancel' : 'edit settings'}</button>
             </div>
+            {/* Inline editable max loss + profit target */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+              {([
+                { key: 'loss' as const, label: 'Max loss today', placeholder: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
+                { key: 'target' as const, label: 'Profit target', placeholder: formatCurrency(riskLimits.target), color: C.grn },
+              ]).map(({ key, label, placeholder, color }) => {
+                const value = key === 'loss' ? sessionMaxLoss : sessionTarget;
+                const setter = key === 'loss' ? setSessionMaxLoss : setSessionTarget;
+                return (
+                  <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: C.t2 }}>{label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, borderRadius: 5, border: `1px solid ${color}30`, backgroundColor: C.d2, padding: '0 8px' }}>
+                      <span style={{ fontSize: 11, color: C.t2, flexShrink: 0 }}>$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder={placeholder.replace(/[$,]/g, '')}
+                        value={value}
+                        onChange={e => setter(e.target.value)}
+                        onBlur={() => {
+                          const n = parseFloat(value);
+                          if (key === 'loss') persistPreSession({ sessionMaxLoss: isFinite(n) && n > 0 ? n : null });
+                          else persistPreSession({ dailyTarget: isFinite(n) && n > 0 ? n : null });
+                        }}
+                        style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color, padding: '7px 0', minWidth: 0 }}
+                      />
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            {/* Secondary stats — max trades / contracts (read-only, edit via modal) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
               {[
-                { label: 'max loss', value: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
                 { label: 'max trades', value: String(riskLimits.maxTrades), color: C.t0 },
                 { label: 'contracts', value: String(riskLimits.maxContracts), color: C.t0 },
-                { label: 'target', value: formatCurrency(riskLimits.target), color: C.grn },
               ].map(stat => (
-                <div key={stat.label} style={{ padding: '8px 10px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                <div key={stat.label} style={{ padding: '7px 10px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
                   <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: stat.color }}>{stat.value}</p>
                   <p style={{ fontSize: 10, color: C.t2, marginTop: 2 }}>{stat.label}</p>
                 </div>
@@ -1050,17 +1109,18 @@ export default function FlyxaAIPreSession() {
               <div style={{ marginTop: 8, padding: 12, borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   {([
-                    ['daily_loss_limit', 'Max loss', '$'],
-                    ['max_trades_per_day', 'Max trades', ''],
-                    ['max_contracts_per_trade', 'Contracts', ''],
-                    ['account_size', 'Account size', '$'],
-                    ['risk_percentage', 'Risk %', '%'],
-                  ] as const).map(([field, label, suffix]) => (
+                    ['daily_loss_limit',       'Max loss',     '$', true ],
+                    ['max_trades_per_day',      'Max trades',   '',  true ],
+                    ['max_contracts_per_trade', 'Contracts',    '',  false],
+                    ['account_size',            'Account size', '$', false],
+                    ['risk_percentage',         'Risk %',       '%', false],
+                  ] as const).map(([field, label, suffix, required]) => (
                     <label key={field} style={{ fontSize: 10, color: C.t2 }}>
-                      {label}
+                      {label}{!required && <span style={{ opacity: 0.5 }}> (opt)</span>}
                       <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 7px' }}>
                         {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
                         <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'}
+                          placeholder={required ? '' : 'skip'}
                           value={riskDraft[field]}
                           onChange={e => updateRiskDraft(field, e.target.value)}
                           style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }}
@@ -1280,18 +1340,31 @@ export default function FlyxaAIPreSession() {
 
           {/* CTA */}
           <div data-tour-id="pre-session-begin" style={{ borderTop: `1px solid ${C.b0}`, paddingTop: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button type="button" onClick={startSession}
-              style={{
-                height: 36, padding: '0 22px', borderRadius: 5,
-                border: `1px solid ${C.acc}`, backgroundColor: C.acc,
-                color: '#0e0d0d', fontSize: 12, fontWeight: 700,
-                cursor: 'pointer', letterSpacing: '-0.01em',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.opacity = '0.87'; }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-            >
-              Accept oath — begin session
-            </button>
+            {sessionAlreadyStarted ? (
+              <button type="button" onClick={() => navigate('/journal')}
+                style={{
+                  height: 36, padding: '0 22px', borderRadius: 5,
+                  border: `1px solid ${C.grn}55`, backgroundColor: `${C.grn}12`,
+                  color: C.grn, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', letterSpacing: '-0.01em',
+                }}
+              >
+                Session open — continue →
+              </button>
+            ) : (
+              <button type="button" onClick={startSession}
+                style={{
+                  height: 36, padding: '0 22px', borderRadius: 5,
+                  border: `1px solid ${C.acc}`, backgroundColor: C.acc,
+                  color: '#0e0d0d', fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', letterSpacing: '-0.01em',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = '0.87'; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+              >
+                Accept oath — begin session
+              </button>
+            )}
             <button type="button" onClick={() => navigate('/')}
               style={{
                 height: 36, padding: '0 16px', borderRadius: 5,

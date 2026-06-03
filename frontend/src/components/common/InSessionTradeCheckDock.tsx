@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ExternalLink, GripHorizontal, Minus, ShieldCheck, X } from 'lucide-react';
 
-const STORAGE_KEY = 'flyxa.trade-check-dock.position';
+const STORAGE_KEY      = 'flyxa.trade-check-dock.position';
+const PROMPT_KEY       = 'flyxa.session-done-prompt';
 const W = 186;
-const H_FULL = 210; // header + iframe
+const H_FULL = 210;
 const H_MIN = 28;
 
 declare global {
@@ -33,11 +35,18 @@ function getInitialPosition(): DockPosition {
   return { x: Math.max(8, window.innerWidth - W - 16), y: 78 };
 }
 
+function fmtMoney(v: number) {
+  return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
 export default function InSessionTradeCheckDock() {
-  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const [open, setOpen]           = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [position, setPosition] = useState<DockPosition>(() => getInitialPosition());
+  const [position, setPosition]   = useState<DockPosition>(() => getInitialPosition());
+  const [logPrompt, setLogPrompt] = useState<{ tradeCount: number; pnl: number } | null>(null);
   const pipWindowRef = useRef<Window | null>(null);
+  const skipFirstPersistRef = useRef(true);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -46,6 +55,7 @@ export default function InSessionTradeCheckDock() {
     originY: number;
   } | null>(null);
 
+  // Open dock via custom event
   useEffect(() => {
     const handler = () => {
       void openPictureInPicture().then((opened) => {
@@ -58,19 +68,79 @@ export default function InSessionTradeCheckDock() {
     return () => window.removeEventListener('flyxa:open-trade-check', handler);
   }, []);
 
+  // Restore any pending prompt from a previous session (survives tab switches / refresh)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PROMPT_KEY);
+      if (raw) setLogPrompt(JSON.parse(raw) as { tradeCount: number; pnl: number });
+    } catch { /* ignore */ }
+  }, []);
+
+  // Persist prompt to localStorage whenever it changes.
+  // Skip the very first run (mount) to avoid a race with the restore effect above —
+  // both would otherwise fire with logPrompt=null and erase any key the popup just wrote.
+  useEffect(() => {
+    if (skipFirstPersistRef.current) { skipFirstPersistRef.current = false; return; }
+    try {
+      if (logPrompt) localStorage.setItem(PROMPT_KEY, JSON.stringify(logPrompt));
+      else localStorage.removeItem(PROMPT_KEY);
+    } catch { /* ignore */ }
+  }, [logPrompt]);
+
+  // Pick up localStorage writes from the popup window.
+  // The Web Storage `storage` event fires in OTHER windows/tabs when localStorage changes,
+  // so when TradeCheck (popup) writes PROMPT_KEY, this tab gets notified immediately.
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key !== PROMPT_KEY || !e.newValue) return;
+      try { setLogPrompt(JSON.parse(e.newValue) as { tradeCount: number; pnl: number }); } catch { /* ignore */ }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+
+  // Listen for messages from the iframe (inline) or popup (window.opener)
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if ((e.data as { type?: string })?.type === 'flyxa:close-dock') setOpen(false);
+      const data = e.data as { type?: string; tradeCount?: number; pnl?: number };
+      if (data?.type === 'flyxa:close-dock') {
+        setOpen(false);
+      } else if (data?.type === 'flyxa:session-done') {
+        setOpen(false);
+        if ((data.tradeCount ?? 0) > 0) {
+          setLogPrompt({ tradeCount: data.tradeCount!, pnl: data.pnl ?? 0 });
+        }
+      }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  // Auto-dismiss after 5 min of the tab being visible — pauses while tab is hidden
+  useEffect(() => {
+    if (!logPrompt) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+
+    const start = () => { t = setTimeout(() => setLogPrompt(null), 5 * 60 * 1000); };
+    const pause = () => { if (t !== null) { clearTimeout(t); t = null; } };
+
+    const onVisibility = () => { document.hidden ? pause() : start(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    if (!document.hidden) start();
+
+    return () => {
+      pause();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [logPrompt]);
+
+  // Persist dock position
   useEffect(() => {
     if (!open) return;
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(position)); } catch { /* ignore */ }
   }, [open, position]);
 
+  // Drag handling
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
       const drag = dragRef.current;
@@ -94,8 +164,6 @@ export default function InSessionTradeCheckDock() {
       window.removeEventListener('pointercancel', onPointerUp);
     };
   }, [minimized]);
-
-  if (!open) return null;
 
   async function openPictureInPicture(): Promise<boolean> {
     if (!window.documentPictureInPicture) return false;
@@ -127,69 +195,153 @@ export default function InSessionTradeCheckDock() {
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        left: position.x,
-        top: position.y,
-        width: W,
-        zIndex: 1600,
-        border: '1px solid rgba(255,255,255,0.06)',
-        background: 'rgba(4,3,3,0.03)',
-        borderRadius: 8,
-        overflow: 'hidden',
-        boxShadow: '0 1px 10px rgba(0,0,0,0.05)',
-        backdropFilter: 'blur(7px)',
-        WebkitBackdropFilter: 'blur(7px)',
-        fontFamily: 'var(--font-sans)',
-      }}
-    >
-      {/* Drag handle / header */}
-      <div
-        role="button"
-        tabIndex={0}
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originX: position.x, originY: position.y };
-        }}
-        style={{
-          height: H_MIN,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 6,
-          padding: '0 6px 0 8px',
-          borderBottom: minimized ? 'none' : '1px solid rgba(255,255,255,0.04)',
-          cursor: 'grab',
-          userSelect: 'none',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-          <ShieldCheck size={11} color="rgba(245,158,11,0.40)" />
-          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(232,227,220,0.45)', letterSpacing: '0.02em' }}>Trade Check</span>
-          <GripHorizontal size={11} color="rgba(92,87,81,0.30)" />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <button type="button" onClick={openExternal} title="Open as window" aria-label="Open as window" style={iconBtnStyle}>
-            <ExternalLink size={10} />
-          </button>
-          <button type="button" onClick={() => setMinimized(v => !v)} title={minimized ? 'Expand' : 'Minimize'} aria-label={minimized ? 'Expand' : 'Minimize'} style={iconBtnStyle}>
-            <Minus size={10} />
-          </button>
-          <button type="button" onClick={() => setOpen(false)} title="Close" aria-label="Close" style={iconBtnStyle}>
-            <X size={11} />
-          </button>
-        </div>
-      </div>
+    <>
+      {/* ── Floating dock ─────────────────────────────────────────── */}
+      {open && (
+        <div
+          style={{
+            position: 'fixed',
+            left: position.x,
+            top: position.y,
+            width: W,
+            zIndex: 1600,
+            border: '1px solid rgba(255,255,255,0.06)',
+            background: 'rgba(4,3,3,0.03)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            boxShadow: '0 1px 10px rgba(0,0,0,0.05)',
+            backdropFilter: 'blur(7px)',
+            WebkitBackdropFilter: 'blur(7px)',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          {/* Drag handle / header */}
+          <div
+            role="button"
+            tabIndex={0}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originX: position.x, originY: position.y };
+            }}
+            style={{
+              height: H_MIN,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 6,
+              padding: '0 6px 0 8px',
+              borderBottom: minimized ? 'none' : '1px solid rgba(255,255,255,0.04)',
+              cursor: 'grab',
+              userSelect: 'none',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+              <ShieldCheck size={11} color="rgba(245,158,11,0.40)" />
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(232,227,220,0.45)', letterSpacing: '0.02em' }}>Trade Check</span>
+              <GripHorizontal size={11} color="rgba(92,87,81,0.30)" />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <button type="button" onClick={openExternal} title="Open as window" aria-label="Open as window" style={iconBtnStyle}>
+                <ExternalLink size={10} />
+              </button>
+              <button type="button" onClick={() => setMinimized(v => !v)} title={minimized ? 'Expand' : 'Minimize'} aria-label={minimized ? 'Expand' : 'Minimize'} style={iconBtnStyle}>
+                <Minus size={10} />
+              </button>
+              <button type="button" onClick={() => setOpen(false)} title="Close" aria-label="Close" style={iconBtnStyle}>
+                <X size={11} />
+              </button>
+            </div>
+          </div>
 
-      {!minimized && (
-        <iframe
-          title="In-session trade check"
-          src="/trade-check"
-          style={{ display: 'block', width: '100%', height: H_FULL - H_MIN, border: 'none', background: 'transparent' }}
-        />
+          {!minimized && (
+            <iframe
+              title="In-session trade check"
+              src="/trade-check"
+              style={{ display: 'block', width: '100%', height: H_FULL - H_MIN, border: 'none', background: 'transparent' }}
+            />
+          )}
+        </div>
       )}
-    </div>
+
+      {/* ── Post-session log prompt ────────────────────────────────── */}
+      {logPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 28,
+            right: 28,
+            zIndex: 1700,
+            width: 276,
+            // Backdrop blur layer — opaque enough that text sits on solid bg, not over blur
+            background: 'rgba(18,12,4,0.97)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderTop: '2px solid rgba(245,158,11,0.65)',
+            border: '1px solid rgba(245,158,11,0.18)',
+            borderRadius: 10,
+            fontFamily: 'var(--font-sans)',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.50)',
+            // Force own compositing layer so text renders above the blur, not through it
+            transform: 'translateZ(0)',
+            WebkitFontSmoothing: 'antialiased',
+            MozOsxFontSmoothing: 'grayscale',
+          } as React.CSSProperties}
+        >
+          {/* Inner content isolated from backdrop — prevents blur bleed onto text */}
+          <div style={{ padding: '15px 15px 13px', position: 'relative', zIndex: 1, isolation: 'isolate' } as React.CSSProperties}>
+            {/* Dismiss */}
+            <button
+              type="button"
+              onClick={() => setLogPrompt(null)}
+              style={{ position: 'absolute', top: 0, right: 0, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', color: 'rgba(232,227,220,0.45)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}
+            >✕</button>
+
+            {/* Header */}
+            <p style={{ margin: '0 0 5px', fontSize: 12.5, fontWeight: 700, color: 'rgba(245,158,11,0.95)', letterSpacing: '-0.01em', textRendering: 'optimizeLegibility' } as React.CSSProperties}>
+              Session complete
+            </p>
+
+            {/* Stats */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 9 }}>
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(232,227,220,0.70)' }}>
+                {logPrompt.tradeCount} trade{logPrompt.tradeCount !== 1 ? 's' : ''}
+              </span>
+              {logPrompt.pnl !== 0 && (
+                <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', fontWeight: 800, color: logPrompt.pnl > 0 ? 'rgba(52,211,153,0.95)' : 'rgba(248,113,113,0.95)', letterSpacing: '0.01em' }}>
+                  {logPrompt.pnl > 0 ? '+' : ''}{fmtMoney(logPrompt.pnl)}
+                </span>
+              )}
+            </div>
+
+            {/* Sub-label */}
+            <p style={{ margin: '0 0 12px', fontSize: 9.5, fontWeight: 400, color: 'rgba(232,227,220,0.50)', lineHeight: 1.5 }}>
+              Log while it's fresh — your post-session review is waiting.
+            </p>
+
+            {/* CTA */}
+            <button
+              type="button"
+              onClick={() => { navigate('/scanner'); setLogPrompt(null); }}
+              style={{
+                width: '100%',
+                height: 34,
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 700,
+                border: '1px solid rgba(245,158,11,0.32)',
+                background: 'rgba(245,158,11,0.11)',
+                color: 'rgba(245,158,11,0.95)',
+                cursor: 'pointer',
+                letterSpacing: '0.025em',
+                transition: 'all 0.12s',
+              }}
+            >
+              Review &amp; log trades →
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

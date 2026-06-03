@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef, type ChangeEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Download,
@@ -332,6 +332,7 @@ function EntryItem({
 
 export default function Journal() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [selected, setSelected] = useState<JournalEntry | null>(null);
@@ -1104,6 +1105,46 @@ export default function Journal() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Post-session prompt bar */}
+      <div
+        style={{
+          flexShrink: 0,
+          borderTop: `1px solid ${BORDER}`,
+          background: S1,
+          padding: '10px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: T2 }}>Done journaling?</p>
+          <p style={{ margin: 0, fontSize: 11, color: T3, marginTop: 1 }}>Run your post-session review while it's fresh.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/flyxa-ai/post-session')}
+          style={{
+            flexShrink: 0,
+            height: 32,
+            padding: '0 14px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            border: `1px solid ${AMBER}44`,
+            background: `${AMBER}10`,
+            color: AMBER,
+            cursor: 'pointer',
+            letterSpacing: '0.02em',
+            transition: 'all 0.12s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Post-session review →
+        </button>
       </div>
 
       {/* Delete modal */}

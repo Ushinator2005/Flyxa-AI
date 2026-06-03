@@ -22,6 +22,7 @@ import { pushToast } from '../store/toastStore.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName, normalizeResolvedSymbol } from '../utils/tradeScannerPipeline.js';
+import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
@@ -158,7 +159,8 @@ const STATE_OF_MIND_TAGS = {
 
 const TAGS = Array.from(new Set(Object.values(STATE_OF_MIND_TAGS).flat()));
 
-function getTodayIso() {
+function getTodayIso(tz?: string) {
+  if (tz) return getTimeZoneParts(new Date(), tz).date;
   return new Date().toISOString().split('T')[0];
 }
 
@@ -1721,7 +1723,7 @@ function ProcessScoreBlock({ trade, entries, navigate }: { trade: JournalTrade; 
 export default function TradeJournal() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { preferences, accounts } = useAppSettings();
+  const { preferences, accounts, selectedAccountId } = useAppSettings();
   const { user } = useAuth();
   const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
@@ -1765,7 +1767,7 @@ export default function TradeJournal() {
   }, [entries]);
 
   const [monthCursor, setMonthCursor] = useState(() => {
-    const today = parseDate(getTodayIso());
+    const today = parseDate(getTodayIso(preferences.timezone));
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
@@ -1782,7 +1784,7 @@ export default function TradeJournal() {
   const [deleteEntryConfirm, setDeleteEntryConfirm] = useState(false);
   const [isScreenshotFullscreen, setIsScreenshotFullscreen] = useState(false);
   const [isTradeDateEditorOpen, setIsTradeDateEditorOpen] = useState(false);
-  const [tradeDateDraft, setTradeDateDraft] = useState(getTodayIso());
+  const [tradeDateDraft, setTradeDateDraft] = useState(getTodayIso(preferences.timezone));
   const [showCSVImport, setShowCSVImport] = useState(false);
 
   // Collapsible section state — persisted to localStorage
@@ -1953,7 +1955,7 @@ export default function TradeJournal() {
   }, [tradedEntriesInMonth]);
 
   const addBlankDay = useCallback(() => {
-    const date = selectedEntry?.date ?? getTodayIso();
+    const date = selectedEntry?.date ?? getTodayIso(preferences.timezone);
     const existing = entries.find(entry => entry.date === date);
     if (existing) {
       setSelectedEntryId(existing.id);
@@ -1971,7 +1973,7 @@ export default function TradeJournal() {
       pushToast({ tone: 'red', durationMs: 3000, message: 'Enter a valid date (YYYY-MM-DD).' });
       return;
     }
-    if (nextDate > getTodayIso()) {
+    if (nextDate > getTodayIso(preferences.timezone)) {
       pushToast({ tone: 'red', durationMs: 3000, message: 'Trade date cannot be in the future.' });
       return;
     }
@@ -2101,7 +2103,7 @@ export default function TradeJournal() {
 
     setScanError('');
     setIsScanning(true);
-    const tradeDate = inferTradeDateFromFileName(file.name) ?? selectedEntry?.date ?? getTodayIso();
+    const tradeDate = inferTradeDateFromFileName(file.name) ?? selectedEntry?.date ?? getTodayIso(preferences.timezone);
     const tradeTime = getNowTime();
     let scanSucceeded = false;
 
@@ -2420,8 +2422,13 @@ export default function TradeJournal() {
                 </div>
                 <p className="tj-entry-sub">
                   {(() => {
-                    const acctId = activeTrade?.accountId;
-                    const acct = accounts.find(a => a.id === acctId);
+                    // Use the globally selected account; fall back to the trade's own account
+                    // when "All Accounts" is active or the selected account can't be found.
+                    const resolvedId =
+                      selectedAccountId && selectedAccountId !== DEFAULT_ACCOUNT_ID
+                        ? selectedAccountId
+                        : activeTrade?.accountId;
+                    const acct = accounts.find(a => a.id === resolvedId);
                     return acct ? `${acct.name} | ${acct.type}` : null;
                   })()} | <strong>{formatSignedCurrency(computeEntryStats(selectedEntry).pnl)}</strong>
                 </p>
@@ -2450,7 +2457,7 @@ export default function TradeJournal() {
                       onChange={setTradeDateDraft}
                       compact
                       align="left"
-                      max={getTodayIso()}
+                      max={getTodayIso(preferences.timezone)}
                     />
                     <button type="button" className="tj-mini-btn" onClick={saveTradeDate}>Save</button>
                     <button type="button" className="tj-mini-btn" onClick={() => {
