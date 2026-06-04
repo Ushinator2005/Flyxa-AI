@@ -356,7 +356,6 @@ export default function Journal() {
   const titleSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const moodsHydratedRef = useRef<string | null>(null);
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
   const backupStorageKey = useMemo(
     () => `${JOURNAL_BACKUP_STORAGE_PREFIX}${user?.id ?? 'anonymous'}`,
@@ -410,9 +409,10 @@ export default function Journal() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const hydrationKey = user?.id ?? 'anonymous';
-    if (moodsHydratedRef.current === hydrationKey) return;
-    moodsHydratedRef.current = hydrationKey;
+    // Re-run whenever moodByEntryId becomes empty (e.g. after a Supabase merge wipes it) so the
+    // localStorage backup can restore the data.  The per-entry guard (!moodByEntryId[entryId])
+    // prevents redundant sets when moods are already loaded.
+    if (Object.keys(moodByEntryId).length > 0) return;
 
     try {
       const raw = window.localStorage.getItem(moodsStorageKey);
@@ -424,10 +424,14 @@ export default function Journal() {
     } catch {
       // ignore malformed local fallback cache
     }
-  }, [moodByEntryId, moodsStorageKey, setJournalMoodAction, user?.id]);
+  }, [moodByEntryId, moodsStorageKey, setJournalMoodAction]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    // Never overwrite a non-empty localStorage backup with an empty object — this prevents a
+    // Supabase async-merge (which may arrive with journalMoods:{} from an older save) from
+    // destroying moods that were already persisted locally.
+    if (Object.keys(moodByEntryId).length === 0) return;
     try {
       window.localStorage.setItem(moodsStorageKey, JSON.stringify(moodByEntryId));
     } catch {

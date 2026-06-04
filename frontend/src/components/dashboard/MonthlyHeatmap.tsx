@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import { journalApi } from '../../services/api.js';
 import { JournalEntry, Trade } from '../../types/index.js';
 import { buildMonthlyHeatmapData } from '../../utils/tradeAnalytics.js';
@@ -266,6 +267,7 @@ function DailyJournalModal({
   onPrev,
   onNext,
   onSave,
+  onViewTrades,
 }: {
   entry: DailyJournalModalEntry;
   isLoading: boolean;
@@ -276,6 +278,7 @@ function DailyJournalModal({
   onPrev: () => void;
   onNext: () => void;
   onSave: (tab: JournalTab, content: string) => Promise<void> | void;
+  onViewTrades: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<JournalTab>('reflection');
   const [draftByTab, setDraftByTab] = useState<Record<JournalTab, string>>({
@@ -506,6 +509,28 @@ function DailyJournalModal({
                 style={!canNext ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
               >
                 <ChevronRight size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={onViewTrades}
+                style={{
+                  height: 28,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '0 12px',
+                  borderRadius: 4,
+                  border: '1px solid var(--amber)',
+                  background: 'var(--amber-dim)',
+                  color: 'var(--amber)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  letterSpacing: '0.01em',
+                }}
+              >
+                <ExternalLink size={11} />
+                View trades
               </button>
               <button
                 type="button"
@@ -796,6 +821,7 @@ const TOKEN_SCOPE_STYLE = {
 export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   const now = new Date();
   const today = useMemo(() => new Date(), []);
+  const navigate = useNavigate();
   const { accounts } = useAppSettings();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -1166,25 +1192,9 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                       const targetDate = format(new Date(year, month - 1, day), 'yyyy-MM-dd');
                       if (journalEntry) {
                         void openJournalModal(journalEntry.id, targetDate);
-                        return;
+                      } else {
+                        navigate(`/scanner?date=${targetDate}`);
                       }
-                      void (async () => {
-                        try {
-                          const created = await journalApi.create({
-                            date: targetDate,
-                            content: '',
-                            screenshots: [],
-                          }) as JournalEntry;
-                          setJournalEntries(current => [created, ...current.filter(entry => entry.id !== created.id)]);
-                          setJournals(current => ({
-                            ...current,
-                            [day]: { id: created.id, date: created.date },
-                          }));
-                          void openJournalModal(created.id, targetDate);
-                        } catch {
-                          setJournalError('Unable to open this daily journal entry.');
-                        }
-                      })();
                     }}
                     className={[
                       'relative flex flex-col border-r border-slate-600 p-2 transition-colors',
@@ -1262,6 +1272,10 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
           onPrev={handlePrevJournal}
           onNext={handleNextJournal}
           onSave={handleSaveTab}
+          onViewTrades={() => {
+            closeJournalModal();
+            navigate(`/scanner?date=${activeJournalDate}`);
+          }}
         />
       )}
     </div>

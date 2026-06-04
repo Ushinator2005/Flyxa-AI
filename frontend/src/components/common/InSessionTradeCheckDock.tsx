@@ -174,10 +174,10 @@ export default function InSessionTradeCheckDock() {
       }
       const pipWindow = await window.documentPictureInPicture.requestWindow({ width: W, height: H_FULL });
       pipWindowRef.current = pipWindow;
-      pipWindow.document.title = 'Flyxa Trade Check';
+      pipWindow.document.title = 'Flyxa Trade Guard';
       pipWindow.document.body.style.cssText = 'margin:0;background:transparent;overflow:hidden';
       const iframe = pipWindow.document.createElement('iframe');
-      iframe.title = 'Flyxa Trade Check';
+      iframe.title = 'Flyxa Trade Guard';
       iframe.src = '/trade-check';
       iframe.style.cssText = 'width:100vw;height:100vh;border:0;display:block;background:transparent';
       pipWindow.document.body.appendChild(iframe);
@@ -237,7 +237,7 @@ export default function InSessionTradeCheckDock() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
               <ShieldCheck size={11} color="rgba(245,158,11,0.40)" />
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(232,227,220,0.45)', letterSpacing: '0.02em' }}>Trade Check</span>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(232,227,220,0.45)', letterSpacing: '0.02em' }}>Trade Guard</span>
               <GripHorizontal size={11} color="rgba(92,87,81,0.30)" />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -255,7 +255,7 @@ export default function InSessionTradeCheckDock() {
 
           {!minimized && (
             <iframe
-              title="In-session trade check"
+              title="In-session Trade Guard"
               src="/trade-check"
               style={{ display: 'block', width: '100%', height: H_FULL - H_MIN, border: 'none', background: 'transparent' }}
             />

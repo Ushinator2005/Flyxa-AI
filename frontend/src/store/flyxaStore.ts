@@ -870,6 +870,14 @@ const useFlyxaStore = create<FlyxaStore>()(
           riskRules: removeLegacyDefaults(persisted.riskRules ?? base.riskRules, LEGACY_DEFAULT_RISK_RULE_IDS),
           checklist: removeLegacyDefaults(persisted.checklist ?? base.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
           aiReflections: persisted.aiReflections ?? base.aiReflections,
+          // Prefer non-empty moods/titles: if Supabase blob has none (e.g. older save that predates
+          // the field) keep whatever is already in base (may have been hydrated from localStorage).
+          journalMoods: (persisted.journalMoods && Object.keys(persisted.journalMoods).length > 0)
+            ? persisted.journalMoods
+            : base.journalMoods,
+          journalTitles: (persisted.journalTitles && Object.keys(persisted.journalTitles).length > 0)
+            ? persisted.journalTitles
+            : base.journalTitles,
         };
       },
       migrate: (persistedState) => {

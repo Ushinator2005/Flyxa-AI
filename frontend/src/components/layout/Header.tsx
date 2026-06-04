@@ -1,4 +1,4 @@
-import { Settings, ChevronDown, ShieldCheck } from 'lucide-react';
+import { Settings, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
@@ -32,7 +32,7 @@ const pageNames: Record<string, string> = {
   '/rivals': 'Rivals',
   '/billing': 'Billing',
   '/settings': 'Settings',
-  '/trade-check': 'Trade Check',
+  '/trade-check': 'Trade Guard',
 };
 
 export default function Header() {
@@ -192,25 +192,35 @@ export default function Header() {
           onClick={openTradeCheck}
           style={{
             display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 7,
+            alignItems: 'stretch',
             height: 34,
-            padding: '0 11px',
-            borderRadius: 6,
-            border: '1px solid rgba(245,158,11,0.24)',
-            background: 'rgba(245,158,11,0.09)',
-            color: 'var(--amber)',
+            padding: 0,
+            borderRadius: 5,
+            overflow: 'hidden',
+            border: 'none',
+            background: '#f59e0b',
             cursor: 'pointer',
-            fontSize: 12,
-            fontWeight: 650,
-            fontFamily: 'var(--font-sans)',
+            transition: 'opacity 150ms ease',
           }}
-          aria-label="Open in-session trade check"
-          title="Open in-session trade check"
+          onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+          aria-label="Open Trade Guard"
+          title="Open Trade Guard"
         >
-          <ShieldCheck size={14} />
-          Check
+          <span style={{ width: 3, background: 'rgba(0,0,0,0.22)', display: 'block', flexShrink: 0 }} />
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 12px',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.11em',
+            textTransform: 'uppercase',
+            fontFamily: 'var(--font-mono)',
+            color: '#000',
+          }}>
+            Trade Guard
+          </span>
         </button>
         <ThemeToggle compact />
         <button

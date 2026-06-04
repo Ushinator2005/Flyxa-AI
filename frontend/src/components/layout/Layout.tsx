@@ -22,6 +22,7 @@ export default function Layout() {
     || location.pathname === '/market-news'
     || location.pathname === '/goals'
     || location.pathname === '/'
+    || location.pathname === '/journal'
     || isJournalWorkspace;
 
   return (

@@ -696,7 +696,7 @@ export default function Dashboard() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        {['Symbol', 'Dir', 'Entry', 'Exit', 'Qty', 'R:R', 'P&L', 'Result'].map(col => (
+                        {['Date', 'Dir', 'Entry', 'Exit', 'Qty', 'R:R', 'P&L', 'Result'].map(col => (
                           <th key={col} style={{
                             padding: '9px 14px',
                             paddingRight: col === 'Result' ? 36 : 14,
@@ -719,8 +719,10 @@ export default function Dashboard() {
                             onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
                           >
                             <td style={{ padding: '9px 14px' }}>
-                              <div style={{ fontSize: 13, fontWeight: 500, fontFamily: MONO, color: T1 }}>{trade.symbol || 'N/A'}</div>
-                              <div style={{ fontSize: 11, color: T3, marginTop: 1 }}>{trade.trade_date}</div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: T1 }}>
+                                {trade.trade_date ? format(new Date(`${trade.trade_date}T00:00:00`), 'MMM d, yyyy') : '—'}
+                              </div>
+                              <div style={{ fontSize: 11, color: T3, marginTop: 1 }}>{trade.symbol || 'N/A'}</div>
                             </td>
                             <td style={{ padding: '9px 14px' }}>
                               {(trade.direction === 'Long' || trade.direction === 'Short')
