@@ -28,6 +28,7 @@ export interface Trade {
   post_trade_notes: string;
   confluences?: string[];
   followed_plan?: boolean | null;
+  plan_score?: number | null;
   behavioral_flags?: string[];
   session: 'Asia' | 'London' | 'Pre Market' | 'New York' | 'Other';
   created_at: string;

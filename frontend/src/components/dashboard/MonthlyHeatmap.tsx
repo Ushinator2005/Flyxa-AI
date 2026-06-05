@@ -1047,13 +1047,20 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
     const dayTrades = trades.filter(trade => trade.trade_date === activeJournalDate);
     const pnl = dayTrades.reduce((sum, trade) => sum + trade.pnl, 0);
 
-    const tradesWithPlanLogged = dayTrades.filter(trade => typeof trade.followed_plan === 'boolean');
-    const followedPlanCount = tradesWithPlanLogged.filter(trade => trade.followed_plan === true).length;
-    const discipline = tradesWithPlanLogged.length > 0
-      ? Number((1 + ((followedPlanCount / tradesWithPlanLogged.length) * 4)).toFixed(1))
+    const tradesWithScore = dayTrades.filter(trade => typeof trade.plan_score === 'number');
+    const tradesWithPlanLogged = tradesWithScore.length > 0
+      ? tradesWithScore
+      : dayTrades.filter(trade => typeof trade.followed_plan === 'boolean');
+    const avgPlanScore = tradesWithScore.length > 0
+      ? tradesWithScore.reduce((s, t) => s + (t.plan_score as number), 0) / tradesWithScore.length
+      : tradesWithPlanLogged.length > 0
+        ? (tradesWithPlanLogged.filter(t => t.followed_plan === true).length / tradesWithPlanLogged.length) * 100
+        : null;
+    const discipline = avgPlanScore !== null
+      ? Number((1 + (avgPlanScore / 100) * 4).toFixed(1))
       : 0;
-    const disciplineNote = tradesWithPlanLogged.length > 0
-      ? `${followedPlanCount}/${tradesWithPlanLogged.length} followed plan`
+    const disciplineNote = avgPlanScore !== null
+      ? `${Math.round(avgPlanScore)}% plan adherence`
       : 'No trades logged';
 
     const emotionLabelsFromTrades: string[] = [];

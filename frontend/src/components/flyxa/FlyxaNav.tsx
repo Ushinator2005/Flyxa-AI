@@ -15,7 +15,6 @@ const NAV_ITEMS = [
   { key: 'execution',      label: 'Execution coach',      to: '/flyxa-ai/execution-coach',        end: false },
   { key: 'pattern',        label: 'Pattern library',      to: '/flyxa-ai/patterns',               end: false },
   { key: 'emotional',      label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },
-  { key: 'post-session',   label: 'Post-session',         to: '/flyxa-ai/post-session',           end: false },
   { key: 'ask',            label: 'Ask Flyxa',            to: '/flyxa-ai/ask',                    end: false },
 ];
 

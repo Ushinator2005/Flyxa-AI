@@ -374,9 +374,10 @@ export default function App() {
               <Route path="/flyxa-ai/patterns" element={<FlyxaAIPatterns />} />
               <Route path="/flyxa-ai/ask" element={<FlyxaAIAsk />} />
               <Route path="/pre-session" element={<FlyxaAIPreSession />} />
+              <Route path="/post-session" element={<FlyxaAIPostSession />} />
               <Route path="/flyxa-ai/pre-session" element={<Navigate to="/pre-session" replace />} />
+              <Route path="/flyxa-ai/post-session" element={<Navigate to="/post-session" replace />} />
               <Route path="/flyxa-ai/emotional-fingerprint" element={<FlyxaAIEmotionalFingerprint />} />
-              <Route path="/flyxa-ai/post-session" element={<FlyxaAIPostSession />} />
               <Route path="/flyxa-ai/weekly-report" element={<FlyxaAIWeeklyReport />} />
               <Route path="/coach" element={<Navigate to="/flyxa-ai/execution-coach" replace />} />
               <Route path="/analytics" element={<Analytics />} />

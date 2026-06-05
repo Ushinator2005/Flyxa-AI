@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, CircleSlash } from 'lucide-react';
 import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRisk } from '../contexts/RiskContext.js';
@@ -42,6 +42,24 @@ const EMOTIONS: Array<{ full: string; short: string }> = [
 ];
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+const SESSION_TRADES_STORAGE = 'flyxa.session-trades-v1';
+
+function loadSessionTrades(): SessionTrade[] {
+  try {
+    const raw = localStorage.getItem(SESSION_TRADES_STORAGE);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { date: string; trades: SessionTrade[] };
+    if (parsed.date === todayKey()) return parsed.trades ?? [];
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveSessionTrades(trades: SessionTrade[]) {
+  try {
+    localStorage.setItem(SESSION_TRADES_STORAGE, JSON.stringify({ date: todayKey(), trades }));
+  } catch { /* ignore */ }
+}
 
 function fmtMoney(v: number) {
   return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -107,13 +125,16 @@ export default function TradeCheck() {
   const [phase, setPhase]                 = useState<Phase>('idle');
   const [direction, setDirection]         = useState<TradeDir | null>(null);
   const [outcome, setOutcome]             = useState<Outcome | null>(null);
-  const [sessionTrades, setSessionTrades] = useState<SessionTrade[]>([]);
+  const [sessionTrades, setSessionTrades] = useState<SessionTrade[]>(() => loadSessionTrades());
   // pendingClose: Win or Loss was tapped — waiting for $ amount before confirming
   const [pendingClose, setPendingClose]   = useState<{ outcome: Exclude<Outcome, 'be'>; amount: string } | null>(null);
   // Inline risk-limit editor
   const [showLimits, setShowLimits]       = useState(false);
   const [limitDraft, setLimitDraft]       = useState({ loss: '', trades: '', riskPct: '', contracts: '' });
   const [limitSaving, setLimitSaving]     = useState(false);
+
+  // Persist session trades whenever they change (date-keyed, auto-expires next day)
+  useEffect(() => { saveSessionTrades(sessionTrades); }, [sessionTrades]);
 
   // scopedTrades used only for priorFlow (yesterday's rules) — not for gate checks
   const scopedTrades = useMemo<Trade[]>(() => {
@@ -239,6 +260,8 @@ export default function TradeCheck() {
     return { score, color, msg };
   }, [phase, outcome, sessionTrades, gate.lossPct, gate.status, emotion]);
 
+  const maxTrades = dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day ?? 0;
+
   const sc = gate.status === 'blocked'
     ? { label: 'Blocked', color: C.red,   Icon: CircleSlash  }
     : gate.status === 'caution'
@@ -324,7 +347,8 @@ export default function TradeCheck() {
     setDirection(null);
     setOutcome(null);
     setPendingClose(null);
-    setSessionTrades([]);
+    // Do NOT clear sessionTrades — accumulate across the full day's sessions.
+    // The stored trades auto-expire on the next calendar day.
   }
 
   // ── Render ────────────────────────────────────────────────────────
@@ -334,153 +358,169 @@ export default function TradeCheck() {
       {/* ══ IDLE ════════════════════════════════════════════════════ */}
       {phase === 'idle' && (
         <>
-          {/* Emotion pills */}
-          <div>
-            <p style={KICKER}>State</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 2 }}>
-              {EMOTIONS.map(({ full, short }) => {
-                const on   = emotion === full;
-                const tilt = isTilt(full);
-                return (
-                  <button
-                    key={full}
-                    type="button"
-                    title={full}
-                    onClick={() => setEmotion(full)}
-                    style={{
-                      height: 20, borderRadius: 3, fontSize: 8, fontWeight: on ? 700 : 500,
-                      cursor: 'pointer', padding: 0, overflow: 'hidden', transition: 'all 0.12s',
-                      border: on
-                        ? `1px solid ${tilt ? 'rgba(248,113,113,0.45)' : 'rgba(52,211,153,0.38)'}`
-                        : `1px solid ${C.border}`,
-                      background: on
-                        ? (tilt ? 'rgba(248,113,113,0.10)' : 'rgba(52,211,153,0.07)')
-                        : 'rgba(255,255,255,0.02)',
-                      color: on ? (tilt ? C.red : C.green) : C.subtle,
-                    }}
-                  >{short}</button>
-                );
-              })}
+          {/* Verdict row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <sc.Icon size={11} color={sc.color} />
+              <span style={{ fontSize: 13, fontWeight: 760, color: sc.color, lineHeight: 1, letterSpacing: '-0.01em' }}>{sc.label}</span>
             </div>
-          </div>
-
-          {/* Verdict */}
-          <div style={{ borderLeft: `3px solid ${sc.color}`, paddingLeft: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <sc.Icon size={12} color={sc.color} />
-                <span style={{ fontSize: 14, fontWeight: 760, color: sc.color, lineHeight: 1, letterSpacing: '-0.01em' }}>
-                  {sc.label}
-                </span>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {gate.sessionPnl !== 0 && (
                 <span style={{ fontSize: 10, fontFamily: C.mono, fontWeight: 700, color: gate.sessionPnl > 0 ? C.green : C.red }}>
                   {gate.sessionPnl > 0 ? '+' : ''}{fmtMoney(gate.sessionPnl)}
                 </span>
               )}
-            </div>
-            <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-              <span style={{ fontSize: 9, color: C.subtle }}>
-                {gate.tradeCount} trade{gate.tradeCount !== 1 ? 's' : ''}
-              </span>
-              {gate.lossLimit > 0 && (
-                <span style={{ fontSize: 9, color: gate.lossPct >= 80 ? C.red : C.subtle, fontFamily: C.mono }}>
-                  {gate.lossPct}% loss used
-                </span>
-              )}
+              <button type="button" onClick={openLimitEditor}
+                style={{ fontSize: 8, fontWeight: 600, color: C.amber, background: 'none', border: 'none', cursor: 'pointer', padding: 0, letterSpacing: '0.04em' }}>
+                edit
+              </button>
             </div>
           </div>
 
-          {/* Top flag */}
-          {gate.flags.length > 0 && (
-            <div style={{ borderLeft: `2px solid ${gate.flags[0].status === 'blocked' ? C.red : C.amber}`, paddingLeft: 6, paddingTop: 2, paddingBottom: 2 }}>
-              <span style={{ fontSize: 9.5, fontWeight: 600, color: gate.flags[0].status === 'blocked' ? C.red : C.amber, display: 'block', lineHeight: 1.3, letterSpacing: '0.01em' }}>
-                {gate.flags[0].label}
-              </span>
-              {gate.flags.length > 1 && (
-                <span style={{ fontSize: 8.5, color: C.subtle }}>+{gate.flags.length - 1} more</span>
+          {/* Live stats bars — hidden when limit editor is open */}
+          {!showLimits && (
+            <>
+              {/* Loss bar */}
+              {gate.lossLimit > 0 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                    <span style={{ fontSize: 7.5, color: C.subtle, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Loss</span>
+                    <span style={{ fontSize: 8.5, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.muted }}>
+                      {fmtMoney(gate.sessionLoss)}<span style={{ opacity: 0.45 }}> / {fmtMoney(gate.lossLimit)}</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 2,
+                      width: `${Math.min(100, gate.lossPct)}%`,
+                      background: gate.lossPct >= 100 ? C.red
+                        : gate.sessionPnl > 0 ? 'rgba(52,211,153,0.70)'
+                        : gate.lossPct >= 80 ? C.red
+                        : gate.sessionPnl < 0 ? 'rgba(248,113,113,0.70)'
+                        : 'rgba(255,255,255,0.10)',
+                      transition: 'width 0.4s ease, background 0.3s ease' }} />
+                  </div>
+                </div>
               )}
-            </div>
+
+              {/* Trade segments */}
+              {maxTrades > 0 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                    <span style={{ fontSize: 7.5, color: C.subtle, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Trades</span>
+                    <span style={{ fontSize: 8.5, fontFamily: C.mono, color: gate.tradeCount >= maxTrades ? C.red : C.muted }}>
+                      {gate.tradeCount}<span style={{ opacity: 0.45 }}> / {maxTrades}</span>
+                    </span>
+                  </div>
+                  {maxTrades <= 8 ? (
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {Array.from({ length: maxTrades }).map((_, i) => (
+                        <div key={i} style={{ flex: 1, height: 4, borderRadius: 2,
+                          background: i < gate.tradeCount
+                            ? (gate.tradeCount >= maxTrades ? C.red : C.amber)
+                            : 'rgba(255,255,255,0.05)',
+                          transition: 'background 0.3s ease' }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 2,
+                        width: `${Math.min(100, (gate.tradeCount / maxTrades) * 100)}%`,
+                        background: gate.tradeCount >= maxTrades ? C.red : C.amber,
+                        transition: 'width 0.4s ease' }} />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Profit target bar */}
+              {gate.profitTarget !== null && gate.profitTarget > 0 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                    <span style={{ fontSize: 7.5, color: C.subtle, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Target</span>
+                    <span style={{ fontSize: 8.5, fontFamily: C.mono, color: gate.sessionPnl >= gate.profitTarget ? C.green : C.muted }}>
+                      {fmtMoney(Math.max(0, gate.sessionPnl))}<span style={{ opacity: 0.45 }}> / {fmtMoney(gate.profitTarget)}</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 2,
+                      width: `${Math.min(100, Math.max(0, (gate.sessionPnl / gate.profitTarget) * 100))}%`,
+                      background: gate.sessionPnl >= gate.profitTarget ? C.green : 'rgba(52,211,153,0.38)',
+                      transition: 'width 0.4s ease' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* No limits set hint */}
+              {gate.lossLimit === 0 && maxTrades === 0 && gate.profitTarget === null && (
+                <span style={{ fontSize: 8.5, color: C.subtle }}>no limits set</span>
+              )}
+            </>
           )}
 
-          {/* Risk limits row */}
-          {!showLimits ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                {gate.lossLimit > 0 && (
-                  <span style={{ fontSize: 8.5, color: C.subtle, fontFamily: C.mono }}>
-                    loss {fmtMoney(gate.lossLimit)}
-                  </span>
-                )}
-                {gate.profitTarget !== null && (
-                  <span style={{ fontSize: 8.5, color: gate.sessionPnl >= gate.profitTarget ? C.green : C.subtle, fontFamily: C.mono }}>
-                    target {fmtMoney(gate.profitTarget)}
-                  </span>
-                )}
-                {(dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day ?? 0) > 0 && (
-                  <span style={{ fontSize: 8.5, color: C.subtle, fontFamily: C.mono }}>
-                    max {dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day} trades
-                  </span>
-                )}
-                {gate.lossLimit === 0 && gate.profitTarget === null && (dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day ?? 0) === 0 && (
-                  <span style={{ fontSize: 8.5, color: C.subtle }}>no limits set</span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={openLimitEditor}
-                style={{ fontSize: 8.5, fontWeight: 600, color: C.amber, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', letterSpacing: '0.02em' }}
-              >edit</button>
-            </div>
-          ) : (
+          {/* Limit editor (inline) */}
+          {showLimits && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <p style={{ ...KICKER, margin: 0 }}>Risk limits</p>
-              {/* Loss limit + max trades */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
                 {([
-                  { key: 'loss',      label: 'Loss limit $', required: true  },
-                  { key: 'trades',    label: 'Max trades',   required: true  },
-                  { key: 'riskPct',   label: 'Risk %',       required: false },
-                  { key: 'contracts', label: 'Max contracts',required: false },
+                  { key: 'loss',      label: 'Loss $',        required: true  },
+                  { key: 'trades',    label: 'Max trades',    required: true  },
+                  { key: 'riskPct',   label: 'Risk %',        required: false },
+                  { key: 'contracts', label: 'Max contracts', required: false },
                 ] as const).map(({ key, label, required }) => (
                   <div key={key}>
                     <p style={{ margin: '0 0 2px', fontSize: 7.5, color: C.subtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                      {label}{!required && <span style={{ color: C.subtle, opacity: 0.6 }}> opt</span>}
+                      {label}{!required && <span style={{ opacity: 0.6 }}> opt</span>}
                     </p>
-                    <input
-                      type="number"
-                      min="0"
-                      step={key === 'riskPct' ? '0.1' : '1'}
-                      placeholder={required ? '—' : 'skip'}
-                      value={limitDraft[key]}
+                    <input type="number" min="0" step={key === 'riskPct' ? '0.1' : '1'}
+                      placeholder={required ? '—' : 'skip'} value={limitDraft[key]}
                       onChange={e => setLimitDraft(prev => ({ ...prev, [key]: e.target.value }))}
-                      style={{
-                        width: '100%', boxSizing: 'border-box',
-                        background: 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${C.border}`,
-                        borderRadius: 3, padding: '3px 5px',
-                        color: C.text, fontSize: 10, fontFamily: C.mono,
-                        outline: 'none',
-                      }}
-                    />
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${C.border}`, borderRadius: 3, padding: '3px 5px',
+                        color: C.text, fontSize: 10, fontFamily: C.mono, outline: 'none' }} />
                   </div>
                 ))}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
-                <button
-                  type="button"
-                  onClick={() => { void saveLimits(); }}
-                  disabled={limitSaving}
-                  style={{ height: 22, borderRadius: 3, fontSize: 9, fontWeight: 700, border: `1px solid ${C.amber}30`, background: `${C.amber}10`, color: C.amber, cursor: 'pointer' }}
-                >{limitSaving ? 'Saving…' : 'Save'}</button>
-                <button
-                  type="button"
-                  onClick={() => setShowLimits(false)}
-                  style={{ height: 22, borderRadius: 3, fontSize: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.subtle, cursor: 'pointer' }}
-                >Cancel</button>
+                <button type="button" onClick={() => { void saveLimits(); }} disabled={limitSaving}
+                  style={{ height: 22, borderRadius: 3, fontSize: 9, fontWeight: 700, border: `1px solid ${C.amber}30`, background: `${C.amber}10`, color: C.amber, cursor: 'pointer' }}>
+                  {limitSaving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={() => setShowLimits(false)}
+                  style={{ height: 22, borderRadius: 3, fontSize: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.subtle, cursor: 'pointer' }}>
+                  Cancel
+                </button>
               </div>
             </div>
           )}
+
+          {/* Top flag */}
+          {gate.flags.length > 0 && (
+            <div style={{ borderLeft: `2px solid ${gate.flags[0].status === 'blocked' ? C.red : C.amber}`, paddingLeft: 6, paddingTop: 1, paddingBottom: 1 }}>
+              <span style={{ fontSize: 9, fontWeight: 600, color: gate.flags[0].status === 'blocked' ? C.red : C.amber, display: 'block', lineHeight: 1.3, letterSpacing: '0.01em' }}>
+                {gate.flags[0].label}
+              </span>
+              {gate.flags.length > 1 && <span style={{ fontSize: 8, color: C.subtle }}>+{gate.flags.length - 1}</span>}
+            </div>
+          )}
+
+          {/* Emotion pills */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 2 }}>
+            {EMOTIONS.map(({ full, short }) => {
+              const on   = emotion === full;
+              const tilt = isTilt(full);
+              return (
+                <button key={full} type="button" title={full} onClick={() => setEmotion(full)}
+                  style={{ height: 20, borderRadius: 3, fontSize: 8, fontWeight: on ? 700 : 500,
+                    cursor: 'pointer', padding: 0, overflow: 'hidden', transition: 'all 0.12s',
+                    border: on ? `1px solid ${tilt ? 'rgba(248,113,113,0.45)' : 'rgba(52,211,153,0.38)'}` : `1px solid ${C.border}`,
+                    background: on ? (tilt ? 'rgba(248,113,113,0.10)' : 'rgba(52,211,153,0.07)') : 'rgba(255,255,255,0.02)',
+                    color: on ? (tilt ? C.red : C.green) : C.subtle,
+                  }}>
+                  {short}
+                </button>
+              );
+            })}
+          </div>
 
           {/* Enter trade */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>

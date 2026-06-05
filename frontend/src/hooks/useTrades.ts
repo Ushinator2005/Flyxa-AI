@@ -32,35 +32,79 @@ function deriveEmotionalState(trade: StoreTrade): ApiTrade['emotional_state'] {
   return normalizeEmotion(richTrade.emotionalState) ?? normalizeEmotion(richTrade.preEntry?.emotionalState);
 }
 
+// Severity weights for behavioral flags (points deducted from 100).
+// High = direct plan violations; Medium = execution deviations; Low = minor slippage.
+const FLAG_SEVERITY: Record<string, number> = {
+  'revenge':         35,
+  'past-limit':      35,
+  'off-playbook':    35,
+  'added-losing':    35,
+  'fomo':            20,
+  'no-confirmation': 20,
+  'sized-up':        20,
+  'moved-stop':      20,
+  'past-inval':      20,
+  'chased-entry':    10,
+  'exit-early':      10,
+  'moved-target':    10,
+};
+
+export function computePlanAdherenceScore(trade: StoreTrade): number | null {
+  // Explicit user override takes priority
+  if (trade.reflection?.followedPlanLogged === true && typeof trade.reflection.followedPlan === 'boolean') {
+    return trade.reflection.followedPlan ? 100 : 0;
+  }
+
+  const richTrade = trade as RichStoreTrade;
+  const flags = Array.isArray(richTrade.behavioralFlags) ? richTrade.behavioralFlags : null;
+  const review = richTrade.executionReview;
+
+  // No behavioral data at all → excluded from calculation
+  const hasFlagData = flags !== null;
+  const hasReviewData = review && Object.values(review).some(v => typeof v === 'boolean');
+  if (!hasFlagData && !hasReviewData) return null;
+
+  let flagDeduction = 0;
+
+  if (flags && flags.length > 0) {
+    for (const flag of flags) {
+      flagDeduction += FLAG_SEVERITY[flag] ?? 10;
+    }
+    // PnL modifier: flags hurt less on profitable trades, more on losing ones
+    const pnl = typeof trade.pnl === 'number' ? trade.pnl : 0;
+    if (pnl > 0)      flagDeduction = Math.round(flagDeduction * 0.70);
+    else if (pnl < 0) flagDeduction = Math.round(flagDeduction * 1.30);
+  }
+
+  // Execution review: each "No" answer deducts 8 points (no PnL modifier)
+  let reviewDeduction = 0;
+  if (review) {
+    const signals = [
+      review.enteredAtLevel,
+      review.waitedForConfirmation,
+      review.correctSize,
+      review.exitedAtPlan,
+      review.movedStopCorrectly,
+      review.resistedEarlyExit,
+    ];
+    for (const s of signals) {
+      if (s === false) reviewDeduction += 8;
+    }
+  }
+
+  return Math.max(0, Math.round(100 - flagDeduction - reviewDeduction));
+}
+
 function deriveFollowedPlan(trade: StoreTrade): boolean | null {
+  // Explicit user override takes priority
   if (trade.reflection?.followedPlanLogged === true && typeof trade.reflection.followedPlan === 'boolean') {
     return trade.reflection.followedPlan;
   }
 
-  const richTrade = trade as RichStoreTrade;
-  if (Array.isArray(richTrade.behavioralFlags) && richTrade.behavioralFlags.length > 0) {
-    return false;
-  }
-
-  const review = richTrade.executionReview;
-  if (!review) {
-    return Array.isArray(richTrade.behavioralFlags) && richTrade.behavioralFlags.length === 0 ? true : null;
-  }
-
-  const planSignals = [
-    review.enteredAtLevel,
-    review.waitedForConfirmation,
-    review.correctSize,
-    review.exitedAtPlan,
-    review.resistedEarlyExit,
-  ];
-  const answeredSignals = planSignals.filter((value): value is boolean => typeof value === 'boolean');
-  if (answeredSignals.some(value => value === false)) return false;
-  if (answeredSignals.length > 0 || (Array.isArray(richTrade.behavioralFlags) && richTrade.behavioralFlags.length === 0)) {
-    return true;
-  }
-
-  return null;
+  const score = computePlanAdherenceScore(trade);
+  if (score === null) return null;
+  // Threshold: score >= 65 counts as "followed plan"
+  return score >= 65;
 }
 
 function normalizeConfluences(value: unknown): string[] {
@@ -150,6 +194,7 @@ function toApiTrade(trade: StoreTrade): ApiTrade {
   const confidenceLevelRaw = (trade as StoreTrade).confidenceLevel;
   const confidenceLevel = typeof confidenceLevelRaw === 'number' && Number.isFinite(confidenceLevelRaw) ? confidenceLevelRaw : null;
   const followedPlan = deriveFollowedPlan(trade);
+  const planScore = computePlanAdherenceScore(trade);
   return {
     id: trade.id,
     user_id: 'local',
@@ -188,6 +233,7 @@ function toApiTrade(trade: StoreTrade): ApiTrade {
     post_trade_notes: trade.reflection?.execution,
     confluences: normalizeConfluences((trade as StoreTrade).confluences),
     followed_plan: typeof followedPlan === 'boolean' ? followedPlan : null,
+    plan_score: typeof planScore === 'number' ? planScore : null,
     behavioral_flags: Array.isArray((trade as RichStoreTrade).behavioralFlags) ? (trade as RichStoreTrade).behavioralFlags : [],
     session,
     created_at: trade.createdAt,

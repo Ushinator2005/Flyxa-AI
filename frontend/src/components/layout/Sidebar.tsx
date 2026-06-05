@@ -30,9 +30,9 @@ function accountStatusColor(status: string): string {
   return T3;
 }
 
-const navItems = [
+const navItems: { path: string; icon: typeof LayoutDashboard; label: string; extraActivePaths?: string[] }[] = [
   { path: '/',                         icon: LayoutDashboard, label: 'Dashboard'       },
-  { path: '/pre-session',              icon: ClipboardCheck,  label: 'Pre-Session'     },
+  { path: '/pre-session',              icon: ClipboardCheck,  label: 'Session',        extraActivePaths: ['/post-session'] },
   { path: '/scanner',                  icon: ScanLine,        label: 'Trade Scanner'   },
   { path: '/journal',                  icon: FileText,        label: 'Daily Journal'   },
   { path: '/market-news',              icon: Newspaper,       label: 'Market News'     },
@@ -47,15 +47,17 @@ const navItems = [
 ];
 
 function NavItem({
-  path, icon: Icon, label, exact = false, onClick, collapsed = false,
+  path, icon: Icon, label, exact = false, onClick, collapsed = false, extraActivePaths = [],
 }: {
-  path: string; icon: typeof LayoutDashboard; label: string; exact?: boolean; onClick?: () => void; collapsed?: boolean;
+  path: string; icon: typeof LayoutDashboard; label: string; exact?: boolean; onClick?: () => void; collapsed?: boolean; extraActivePaths?: string[];
 }) {
   const location = useLocation();
   const pathName = path.split('?')[0];
   const isActive = exact
     ? location.pathname === pathName
-    : location.pathname === pathName || location.pathname.startsWith(pathName + '/');
+    : location.pathname === pathName
+      || location.pathname.startsWith(pathName + '/')
+      || extraActivePaths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 
   const [hov, setHov] = useState(false);
   const tourId = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -197,6 +199,7 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
                 exact={item.path === '/'}
                 onClick={onNavClick}
                 collapsed={collapsed}
+                extraActivePaths={item.extraActivePaths}
               />
             ))}
           </div>

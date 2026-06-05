@@ -771,17 +771,27 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
         {accounts.filter(account =>
           account.id !== DEFAULT_ACCOUNT_ID &&
           !account.archived &&
-          (account.status !== 'Blown' || selectedAccountIds.includes(account.id))
-        ).map(account => (
-          <label key={account.id} className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''}`}>
-            <input
-              type="checkbox"
-              checked={selectedAccountIds.includes(account.id)}
-              onChange={event => toggleAccount(account.id, event.target.checked)}
-            />
-            <span>{account.name}{account.status === 'Blown' ? ' (Blown)' : ''}</span>
-          </label>
-        ))}
+          (account.status !== 'Blown'   || selectedAccountIds.includes(account.id)) &&
+          (account.status !== 'Passed'  || selectedAccountIds.includes(account.id))
+        ).map(account => {
+          const isInactive = account.status === 'Blown' || account.status === 'Passed';
+          const statusLabel = account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
+          return (
+            <label
+              key={account.id}
+              className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
+              title={account.status === 'Passed' ? 'Passed accounts cannot be allocated to new trades' : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={selectedAccountIds.includes(account.id)}
+                onChange={event => toggleAccount(account.id, event.target.checked)}
+                disabled={isInactive}
+              />
+              <span>{account.name}{statusLabel}</span>
+            </label>
+          );
+        })}
       </div>
       {(() => {
         const selected = accounts.find(a => a.id === selectedAccountIds[0]);
@@ -1175,7 +1185,7 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
     };
   }, []);
 
-  const EMOTIONAL_STATES = ['Calm and focused','Slightly anxious','Excited / hyped','Frustrated (from earlier trade)','Bored / impatient','Fearful of missing','Revenge-motivated','In the zone','Distracted / not present','Overconfident'];
+  const EMOTIONAL_STATES = ['Calm and focused','Slightly anxious','Scared / nervous','Excited / hyped','Frustrated (from earlier trade)','Bored / impatient','Fearful of missing','Revenge-motivated','In the zone','Distracted / not present','Overconfident'];
   const CONF_LABELS = ['','Low / forced','Uncertain','Moderate','Confident','High conviction'];
 
   const dayTrades = entry.trades;
@@ -2034,6 +2044,8 @@ export default function TradeJournal() {
 
   const addManualTrade = useCallback(() => {
     if (!selectedEntry) return;
+    const entryAccount = accounts.find(a => a.id === selectedEntry.account);
+    if (entryAccount?.status === 'Passed') return;
     const basePrice = 0;
     const newTrade: JournalTrade = {
       id: crypto.randomUUID(),
@@ -2056,7 +2068,7 @@ export default function TradeJournal() {
       confluences: [],
     };
     mutateEntries(prev => prev.map(entry => entry.id === selectedEntry.id ? { ...entry, trades: [withTradeDerivedValues(newTrade), ...entry.trades] } : entry));
-  }, [mutateEntries, selectedEntry]);
+  }, [accounts, mutateEntries, selectedEntry]);
 
   const applyScannedTrade = useCallback((fileDataUrl: string, trade: JournalTrade, date: string) => {
     let nextSelectedId: string | null = null;

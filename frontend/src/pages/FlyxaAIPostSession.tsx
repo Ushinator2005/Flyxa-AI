@@ -1,5 +1,5 @@
 import { CSSProperties, useEffect, useMemo, useState } from 'react';
-import FlyxaNav from '../components/flyxa/FlyxaNav.js';
+import { useNavigate } from 'react-router-dom';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
@@ -85,6 +85,7 @@ function insightDot(type: InsightType) {
 }
 
 export default function FlyxaAIPostSession() {
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount } = useAppSettings();
@@ -131,10 +132,16 @@ export default function FlyxaAIPostSession() {
   );
 
   const planAdherence = useMemo((): number | null => {
+    // Prefer per-trade plan_score (severity-weighted + PnL modifier) when available
+    const withScore = dayTrades.filter(t => typeof t.plan_score === 'number');
+    if (withScore.length) {
+      const total = withScore.reduce((s, t) => s + (t.plan_score as number), 0);
+      return Math.round(total / withScore.length);
+    }
+    // Fallback: boolean count for trades that have no score data
     const withPlan = dayTrades.filter(t => typeof t.followed_plan === 'boolean');
     if (!withPlan.length) return null;
-    const followed = withPlan.filter(t => t.followed_plan === true).length;
-    return Math.round((followed / withPlan.length) * 100);
+    return Math.round(withPlan.filter(t => t.followed_plan === true).length / withPlan.length * 100);
   }, [dayTrades]);
 
   const biasAdherence = useMemo(() => {
@@ -202,15 +209,16 @@ export default function FlyxaAIPostSession() {
 
     // Plan adherence
     if (planAdherence !== null) {
-      const offCount = dayTrades.filter(t => t.followed_plan === false).length;
       if (planAdherence === 100)
         insights.push({ type: 'good', text: 'Every trade followed the plan — clean, disciplined execution.' });
       else if (planAdherence >= 80)
-        insights.push({ type: 'good', text: `${planAdherence}% plan adherence — ${offCount} trade${offCount !== 1 ? 's' : ''} deviated from the plan.` });
-      else if (planAdherence >= 50)
-        insights.push({ type: 'warn', text: `${planAdherence}% plan adherence — ${offCount} trade${offCount !== 1 ? 's' : ''} went off-plan.` });
+        insights.push({ type: 'good', text: `${planAdherence}% plan adherence — minor deviations but execution was largely disciplined.` });
+      else if (planAdherence >= 65)
+        insights.push({ type: 'warn', text: `${planAdherence}% plan adherence — some behavioral flags or execution misses pulled the score down.` });
+      else if (planAdherence >= 40)
+        insights.push({ type: 'bad', text: `${planAdherence}% plan adherence — significant deviations from the plan detected.` });
       else
-        insights.push({ type: 'bad', text: `Only ${planAdherence}% plan adherence — most trades were off-plan.` });
+        insights.push({ type: 'bad', text: `${planAdherence}% plan adherence — trades showed major rule violations or repeated behavioral flags.` });
     }
 
     // Off-plan P&L vs on-plan
@@ -285,17 +293,35 @@ export default function FlyxaAIPostSession() {
       className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl"
       style={{ backgroundColor: C.d0, color: C.t0 }}
     >
-      <div className="grid h-full grid-cols-[178px_minmax(0,1fr)] overflow-hidden">
-        <FlyxaNav />
-
-        <main className="min-h-0 overflow-y-auto" style={{ backgroundColor: C.d0 }}>
+        <main className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: C.d0 }}>
           {/* Header */}
           <section className="border-b px-6 py-5" style={{ borderColor: C.b0 }}>
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p style={SECTION_LABEL}>Post-session debrief</p>
+                {/* Session tab toggle */}
+                <div style={{ display: 'inline-flex', gap: 2, padding: 2, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 7, border: `1px solid ${C.b0}`, marginBottom: 10 }}>
+                  {([
+                    { label: 'Pre-session',  to: '/pre-session'  },
+                    { label: 'Post-session', to: '/post-session' },
+                  ] as const).map(tab => (
+                    <button
+                      key={tab.to}
+                      type="button"
+                      onClick={() => navigate(tab.to)}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: tab.to === '/post-session' ? 600 : 500,
+                        color: tab.to === '/post-session' ? C.acc : C.t2,
+                        backgroundColor: tab.to === '/post-session' ? 'rgba(245,158,11,0.10)' : 'transparent',
+                        border: 'none', borderRadius: 5, padding: '4px 10px', cursor: 'pointer',
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
                 <h1
-                  className="mt-2 text-[22px] font-bold tracking-[-0.02em]"
+                  className="text-[22px] font-bold tracking-[-0.02em]"
                   style={{ color: C.t0 }}
                 >
                   {displayDate}
@@ -320,7 +346,7 @@ export default function FlyxaAIPostSession() {
             </div>
           </section>
 
-          <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+          <div className="min-h-0 flex-1 overflow-y-auto"><div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
             {/* PRE-SESSION PLAN */}
             <div className="flex flex-col gap-4">
               <p style={SECTION_LABEL}>Pre-session plan</p>
@@ -838,8 +864,8 @@ export default function FlyxaAIPostSession() {
               </div>
             </div>
           )}
+          </div>{/* end scroll wrapper */}
         </main>
-      </div>
     </div>
   );
 }

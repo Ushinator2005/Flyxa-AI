@@ -150,10 +150,13 @@ function computeWeekStats(trades: Trade[], offset: number): WeekStats {
   const behavioralFlags: FlagStat[] = Array.from(flagMap.entries())
     .map(([flag, count]) => ({ flag, count })).sort((a, b) => b.count - a.count).slice(0, 4);
 
+  const withScore = wt.filter(t => typeof t.plan_score === 'number');
   const withPlan = wt.filter(t => typeof t.followed_plan === 'boolean');
-  const planAdherence = withPlan.length > 0
-    ? Math.round(withPlan.filter(t => t.followed_plan).length / withPlan.length * 100)
-    : null;
+  const planAdherence = withScore.length > 0
+    ? Math.round(withScore.reduce((s, t) => s + (t.plan_score as number), 0) / withScore.length)
+    : withPlan.length > 0
+      ? Math.round(withPlan.filter(t => t.followed_plan).length / withPlan.length * 100)
+      : null;
 
   return {
     weekLabel, weekKey,
