@@ -1571,8 +1571,6 @@ export default function FlyxaAI() {
               { key: 'weekly-report', label: 'Weekly report', to: '/flyxa-ai/weekly-report', end: false },
               { key: 'execution', label: 'Execution coach', to: '/flyxa-ai/execution-coach', end: false },
               { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
-              { key: 'emotional', label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint', end: false },
-              { key: 'post-session', label: 'Post-session', to: '/flyxa-ai/post-session', end: false },
               { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai/ask', end: false },
             ].map(item => (
               <NavLink key={item.key} to={item.to} end={item.end}>
@@ -1908,7 +1906,6 @@ export default function FlyxaAI() {
                                 const label = insight.actionLabel.toLowerCase();
                                 if (label.includes('pre-session')) navigate('/pre-session');
                                 else if (label.includes('pattern library') || label.includes('confluence')) navigate('/flyxa-ai/patterns');
-                                else if (label.includes('emotional') || label.includes('emotion')) navigate('/flyxa-ai/emotional-fingerprint');
                                 else if (label.includes('keep logging')) navigate('/scanner');
                                 else navigate('/journal');
                               }}

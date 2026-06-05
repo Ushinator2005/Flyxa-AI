@@ -1,6 +1,7 @@
 import { CSSProperties, useState } from 'react';
 import { X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useRisk } from '../../contexts/RiskContext.js';
+import useFlyxaStore from '../../store/flyxaStore.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 function fmtPnl(v: number): string {
@@ -27,9 +28,12 @@ function pnlColor(v: number): string {
 // ── component ──────────────────────────────────────────────────────────────────
 export default function SessionHUD() {
   const { dailyStatus, riskLevel } = useRisk();
+  const preSession = useFlyxaStore(state => state.preSession);
   const [expanded, setExpanded] = useState(false);
 
-  if (!dailyStatus) return null;
+  const sessionLive = Boolean(preSession?.startedAt);
+
+  if (!dailyStatus || !sessionLive) return null;
 
   const { todayPnL, tradesCount, maxTradesPerDay, lossUsedPercent, dailyLossLimit } = dailyStatus;
 

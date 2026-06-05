@@ -42,13 +42,6 @@ const C = {
 const emotions = ['Frustrated', 'Anxious', 'Neutral', 'Focused', 'Confident'] as const;
 const biasOptions: BiasValue[] = ['Bull', 'Bear', 'Neutral'];
 
-const preTradeReminderItems = [
-  'The goal is not to trade. The goal is to protect capital and execute only when conditions are clean.',
-  'No screenshot, plan, or confirmation means no trade.',
-  'A missed trade is acceptable. A forced trade is not.',
-  'After a loss, the next decision must be slower, smaller, and cleaner.',
-];
-
 const oathChecklistItems: ChecklistItem[] = [
   { id: 'oath-plan-only', label: 'I will only take trades that match my plan' },
   { id: 'oath-no-revenge', label: 'I will not trade to recover, prove, or force a green day' },
@@ -251,10 +244,10 @@ export default function FlyxaAIPreSession() {
   const [bias, setBias] = useState<BiasState>(() => (storedPreSession?.bias as BiasState ?? { ES: 'Neutral', NQ: 'Neutral' }));
   const [checklistState, setChecklistState] = useState<ChecklistState>(() => (storedPreSession?.checklistState as ChecklistState ?? {}));
   const [storedRiskSettings] = useState(() => parseRiskSettingsFromStorage());
-  const [sessionMaxLoss, setSessionMaxLoss] = useState<string>(() =>
+  const [sessionMaxLoss] = useState<string>(() =>
     storedPreSession?.sessionMaxLoss != null ? String(storedPreSession.sessionMaxLoss) : ''
   );
-  const [sessionTarget, setSessionTarget] = useState<string>(() =>
+  const [sessionTarget] = useState<string>(() =>
     storedPreSession?.dailyTarget != null ? String(storedPreSession.dailyTarget) : ''
   );
   const [oathEditOpen, setOathEditOpen] = useState(false);
@@ -716,15 +709,22 @@ export default function FlyxaAIPreSession() {
       <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 18 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)', gap: 14, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <section style={{ border: `1px solid ${readinessColor}30`, backgroundColor: `${readinessColor}09`, borderRadius: 10, padding: 16, display: 'grid', gridTemplateColumns: 'minmax(170px, 0.45fr) minmax(0, 1fr)', gap: 16, alignItems: 'center' }}>
+            <section style={{ border: '1px solid rgba(255,255,255,0.065)', backgroundColor: `${readinessColor}07`, borderRadius: 14, padding: '18px 20px', display: 'grid', gridTemplateColumns: '210px minmax(0,1fr)', gap: 24, alignItems: 'center', boxShadow: '0 2px 18px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.04) inset' }}>
+              {/* Score side */}
               <div>
-                <p style={{ fontSize: 10, color: readinessColor, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800 }}>{readiness.status}</p>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: 42, fontWeight: 800, color: C.t0, lineHeight: 1 }}>{readiness.score}</span>
-                  <span style={{ fontSize: 12, color: C.t2 }}>/100</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: `${readinessColor}18`, border: `1px solid ${readinessColor}40`, color: readinessColor, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  {readiness.status}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 10 }}>
+                  <span style={{ fontSize: 48, fontWeight: 800, color: C.t0, lineHeight: 1, letterSpacing: '-0.04em' }}>{readiness.score}</span>
+                  <span style={{ fontSize: 13, color: C.t2, letterSpacing: '-0.01em' }}>/100</span>
                 </div>
-                <p style={{ marginTop: 7, fontSize: 12, color: C.t1, lineHeight: 1.55 }}>{readiness.summary}</p>
+                <div style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999, overflow: 'hidden', margin: '10px 0 9px' }}>
+                  <div style={{ height: '100%', width: `${readiness.score}%`, backgroundColor: readinessColor, borderRadius: 999, transition: 'width 0.55s cubic-bezier(0.4,0,0.2,1)' }} />
+                </div>
+                <p style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.55, letterSpacing: '-0.01em' }}>{readiness.summary}</p>
               </div>
+              {/* Metric cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
                 {[
                   { label: 'Checks', value: `${checklistTotals.completed}/${checklistTotals.total}`, color: checklistTotals.completed === checklistTotals.total ? C.grn : C.acc },
@@ -732,9 +732,9 @@ export default function FlyxaAIPreSession() {
                   { label: 'Plan', value: String(sessionPlan.length), color: C.t0 },
                   { label: 'Last', value: lastSession ? formatSignedCurrency(lastSession.netPnl) : '--', color: lastSession && lastSession.netPnl < 0 ? C.red : C.grn },
                 ].map(item => (
-                  <article key={item.label} style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, padding: '10px 11px' }}>
-                    <p style={{ fontSize: 10, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</p>
-                    <p style={{ marginTop: 6, fontFamily: 'monospace', fontSize: 16, color: item.color, fontWeight: 800 }}>{item.value}</p>
+                  <article key={item.label} style={{ borderRadius: 10, backgroundColor: C.d1, padding: '13px 14px', border: '1px solid rgba(255,255,255,0.055)', boxShadow: '0 1px 8px rgba(0,0,0,0.22)' }}>
+                    <p style={{ fontSize: 9.5, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 9 }}>{item.label}</p>
+                    <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 20, color: item.color, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{item.value}</p>
                   </article>
                 ))}
               </div>
@@ -780,52 +780,62 @@ export default function FlyxaAIPreSession() {
               </section>
             )}
 
-            <section data-tour-id="pre-session-oath" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0 }}>Trader Oath</h2>
+            <section data-tour-id="pre-session-oath" style={{ border: '1px solid rgba(255,255,255,0.065)', borderRadius: 14, backgroundColor: C.d1, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
+              {/* Header */}
+              <div style={{ padding: '14px 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 9.5, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 3 }}>Pre-session commitment</p>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, color: C.t0, letterSpacing: '-0.02em' }}>Trader Oath</h2>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: 11, color: oathCompleted === activeOathItems.length ? C.grn : C.acc }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: oathCompleted === activeOathItems.length ? 'rgba(34,214,138,0.12)' : 'rgba(245,158,11,0.1)', border: `1px solid ${oathCompleted === activeOathItems.length ? 'rgba(34,214,138,0.3)' : 'rgba(245,158,11,0.25)'}`, color: oathCompleted === activeOathItems.length ? C.grn : C.acc, fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>
                     {oathCompleted}/{activeOathItems.length}
                   </span>
                   <button type="button" onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
-                    style={{ fontSize: 10, color: oathEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    style={{ fontSize: 10, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', padding: 0, letterSpacing: '0.02em' }}
                   >{oathEditOpen ? 'cancel' : 'edit'}</button>
                 </div>
               </div>
+              {/* Progress track */}
+              <div style={{ margin: '12px 18px 0', height: 2, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${activeOathItems.length > 0 ? (oathCompleted / activeOathItems.length) * 100 : 0}%`, backgroundColor: oathCompleted === activeOathItems.length ? C.grn : C.acc, borderRadius: 999, transition: 'width 0.45s cubic-bezier(0.4,0,0.2,1)' }} />
+              </div>
               {oathEditOpen ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '12px 18px 16px' }}>
                   {oathDraft.map((item, idx) => (
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input type="text" value={item.label}
                         onChange={e => { const next = [...oathDraft]; next[idx] = { ...item, label: e.target.value }; setOathDraft(next); }}
-                        style={{ flex: 1, borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t0, fontSize: 12, padding: '8px 10px', outline: 'none', fontFamily: 'inherit' }}
+                        style={{ flex: 1, borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', backgroundColor: C.d2, color: C.t0, fontSize: 12, padding: '8px 10px', outline: 'none', fontFamily: 'inherit' }}
                       />
                       <button type="button" onClick={() => setOathDraft(oathDraft.filter((_, i) => i !== idx))}
-                        style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t2, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+                        style={{ width: 28, height: 28, borderRadius: 5, border: '1px solid rgba(255,255,255,0.08)', backgroundColor: C.d2, color: C.t2, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
                         aria-label="Remove">✕</button>
                     </div>
                   ))}
                   <button type="button" onClick={() => setOathDraft([...oathDraft, { id: `oath-custom-${Date.now()}`, label: '' }])}
-                    style={{ padding: '7px 0', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: 'transparent', color: C.t2, fontSize: 12, cursor: 'pointer' }}
+                    style={{ padding: '7px 0', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent', color: C.t2, fontSize: 12, cursor: 'pointer' }}
                   >+ Add</button>
                   <button type="button" onClick={saveOathItems}
-                    style={{ padding: '7px 0', borderRadius: 5, border: `1px solid rgba(245,158,11,0.35)`, backgroundColor: 'rgba(245,158,11,0.1)', color: C.acc, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                    style={{ padding: '8px 0', borderRadius: 6, border: '1px solid rgba(245,158,11,0.35)', backgroundColor: 'rgba(245,158,11,0.1)', color: C.acc, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                   >Save</button>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                  {activeOathItems.map((item, idx) => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '10px 14px 14px' }}>
+                  {activeOathItems.map(item => {
                     const checked = Boolean(checklistState[item.id]);
                     return (
                       <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
-                        borderRadius: 5, border: `1px solid ${checked ? 'rgba(245,158,11,0.22)' : C.b0}`,
-                        backgroundColor: checked ? 'rgba(245,158,11,0.06)' : C.d2,
+                        display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 14px',
+                        borderRadius: 9,
+                        border: `1px solid ${checked ? 'rgba(245,158,11,0.18)' : 'transparent'}`,
+                        borderLeft: `2px solid ${checked ? C.acc : 'transparent'}`,
+                        backgroundColor: checked ? 'rgba(245,158,11,0.05)' : 'transparent',
                         cursor: 'pointer', textAlign: 'left', width: '100%',
+                        transition: 'background 0.15s ease, border-color 0.15s ease',
                       }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: 10, color: checked ? C.acc : C.t2, flexShrink: 0, marginTop: 2 }}>{String(idx + 1).padStart(2, '0')}</span>
                         {customCheckbox(checked)}
-                        <p style={{ fontSize: 12, lineHeight: 1.5, color: checked ? C.t0 : C.t1, flex: 1 }}>{item.label}</p>
+                        <p style={{ fontSize: 12.5, lineHeight: 1.6, color: checked ? C.t1 : C.t0, flex: 1, letterSpacing: '-0.01em', transition: 'color 0.15s ease' }}>{item.label}</p>
                       </button>
                     );
                   })}
@@ -888,38 +898,25 @@ export default function FlyxaAIPreSession() {
               </div>
             </section>
 
-            <section style={{ display: 'grid', gridTemplateColumns: visiblePatterns.length > 0 ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)', gap: 14 }}>
-              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Before You Trade</h2>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {preTradeReminderItems.slice(0, 4).map((item, idx) => (
-                    <div key={item} style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 8, padding: '8px 9px', borderRadius: 7, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: 10, color: C.acc }}>{String(idx + 1).padStart(2, '0')}</span>
-                      <p style={{ fontSize: 11.5, lineHeight: 1.5, color: C.t1 }}>{item}</p>
-                    </div>
-                  ))}
+            {visiblePatterns.length > 0 && (
+              <section style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
+                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Pattern Watch</h2>
+                <div style={{ display: 'grid', gap: 7 }}>
+                  {visiblePatterns.map(p => {
+                    const risk = activeRiskPatterns.some(item => item.id === p.id);
+                    return (
+                      <article key={p.id} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', borderRadius: 7, overflow: 'hidden', border: `1px solid ${risk ? 'rgba(240,82,82,0.22)' : 'rgba(34,214,138,0.22)'}` }}>
+                        <div style={{ backgroundColor: risk ? C.red : C.grn }} />
+                        <div style={{ padding: '9px 10px', backgroundColor: C.d2 }}>
+                          <p style={{ fontSize: 12, fontWeight: 800, color: risk ? C.red : C.grn }}>{risk ? 'Watch' : 'Lean in'}: {p.title}</p>
+                          <p style={{ fontSize: 11, color: C.t1, marginTop: 2, lineHeight: 1.45 }}>{buildPatternInstruction(p, risk ? 'watch' : 'protect')}</p>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-              </div>
-              {visiblePatterns.length > 0 && (
-                <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-                  <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Pattern Watch</h2>
-                  <div style={{ display: 'grid', gap: 7 }}>
-                    {visiblePatterns.map(p => {
-                      const risk = activeRiskPatterns.some(item => item.id === p.id);
-                      return (
-                        <article key={p.id} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', borderRadius: 7, overflow: 'hidden', border: `1px solid ${risk ? 'rgba(240,82,82,0.22)' : 'rgba(34,214,138,0.22)'}` }}>
-                          <div style={{ backgroundColor: risk ? C.red : C.grn }} />
-                          <div style={{ padding: '9px 10px', backgroundColor: C.d2 }}>
-                            <p style={{ fontSize: 12, fontWeight: 800, color: risk ? C.red : C.grn }}>{risk ? 'Watch' : 'Lean in'}: {p.title}</p>
-                            <p style={{ fontSize: 11, color: C.t1, marginTop: 2, lineHeight: 1.45 }}>{buildPatternInstruction(p, risk ? 'watch' : 'protect')}</p>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </section>
+              </section>
+            )}
           </div>
 
           <aside data-tour-id="pre-session-inputs" style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 0 }}>

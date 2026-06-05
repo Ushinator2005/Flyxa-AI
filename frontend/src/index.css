@@ -308,34 +308,43 @@
     @apply text-slate-400 text-sm font-medium mb-1 block;
   }
 
+  /* ── Auth Shell ──────────────────────────────────────────────────────────── */
   .auth-shell {
     position: relative;
     isolation: isolate;
     background:
-      radial-gradient(circle at 82% 6%, rgba(245, 158, 11, 0.11), transparent 28%),
-      radial-gradient(circle at 14% 88%, rgba(245, 158, 11, 0.08), transparent 34%),
+      radial-gradient(ellipse 70% 55% at 68% -8%, rgba(245, 158, 11, 0.13), transparent),
+      radial-gradient(ellipse 55% 65% at -8% 108%, rgba(245, 158, 11, 0.08), transparent),
+      radial-gradient(ellipse 90% 80% at 50% 50%, rgba(245, 158, 11, 0.025), transparent),
       var(--app-bg);
   }
 
-  .auth-shell::before,
-  .auth-shell::after {
+  .auth-shell::before {
     content: '';
-    position: absolute;
+    position: fixed;
     inset: 0;
     pointer-events: none;
-  }
-
-  .auth-shell::before {
-    display: none;
+    z-index: -1;
   }
 
   .auth-shell::after {
+    content: '';
     position: fixed;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23noise)'/%3E%3C/svg%3E");
-    background-size: 220px 220px;
-    background-repeat: repeat;
-    filter: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3C/svg%3E%23n");
-    opacity: 0.04;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 40% 30% at 72% 5%, rgba(245, 158, 11, 0.06), transparent),
+      radial-gradient(ellipse 30% 40% at 5% 95%, rgba(245, 158, 11, 0.04), transparent);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Decorative background chart SVG */
+  .auth-deco-chart {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
     z-index: -1;
   }
 
@@ -344,23 +353,104 @@
     letter-spacing: -0.04em;
   }
 
-  .auth-card {
-    background: var(--app-panel-soft);
-    border: 1px solid var(--app-border);
-    box-shadow: 0 24px 70px rgba(2, 6, 23, 0.35);
-    backdrop-filter: blur(16px);
+  /* ── Left panel typography ────────────────────────────────────────────────── */
+  .auth-kicker {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--app-text-subtle);
   }
 
-  .auth-feature-row {
-    display: block;
+  .auth-headline {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 4.2vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    color: var(--app-text);
   }
 
+  .auth-headline-em {
+    color: var(--accent);
+  }
+
+  .auth-subhead {
+    font-size: 0.975rem;
+    line-height: 1.72;
+    color: var(--app-text-muted);
+  }
+
+  /* ── Stat chips ────────────────────────────────────────────────────────────── */
+  .auth-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.16);
+    color: var(--app-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .auth-stat-sep {
+    display: inline-block;
+    width: 1px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.1);
+    vertical-align: middle;
+  }
+
+  /* ── Feature list ──────────────────────────────────────────────────────────── */
+  .auth-feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 15px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .auth-feature-item:first-child {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .auth-feature-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    width: 22px;
+    padding-top: 1px;
+  }
+
+  .auth-feature-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--app-text);
+    letter-spacing: -0.01em;
+    margin: 0 0 3px;
+  }
+
+  .auth-feature-desc {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--app-text-muted);
+    margin: 0;
+  }
+
+  /* ── Ticker ────────────────────────────────────────────────────────────────── */
   .auth-ticker {
     position: relative;
     overflow: hidden;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: var(--app-panel-strong);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
   }
 
   .auth-ticker::before,
@@ -396,54 +486,206 @@
   .auth-ticker__item {
     position: relative;
     padding-right: 1.25rem;
-    color: var(--app-text-muted);
-    font-size: 0.78rem;
+    color: var(--app-text-subtle);
+    font-size: 0.74rem;
     font-weight: 600;
-    letter-spacing: 0.34em;
+    letter-spacing: 0.36em;
     text-transform: uppercase;
     white-space: nowrap;
   }
 
   .auth-ticker__item::after {
-    content: '|';
+    content: '·';
     position: absolute;
-    right: -0.18rem;
+    right: 0.1rem;
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 0.9rem;
+  }
+
+  /* ── Card ──────────────────────────────────────────────────────────────────── */
+  .auth-card {
+    background: rgba(22, 21, 19, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 40px 96px rgba(0, 0, 0, 0.6),
+      0 8px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(24px) saturate(180%);
+    border-radius: 20px !important;
+  }
+
+  .auth-card-eyebrow {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
     color: var(--app-text-subtle);
   }
 
-  .auth-note-card {
-    background: rgba(10, 17, 29, 0.78);
-    border-color: rgba(51, 65, 85, 0.62);
-    box-shadow: none;
+  .auth-card-title {
+    font-size: 1.7rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em !important;
+    color: var(--app-text) !important;
+    line-height: 1.1 !important;
+  }
+
+  .auth-card-desc {
+    font-size: 13px !important;
+    line-height: 1.55 !important;
+    color: var(--app-text-muted) !important;
+  }
+
+  .auth-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--app-text-muted);
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Tabs ──────────────────────────────────────────────────────────────────── */
+  .auth-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 12px;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .auth-tab {
-    @apply rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200;
+    padding: 9px 16px;
+    border-radius: 9px;
+    font-size: 13.5px;
+    font-weight: 600;
+    transition: all 0.18s ease;
     color: var(--app-text-muted);
+    cursor: pointer;
   }
 
   .auth-tab:hover {
     color: var(--app-text);
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .auth-tab--active {
-    background: var(--accent-dim);
+    background: rgba(245, 158, 11, 0.12);
     color: var(--accent);
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    box-shadow: none;
+    border: 1px solid rgba(245, 158, 11, 0.28);
   }
 
+  /* ── Input ──────────────────────────────────────────────────────────────────── */
   .auth-input {
-    background: var(--app-panel-strong) !important;
-    border-color: var(--app-border) !important;
+    height: 44px !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     color: var(--app-text) !important;
-    box-shadow: none;
+    border-radius: 10px !important;
+    font-size: 14px !important;
+    box-shadow: none !important;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .auth-input::placeholder {
+    color: var(--app-text-subtle) !important;
   }
 
   .auth-input:focus {
-    border-color: rgba(245, 158, 11, 0.45) !important;
-    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.28) !important;
+    border-color: rgba(245, 158, 11, 0.5) !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1) !important;
+    background: rgba(255, 255, 255, 0.055) !important;
+  }
+
+  /* ── Submit button ──────────────────────────────────────────────────────────── */
+  .auth-submit-btn {
+    height: 46px !important;
+    border-radius: 12px !important;
+    background: var(--accent) !important;
+    color: #0a0909 !important;
+    font-size: 14.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+    border: none !important;
+    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.28), 0 1px 0 rgba(255,255,255,0.15) inset !important;
+    transition: opacity 0.15s, box-shadow 0.15s !important;
+    cursor: pointer;
+  }
+
+  .auth-submit-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    box-shadow: 0 6px 28px rgba(245, 158, 11, 0.38), 0 1px 0 rgba(255,255,255,0.15) inset !important;
+  }
+
+  .auth-submit-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  /* ── Divider ────────────────────────────────────────────────────────────────── */
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .auth-divider::before,
+  .auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .auth-divider span {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--app-text-subtle);
+  }
+
+  /* ── Google button ──────────────────────────────────────────────────────────── */
+  .auth-google-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 46px;
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--app-text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .auth-google-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .auth-google-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ── Privacy note ───────────────────────────────────────────────────────────── */
+  .auth-privacy-note {
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--app-text-subtle);
+    letter-spacing: 0.02em;
+    margin: 0;
+  }
+
+  /* ── Legacy / unused ─────────────────────────────────────────────────────────── */
+  .auth-note-card {
+    background: rgba(10, 17, 29, 0.78);
+    border-color: rgba(51, 65, 85, 0.62);
+    box-shadow: none;
   }
 
   .brand-mark {
@@ -792,23 +1034,42 @@ html[data-theme='light'] .glass-card {
 }
 
 html[data-theme='light'] .auth-shell {
-  background: var(--app-bg);
+  background:
+    radial-gradient(ellipse 70% 55% at 68% -8%, rgba(245, 158, 11, 0.09), transparent),
+    radial-gradient(ellipse 55% 65% at -8% 108%, rgba(245, 158, 11, 0.06), transparent),
+    var(--app-bg);
+}
+
+html[data-theme='light'] .auth-shell::before {
+  display: none;
 }
 
 html[data-theme='light'] .auth-shell::after {
-  opacity: 0.03;
+  opacity: 0;
 }
 
 html[data-theme='light'] .auth-card {
-  background: var(--app-panel-soft);
-  border-color: var(--app-border);
-  box-shadow: 0 18px 48px rgba(100, 90, 80, 0.13);
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(188, 180, 168, 0.8) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset,
+    0 40px 96px rgba(100, 80, 50, 0.12),
+    0 8px 24px rgba(100, 80, 50, 0.08) !important;
+}
+
+html[data-theme='light'] .auth-stat-chip {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+html[data-theme='light'] .auth-stat-sep {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 html[data-theme='light'] .auth-ticker {
-  border-top-color: var(--app-border);
-  border-bottom-color: var(--app-border);
-  background: var(--app-panel-strong);
+  border-top-color: rgba(0, 0, 0, 0.07);
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+  background: transparent;
 }
 
 html[data-theme='light'] .auth-ticker::before {
@@ -824,12 +1085,25 @@ html[data-theme='light'] .auth-ticker__item {
 }
 
 html[data-theme='light'] .auth-ticker__item::after {
-  color: var(--app-text-subtle);
+  color: rgba(0, 0, 0, 0.18);
+}
+
+html[data-theme='light'] .auth-feature-item {
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+
+html[data-theme='light'] .auth-feature-item:first-child {
+  border-top-color: rgba(0, 0, 0, 0.07);
 }
 
 html[data-theme='light'] .auth-note-card {
   background: rgba(255, 255, 255, 0.80);
   border-color: rgba(205, 198, 186, 0.85);
+}
+
+html[data-theme='light'] .auth-tabs {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
 html[data-theme='light'] .auth-tab {
@@ -838,21 +1112,41 @@ html[data-theme='light'] .auth-tab {
 
 html[data-theme='light'] .auth-tab:hover {
   color: var(--app-text);
-  background: rgba(120, 113, 108, 0.06);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 html[data-theme='light'] .auth-tab--active {
   color: var(--accent);
-  background: var(--accent-dim);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  box-shadow: none;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 html[data-theme='light'] .auth-input {
-  background: var(--app-panel) !important;
-  border-color: var(--app-border) !important;
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(188, 180, 168, 0.9) !important;
   color: var(--app-text) !important;
-  box-shadow: none;
+}
+
+html[data-theme='light'] .auth-input:focus {
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+html[data-theme='light'] .auth-google-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(188, 180, 168, 0.9);
+  color: var(--app-text);
+}
+
+html[data-theme='light'] .auth-google-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(188, 180, 168, 1);
+}
+
+html[data-theme='light'] .auth-divider::before,
+html[data-theme='light'] .auth-divider::after {
+  background: rgba(0, 0, 0, 0.09);
 }
 
 html[data-theme='light'] .btn-secondary {

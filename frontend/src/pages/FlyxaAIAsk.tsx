@@ -194,7 +194,6 @@ export default function FlyxaAIAsk() {
             {[
               { label: 'Debrief', to: '/flyxa-ai' },
               { label: 'Pattern library', to: '/flyxa-ai/patterns' },
-              { label: 'Emotional fingerprint', to: '/flyxa-ai/emotional-fingerprint' },
               { label: 'Post-session', to: '/flyxa-ai/post-session' },
               { label: 'Ask Flyxa', to: '/flyxa-ai/ask', active: true },
             ].map(item => (

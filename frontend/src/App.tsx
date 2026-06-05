@@ -20,12 +20,11 @@ const FlyxaAIExecutionCoach = lazy(() => import('./pages/FlyxaAIExecutionCoach.j
 const FlyxaAIPatterns = lazy(() => import('./pages/FlyxaAIPatterns.js'));
 const FlyxaAIAsk = lazy(() => import('./pages/FlyxaAIAsk.js'));
 const FlyxaAIPreSession = lazy(() => import('./pages/FlyxaAIPreSession.js'));
-const FlyxaAIEmotionalFingerprint = lazy(() => import('./pages/FlyxaAIEmotionalFingerprint.js'));
 const FlyxaAIPostSession = lazy(() => import('./pages/FlyxaAIPostSession.js'));
 const FlyxaAIWeeklyReport = lazy(() => import('./pages/FlyxaAIWeeklyReport.js'));
 const Analytics = lazy(() => import('./pages/Analytics.js'));
 const Achievements = lazy(() => import('./pages/Achievements.js'));
-const Backtest = lazy(() => import('./pages/Backtest.js'));
+const Backtest = lazy(() => import('./pages/BacktestUnavailable.js'));
 const TradingPlan = lazy(() => import('./pages/TradingPlan.js'));
 const Billing = lazy(() => import('./pages/Billing.js'));
 const PsychologyTracker = lazy(() => import('./pages/PsychologyTracker.js'));
@@ -377,7 +376,6 @@ export default function App() {
               <Route path="/post-session" element={<FlyxaAIPostSession />} />
               <Route path="/flyxa-ai/pre-session" element={<Navigate to="/pre-session" replace />} />
               <Route path="/flyxa-ai/post-session" element={<Navigate to="/post-session" replace />} />
-              <Route path="/flyxa-ai/emotional-fingerprint" element={<FlyxaAIEmotionalFingerprint />} />
               <Route path="/flyxa-ai/weekly-report" element={<FlyxaAIWeeklyReport />} />
               <Route path="/coach" element={<Navigate to="/flyxa-ai/execution-coach" replace />} />
               <Route path="/analytics" element={<Analytics />} />

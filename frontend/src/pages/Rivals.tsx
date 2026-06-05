@@ -58,7 +58,12 @@ export default function Rivals() {
         <div className="rivals-top">
           <div>
             <h1 className="rivals-title">Rivals</h1>
-            <p className="rivals-subtitle">Daily journal streak, weekday trading journal coverage, backtesting volume, and process score.</p>
+            <div className="rivals-top-meta">
+              <p className="rivals-subtitle">Journal streak · trading coverage · backtests · process score</p>
+              {quickStats.myRank && (
+                <span className="rivals-rank-chip">RANK #{quickStats.myRank}</span>
+              )}
+            </div>
           </div>
           <button type="button" className="rivals-cta" onClick={() => setIsAddOpen(true)}>
             <Plus size={14} />
@@ -71,52 +76,54 @@ export default function Rivals() {
             label="Daily Journal"
             value={`${quickStats.dailyJournalScore}/100`}
             tone="var(--rv-blue)"
-            note={`${quickStats.dailyJournalStreak}d run; recent entries still count`}
+            note={`${quickStats.dailyJournalStreak}d streak · recent entries still count`}
+            percent={quickStats.dailyJournalScore}
           />
           <StatCard
             label="Trading Journal"
             value={`${quickStats.tradingJournalScore}%`}
             tone="var(--rv-amber)"
             note="Weekday entries with trades logged"
+            percent={quickStats.tradingJournalScore}
           />
           <StatCard
             label="Backtesting Sessions"
             value={String(quickStats.backtestSessions)}
             tone="var(--rv-green)"
             note="All saved backtest sessions"
+            percent={Math.min(100, quickStats.backtestSessions * 5)}
           />
           <StatCard
             label="Process Score"
             value={`${quickStats.processScore}/100`}
             tone="var(--rv-purple)"
             note={quickStats.myRank ? `Leaderboard rank #${quickStats.myRank}` : 'Rank appears after you add rivals'}
+            percent={quickStats.processScore}
           />
         </div>
 
-        <div className="rivals-setup-grid">
-          <section className="rv-card rivals-requests-card">
-            <div className="rv-section-head">
-              <div>
-                <div className="rv-section-kicker">Friend Requests</div>
-                <div className="rv-section-title">Rival requests</div>
+        {pendingRequests.length > 0 && (
+          <div className="rivals-setup-grid">
+            <section className="rv-card rivals-requests-card">
+              <div className="rv-section-head">
+                <div>
+                  <div className="rv-section-kicker">Friend Requests</div>
+                  <div className="rv-section-title">Rival requests</div>
+                </div>
               </div>
-            </div>
-            <div className="rivals-request-list">
-              {pendingRequests.length === 0 ? (
-                <div className="rivals-request-empty">No pending rival requests.</div>
-              ) : (
-                pendingRequests.map(request => (
+              <div className="rivals-request-list">
+                {pendingRequests.map(request => (
                   <RequestRow
                     key={request.id}
                     request={request}
                     busy={requestBusyId === request.id}
                     onAction={(action) => { void handleRequestAction(request.id, action); }}
                   />
-                ))
-              )}
-            </div>
-          </section>
-        </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
 
         <div className="rivals-main-grid">
           <MascotCard mascot={currentUser.mascot} />
@@ -173,11 +180,14 @@ function RequestRow({
   );
 }
 
-function StatCard({ label, value, tone, note }: { label: string; value: string; tone: string; note: string }) {
+function StatCard({ label, value, tone, note, percent }: { label: string; value: string; tone: string; note: string; percent: number }) {
   return (
-    <div className="rivals-stat">
+    <div className="rivals-stat" style={{ '--stat-tone': tone } as React.CSSProperties}>
       <div className="rivals-stat-label">{label}</div>
       <div className="rivals-stat-value" style={{ color: tone }}>{value}</div>
+      <div className="rivals-stat-bar">
+        <div className="rivals-stat-bar-fill" style={{ width: `${Math.min(100, Math.max(0, percent))}%`, background: tone }} />
+      </div>
       <div className="rivals-stat-note">{note}</div>
     </div>
   );
