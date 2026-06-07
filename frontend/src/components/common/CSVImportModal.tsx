@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
-import { Upload, X, ChevronRight, Check, AlertTriangle, FileText } from 'lucide-react';
+import { Upload, X, Check, AlertTriangle, FileText } from 'lucide-react';
 
-// ─── colours (match app shell) ────────────────────────────────────────────────
+// ─── colours ──────────────────────────────────────────────────────────────────
 const C = {
   d0: 'var(--app-bg, #0e0d0d)',
   d1: 'var(--app-panel, #141312)',
@@ -14,6 +14,7 @@ const C = {
   grn: '#22d68a',
   red: '#f05252',
   sans: 'var(--font-sans, Inter, sans-serif)',
+  mono: 'var(--font-mono, monospace)',
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,8 +37,8 @@ interface FieldDef {
 const FIELDS: FieldDef[] = [
   { key: 'symbol',         label: 'Symbol',        required: true,  hint: 'NQ, ES, AAPL…'         },
   { key: 'direction',      label: 'Direction',     required: true,  hint: 'Long/Short, Buy/Sell'   },
-  { key: 'entry_price',    label: 'Entry Price',   required: false, hint: 'Numeric, optional for Notion logs' },
-  { key: 'exit_price',     label: 'Exit Price',    required: false, hint: 'Numeric, optional for Notion logs' },
+  { key: 'entry_price',    label: 'Entry Price',   required: false, hint: 'Numeric, optional'      },
+  { key: 'exit_price',     label: 'Exit Price',    required: false, hint: 'Numeric, optional'      },
   { key: 'pnl',            label: 'P&L',           required: true,  hint: 'Numeric, e.g. 250 or -100' },
   { key: 'trade_date',     label: 'Date',          required: true,  hint: 'YYYY-MM-DD or MM/DD/YYYY' },
   { key: 'trade_time',     label: 'Entry Time',    required: false, hint: 'HH:MM'                  },
@@ -48,7 +49,7 @@ const FIELDS: FieldDef[] = [
   { key: 'pre_trade_notes',label: 'Notes',         required: false, hint: 'Text'                   },
   { key: 'followed_plan',  label: 'Followed Plan', required: false, hint: 'yes/no, true/false'     },
   { key: 'emotional_state',label: 'Emotion',       required: false, hint: 'Calm, Anxious...'       },
-  { key: 'confluences',    label: 'Tags',          required: false, hint: 'Notion tags, setup, mistakes' },
+  { key: 'confluences',    label: 'Tags',          required: false, hint: 'Setup tags, confluences' },
 ];
 
 // ─── CSV parser ───────────────────────────────────────────────────────────────
@@ -64,20 +65,12 @@ function parseCSV(text: string): { headers: string[]; rows: string[][] } {
     const next = normalized[i + 1];
 
     if (ch === '"') {
-      if (inQ && next === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQ = !inQ;
-      }
+      if (inQ && next === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
       continue;
     }
 
-    if (ch === ',' && !inQ) {
-      row.push(cur.trim());
-      cur = '';
-      continue;
-    }
+    if (ch === ',' && !inQ) { row.push(cur.trim()); cur = ''; continue; }
 
     if ((ch === '\n' || ch === '\r') && !inQ) {
       if (ch === '\r' && next === '\n') i++;
@@ -95,9 +88,7 @@ function parseCSV(text: string): { headers: string[]; rows: string[][] } {
   if (row.some(c => c !== '')) table.push(row);
 
   if (table.length < 2) return { headers: [], rows: [] };
-  const headers = table[0];
-  const rows = table.slice(1);
-  return { headers, rows };
+  return { headers: table[0], rows: table.slice(1) };
 }
 
 // ─── Auto column guesser ──────────────────────────────────────────────────────
@@ -128,13 +119,7 @@ function autoGuessMapping(headers: string[]): Record<FieldKey, string> {
       if (idx !== -1) { mapping[field.key] = headers[idx]; break; }
     }
   }
-
-  // NinjaTrader: "Entry time" often contains both date + time
-  // If trade_date not matched but trade_time is, copy it
-  if (!mapping.trade_date && mapping.trade_time) {
-    mapping.trade_date = mapping.trade_time;
-  }
-
+  if (!mapping.trade_date && mapping.trade_time) mapping.trade_date = mapping.trade_time;
   return mapping as Record<FieldKey, string>;
 }
 
@@ -148,14 +133,8 @@ function parseDirection(v: string): 'Long' | 'Short' | null {
 
 function parseDate(v: string): string | null {
   if (!v) return null;
-  // Try to extract just the date part if it's a datetime string
-  // Formats: "9/15/2025 9:30:00 AM", "2025-09-15 09:30:00", "09/15/2025", "2025-09-15", "15/09/2025"
   const d = v.trim();
-
-  // ISO: YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
-
-  // M/D/YYYY or MM/DD/YYYY (US)
   const slash = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (slash) {
     const [, first, second, y] = slash;
@@ -165,27 +144,21 @@ function parseDate(v: string): string | null {
     const day = firstNum > 12 && secondNum <= 12 ? first : second;
     return `${y}-${m.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
-
-  // D.M.YYYY
   const eu = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
   if (eu) {
     const [, day, m, y] = eu;
     return `${y}-${m.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
-
   const parsed = new Date(d);
   if (!Number.isNaN(parsed.getTime())) {
     return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
   }
-
   return null;
 }
 
 function parseTime(v: string): string | null {
   if (!v) return null;
   const d = v.trim();
-
-  // "9:30:00 AM" or "9:30 AM"
   const ampm = d.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
   if (ampm) {
     let h = parseInt(ampm[1], 10);
@@ -195,11 +168,8 @@ function parseTime(v: string): string | null {
     if (mer === 'AM' && h === 12) h = 0;
     return `${String(h).padStart(2, '0')}:${min}`;
   }
-
-  // "09:30:00" or "9:30"
   const hm = d.match(/(\d{1,2}):(\d{2})/);
   if (hm) return `${hm[1].padStart(2, '0')}:${hm[2]}`;
-
   return null;
 }
 
@@ -208,7 +178,6 @@ function parseNum(v: string): number | null {
   const cleaned = v.replace(/[+$,()]/g, '').trim();
   if (!cleaned || /^[-–—]$/.test(cleaned)) return null;
   const n = parseFloat(cleaned);
-  // Parentheses = negative, e.g. (100.00)
   const neg = /^\(.*\)$/.test(v.trim());
   return isNaN(n) ? null : neg ? -Math.abs(n) : n;
 }
@@ -229,7 +198,7 @@ function parseTags(v: string): string[] {
     .filter((tag, index, all) => all.findIndex(item => item.toLowerCase() === tag.toLowerCase()) === index);
 }
 
-// ─── Map a single CSV row to ApiTrade partial ─────────────────────────────────
+// ─── Row mapper ───────────────────────────────────────────────────────────────
 type ImportedTrade = {
   symbol: string;
   direction: 'Long' | 'Short';
@@ -249,11 +218,7 @@ type ImportedTrade = {
   _errors: string[];
 };
 
-function mapRow(
-  row: string[],
-  headers: string[],
-  mapping: Record<FieldKey, string>,
-): ImportedTrade | null {
+function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, string>): ImportedTrade | null {
   const get = (field: FieldKey): string => {
     const col = mapping[field];
     if (!col) return '';
@@ -262,8 +227,7 @@ function mapRow(
   };
 
   const errors: string[] = [];
-
-  const symbol = get('symbol').trim().replace(/\s+\d{2}-\d{2}$/, '').toUpperCase(); // strip expiry like "NQ 09-25"
+  const symbol = get('symbol').trim().replace(/\s+\d{2}-\d{2}$/, '').toUpperCase();
   if (!symbol) errors.push('Missing symbol');
 
   const direction = parseDirection(get('direction'));
@@ -287,13 +251,10 @@ function mapRow(
 
   if (errors.length > 0) return { symbol, direction: direction ?? 'Long', entry_price: entry_price ?? 0, exit_price: exit_price ?? 0, pnl: pnl ?? 0, trade_date: trade_date ?? '', _errors: errors };
 
-  // Optional fields
   const timeRaw = get('trade_time');
   const trade_time = parseTime(timeRaw) ?? undefined;
-
   const closeRaw = get('close_time');
   const close_time = parseTime(closeRaw) ?? undefined;
-
   const contracts = parseNum(get('contract_size'));
   const sl_price = parseNum(get('sl_price')) ?? undefined;
   const tp_price = parseNum(get('tp_price')) ?? undefined;
@@ -303,21 +264,12 @@ function mapRow(
   const confluences = parseTags(get('confluences'));
 
   return {
-    symbol,
-    direction: direction!,
-    entry_price: entry_price ?? exit_price ?? 0,
-    exit_price: exit_price ?? entry_price ?? 0,
-    pnl: pnl!,
-    trade_date: trade_date!,
-    trade_time,
-    close_time,
-    contract_size: contracts && contracts > 0 ? contracts : undefined,
-    sl_price,
-    tp_price,
-    pre_trade_notes: notes,
+    symbol, direction: direction!, entry_price: entry_price ?? exit_price ?? 0,
+    exit_price: exit_price ?? entry_price ?? 0, pnl: pnl!, trade_date: trade_date!,
+    trade_time, close_time, contract_size: contracts && contracts > 0 ? contracts : undefined,
+    sl_price, tp_price, pre_trade_notes: notes,
     followed_plan: typeof fp === 'boolean' ? fp : undefined,
-    emotional_state: emotion,
-    confluences: confluences.length > 0 ? confluences : undefined,
+    emotional_state: emotion, confluences: confluences.length > 0 ? confluences : undefined,
     _errors: [],
   };
 }
@@ -327,6 +279,23 @@ interface CSVImportModalProps {
   onClose: () => void;
   onImport: (trades: ImportedTrade[]) => Promise<void>;
 }
+
+// ─── STEPS label map ──────────────────────────────────────────────────────────
+const STEP_LABELS: Record<Step, string> = {
+  upload: 'Upload',
+  map: 'Map columns',
+  preview: 'Preview',
+  done: 'Done',
+};
+const STEP_ORDER: Step[] = ['upload', 'map', 'preview', 'done'];
+
+const PLATFORMS = [
+  { name: 'NinjaTrader', domain: 'ninjatrader.com',  cols: 'Instrument · Market pos. · Quantity · Entry price · Exit price · Profit' },
+  { name: 'Tradovate',   domain: 'tradovate.com',    cols: 'Symbol · B/S · Qty · Avg Price · Net Profit · Time' },
+  { name: 'TopStep',     domain: 'topstep.com',      cols: 'Symbol · Side · Qty · Avg Entry · Avg Exit · P/L' },
+  { name: 'Notion',      domain: 'notion.so',        cols: 'Name · Direction · P&L · Date · Tags · Emotion' },
+  { name: 'Generic CSV', domain: null,               cols: 'Symbol · Direction · P&L · Date · Contracts · Notes' },
+];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function CSVImportModal({ onClose, onImport }: CSVImportModalProps) {
@@ -343,13 +312,11 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
 
   const processText = useCallback((text: string) => {
     const { headers: h, rows: r } = parseCSV(text);
-    if (h.length === 0) { setFileError('Could not parse CSV — make sure the file has a header row.'); return; }
+    if (h.length === 0) { setFileError('Could not parse CSV — check the file has a header row.'); return; }
     if (r.length === 0) { setFileError('CSV has headers but no data rows.'); return; }
-    setHeaders(h);
-    setRows(r);
+    setHeaders(h); setRows(r);
     setMapping(autoGuessMapping(h));
-    setFileError('');
-    setStep('map');
+    setFileError(''); setStep('map');
   }, []);
 
   const handleFile = useCallback((file: File) => {
@@ -360,15 +327,13 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
   }, [processText]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
+    e.preventDefault(); setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
   }, [handleFile]);
 
   const handleGoPreview = useCallback(() => {
-    const result = rows.map(r => mapRow(r, headers, mapping as Record<FieldKey, string>));
-    setParsed(result);
+    setParsed(rows.map(r => mapRow(r, headers, mapping as Record<FieldKey, string>)));
     setStep('preview');
   }, [rows, headers, mapping]);
 
@@ -378,8 +343,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
     setImporting(true);
     try {
       await onImport(valid);
-      const failed = parsed.filter(t => t === null || t._errors.length > 0).length;
-      setImportResult({ ok: valid.length, fail: failed });
+      setImportResult({ ok: valid.length, fail: parsed.filter(t => !t || t._errors.length > 0).length });
       setStep('done');
     } finally {
       setImporting(false);
@@ -389,6 +353,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
   const validCount = parsed.filter(t => t && t._errors.length === 0).length;
   const errorCount = parsed.filter(t => !t || t._errors.length > 0).length;
   const requiredMapped = FIELDS.filter(f => f.required).every(f => mapping[f.key]);
+  const currentIdx = STEP_ORDER.indexOf(step);
 
   return (
     <div
@@ -399,20 +364,22 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
         position: 'fixed', inset: 0, zIndex: 1200,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
-        background: 'rgba(10,8,6,0.85)',
-        backdropFilter: 'blur(12px)',
+        background: 'rgba(8,7,6,0.88)',
+        backdropFilter: 'blur(10px)',
         fontFamily: C.sans,
       }}
     >
       <div style={{
-        width: 'min(720px, 100%)',
+        width: 'min(740px, 100%)',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: 14,
+        borderRadius: 12,
         border: `1px solid ${C.b0}`,
+        borderTop: `2px solid ${C.acc}`,
         background: C.d1,
         overflow: 'hidden',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.55)',
       }}>
 
         {/* Header */}
@@ -421,43 +388,51 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
           borderBottom: `1px solid ${C.b0}`,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 650, color: C.t0 }}>Import Trades from CSV</div>
-            <div style={{ fontSize: 11, color: C.t2, marginTop: 2 }}>
-              NinjaTrader · Tradovate · APEX · TopStep · Any broker
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: '0.1em',
+              color: C.acc, background: 'rgba(245,158,11,0.1)',
+              border: '1px solid rgba(245,158,11,0.22)',
+              borderRadius: 4, padding: '2px 7px',
+            }}>CSV</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}>
+              Import trade history
+            </span>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t1, padding: 4, lineHeight: 0 }}>
-            <X size={16} />
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t2, padding: 4, lineHeight: 0, display: 'flex' }}
+          >
+            <X size={15} />
           </button>
         </div>
 
-        {/* Step indicator */}
-        <div style={{ padding: '10px 20px', borderBottom: `1px solid ${C.b0}`, display: 'flex', gap: 6, alignItems: 'center' }}>
-          {(['upload', 'map', 'preview', 'done'] as Step[]).map((s, i) => {
-            const labels = ['Upload', 'Map columns', 'Preview', 'Done'];
+        {/* Step bar */}
+        <div style={{
+          padding: '0 20px',
+          borderBottom: `1px solid ${C.b0}`,
+          display: 'flex',
+          gap: 0,
+        }}>
+          {STEP_ORDER.map((s, i) => {
             const isCurrent = step === s;
-            const isPast = ['upload', 'map', 'preview', 'done'].indexOf(step) > i;
+            const isPast = currentIdx > i;
             return (
-              <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{
+              <div
+                key={s}
+                style={{
+                  padding: '10px 16px 9px',
+                  fontSize: 11,
+                  fontWeight: isCurrent ? 700 : 500,
+                  color: isCurrent ? C.t0 : isPast ? C.t1 : C.t2,
+                  borderBottom: isCurrent ? `2px solid ${C.acc}` : '2px solid transparent',
                   display: 'flex', alignItems: 'center', gap: 5,
-                  fontSize: 11, fontWeight: isCurrent ? 600 : 400,
-                  color: isCurrent ? C.acc : isPast ? C.grn : C.t2,
-                }}>
-                  <div style={{
-                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 9, fontWeight: 700,
-                    background: isCurrent ? `${C.acc}20` : isPast ? `${C.grn}20` : 'transparent',
-                    border: `1px solid ${isCurrent ? C.acc : isPast ? C.grn : C.b0}`,
-                    color: isCurrent ? C.acc : isPast ? C.grn : C.t2,
-                  }}>
-                    {isPast ? <Check size={9} /> : i + 1}
-                  </div>
-                  {labels[i]}
-                </div>
-                {i < 3 && <ChevronRight size={11} style={{ color: C.t2, flexShrink: 0 }} />}
+                  marginBottom: -1,
+                  transition: 'color 0.15s',
+                }}
+              >
+                {isPast && <Check size={10} style={{ color: C.grn }} />}
+                {STEP_LABELS[s]}
               </div>
             );
           })}
@@ -466,30 +441,34 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
 
-          {/* ── STEP: Upload ── */}
+          {/* ── Upload ── */}
           {step === 'upload' && (
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* Drop zone */}
               <div
                 onDrop={handleDrop}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onClick={() => inputRef.current?.click()}
                 style={{
-                  border: `2px dashed ${dragOver ? C.acc : C.b0}`,
-                  borderRadius: 10,
-                  padding: '40px 24px',
+                  border: `1px dashed ${dragOver ? C.acc : 'rgba(255,255,255,0.14)'}`,
+                  borderRadius: 8,
+                  padding: '36px 24px',
                   textAlign: 'center',
                   cursor: 'pointer',
-                  background: dragOver ? `${C.acc}08` : C.d2,
+                  background: dragOver ? 'rgba(245,158,11,0.06)' : 'rgba(255,255,255,0.02)',
                   transition: 'border-color 0.15s, background 0.15s',
                 }}
               >
-                <Upload size={28} style={{ color: C.t2, marginBottom: 12 }} />
-                <div style={{ fontSize: 14, color: C.t0, fontWeight: 500, marginBottom: 6 }}>
-                  Drop your CSV here or click to browse
+                <Upload size={20} style={{ color: dragOver ? C.acc : C.t2, marginBottom: 12 }} />
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.t0, marginBottom: 8, letterSpacing: '-0.01em' }}>
+                  Drop your CSV here
                 </div>
-                <div style={{ fontSize: 12, color: C.t2 }}>
-                  Export your Notion trade database as CSV, then drop it here
+                <div style={{ fontSize: 12, color: C.t1, lineHeight: 1.6, maxWidth: 380, margin: '0 auto' }}>
+                  Flyxa maps your columns automatically and creates journal days for each trade.
+                </div>
+                <div style={{ marginTop: 14, fontSize: 11, color: C.t2 }}>
+                  .csv or .txt · any broker format
                 </div>
                 <input
                   ref={inputRef}
@@ -502,60 +481,84 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
 
               {fileError && (
                 <div style={{
-                  marginTop: 12, padding: '10px 14px', borderRadius: 8,
-                  background: `${C.red}12`, border: `1px solid ${C.red}30`,
+                  padding: '9px 13px', borderRadius: 7,
+                  background: `${C.red}10`, border: `1px solid ${C.red}28`,
                   color: C.red, fontSize: 12, display: 'flex', gap: 8, alignItems: 'center',
                 }}>
-                  <AlertTriangle size={14} />
+                  <AlertTriangle size={13} />
                   {fileError}
                 </div>
               )}
 
-              {/* Format guide */}
-              <div style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2, marginBottom: 10 }}>
-                  Supported formats
+              {/* Platform list */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.t2, marginBottom: 10 }}>
+                  Supported platforms
                 </div>
-                {[
-                  { name: 'Notion trade database', cols: 'Name/Symbol, Direction, P&L, Date, Entry, Exit, Tags, Emotion, Notes' },
-                  { name: 'NinjaTrader', cols: 'Instrument, Market pos., Quantity, Entry price, Exit price, Entry time, Exit time, Profit' },
-                  { name: 'Tradovate', cols: 'Symbol, B/S, Qty, Avg Price, Net Profit, Time' },
-                  { name: 'TopStep / TopstepX', cols: 'Symbol, Side, Qty, Avg Entry, Avg Exit, Open Time, Close Time, P/L, Net P/L' },
-                  { name: 'Generic', cols: 'Symbol, Direction, Entry, Exit, PnL, Date, Contracts' },
-                ].map(fmt => (
-                  <div key={fmt.name} style={{
-                    padding: '10px 14px', borderRadius: 8, marginBottom: 6,
-                    background: C.d2, border: `1px solid ${C.b0}`,
-                  }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: C.t0, marginBottom: 3 }}>{fmt.name}</div>
-                    <div style={{ fontSize: 11, color: C.t2, fontFamily: 'var(--font-mono, monospace)' }}>{fmt.cols}</div>
-                  </div>
-                ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: `1px solid ${C.b0}`, borderRadius: 8, overflow: 'hidden' }}>
+                  {PLATFORMS.map((p, i) => (
+                    <div
+                      key={p.name}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '140px 1fr',
+                        gap: 12,
+                        alignItems: 'center',
+                        padding: '9px 14px',
+                        borderBottom: i < PLATFORMS.length - 1 ? `1px solid ${C.b0}` : 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        {p.domain ? (
+                          <img
+                            src={`https://www.google.com/s2/favicons?domain=${p.domain}&sz=32`}
+                            alt=""
+                            width={16}
+                            height={16}
+                            style={{ borderRadius: 3, flexShrink: 0, opacity: 0.9 }}
+                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <FileText size={14} style={{ color: C.t2, flexShrink: 0 }} />
+                        )}
+                        <span style={{ fontSize: 11.5, fontWeight: 650, color: C.t0 }}>{p.name}</span>
+                      </div>
+                      <span style={{ fontSize: 10.5, color: C.t2, fontFamily: C.mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.cols}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: C.t2 }}>
+                  Column names don't need to match exactly — you can remap everything on the next step.
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── STEP: Map ── */}
+          {/* ── Map ── */}
           {step === 'map' && (
             <div>
-              <div style={{ fontSize: 13, color: C.t1, marginBottom: 16 }}>
-                Detected <strong style={{ color: C.t0 }}>{rows.length} rows</strong> and{' '}
-                <strong style={{ color: C.t0 }}>{headers.length} columns</strong>.
-                Match each Flyxa field to a column in your file.
+              <div style={{ fontSize: 12.5, color: C.t1, marginBottom: 16 }}>
+                <strong style={{ color: C.t0 }}>{rows.length} rows</strong> · <strong style={{ color: C.t0 }}>{headers.length} columns</strong> detected.
+                {' '}Match each field to a column in your file.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px' }}>
                 {FIELDS.map(field => (
-                  <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: field.required ? C.acc : C.t2 }}>
-                      {field.label}{field.required ? ' *' : ''}
-                    </label>
+                  <div key={field.key}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: field.required ? C.acc : C.t2 }}>
+                        {field.label}
+                      </label>
+                      {field.required && <span style={{ fontSize: 9, color: C.acc }}>required</span>}
+                    </div>
                     <select
                       value={mapping[field.key] ?? ''}
                       onChange={e => setMapping(m => ({ ...m, [field.key]: e.target.value || undefined }))}
                       style={{
-                        height: 34, borderRadius: 7, padding: '0 10px',
-                        border: `1px solid ${mapping[field.key] ? C.acc + '40' : C.b0}`,
-                        background: C.d2, color: mapping[field.key] ? C.t0 : C.t2,
+                        width: '100%',
+                        height: 33, borderRadius: 6, padding: '0 9px',
+                        border: `1px solid ${mapping[field.key] ? 'rgba(245,158,11,0.35)' : C.b0}`,
+                        background: C.d2,
+                        color: mapping[field.key] ? C.t0 : C.t2,
                         fontSize: 12, fontFamily: C.sans, outline: 'none', cursor: 'pointer',
                       }}
                     >
@@ -564,41 +567,49 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                         <option key={h} value={h}>{h}</option>
                       ))}
                     </select>
-                    <span style={{ fontSize: 10, color: C.t2 }}>{field.hint}</span>
+                    <span style={{ fontSize: 10, color: C.t2, marginTop: 3, display: 'block' }}>{field.hint}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ── STEP: Preview ── */}
+          {/* ── Preview ── */}
           {step === 'preview' && (
             <div>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center' }}>
-                <div style={{
-                  padding: '6px 12px', borderRadius: 7,
-                  background: `${C.grn}12`, border: `1px solid ${C.grn}30`,
-                  color: C.grn, fontSize: 12, fontWeight: 600,
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+                <span style={{
+                  padding: '4px 10px', borderRadius: 5,
+                  border: `1px solid ${C.grn}30`, background: `${C.grn}0e`,
+                  color: C.grn, fontSize: 11, fontWeight: 650,
                 }}>
-                  {validCount} ready to import
-                </div>
+                  {validCount} ready
+                </span>
                 {errorCount > 0 && (
-                  <div style={{
-                    padding: '6px 12px', borderRadius: 7,
-                    background: `${C.red}12`, border: `1px solid ${C.red}30`,
-                    color: C.red, fontSize: 12, fontWeight: 600,
+                  <span style={{
+                    padding: '4px 10px', borderRadius: 5,
+                    border: `1px solid ${C.red}30`, background: `${C.red}0e`,
+                    color: C.red, fontSize: 11, fontWeight: 650,
                   }}>
-                    {errorCount} will be skipped (missing required fields)
-                  </div>
+                    {errorCount} skipped
+                  </span>
                 )}
+                <span style={{ fontSize: 11, color: C.t2, marginLeft: 2 }}>
+                  Skipped rows are missing required fields.
+                </span>
               </div>
 
-              <div style={{ overflowX: 'auto', borderRadius: 8, border: `1px solid ${C.b0}` }}>
+              <div style={{ overflowX: 'auto', borderRadius: 7, border: `1px solid ${C.b0}` }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.b0}` }}>
-                      {['', 'Symbol', 'Dir', 'Date', 'Entry', 'Exit', 'P&L', 'Contracts', 'Time', 'Issues'].map(h => (
-                        <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.t2, background: C.d2 }}>
+                      {['', 'Symbol', 'Dir', 'Date', 'Entry', 'Exit', 'P&L', 'Qty', 'Time', 'Issues'].map(h => (
+                        <th key={h} style={{
+                          padding: '7px 10px', textAlign: 'left',
+                          fontWeight: 700, fontSize: 9.5, letterSpacing: '0.08em',
+                          textTransform: 'uppercase', color: C.t2,
+                          background: C.d2, whiteSpace: 'nowrap',
+                        }}>
                           {h}
                         </th>
                       ))}
@@ -609,22 +620,22 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                       const ok = t && t._errors.length === 0;
                       return (
                         <tr key={i} style={{ borderBottom: `1px solid ${C.b0}`, background: ok ? 'transparent' : `${C.red}06` }}>
-                          <td style={{ padding: '7px 10px' }}>
+                          <td style={{ padding: '6px 10px', width: 24 }}>
                             {ok
-                              ? <Check size={12} style={{ color: C.grn }} />
-                              : <AlertTriangle size={12} style={{ color: C.red }} />}
+                              ? <Check size={11} style={{ color: C.grn }} />
+                              : <AlertTriangle size={11} style={{ color: C.red }} />}
                           </td>
-                          <td style={{ padding: '7px 10px', color: C.t0, fontWeight: 500 }}>{t?.symbol ?? '—'}</td>
-                          <td style={{ padding: '7px 10px', color: t?.direction === 'Long' ? C.grn : C.red }}>{t?.direction ?? '—'}</td>
-                          <td style={{ padding: '7px 10px', color: C.t1 }}>{t?.trade_date ?? '—'}</td>
-                          <td style={{ padding: '7px 10px', color: C.t1, fontFamily: 'var(--font-mono)' }}>{t?.entry_price ?? '—'}</td>
-                          <td style={{ padding: '7px 10px', color: C.t1, fontFamily: 'var(--font-mono)' }}>{t?.exit_price ?? '—'}</td>
-                          <td style={{ padding: '7px 10px', color: (t?.pnl ?? 0) >= 0 ? C.grn : C.red, fontFamily: 'var(--font-mono)' }}>
+                          <td style={{ padding: '6px 10px', color: C.t0, fontWeight: 600 }}>{t?.symbol ?? '—'}</td>
+                          <td style={{ padding: '6px 10px', color: t?.direction === 'Long' ? C.grn : C.red, fontWeight: 600 }}>{t?.direction ?? '—'}</td>
+                          <td style={{ padding: '6px 10px', color: C.t1, fontFamily: C.mono }}>{t?.trade_date ?? '—'}</td>
+                          <td style={{ padding: '6px 10px', color: C.t1, fontFamily: C.mono }}>{t?.entry_price ?? '—'}</td>
+                          <td style={{ padding: '6px 10px', color: C.t1, fontFamily: C.mono }}>{t?.exit_price ?? '—'}</td>
+                          <td style={{ padding: '6px 10px', color: (t?.pnl ?? 0) >= 0 ? C.grn : C.red, fontFamily: C.mono, fontWeight: 600 }}>
                             {t?.pnl !== undefined ? `${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}` : '—'}
                           </td>
-                          <td style={{ padding: '7px 10px', color: C.t1 }}>{t?.contract_size ?? 1}</td>
-                          <td style={{ padding: '7px 10px', color: C.t2 }}>{t?.trade_time ?? '—'}</td>
-                          <td style={{ padding: '7px 10px', color: C.red, fontSize: 10 }}>
+                          <td style={{ padding: '6px 10px', color: C.t1 }}>{t?.contract_size ?? 1}</td>
+                          <td style={{ padding: '6px 10px', color: C.t2, fontFamily: C.mono }}>{t?.trade_time ?? '—'}</td>
+                          <td style={{ padding: '6px 10px', color: C.red, fontSize: 10 }}>
                             {t?._errors.join(', ') ?? 'null row'}
                           </td>
                         </tr>
@@ -634,35 +645,27 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                 </table>
               </div>
               {parsed.length > 20 && (
-                <div style={{ fontSize: 11, color: C.t2, marginTop: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: C.t2, marginTop: 8 }}>
                   Showing first 20 of {parsed.length} rows
                 </div>
               )}
             </div>
           )}
 
-          {/* ── STEP: Done ── */}
+          {/* ── Done ── */}
           {step === 'done' && importResult && (
-            <div style={{ textAlign: 'center', padding: '32px 0' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: '50%',
-                background: `${C.grn}15`, border: `2px solid ${C.grn}40`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 16px',
-              }}>
-                <Check size={24} style={{ color: C.grn }} />
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 650, color: C.t0, marginBottom: 8 }}>
+            <div style={{ padding: '24px 0' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
                 Import complete
               </div>
-              <div style={{ fontSize: 13, color: C.t1 }}>
-                <strong style={{ color: C.grn }}>{importResult.ok} trades</strong> imported successfully
-                {importResult.fail > 0 && (
-                  <>, <strong style={{ color: C.red }}>{importResult.fail} skipped</strong> due to missing fields</>
-                )}
+              <div style={{ fontSize: 28, fontWeight: 800, color: C.t0, letterSpacing: '-0.02em', marginBottom: 6, fontFamily: C.mono }}>
+                {importResult.ok} trade{importResult.ok !== 1 ? 's' : ''} added
               </div>
-              <div style={{ fontSize: 12, color: C.t2, marginTop: 6 }}>
-                Your patterns page will update automatically as data grows.
+              <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>
+                {importResult.fail > 0
+                  ? <>{importResult.fail} row{importResult.fail !== 1 ? 's' : ''} were skipped due to missing required fields.</>
+                  : <>All rows imported successfully. Check the Journal to review your trades.</>
+                }
               </div>
             </div>
           )}
@@ -670,15 +673,16 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
 
         {/* Footer */}
         <div style={{
-          padding: '12px 20px',
+          padding: '11px 20px',
           borderTop: `1px solid ${C.b0}`,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <button
             onClick={step === 'upload' || step === 'done' ? onClose : () => setStep(step === 'map' ? 'upload' : 'map')}
             style={{
-              padding: '8px 16px', borderRadius: 7, border: `1px solid ${C.b0}`,
-              background: 'transparent', color: C.t1, fontSize: 12.5, cursor: 'pointer', fontFamily: C.sans,
+              padding: '7px 14px', borderRadius: 6,
+              border: `1px solid ${C.b0}`, background: 'transparent',
+              color: C.t1, fontSize: 12, cursor: 'pointer', fontFamily: C.sans,
             }}
           >
             {step === 'done' ? 'Close' : step === 'upload' ? 'Cancel' : 'Back'}
@@ -690,13 +694,14 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                 disabled={!requiredMapped}
                 onClick={handleGoPreview}
                 style={{
-                  padding: '8px 18px', borderRadius: 7, border: 'none',
-                  background: requiredMapped ? C.acc : `${C.acc}40`,
-                  color: '#0a0806', fontSize: 12.5, fontWeight: 650, cursor: requiredMapped ? 'pointer' : 'not-allowed',
-                  fontFamily: C.sans, display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '7px 16px', borderRadius: 6, border: 'none',
+                  background: requiredMapped ? C.acc : `${C.acc}35`,
+                  color: requiredMapped ? '#0a0806' : C.t2,
+                  fontSize: 12, fontWeight: 700, cursor: requiredMapped ? 'pointer' : 'not-allowed',
+                  fontFamily: C.sans,
                 }}
               >
-                Preview <ChevronRight size={13} />
+                Preview →
               </button>
             )}
 
@@ -705,18 +710,15 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                 disabled={validCount === 0 || importing}
                 onClick={() => { void handleImport(); }}
                 style={{
-                  padding: '8px 18px', borderRadius: 7, border: 'none',
-                  background: validCount > 0 && !importing ? C.acc : `${C.acc}40`,
-                  color: '#0a0806', fontSize: 12.5, fontWeight: 650,
+                  padding: '7px 16px', borderRadius: 6, border: 'none',
+                  background: validCount > 0 && !importing ? C.acc : `${C.acc}35`,
+                  color: validCount > 0 && !importing ? '#0a0806' : C.t2,
+                  fontSize: 12, fontWeight: 700,
                   cursor: validCount > 0 && !importing ? 'pointer' : 'not-allowed',
                   fontFamily: C.sans, display: 'flex', alignItems: 'center', gap: 6,
                 }}
               >
-                {importing ? (
-                  <>Importing…</>
-                ) : (
-                  <><FileText size={13} /> Import {validCount} trade{validCount !== 1 ? 's' : ''}</>
-                )}
+                {importing ? 'Importing…' : <><FileText size={12} /> Import {validCount} trade{validCount !== 1 ? 's' : ''}</>}
               </button>
             )}
           </div>

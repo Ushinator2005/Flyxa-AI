@@ -243,11 +243,13 @@ function recalcTrade(trade: Trade): Trade {
   const exit = typeof trade.exit === 'number' && Number.isFinite(trade.exit) ? trade.exit : null;
   const pv = pointValue(trade.symbol);
 
-  const pnl = exit === null
-    ? 0
-    : trade.direction === 'LONG'
-      ? (exit - entry) * contracts * pv
-      : (entry - exit) * contracts * pv;
+  const pnl = typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride)
+    ? trade.pnlOverride
+    : exit === null
+      ? 0
+      : trade.direction === 'LONG'
+        ? (exit - entry) * contracts * pv
+        : (entry - exit) * contracts * pv;
 
   const risk = trade.direction === 'LONG' ? entry - sl : sl - entry;
   const reward = trade.direction === 'LONG' ? tp - entry : entry - tp;
@@ -813,7 +815,12 @@ const useFlyxaStore = create<FlyxaStore>()(
             ...account,
             roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
           }));
-          let nextAccounts = payload.accounts && payload.accounts.length ? payload.accounts : state.accounts;
+          let nextAccounts = payload.accounts && payload.accounts.length
+            ? payload.accounts.map(incoming => {
+                const existing = state.accounts.find(a => a.id === incoming.id);
+                return existing?.payouts?.length ? { ...incoming, payouts: existing.payouts } : incoming;
+              })
+            : state.accounts;
           billingAccounts.forEach((account) => {
             nextAccounts = maybeCreateFundedAccount(nextAccounts, account);
           });

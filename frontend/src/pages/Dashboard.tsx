@@ -463,7 +463,8 @@ export default function Dashboard() {
         {/* Stat cards */}
         <div data-tour-id="dashboard-metrics" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: isMobile ? 8 : 14, flexShrink: 0 }}>
           {selectedStoreAcct && (() => {
-            const sb = selectedStoreAcct.startingBalance ?? 0;
+            const sbRaw = selectedStoreAcct.startingBalance;
+            const sb = sbRaw ?? 0;
             const totalPayouts = (selectedStoreAcct.payouts ?? []).reduce((s, p) => s + p.amount, 0);
             const liveBalance = sb + summary.netPnL - totalPayouts;
             return (
@@ -471,7 +472,7 @@ export default function Dashboard() {
                 color={COBALT}
                 label="Account Balance"
                 value={fmtUSD(liveBalance)}
-                badgeLabel={totalPayouts > 0 ? `Payouts taken: ${fmtUSD(totalPayouts)}` : sb > 0 ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
+                badgeLabel={totalPayouts > 0 ? `Payouts taken: ${fmtUSD(totalPayouts)}` : sbRaw !== undefined ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
                 valueTone={liveBalance >= sb ? 'positive' : 'negative'}
                 compact={isMobile}
               />

@@ -25,6 +25,7 @@ export interface Trade {
   contracts: number;
   rr: number;
   pnl: number;
+  pnlOverride?: number;
   result: TradeResult;
   time: string;
   exitTime: string | null;

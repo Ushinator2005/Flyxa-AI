@@ -169,6 +169,7 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     contracts: typeof data.contract_size === 'number' && data.contract_size > 0 ? data.contract_size : 1,
     rr: 0,
     pnl: typeof data.pnl === 'number' ? data.pnl : 0,
+    pnlOverride: typeof data.pnlOverride === 'number' && Number.isFinite(data.pnlOverride) ? data.pnlOverride : undefined,
     result,
     time: (data.trade_time ?? '09:30').slice(0, 5),
     exitTime: typeof data.close_time === 'string' ? data.close_time.slice(0, 5) : (data.trade_time ?? '09:30').slice(0, 5),
@@ -217,6 +218,7 @@ function toApiTrade(trade: StoreTrade): ApiTrade {
     tp_price: trade.tp,
     exit_reason: trade.result === 'win' ? 'TP' : trade.result === 'loss' ? 'SL' : 'BE',
     pnl: trade.pnl,
+    pnlOverride: typeof trade.pnlOverride === 'number' ? trade.pnlOverride : undefined,
     contract_size: trade.contracts,
     point_value: 1,
     trade_date: trade.date,
@@ -374,6 +376,7 @@ export function useTrades() {
         ? null
         : (typeof data.confidence_level === 'number' && Number.isFinite(data.confidence_level) ? data.confidence_level : undefined),
       confluences: normalizeConfluences(data.confluences),
+      pnlOverride: typeof data.pnlOverride === 'number' && Number.isFinite(data.pnlOverride) ? data.pnlOverride : undefined,
     };
 
     updateTradeInStore(entry.id, id, patch);

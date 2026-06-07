@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  Award,
   CreditCard,
-  DollarSign,
-  Flame,
   LayoutGrid,
   List,
   MessageSquare,
   Pencil,
   Plus,
-  Target,
   TrendingDown,
   TrendingUp,
   Trash2,
@@ -536,8 +532,7 @@ export default function Billing() {
     <div style={{ height: '100%', overflowY: 'auto', padding: '24px 28px 40px', background: 'var(--app-bg)' }}>
       <style>{`
         .billing-desk { display: grid; grid-template-columns: minmax(320px, 1.15fr) minmax(320px, 1fr); gap: 14px; margin-bottom: 16px; }
-        .billing-hero-panel { position: relative; overflow: hidden; border: 1px solid rgba(245,158,11,0.28); border-radius: 8px; background: linear-gradient(135deg, rgba(245,158,11,0.14), rgba(255,255,255,0.025) 42%, var(--surface-1)); padding: 18px; }
-        .billing-hero-panel::after { content: ""; position: absolute; inset: auto 18px 0 18px; height: 1px; background: linear-gradient(90deg, transparent, rgba(245,158,11,0.45), transparent); }
+        .billing-hero-panel { border: 1px solid var(--border); border-top: 2px solid var(--amber); border-radius: 8px; background: var(--surface-1); padding: 18px; }
         .billing-kicker { margin: 0; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 700; }
         .billing-ledger-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
         .billing-stat-card { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); padding: 14px; transition: border-color 140ms ease, transform 140ms ease, background 140ms ease; min-width: 0; }
@@ -550,7 +545,7 @@ export default function Billing() {
         .billing-command-btn { height: 34px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--txt-2); display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color 120ms, color 120ms, background 120ms; }
         .billing-command-btn:hover { border-color: rgba(255,255,255,0.18); color: var(--txt); }
         .billing-command-btn.primary { border-color: var(--amber); background: var(--amber); color: var(--bg); }
-        .billing-break-even { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid rgba(96,165,250,0.18); border-radius: 8px; background: linear-gradient(90deg, rgba(96,165,250,0.08), var(--surface-1)); padding: 14px 16px; margin-bottom: 18px; flex-wrap: wrap; }
+        .billing-break-even { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); padding: 14px 16px; margin-bottom: 18px; flex-wrap: wrap; }
         .billing-table-row:hover td { background: var(--surface-2); }
         .billing-action-icon { border: none; background: transparent; color: var(--txt-3); display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
         .billing-action-icon:hover { color: var(--txt-2); }
@@ -645,38 +640,26 @@ export default function Billing() {
 
         <div className="billing-ledger-grid">
           <article className="billing-stat-card">
-            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber-border)', marginBottom: 8 }}>
-              <Flame size={14} />
-            </span>
             <p className="billing-stat-label">Monthly Burn</p>
             <p className="billing-stat-value" style={{ color: 'var(--amber)' }}>{formatCurrency(derived.monthlyBurn)}</p>
             <p className="billing-stat-note">average account fee pressure</p>
           </article>
 
           <article className="billing-stat-card">
-            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--cobalt-dim)', color: 'var(--cobalt)', border: '1px solid var(--cobalt-border)', marginBottom: 8 }}>
-              <DollarSign size={14} />
-            </span>
             <p className="billing-stat-label">Cost Per Pass</p>
-            <p className="billing-stat-value">{derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '-'}</p>
+            <p className="billing-stat-value">{derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '—'}</p>
             <p className="billing-stat-note">average spend per funded/pass</p>
           </article>
 
           <article className="billing-stat-card">
-            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
-              <Award size={14} />
-            </span>
             <p className="billing-stat-label">Best Firm</p>
             <p className="billing-stat-value" style={{ fontSize: 15, fontFamily: 'var(--font-sans)', fontWeight: 600 }}>
-              {derived.bestFirm ? derived.bestFirm.firm : '-'}
+              {derived.bestFirm ? derived.bestFirm.firm : '—'}
             </p>
             <p className="billing-stat-note">{derived.bestFirm ? `${formatSignedCurrency(derived.bestFirm.roi)} ROI` : 'no payouts yet'}</p>
           </article>
 
           <article className="billing-stat-card">
-            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
-              <Target size={14} />
-            </span>
             <p className="billing-stat-label">Pass Rate</p>
             <p className="billing-stat-value">{derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}</p>
             <p className="billing-stat-note">{derived.totalAccounts} accounts purchased</p>
@@ -698,148 +681,6 @@ export default function Billing() {
         </div>
       </section>
 
-      <div style={{ display: 'none' }}>
-
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <section style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Billing</p>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--txt)' }}>Prop Firm Tracker</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--txt-2)' }}>
-            Challenge costs, phase progression, payouts, and ROI
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openAddModal}
-          style={{ height: 34, borderRadius: 5, border: 'none', background: 'var(--amber)', color: 'var(--bg)', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          <Plus size={14} />
-          Add Account
-        </button>
-      </section>
-
-      {/* ── Stat cards row 1 ─────────────────────────────────────── */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 12 }}>
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid var(--red-border)', marginBottom: 8 }}>
-            <TrendingDown size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Total Spent</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalSpent)}</p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>across all accounts and resets</p>
-        </article>
-
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
-            <TrendingUp size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Total Payouts</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalPayouts)}</p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>from funded accounts</p>
-        </article>
-
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: derived.netPnL >= 0 ? 'var(--cobalt-dim)' : 'var(--red-dim)', color: derived.netPnL >= 0 ? 'var(--cobalt)' : 'var(--red)', border: derived.netPnL >= 0 ? '1px solid var(--cobalt-border)' : '1px solid var(--red-border)', marginBottom: 8 }}>
-            <CreditCard size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Net P&amp;L</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: derived.netPnL >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>{formatSignedCurrency(derived.netPnL)}</p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>overall return on investment</p>
-        </article>
-
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber-border)', marginBottom: 8 }}>
-            <Flame size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Monthly Burn Rate</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.monthlyBurn)}</p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>avg monthly spend on fees</p>
-        </article>
-      </section>
-
-      {/* ── Stat cards row 2 ─────────────────────────────────────── */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 24 }}>
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber-border)', marginBottom: 8 }}>
-            <Target size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Active Challenges</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{derived.activeAccounts}</p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>currently in eval · {derived.blownAccounts} blown</p>
-        </article>
-
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--cobalt-dim)', color: 'var(--cobalt)', border: '1px solid var(--cobalt-border)', marginBottom: 8 }}>
-            <DollarSign size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Cost Per Pass</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
-            {derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '—'}
-          </p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>avg spent per account passed</p>
-        </article>
-
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
-            <Award size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Best Firm</p>
-          <p style={{ margin: '8px 0 5px', fontSize: 15, fontWeight: 600, color: 'var(--txt)' }}>
-            {derived.bestFirm ? derived.bestFirm.firm : '—'}
-          </p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>
-            {derived.bestFirm ? `${formatSignedCurrency(derived.bestFirm.roi)} ROI` : 'no payouts yet'}
-          </p>
-        </article>
-
-        <article className="billing-stat-card" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)', marginBottom: 8 }}>
-            <TrendingUp size={15} />
-          </span>
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Total Saved</p>
-          <p style={{ margin: '8px 0 5px', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalSaved)}</p>
-          <p style={{ margin: 0, fontSize: 11, color: 'var(--txt-3)' }}>via discount codes</p>
-        </article>
-      </section>
-
-      {/* ── Break-even strip ─────────────────────────────────────── */}
-      <section style={{ position: 'relative', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: '18px 22px', marginBottom: 24 }}>
-        <span aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', background: 'linear-gradient(to bottom, var(--amber), transparent)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 280, maxWidth: 480 }}>
-            <p style={{ margin: 0, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Monthly Break-even</p>
-            <p style={{ margin: '8px 0 6px', fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 500, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.monthlyBurn)}</p>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--txt-2)', lineHeight: 1.55 }}>
-              You need to earn this each month just to cover account fees before you are actually profitable.
-            </p>
-          </div>
-          <span aria-hidden="true" style={{ width: 1, height: 48, background: 'var(--border)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
-            <div>
-              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.avgFeePerAccount)}</p>
-              <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Avg fee per account</p>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{derived.totalAccounts}</p>
-              <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Total purchased</p>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>{derived.passedAccounts + derived.fundedAccounts}</p>
-              <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Funded / Passed</p>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
-                {derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}
-              </p>
-              <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Pass rate</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Ledger / Pipeline ────────────────────────────────────── */}
-      </div>
 
       <section style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         <header style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>

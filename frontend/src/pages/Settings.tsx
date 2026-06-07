@@ -2,6 +2,7 @@
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, Scan, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
+import DatePicker from '../components/common/DatePicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -523,6 +524,8 @@ export default function Settings() {
   const setEntries = useFlyxaStore(state => state.setEntries);
   const addPayout = useFlyxaStore(state => state.addPayout);
   const deletePayout = useFlyxaStore(state => state.deletePayout);
+  const storeAccounts = useFlyxaStore(state => state.accounts);
+  const getPayouts = (accountId: string) => storeAccounts.find(a => a.id === accountId)?.payouts ?? [];
   const {
     accounts,
     defaultTradeAccountId,
@@ -1768,7 +1771,7 @@ export default function Settings() {
                     value={account.startingBalance ?? ''}
                     onChange={e => {
                       const v = parseFloat(e.target.value);
-                      updateAccount(account.id, { startingBalance: Number.isFinite(v) && v > 0 ? v : undefined });
+                      updateAccount(account.id, { startingBalance: Number.isFinite(v) && v >= 0 ? v : undefined });
                     }}
                     onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
                     onBlur={e => { e.target.style.borderBottom = 'none'; }}
@@ -1793,26 +1796,32 @@ export default function Settings() {
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {/* Payouts button — live/funded accounts only */}
-                    {(account.type === 'live' || account.phase === 'funded' || account.status === 'Funded' || account.status === 'Live') && (
+                    {(account.status === 'Funded' || account.status === 'Live') && (
                       <button
                         type="button"
                         onClick={() => setPayoutTarget(payoutTarget === account.id ? null : account.id)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
-                          background: (account.payouts?.length ?? 0) > 0 ? 'rgba(245,158,11,0.10)' : 'transparent',
-                          border: `1px solid ${(account.payouts?.length ?? 0) > 0 ? 'rgba(245,158,11,0.3)' : 'rgba(107,114,128,0.3)'}`,
+                          gap: '5px',
+                          background: payoutTarget === account.id
+                            ? '#f59e0b'
+                            : (getPayouts(account.id).length ?? 0) > 0
+                              ? 'rgba(245,158,11,0.18)'
+                              : 'rgba(245,158,11,0.08)',
+                          border: `1px solid ${payoutTarget === account.id ? '#f59e0b' : 'rgba(245,158,11,0.45)'}`,
                           borderRadius: '6px',
-                          padding: '4px 8px',
-                          color: (account.payouts?.length ?? 0) > 0 ? '#f59e0b' : 'rgba(156,163,175,0.9)',
-                          fontSize: '11px',
+                          padding: '5px 10px',
+                          color: payoutTarget === account.id ? '#1a1208' : '#f59e0b',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
                           cursor: 'pointer',
-                          transition: 'background 0.15s, color 0.15s',
+                          transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                          letterSpacing: '0.02em',
                         }}
                       >
-                        <DollarSign size={11} />
-                        Payouts {(account.payouts?.length ?? 0) > 0 ? `(${account.payouts!.length})` : ''}
+                        <DollarSign size={12} />
+                        Payouts{getPayouts(account.id).length > 0 ? ` (${getPayouts(account.id).length})` : ''}
                       </button>
                     )}
                     {account.id !== DEFAULT_ACCOUNT_ID && (account.status === 'Blown' || account.status === 'Passed') && (
@@ -1885,24 +1894,28 @@ export default function Settings() {
 
                 {/* Payouts panel */}
                 {payoutTarget === account.id && (
-                  <div style={{ margin: '8px 4px', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.2)', background: 'rgba(245,158,11,0.04)', padding: '14px 16px' }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#f59e0b', margin: '0 0 12px' }}>
-                      Payouts — {account.name}
-                    </p>
-
+                  <div style={{
+                    margin: '8px 0 4px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--app-border)',
+                    borderLeft: `3px solid ${AMBER}`,
+                    background: 'var(--app-panel)',
+                    padding: '14px 16px',
+                  }}>
                     {/* Add payout form */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 10, color: 'var(--app-text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Date</label>
-                        <input
-                          type="date"
+                        <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Date</label>
+                        <DatePicker
                           value={payoutDate}
-                          onChange={e => setPayoutDate(e.target.value)}
-                          style={{ height: 30, borderRadius: 5, border: '1px solid var(--app-border)', background: 'var(--app-bg)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
+                          onChange={setPayoutDate}
+                          compact
+                          align="left"
+                          max={new Date().toISOString().slice(0, 10)}
                         />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 10, color: 'var(--app-text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Amount ($)</label>
+                        <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Amount ($)</label>
                         <input
                           type="number"
                           min="0"
@@ -1910,17 +1923,17 @@ export default function Settings() {
                           placeholder="e.g. 1500"
                           value={payoutAmount}
                           onChange={e => setPayoutAmount(e.target.value)}
-                          style={{ height: 30, width: 120, borderRadius: 5, border: '1px solid var(--app-border)', background: 'var(--app-bg)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
+                          style={{ height: 30, width: 120, borderRadius: 6, border: '1px solid var(--app-border)', background: 'var(--app-panel-strong)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
                         />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 10, color: 'var(--app-text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Note (optional)</label>
+                        <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Note</label>
                         <input
                           type="text"
-                          placeholder="e.g. Monthly payout"
+                          placeholder="optional"
                           value={payoutNote}
                           onChange={e => setPayoutNote(e.target.value)}
-                          style={{ height: 30, width: 180, borderRadius: 5, border: '1px solid var(--app-border)', background: 'var(--app-bg)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
+                          style={{ height: 30, width: 170, borderRadius: 6, border: '1px solid var(--app-border)', background: 'var(--app-panel-strong)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
                         />
                       </div>
                       <button
@@ -1932,45 +1945,45 @@ export default function Settings() {
                           setPayoutAmount('');
                           setPayoutNote('');
                         }}
-                        style={{ height: 30, borderRadius: 5, border: 'none', background: '#f59e0b', color: '#000', fontSize: 12, fontWeight: 600, padding: '0 14px', cursor: 'pointer' }}
+                        style={{ height: 30, borderRadius: 6, border: 'none', background: AMBER, color: '#111', fontSize: 12, fontWeight: 700, padding: '0 16px', cursor: 'pointer' }}
                       >
                         Add
                       </button>
                     </div>
 
                     {/* Payout list */}
-                    {(account.payouts ?? []).length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
-                        {[...(account.payouts ?? [])].sort((a, b) => b.date.localeCompare(a.date)).map(payout => (
-                          <div key={payout.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <span style={{ fontSize: 11, color: 'var(--app-text-muted)', minWidth: 80 }}>{payout.date}</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', fontFamily: 'var(--font-mono)', minWidth: 90 }}>
-                              +${payout.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {getPayouts(account.id).length > 0 ? (
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          {[...getPayouts(account.id)].sort((a, b) => b.date.localeCompare(a.date)).map(payout => (
+                            <div key={payout.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--app-border)' }}>
+                              <span style={{ fontSize: 11, color: 'var(--app-text-muted)', minWidth: 84, fontFamily: 'var(--font-mono)' }}>{payout.date}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: AMBER, fontFamily: 'var(--font-mono)', minWidth: 100 }}>
+                                +${payout.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <span style={{ fontSize: 11, color: 'var(--app-text-subtle)', flex: 1 }}>{payout.note ?? ''}</span>
+                              <button
+                                type="button"
+                                onClick={() => deletePayout(account.id, payout.id)}
+                                style={{ background: 'none', border: 'none', color: 'var(--app-text-subtle)', cursor: 'pointer', lineHeight: 0, padding: 2, opacity: 0.6 }}
+                                title="Remove"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
+                          <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>
+                            Total:{' '}
+                            <span style={{ fontWeight: 700, color: AMBER, fontFamily: 'var(--font-mono)' }}>
+                              ${getPayouts(account.id).reduce((s, p) => s + p.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
-                            {payout.note && <span style={{ fontSize: 11, color: 'var(--app-text-subtle)', flex: 1 }}>{payout.note}</span>}
-                            <button
-                              type="button"
-                              onClick={() => deletePayout(account.id, payout.id)}
-                              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(252,165,165,0.6)', cursor: 'pointer', lineHeight: 0, padding: 2 }}
-                              title="Remove payout"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                          </span>
+                        </div>
+                      </>
                     ) : (
-                      <p style={{ fontSize: 11, color: 'var(--app-text-subtle)', marginBottom: 10 }}>No payouts logged yet.</p>
-                    )}
-
-                    {/* Total */}
-                    {(account.payouts ?? []).length > 0 && (
-                      <p style={{ fontSize: 11, color: 'var(--app-text-muted)', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, margin: 0 }}>
-                        Total payouts:{' '}
-                        <span style={{ fontWeight: 700, color: '#f59e0b', fontFamily: 'var(--font-mono)' }}>
-                          ${(account.payouts ?? []).reduce((s, p) => s + p.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </p>
+                      <p style={{ fontSize: 11, color: 'var(--app-text-subtle)', margin: 0 }}>No payouts logged yet.</p>
                     )}
                   </div>
                 )}

@@ -185,6 +185,10 @@ export default function TradeForm({
   const [matchedContract, setMatchedContract] = useState<FuturesContract | undefined>(
     () => lookupContract(initialData?.symbol || '')
   );
+  const [pnlEditMode, setPnlEditMode] = useState(false);
+  const [pnlOverride, setPnlOverride] = useState<number | null>(
+    () => typeof initialData?.pnlOverride === 'number' && Number.isFinite(initialData.pnlOverride) ? initialData.pnlOverride : null
+  );
 
   useEffect(() => {
     const nextForm = buildFormState(initialData);
@@ -211,6 +215,8 @@ export default function TradeForm({
     setMatchedContract(contract);
     setSubmitError('');
     setSelectedConfluence('');
+    setPnlOverride(typeof initialData?.pnlOverride === 'number' && Number.isFinite(initialData.pnlOverride) ? initialData.pnlOverride : null);
+    setPnlEditMode(false);
   }, [initialData]);
 
   const calcPnL = (): number => {
@@ -394,10 +400,11 @@ export default function TradeForm({
       exit_price: normalizedExitPrice,
       pre_trade_notes: preTradeNotes,
       post_trade_notes: postTradeNotes,
+      ...(pnlOverride !== null ? { pnlOverride } : {}),
     });
   };
 
-  const pnl = calcPnL();
+  const pnl = pnlOverride !== null ? pnlOverride : calcPnL();
   const rr = calcRR();
   const confluences = normalizeConfluences(form.confluences);
   const availableConfluenceOptions = confluenceOptions.filter(
@@ -729,8 +736,53 @@ export default function TradeForm({
           </div>
           <div style={{ ...sub, marginTop: 8, display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
             <div>
-              <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: T3, marginBottom: 3 }}>Net P&L</p>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: pnl === 0 ? AMBER : pnl > 0 ? '#34d399' : '#f87171' }}>{formatCurrency(pnl)}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: T3 }}>Net P&amp;L</p>
+                {pnlOverride !== null && (
+                  <button
+                    type="button"
+                    onClick={() => { setPnlOverride(null); setPnlEditMode(false); }}
+                    style={{ fontSize: 9, color: T3, cursor: 'pointer', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', lineHeight: 1 }}
+                    title="Reset to calculated value"
+                  >
+                    ↺ auto
+                  </button>
+                )}
+              </div>
+              {pnlEditMode ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  autoFocus
+                  value={pnlOverride !== null ? pnlOverride : calcPnL()}
+                  onChange={e => setPnlOverride(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                  onBlur={() => setPnlEditMode(false)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); setPnlEditMode(false); }
+                    else if (e.key === 'Escape') { setPnlOverride(null); setPnlEditMode(false); }
+                  }}
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    width: 130,
+                    background: 'transparent',
+                    border: `1px solid ${BD}`,
+                    borderRadius: 4,
+                    color: pnl > 0 ? '#34d399' : pnl < 0 ? '#f87171' : AMBER,
+                    padding: '2px 6px',
+                    outline: 'none',
+                  }}
+                />
+              ) : (
+                <p
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: pnl === 0 ? AMBER : pnl > 0 ? '#34d399' : '#f87171', cursor: 'pointer' }}
+                  onClick={() => { setPnlOverride(v => v !== null ? v : calcPnL()); setPnlEditMode(true); }}
+                  title="Click to override Net P&L"
+                >
+                  {formatCurrency(pnl)}
+                </p>
+              )}
             </div>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: T3, marginBottom: 3 }}>R:R</p>

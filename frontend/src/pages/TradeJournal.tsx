@@ -56,6 +56,7 @@ interface JournalTrade {
   contracts: number;
   rr: number;
   pnl: number;
+  pnlOverride?: number;
   result: TradeResult;
   screenshotUrl?: string;
   reflection?: {
@@ -332,7 +333,10 @@ function computeTradeRr(trade: JournalTrade, entry?: number): number {
 function withTradeDerivedValues(trade: JournalTrade): JournalTrade {
   const entry = getTradeEntry(trade);
   const exit = getTradeExit(trade);
-  const pnl = computeTradePnl(trade, entry, exit);
+  const calcPnl = computeTradePnl(trade, entry, exit);
+  const pnl = typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride)
+    ? trade.pnlOverride
+    : calcPnl;
   const rr = computeTradeRr(trade, entry);
   const result: TradeResult = exit === undefined ? 'open' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'open';
   return {
@@ -596,6 +600,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           processScore: typeof trade.processScore === 'number' ? trade.processScore : undefined,
           confluences: normalizeConfluences(trade.confluences),
           timeframe: typeof trade.timeframe === 'string' && trade.timeframe ? trade.timeframe : undefined,
+          pnlOverride: typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride) ? trade.pnlOverride : undefined,
         };
         return withTradeDerivedValues(normalizedTrade);
       });
@@ -814,6 +819,8 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
     sl: trade.sl != null ? String(trade.sl) : '',
     tp: trade.tp != null ? String(trade.tp) : '',
   });
+  const [pnlEditMode, setPnlEditMode] = useState(false);
+  const [pnlEditValue, setPnlEditValue] = useState('');
 
   useEffect(() => {
     setLocal({
@@ -822,6 +829,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
       sl: trade.sl != null ? String(trade.sl) : '',
       tp: trade.tp != null ? String(trade.tp) : '',
     });
+    setPnlEditMode(false);
   }, [trade.id, trade.entry, trade.entryPrice, trade.exit, trade.exitPrice, trade.sl, trade.tp]);
 
   const parseLocal = (value: string): number | undefined => {
@@ -869,6 +877,10 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
       : (entryValue - exitValue) * contracts * pointValue
     : null;
 
+  const effectivePnl = typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride)
+    ? trade.pnlOverride
+    : netPnl;
+
   const rr = (() => {
     if (entryValue === undefined || slValue === undefined || tpValue === undefined) return null;
     const risk = trade.direction === 'LONG' ? entryValue - slValue : slValue - entryValue;
@@ -877,18 +889,6 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
     return reward / risk;
   })();
 
-  const result = (() => {
-    if (exitValue === undefined) return 'OPEN';
-    if (entryValue === undefined || slValue === undefined || tpValue === undefined) return 'PARTIAL';
-    if (trade.direction === 'LONG') {
-      if (exitValue >= tpValue) return 'WIN';
-      if (exitValue <= slValue) return 'LOSS';
-      return 'PARTIAL';
-    }
-    if (exitValue <= tpValue) return 'WIN';
-    if (exitValue >= slValue) return 'LOSS';
-    return 'PARTIAL';
-  })();
 
   const sourceText = trade.priceLevelsEdited ? 'Manually set' : trade.priceLevelsSource === 'ai' ? 'AI extracted' : 'Manually set';
   const renderPointsDiff = (delta: number | null, mode: 'pos' | 'neg' | 'auto') => {
@@ -966,20 +966,70 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
       </div>
       <div className="tj-pl-summary">
         <div className="tj-pl-summary-block">
-          <div className="tj-pl-summary-label">NET P&amp;L</div>
-          <div className={`tj-pl-summary-value ${netPnl !== null && netPnl > 0 ? 'pos' : netPnl !== null && netPnl < 0 ? 'neg' : ''}`}>
-            {netPnl === null ? '-' : formatCurrencyFixed(netPnl)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <div className="tj-pl-summary-label" style={{ marginBottom: 0 }}>NET P&amp;L</div>
+            {trade.pnlOverride !== undefined && (
+              <button
+                type="button"
+                onClick={() => { onMutate({ pnlOverride: undefined }); setPnlEditMode(false); }}
+                style={{ fontSize: 9, color: 'var(--txt-3)', cursor: 'pointer', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', lineHeight: 1 }}
+                title="Reset to calculated value"
+              >
+                ↺ auto
+              </button>
+            )}
           </div>
+          {pnlEditMode ? (
+            <input
+              type="number"
+              step="0.01"
+              autoFocus
+              value={pnlEditValue}
+              onChange={e => setPnlEditValue(e.target.value)}
+              onBlur={() => {
+                const parsed = parseFloat(pnlEditValue);
+                if (Number.isFinite(parsed)) onMutate({ pnlOverride: parsed });
+                setPnlEditMode(false);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const parsed = parseFloat(pnlEditValue);
+                  if (Number.isFinite(parsed)) onMutate({ pnlOverride: parsed });
+                  setPnlEditMode(false);
+                } else if (e.key === 'Escape') {
+                  setPnlEditMode(false);
+                }
+              }}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 18,
+                fontWeight: 600,
+                width: 130,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                color: parseFloat(pnlEditValue) > 0 ? 'var(--green)' : parseFloat(pnlEditValue) < 0 ? 'var(--red)' : 'var(--txt)',
+                padding: '2px 6px',
+                outline: 'none',
+              }}
+            />
+          ) : (
+            <div
+              className={`tj-pl-summary-value ${effectivePnl !== null && effectivePnl > 0 ? 'pos' : effectivePnl !== null && effectivePnl < 0 ? 'neg' : ''}`}
+              onClick={() => { setPnlEditValue(String(effectivePnl ?? 0)); setPnlEditMode(true); }}
+              title="Click to override Net P&L"
+              style={{ cursor: 'pointer' }}
+            >
+              {effectivePnl === null ? '-' : formatCurrencyFixed(effectivePnl)}
+            </div>
+          )}
         </div>
         <div className="tj-pl-summary-block">
           <div className="tj-pl-summary-label">R:R</div>
           <div className={`tj-pl-summary-rr ${rr !== null && rr >= 2 ? 'pos' : rr !== null && rr >= 1 ? 'amber' : rr !== null ? 'neg' : ''}`}>
             {rr === null ? '-' : `${rr.toFixed(2)}R`}
           </div>
-        </div>
-        <div className="tj-pl-summary-block end">
-          <div className="tj-pl-summary-label">RESULT</div>
-          <span className={`tj-pl-result ${result.toLowerCase()}`}>{result}</span>
         </div>
       </div>
     </div>

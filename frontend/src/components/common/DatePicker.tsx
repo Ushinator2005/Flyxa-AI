@@ -1,4 +1,5 @@
 import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DatePickerProps {
@@ -63,7 +64,9 @@ export default function DatePicker({
   max,
 }: DatePickerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number; right?: number } | null>(null);
   const selectedDate = parseIsoDate(value);
   const [viewDate, setViewDate] = useState(() => selectedDate ?? new Date());
 
@@ -79,6 +82,16 @@ export default function DatePicker({
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    if (align === 'left') {
+      setPopupPos({ top: rect.bottom + 8, left: rect.left });
+    } else {
+      setPopupPos({ top: rect.bottom + 8, left: rect.right - 286 });
+    }
+  }, [open, align]);
 
   const cells = useMemo(() => monthGrid(viewDate), [viewDate]);
   const todayIso = toIsoDate(new Date());
@@ -98,6 +111,7 @@ export default function DatePicker({
   return (
     <div ref={rootRef} style={{ position: 'relative', display: fullWidth ? 'block' : 'inline-block', width: fullWidth ? '100%' : undefined }}>
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen(current => !current)}
@@ -131,15 +145,15 @@ export default function DatePicker({
         </span>
       </button>
 
-      {open && (
+      {open && popupPos && createPortal(
         <div
           role="dialog"
           aria-label="Choose date"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            [align]: 0,
-            zIndex: 1200,
+            position: 'fixed',
+            top: popupPos.top,
+            left: popupPos.left,
+            zIndex: 9999,
             width: 286,
             borderRadius: 12,
             border: '1px solid rgba(255,255,255,0.10)',
@@ -200,7 +214,8 @@ export default function DatePicker({
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
