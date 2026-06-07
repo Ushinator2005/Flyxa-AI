@@ -116,7 +116,7 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric }: Le
         const rank = idx + 1;
 
         return (
-          <div key={rival.id} className={`rv-comp-row ${isMe ? 'me' : ''}`}>
+          <div key={rival.id} className={`rv-comp-row rank-${rank} ${isMe ? 'me' : ''}`}>
             <span className={`rv-rank ${rankClass(rank)}`}>
               {String(rank).padStart(2, '0')}
             </span>

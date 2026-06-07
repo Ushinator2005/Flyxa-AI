@@ -50,4 +50,12 @@ describe('tradingAccounts', () => {
 
     expect('credentials' in accounts.find(item => item.id === 'legacy')!).toBe(false);
   });
+
+  it('preserves archived account state during normalization', () => {
+    const accounts = ensureDefaultAccount([
+      account({ id: 'archived-account', status: 'Blown', archived: true }),
+    ]);
+
+    expect(accounts.find(item => item.id === 'archived-account')?.archived).toBe(true);
+  });
 });

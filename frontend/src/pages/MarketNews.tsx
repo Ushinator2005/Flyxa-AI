@@ -953,11 +953,34 @@ function CalendarPanel({
     setWeekOffset(offsetToNext);
   }, [filteredEvents, weekEndSlice, weekEvents.length, weekOffset, weekStart, setWeekOffset]);
 
+  const todayRef = useRef<HTMLDivElement>(null);
+  const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolled = useRef(false);
+
   const byDate = weekEvents.reduce<Record<string, CalendarEvent[]>>((acc, e) => {
     (acc[e.date] ??= []).push(e);
     return acc;
   }, {});
   const dates = Object.keys(byDate).sort();
+
+  // Auto-scroll to today's date section when events first load on the current week.
+  useEffect(() => {
+    if (weekOffset !== 0) return;
+    if (!dates.includes(todaySlice)) return;
+    if (hasAutoScrolled.current) return;
+    if (!todayRef.current) return;
+    hasAutoScrolled.current = true;
+    const timer = setTimeout(() => {
+      const container = calendarScrollRef.current;
+      const todayEl = todayRef.current;
+      if (!container || !todayEl) return;
+      const containerRect = container.getBoundingClientRect();
+      const todayRect = todayEl.getBoundingClientRect();
+      const offset = todayRect.top - containerRect.top + container.scrollTop;
+      container.scrollTo({ top: offset, behavior: 'smooth' });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [dates, todaySlice, weekOffset]);
 
   return (
     <section style={{ ...sidebarCardStyle(), padding: '16px', borderColor: AMBER_BORDER, background: S1 }}>
@@ -1039,6 +1062,7 @@ function CalendarPanel({
         <p style={{ margin: 0, color: T3, fontSize: 11 }}>No selected USD events for this week.</p>
       ) : (
         <div
+          ref={calendarScrollRef}
           style={{
             display: 'grid',
             gap: 14,
@@ -1053,7 +1077,7 @@ function CalendarPanel({
           }}
         >
           {dates.map(date => (
-            <div key={date} style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+            <div key={date} ref={date === todaySlice ? todayRef : undefined} style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
               <p style={{ margin: '0 0 7px', paddingLeft: 2, fontSize: 11, fontWeight: 800, color: date === todaySlice ? COBALT : AMBER, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2 }}>
                 {fmtCalendarDate(date, safeDisplayTimezone)}
               </p>
@@ -1332,9 +1356,11 @@ export default function MarketNews() {
     };
   }, [fetchNews, fetchSidebar]);
 
-  // When the user navigates forward, check if we have events for that week.
-  // If not, re-fetch with a wider range so FMP can cover it.
-  const loadedWeeksAheadRef = useRef(4);
+  // When the user navigates forward, re-fetch on the first visit to each new
+  // week offset. Starting at 0 ensures offset=1 (next week) always triggers a
+  // fresh pull — the FF feeds often don't publish next week's data until
+  // Saturday, so the initial 4-week load may return empty for next week.
+  const loadedWeeksAheadRef = useRef(0);
   useEffect(() => {
     if (calendarWeekOffset <= 0) return;
     const neededWeeks = calendarWeekOffset + 2; // pad by 2 extra weeks

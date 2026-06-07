@@ -479,15 +479,22 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         account.id === accountId ? { ...account, ...updates } : account
       )
     );
+    const nextSelectedAccountId = updates.archived === true && selectedAccountIdRef.current === accountId
+      ? ALL_ACCOUNTS_ID
+      : selectedAccountIdRef.current;
     setAccounts(nextAccounts);
+    if (nextSelectedAccountId !== selectedAccountIdRef.current) {
+      setSelectedAccountIdState(nextSelectedAccountId);
+    }
 
-    // When startingBalance changes, save immediately to user_store without waiting for debounce.
-    // This ensures the value survives a page refresh even if the 1.5s timer hasn't fired yet.
-    if ('startingBalance' in updates && user && initialLoadDone.current) {
+    // Account lifecycle fields should survive refreshes immediately instead of waiting
+    // for the debounce, especially archive/unarchive actions that change navigation.
+    const shouldSaveSettingsImmediately = 'startingBalance' in updates || 'archived' in updates;
+    if (shouldSaveSettingsImmediately && user && initialLoadDone.current) {
       void saveAppSettingsToSupabase(user.id, {
         accounts: nextAccounts,
         preferences: preferencesRef.current,
-        selectedAccountId: selectedAccountIdRef.current,
+        selectedAccountId: nextSelectedAccountId,
         tradeAccounts: tradeAccountsRef.current,
         confluenceOptions: confluenceOptionsRef.current,
       });

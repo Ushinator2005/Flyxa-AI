@@ -4,7 +4,6 @@ import type { ExtractedTradeData } from '../types/index';
 const GEMINI_MODEL_FALLBACK_CHAIN = ['gemini-2.5-pro', 'gemini-2.5-flash'];
 const GEMINI_MAX_RETRIES_PER_MODEL = 4;
 const GEMINI_BASE_RETRY_DELAY_MS = 2000;
-const DEBUG_AI_LOGS = process.env.DEBUG_AI_LOGS === 'true';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -311,18 +310,11 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-    const { text, model } = await generateWithFallback(genAI, systemPrompt, mimeType, base64Image, focusImages);
-    if (DEBUG_AI_LOGS) {
-      console.log(`[Gemini model] ${model}`);
-      console.log('[Gemini raw]', text.slice(0, 500));
-    }
+    const { text } = await generateWithFallback(genAI, systemPrompt, mimeType, base64Image, focusImages);
     const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
 
     try {
       const parsed = JSON.parse(cleaned);
-      if (DEBUG_AI_LOGS) {
-        console.log('[Gemini parsed]', JSON.stringify(parsed).slice(0, 300));
-      }
       const entryTime = parseTimeToken(parsed.entry_time);
       const explicitCloseTime = parseTimeToken(parsed.close_time);
       const durationSecondsRaw = parseNullableNumber(parsed.trade_length_seconds);

@@ -7,6 +7,7 @@ import { lookupContract } from '../../constants/futuresContracts.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { scanChart } from '../../utils/scanChart.js';
 import DatePicker from '../common/DatePicker.js';
+import { pushToast } from '../../store/toastStore.js';
 
 const DRAFT_KEY = 'tw_scanner_draft';
 const DRAFT_IMAGE_KEY = 'tw_scanner_draft_image';
@@ -856,7 +857,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     const selectedAccountIds = Array.from(new Set((data.accountIds?.length ? data.accountIds : [data.accountId ?? tradeAccountId]).filter((id): id is string => typeof id === 'string' && id.length > 0)));
 
     if (selectedAccountIds.length === 0) {
-      alert('Select an account before saving this trade.');
+      pushToast({ tone: 'amber', durationMs: 3500, message: 'Select an account before saving this trade.' });
       return;
     }
 
@@ -865,7 +866,11 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       .find(account => account && !isTradeAccountAllocatable(account.id) && account.id !== existingTradeAccountId);
 
     if (invalidAccount) {
-      alert(`${invalidAccount.name} is marked as ${invalidAccount.status} and cannot be allocated to a trade.`);
+      pushToast({
+        tone: 'amber',
+        durationMs: 4500,
+        message: `${invalidAccount.name} is marked as ${invalidAccount.status} and cannot be allocated to a trade.`,
+      });
       return;
     }
 
@@ -882,7 +887,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       localStorage.removeItem(DRAFT_IMAGE_KEY);
       handleClose();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save trade');
+      pushToast({ tone: 'red', durationMs: 4500, message: err instanceof Error ? err.message : 'Failed to save trade.' });
     } finally {
       setSaving(false);
     }

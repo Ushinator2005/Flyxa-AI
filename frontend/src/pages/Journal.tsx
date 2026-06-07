@@ -23,6 +23,7 @@ import DatePicker from '../components/common/DatePicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
+import { pushToast } from '../store/toastStore.js';
 
 // constants
 
@@ -550,7 +551,11 @@ export default function Journal() {
     if (!selected || !nextDate || nextDate === selected.date) return;
     const duplicate = entries.find(e => e.id !== selected.id && e.date === nextDate);
     if (duplicate) {
-      window.alert(`There is already a journal entry for ${formatEntryDate(nextDate, 'MMMM d, yyyy')}.`);
+      pushToast({
+        tone: 'amber',
+        durationMs: 4000,
+        message: `There is already a journal entry for ${formatEntryDate(nextDate, 'MMMM d, yyyy')}.`,
+      });
       return;
     }
     const previousDate = selected.date;
@@ -645,7 +650,7 @@ export default function Journal() {
       const normalizedTitles = normalizeStringMap(parsed.titles);
 
       if (normalizedEntries.length === 0) {
-        window.alert('This backup file has no valid journal entries.');
+        pushToast({ tone: 'amber', durationMs: 4000, message: 'This backup file has no valid journal entries.' });
         return;
       }
 
@@ -659,12 +664,14 @@ export default function Journal() {
 
       await fetchEntries();
 
-      window.alert(
-        `Backup restored. Created ${restoreResult.created}, updated ${restoreResult.updated}, skipped ${restoreResult.skipped}, failed ${restoreResult.failed}.`
-      );
+      pushToast({
+        tone: restoreResult.failed > 0 ? 'amber' : 'green',
+        durationMs: 5000,
+        message: `Backup restored. Created ${restoreResult.created}, updated ${restoreResult.updated}, skipped ${restoreResult.skipped}, failed ${restoreResult.failed}.`,
+      });
     } catch (error) {
       console.error(error);
-      window.alert('Import failed. Please verify this is a valid Flyxa AI journal backup JSON file.');
+      pushToast({ tone: 'red', durationMs: 5000, message: 'Import failed. Please verify this is a valid Flyxa AI journal backup JSON file.' });
     } finally {
       setBackupBusy(null);
       event.target.value = '';

@@ -107,6 +107,7 @@ interface JournalTrade {
 interface JournalEntry {
   id: string;
   date: string;
+  account?: string;
   scannedImageUrl?: string;
   trades: JournalTrade[];
   screenshots: string[];
