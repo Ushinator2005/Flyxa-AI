@@ -183,11 +183,12 @@ function CardHeader({ title, sub, right }: { title: string; sub?: string; right?
   );
 }
 
-function StatCard({ color, label, value, badgeLabel, badgeTone = 'neutral', valueTone = 'neutral' }: {
+function StatCard({ color, label, value, badgeLabel, badgeTone = 'neutral', valueTone = 'neutral', compact = false }: {
   color: string;
   label: string; value: string;
   badgeLabel?: string; badgeTone?: BadgeTone;
   valueTone?: BadgeTone;
+  compact?: boolean;
 }) {
   const valueColor = valueTone === 'positive' ? GREEN : valueTone === 'negative' ? RED : T1;
   return (
@@ -200,19 +201,19 @@ function StatCard({ color, label, value, badgeLabel, badgeTone = 'neutral', valu
     }}>
       {/* Top accent line */}
       <div style={{ height: 2, background: `linear-gradient(90deg, ${color}, transparent)` }} />
-      <div style={{ padding: '14px 16px 16px' }}>
+      <div style={{ padding: compact ? '10px 12px 12px' : '14px 16px 16px' }}>
         {/* Header row: label */}
-        <div style={{ marginBottom: 12 }}>
-          <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T2, margin: 0 }}>
+        <div style={{ marginBottom: compact ? 6 : 12 }}>
+          <p style={{ fontSize: compact ? 9 : 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T2, margin: 0 }}>
             {label}
           </p>
         </div>
         {/* Value */}
         <p style={{
-          fontSize: 26, fontWeight: 500, fontFamily: MONO,
+          fontSize: compact ? 18 : 26, fontWeight: 500, fontFamily: MONO,
           fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em',
           fontFeatureSettings: "'zero' 1",
-          lineHeight: 1, marginBottom: 10, color: valueColor,
+          lineHeight: 1, marginBottom: compact ? 6 : 10, color: valueColor,
         }}>
           {value}
         </p>
@@ -471,6 +472,7 @@ export default function Dashboard() {
                 value={fmtUSD(liveBalance)}
                 badgeLabel={sb > 0 ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
                 valueTone={summary.netPnL >= 0 ? 'positive' : 'negative'}
+                compact={isMobile}
               />
             );
           })()}
@@ -481,15 +483,16 @@ export default function Dashboard() {
             badgeLabel={todayTrades.length > 0 ? `Today ${fmtSignedCompactUSD(todayPnL)}` : 'No trades today'}
             badgeTone={todayTrades.length === 0 ? 'neutral' : todayPnL >= 0 ? 'positive' : 'negative'}
             valueTone={summary.netPnL > 0 ? 'positive' : summary.netPnL < 0 ? 'negative' : 'neutral'}
+            compact={isMobile}
           />
           {/* Win Rate card with gauge */}
           <div style={{ background: S1, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
             <div style={{ height: 2, background: `linear-gradient(90deg, ${COBALT}, transparent)` }} />
-            <div style={{ padding: '14px 16px 16px' }}>
-              <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T2, margin: '0 0 12px' }}>Win Rate</p>
+            <div style={{ padding: isMobile ? '10px 12px 12px' : '14px 16px 16px' }}>
+              <p style={{ fontSize: isMobile ? 9 : 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T2, margin: `0 0 ${isMobile ? 6 : 12}px` }}>Win Rate</p>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div>
-                  <p style={{ fontSize: 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em', fontFeatureSettings: "'zero' 1", lineHeight: 1, marginBottom: 10, color: T1 }}>
+                  <p style={{ fontSize: isMobile ? 18 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em', fontFeatureSettings: "'zero' 1", lineHeight: 1, marginBottom: isMobile ? 6 : 10, color: T1 }}>
                     {fmtPct(summary.winRate)}
                   </p>
                   <DeltaBadge label={summary.totalTrades > 0 ? winRateBadge(summary.winRate) : 'No closed trades'} tone={summary.totalTrades === 0 ? 'neutral' : summary.winRate >= 50 ? 'positive' : 'negative'} />
@@ -524,6 +527,7 @@ export default function Dashboard() {
             badgeLabel={summary.avgRR > 0 ? (summary.avgRR >= 1 ? 'Above 1:1' : 'Below 1:1') : 'No ratio yet'}
             badgeTone={summary.avgRR === 0 ? 'neutral' : summary.avgRR >= 1 ? 'positive' : 'negative'}
             valueTone="neutral"
+            compact={isMobile}
           />
           <StatCard
             color={RED}
@@ -531,6 +535,7 @@ export default function Dashboard() {
             value={String(summary.totalTrades)}
             badgeLabel={`${todayTrades.length} Today`}
             valueTone="neutral"
+            compact={isMobile}
           />
         </div>
 
