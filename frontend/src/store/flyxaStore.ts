@@ -8,6 +8,7 @@ import { pushToast } from './toastStore.js';
 import type {
   Account,
   Achievement,
+  Payout,
   BacktestSession,
   BillingAccount,
   ChartHistoryRecord,
@@ -100,6 +101,8 @@ export interface FlyxaStore extends FlyxaStateData {
   setActiveAccount: (id: string | null) => void;
   addAccount: (account: Account) => void;
   updateAccount: (id: string, updates: Partial<Account>) => void;
+  addPayout: (accountId: string, payout: Payout) => void;
+  deletePayout: (accountId: string, payoutId: string) => void;
   updateGoal: (id: string, updates: Partial<Goal>) => void;
   addGoal: (goal: Goal) => void;
   deleteGoal: (id: string) => void;
@@ -625,6 +628,18 @@ const useFlyxaStore = create<FlyxaStore>()(
 
       updateAccount: (id, updates) => set((state) => ({
         accounts: state.accounts.map((account) => (account.id === id ? { ...account, ...updates } : account)),
+      })),
+
+      addPayout: (accountId, payout) => set((state) => ({
+        accounts: state.accounts.map((a) =>
+          a.id === accountId ? { ...a, payouts: [...(a.payouts ?? []), payout] } : a
+        ),
+      })),
+
+      deletePayout: (accountId, payoutId) => set((state) => ({
+        accounts: state.accounts.map((a) =>
+          a.id === accountId ? { ...a, payouts: (a.payouts ?? []).filter((p) => p.id !== payoutId) } : a
+        ),
       })),
 
       updateGoal: (id, updates) => set((state) => ({

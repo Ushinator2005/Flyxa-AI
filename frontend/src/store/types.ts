@@ -86,6 +86,13 @@ export interface JournalEntry {
   };
 }
 
+export interface Payout {
+  id: string;
+  date: string;    // YYYY-MM-DD
+  amount: number;  // positive — money taken out
+  note?: string;
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -100,6 +107,7 @@ export interface Account {
   startingBalance: number;
   isActive: boolean;
   color?: string;
+  payouts?: Payout[];
 }
 
 export interface Achievement {

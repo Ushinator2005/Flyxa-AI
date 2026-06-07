@@ -23,7 +23,8 @@ type FieldKey =
   | 'symbol' | 'direction' | 'entry_price' | 'exit_price'
   | 'pnl' | 'trade_date' | 'trade_time' | 'close_time'
   | 'contract_size' | 'sl_price' | 'tp_price'
-  | 'pre_trade_notes' | 'followed_plan' | 'emotional_state';
+  | 'pre_trade_notes' | 'followed_plan' | 'emotional_state'
+  | 'confluences';
 
 interface FieldDef {
   key: FieldKey;
@@ -35,8 +36,8 @@ interface FieldDef {
 const FIELDS: FieldDef[] = [
   { key: 'symbol',         label: 'Symbol',        required: true,  hint: 'NQ, ES, AAPL…'         },
   { key: 'direction',      label: 'Direction',     required: true,  hint: 'Long/Short, Buy/Sell'   },
-  { key: 'entry_price',    label: 'Entry Price',   required: true,  hint: 'Numeric'                },
-  { key: 'exit_price',     label: 'Exit Price',    required: true,  hint: 'Numeric'                },
+  { key: 'entry_price',    label: 'Entry Price',   required: false, hint: 'Numeric, optional for Notion logs' },
+  { key: 'exit_price',     label: 'Exit Price',    required: false, hint: 'Numeric, optional for Notion logs' },
   { key: 'pnl',            label: 'P&L',           required: true,  hint: 'Numeric, e.g. 250 or -100' },
   { key: 'trade_date',     label: 'Date',          required: true,  hint: 'YYYY-MM-DD or MM/DD/YYYY' },
   { key: 'trade_time',     label: 'Entry Time',    required: false, hint: 'HH:MM'                  },
@@ -46,49 +47,76 @@ const FIELDS: FieldDef[] = [
   { key: 'tp_price',       label: 'Take Profit',   required: false, hint: 'Numeric'                },
   { key: 'pre_trade_notes',label: 'Notes',         required: false, hint: 'Text'                   },
   { key: 'followed_plan',  label: 'Followed Plan', required: false, hint: 'yes/no, true/false'     },
-  { key: 'emotional_state',label: 'Emotion',       required: false, hint: 'Calm, Anxious…'         },
+  { key: 'emotional_state',label: 'Emotion',       required: false, hint: 'Calm, Anxious...'       },
+  { key: 'confluences',    label: 'Tags',          required: false, hint: 'Notion tags, setup, mistakes' },
 ];
 
 // ─── CSV parser ───────────────────────────────────────────────────────────────
 function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return { headers: [], rows: [] };
+  const normalized = text.replace(/^\uFEFF/, '');
+  const table: string[][] = [];
+  let row: string[] = [];
+  let cur = '';
+  let inQ = false;
 
-  const parseRow = (line: string): string[] => {
-    const result: string[] = [];
-    let cur = '';
-    let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQ = !inQ; continue; }
-      if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
-      cur += ch;
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i];
+    const next = normalized[i + 1];
+
+    if (ch === '"') {
+      if (inQ && next === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQ = !inQ;
+      }
+      continue;
     }
-    result.push(cur.trim());
-    return result;
-  };
 
-  const headers = parseRow(lines[0]);
-  const rows = lines.slice(1).map(parseRow).filter(r => r.some(c => c !== ''));
+    if (ch === ',' && !inQ) {
+      row.push(cur.trim());
+      cur = '';
+      continue;
+    }
+
+    if ((ch === '\n' || ch === '\r') && !inQ) {
+      if (ch === '\r' && next === '\n') i++;
+      row.push(cur.trim());
+      cur = '';
+      if (row.some(c => c !== '')) table.push(row);
+      row = [];
+      continue;
+    }
+
+    cur += ch;
+  }
+
+  row.push(cur.trim());
+  if (row.some(c => c !== '')) table.push(row);
+
+  if (table.length < 2) return { headers: [], rows: [] };
+  const headers = table[0];
+  const rows = table.slice(1);
   return { headers, rows };
 }
 
 // ─── Auto column guesser ──────────────────────────────────────────────────────
 const GUESSES: Record<FieldKey, string[]> = {
-  symbol:         ['symbol', 'instrument', 'contract', 'ticker', 'market', 'asset'],
-  direction:      ['direction', 'market pos', 'market pos.', 'side', 'b/s', 'buy/sell', 'type', 'action', 'pos'],
-  entry_price:    ['entry price', 'entry', 'open price', 'avg price', 'avg entry', 'buy price', 'price'],
-  exit_price:     ['exit price', 'exit', 'close price', 'sell price', 'avg exit'],
-  pnl:            ['profit', 'pnl', 'p&l', 'p/l', 'net p/l', 'net profit', 'realized pnl', 'realized p&l', 'realized p/l', 'gain/loss', 'gain', 'net p&l'],
-  trade_date:     ['date', 'trade date', 'entry date', 'open date', 'day'],
-  trade_time:     ['entry time', 'time', 'open time', 'open', 'entry_time'],
-  close_time:     ['exit time', 'close time', 'exit_time', 'close_time'],
-  contract_size:  ['qty', 'quantity', 'contracts', 'size', 'volume', 'shares', 'lots'],
+  symbol:         ['symbol', 'instrument', 'contract', 'ticker', 'market', 'asset', 'pair', 'name'],
+  direction:      ['direction', 'market pos', 'market pos.', 'side', 'b/s', 'buy/sell', 'type', 'action', 'pos', 'bias', 'long/short'],
+  entry_price:    ['entry price', 'entry', 'open price', 'avg price', 'avg entry', 'buy price', 'entry avg', 'entry level'],
+  exit_price:     ['exit price', 'exit', 'close price', 'sell price', 'avg exit', 'exit avg', 'exit level'],
+  pnl:            ['profit', 'pnl', 'p&l', 'p/l', 'net p/l', 'net profit', 'realized pnl', 'realized p&l', 'realized p/l', 'gain/loss', 'gain', 'net p&l', 'result $', 'profit/loss', 'profit loss'],
+  trade_date:     ['date', 'trade date', 'entry date', 'open date', 'day', 'session date', 'created time', 'created'],
+  trade_time:     ['entry time', 'time', 'open time', 'open', 'entry_time', 'opened at', 'start time'],
+  close_time:     ['exit time', 'close time', 'exit_time', 'close_time', 'closed at', 'end time'],
+  contract_size:  ['qty', 'quantity', 'contracts', 'size', 'volume', 'shares', 'lots', 'position size'],
   sl_price:       ['stop loss', 'sl', 'stop', 'sl price'],
   tp_price:       ['take profit', 'tp', 'target', 'tp price', 'profit target'],
-  pre_trade_notes:['notes', 'comment', 'comments', 'remarks', 'note', 'description'],
-  followed_plan:  ['followed plan', 'plan', 'follow plan', 'followed_plan'],
-  emotional_state:['emotion', 'emotional state', 'mood', 'feeling', 'state'],
+  pre_trade_notes:['notes', 'comment', 'comments', 'remarks', 'note', 'description', 'reflection', 'review', 'lesson', 'thesis'],
+  followed_plan:  ['followed plan', 'plan', 'follow plan', 'followed_plan', 'followed rules', 'rules followed', 'on plan'],
+  emotional_state:['emotion', 'emotional state', 'mood', 'feeling', 'state', 'mindset', 'psychology'],
+  confluences:    ['tags', 'tag', 'setup', 'strategy', 'mistake', 'mistakes', 'confluence', 'confluences'],
 };
 
 function autoGuessMapping(headers: string[]): Record<FieldKey, string> {
@@ -128,9 +156,13 @@ function parseDate(v: string): string | null {
   if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
 
   // M/D/YYYY or MM/DD/YYYY (US)
-  const us = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (us) {
-    const [, m, day, y] = us;
+  const slash = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slash) {
+    const [, first, second, y] = slash;
+    const firstNum = Number(first);
+    const secondNum = Number(second);
+    const m = firstNum > 12 && secondNum <= 12 ? second : first;
+    const day = firstNum > 12 && secondNum <= 12 ? first : second;
     return `${y}-${m.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
 
@@ -139,6 +171,11 @@ function parseDate(v: string): string | null {
   if (eu) {
     const [, day, m, y] = eu;
     return `${y}-${m.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(d);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
   }
 
   return null;
@@ -168,7 +205,9 @@ function parseTime(v: string): string | null {
 
 function parseNum(v: string): number | null {
   if (!v) return null;
-  const n = parseFloat(v.replace(/[$,()]/g, '').trim());
+  const cleaned = v.replace(/[+$,()]/g, '').trim();
+  if (!cleaned || /^[-–—]$/.test(cleaned)) return null;
+  const n = parseFloat(cleaned);
   // Parentheses = negative, e.g. (100.00)
   const neg = /^\(.*\)$/.test(v.trim());
   return isNaN(n) ? null : neg ? -Math.abs(n) : n;
@@ -176,9 +215,18 @@ function parseNum(v: string): number | null {
 
 function parseFollowedPlan(v: string): boolean | null {
   const s = v.trim().toLowerCase();
-  if (['yes', 'true', '1', 'y'].includes(s)) return true;
-  if (['no', 'false', '0', 'n'].includes(s)) return false;
+  if (['yes', 'true', '1', 'y', 'checked', 'done', 'on plan'].includes(s)) return true;
+  if (['no', 'false', '0', 'n', 'unchecked', 'off plan'].includes(s)) return false;
   return null;
+}
+
+function parseTags(v: string): string[] {
+  if (!v) return [];
+  return v
+    .split(/[,;|]/)
+    .map(tag => tag.trim())
+    .filter(Boolean)
+    .filter((tag, index, all) => all.findIndex(item => item.toLowerCase() === tag.toLowerCase()) === index);
 }
 
 // ─── Map a single CSV row to ApiTrade partial ─────────────────────────────────
@@ -197,6 +245,7 @@ type ImportedTrade = {
   pre_trade_notes?: string;
   followed_plan?: boolean;
   emotional_state?: string;
+  confluences?: string[];
   _errors: string[];
 };
 
@@ -222,11 +271,11 @@ function mapRow(
 
   const entryRaw = get('entry_price');
   const entry_price = parseNum(entryRaw);
-  if (entry_price === null) errors.push(`Bad entry price: "${entryRaw}"`);
+  if (entryRaw.trim() && entry_price === null) errors.push(`Bad entry price: "${entryRaw}"`);
 
   const exitRaw = get('exit_price');
   const exit_price = parseNum(exitRaw);
-  if (exit_price === null) errors.push(`Bad exit price: "${exitRaw}"`);
+  if (exitRaw.trim() && exit_price === null) errors.push(`Bad exit price: "${exitRaw}"`);
 
   const pnlRaw = get('pnl');
   const pnl = parseNum(pnlRaw);
@@ -251,12 +300,13 @@ function mapRow(
   const notes = get('pre_trade_notes').trim() || undefined;
   const fp = parseFollowedPlan(get('followed_plan'));
   const emotion = get('emotional_state').trim() || undefined;
+  const confluences = parseTags(get('confluences'));
 
   return {
     symbol,
     direction: direction!,
-    entry_price: entry_price!,
-    exit_price: exit_price!,
+    entry_price: entry_price ?? exit_price ?? 0,
+    exit_price: exit_price ?? entry_price ?? 0,
     pnl: pnl!,
     trade_date: trade_date!,
     trade_time,
@@ -267,6 +317,7 @@ function mapRow(
     pre_trade_notes: notes,
     followed_plan: typeof fp === 'boolean' ? fp : undefined,
     emotional_state: emotion,
+    confluences: confluences.length > 0 ? confluences : undefined,
     _errors: [],
   };
 }
@@ -438,7 +489,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                   Drop your CSV here or click to browse
                 </div>
                 <div style={{ fontSize: 12, color: C.t2 }}>
-                  Supports .csv and .txt files
+                  Export your Notion trade database as CSV, then drop it here
                 </div>
                 <input
                   ref={inputRef}
@@ -466,6 +517,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                   Supported formats
                 </div>
                 {[
+                  { name: 'Notion trade database', cols: 'Name/Symbol, Direction, P&L, Date, Entry, Exit, Tags, Emotion, Notes' },
                   { name: 'NinjaTrader', cols: 'Instrument, Market pos., Quantity, Entry price, Exit price, Entry time, Exit time, Profit' },
                   { name: 'Tradovate', cols: 'Symbol, B/S, Qty, Avg Price, Net Profit, Time' },
                   { name: 'TopStep / TopstepX', cols: 'Symbol, Side, Qty, Avg Entry, Avg Exit, Open Time, Close Time, P/L, Net P/L' },

@@ -17,7 +17,8 @@ import {
 } from 'recharts';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useTrades } from '../hooks/useTrades.js';
-import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
+import useFlyxaStore from '../store/flyxaStore.js';
 import { Trade } from '../types/index.js';
 import { formatCurrency } from '../utils/calculations.js';
 import { getSessionKeyForTime, timeToMinutes } from '../utils/sessionTimes.js';
@@ -209,7 +210,12 @@ function MetricCard({
 
 export default function Analytics() {
   const { trades, loading } = useTrades();
-  const { filterTradesBySelectedAccount, preferences } = useAppSettings();
+  const { filterTradesBySelectedAccount, preferences, selectedAccountId } = useAppSettings();
+  const storeAccounts = useFlyxaStore(state => state.accounts);
+  const selectedStoreAcct = selectedAccountId && selectedAccountId !== ALL_ACCOUNTS_ID
+    ? storeAccounts.find(a => a.id === selectedAccountId)
+    : undefined;
+  const accountPayouts = selectedStoreAcct?.payouts ?? [];
   const [period, setPeriod] = useState<PeriodKey>('1M');
   const [timeWindow, setTimeWindow] = useState<TimeWindowMins>(30);
   const today = useMemo(() => new Date(), []);
@@ -314,18 +320,27 @@ export default function Analytics() {
       grouped.set(key, (grouped.get(key) ?? 0) + trade.pnl);
     });
 
-    const daily = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
+    // Collect all dates (trades + payouts)
+    const payoutByDate = new Map<string, number>();
+    accountPayouts.forEach(p => {
+      payoutByDate.set(p.date, (payoutByDate.get(p.date) ?? 0) + p.amount);
+    });
+    const allDates = Array.from(new Set([...grouped.keys(), ...payoutByDate.keys()])).sort();
+
     let cumulative = 0;
-    return daily.map(([date, pnl]) => {
-      cumulative += pnl;
+    return allDates.map(date => {
+      cumulative += grouped.get(date) ?? 0;
+      const payoutAmount = payoutByDate.get(date) ?? 0;
+      cumulative -= payoutAmount;
       return {
         date,
         label: formatDateLabel(date),
         cumulative,
         breakeven: 0,
+        payoutAmount: payoutAmount > 0 ? payoutAmount : undefined,
       };
     });
-  }, [filteredTrades]);
+  }, [filteredTrades, accountPayouts]);
 
   const maxDrawdown = useMemo(() => {
     if (equityCurveData.length === 0) return 0;
@@ -801,6 +816,12 @@ export default function Analytics() {
                 <span className="h-3 w-3 rounded-full bg-[var(--accent)]" />
                 Breakeven
               </span>
+              {accountPayouts.length > 0 && (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full" style={{ background: '#f59e0b' }} />
+                  Payout
+                </span>
+              )}
             </div>
           </div>
 
@@ -825,7 +846,16 @@ export default function Analytics() {
                   contentStyle={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 10 }}
                   labelStyle={{ color: 'var(--app-text-muted)' }}
                   itemStyle={{ color: 'var(--app-text)' }}
-                  formatter={(value: number, name) => [formatCurrency(value), name === 'cumulative' ? 'P&L' : 'Breakeven']}
+                  formatter={(value: number, name: string, props: { payload?: { payoutAmount?: number } }) => {
+                    if (name === 'cumulative') {
+                      const payout = props.payload?.payoutAmount;
+                      if (payout) {
+                        return [`${formatCurrency(value)} (payout −${formatCurrency(payout)})`, 'P&L'];
+                      }
+                      return [formatCurrency(value), 'P&L'];
+                    }
+                    return [formatCurrency(value), 'Breakeven'];
+                  }}
                 />
                 <ReferenceLine y={0} stroke="var(--accent)" strokeDasharray="4 4" />
                 <Area
@@ -834,7 +864,14 @@ export default function Analytics() {
                   stroke={DASHBOARD_GREEN}
                   strokeWidth={3}
                   fill="url(#pnl-fill)"
-                  dot={false}
+                  dot={(props: { cx?: number; cy?: number; payload?: { payoutAmount?: number } }) => {
+                    if (!props.payload?.payoutAmount) return <g key={`${props.cx}-${props.cy}`} />;
+                    return (
+                      <g key={`payout-${props.cx}-${props.cy}`}>
+                        <circle cx={props.cx} cy={props.cy} r={5} fill="#f59e0b" stroke="#0e0d0d" strokeWidth={1.5} />
+                      </g>
+                    );
+                  }}
                 />
               </AreaChart>
             </ResponsiveContainer>

@@ -149,6 +149,12 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
   const sl = typeof data.sl_price === 'number' ? data.sl_price : entry;
   const tp = typeof data.tp_price === 'number' ? data.tp_price : entry;
   const exit = typeof data.exit_price === 'number' ? data.exit_price : null;
+  const result: StoreTrade['result'] =
+    data.exit_reason === 'TP' ? 'win'
+    : data.exit_reason === 'SL' ? 'loss'
+    : typeof data.pnl === 'number' && data.pnl > 0 ? 'win'
+    : typeof data.pnl === 'number' && data.pnl < 0 ? 'loss'
+    : 'open';
 
   return {
     id: data.id ?? crypto.randomUUID(),
@@ -163,7 +169,7 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     contracts: typeof data.contract_size === 'number' && data.contract_size > 0 ? data.contract_size : 1,
     rr: 0,
     pnl: typeof data.pnl === 'number' ? data.pnl : 0,
-    result: 'open',
+    result,
     time: (data.trade_time ?? '09:30').slice(0, 5),
     exitTime: typeof data.close_time === 'string' ? data.close_time.slice(0, 5) : (data.trade_time ?? '09:30').slice(0, 5),
     duration: typeof data.trade_length_seconds === 'number' ? Math.round(data.trade_length_seconds / 60) : null,

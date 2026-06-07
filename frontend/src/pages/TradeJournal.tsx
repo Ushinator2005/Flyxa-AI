@@ -1826,7 +1826,7 @@ export default function TradeJournal() {
     entry_price: number; exit_price: number; pnl: number; trade_date: string;
     trade_time?: string; close_time?: string; contract_size?: number;
     sl_price?: number; tp_price?: number; pre_trade_notes?: string;
-    followed_plan?: boolean; emotional_state?: string;
+    followed_plan?: boolean; emotional_state?: string; confluences?: string[];
   }>) => {
     let ok = 0;
     for (const t of trades) {
@@ -1838,6 +1838,7 @@ export default function TradeJournal() {
           exit_price: t.exit_price,
           sl_price: t.sl_price ?? t.entry_price,
           tp_price: t.tp_price ?? t.entry_price,
+          exit_reason: t.pnl > 0 ? 'TP' : t.pnl < 0 ? 'SL' : 'BE',
           pnl: t.pnl,
           contract_size: t.contract_size ?? 1,
           trade_date: t.trade_date,
@@ -1847,6 +1848,7 @@ export default function TradeJournal() {
           post_trade_notes: '',
           followed_plan: t.followed_plan ?? null,
           emotional_state: t.emotional_state ?? null,
+          confluences: t.confluences ?? [],
         });
         ok++;
       } catch {
@@ -2344,12 +2346,12 @@ export default function TradeJournal() {
                 data-tour-id="scanner-import"
                 type="button"
                 className="tj-nav"
-                title="Import trades from CSV"
+                title="Import trades from Notion or broker CSV"
                 onClick={() => setShowCSVImport(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 8, paddingRight: 8, fontSize: 11, color: 'var(--amber)' }}
               >
                 <Upload size={12} />
-                Import
+                Import CSV
               </button>
             </span>
           </div>

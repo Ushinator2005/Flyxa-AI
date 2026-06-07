@@ -464,14 +464,15 @@ export default function Dashboard() {
         <div data-tour-id="dashboard-metrics" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: isMobile ? 8 : 14, flexShrink: 0 }}>
           {selectedStoreAcct && (() => {
             const sb = selectedStoreAcct.startingBalance ?? 0;
-            const liveBalance = sb + summary.netPnL;
+            const totalPayouts = (selectedStoreAcct.payouts ?? []).reduce((s, p) => s + p.amount, 0);
+            const liveBalance = sb + summary.netPnL - totalPayouts;
             return (
               <StatCard
                 color={COBALT}
                 label="Account Balance"
                 value={fmtUSD(liveBalance)}
-                badgeLabel={sb > 0 ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
-                valueTone={summary.netPnL >= 0 ? 'positive' : 'negative'}
+                badgeLabel={totalPayouts > 0 ? `Payouts taken: ${fmtUSD(totalPayouts)}` : sb > 0 ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
+                valueTone={liveBalance >= sb ? 'positive' : 'negative'}
                 compact={isMobile}
               />
             );
