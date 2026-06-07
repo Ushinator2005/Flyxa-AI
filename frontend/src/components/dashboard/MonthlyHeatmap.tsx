@@ -823,6 +823,12 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   const today = useMemo(() => new Date(), []);
   const navigate = useNavigate();
   const { accounts } = useAppSettings();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -925,8 +931,8 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   // Sun–Sat display order (Sun-indexed week: 0=Sun,1=Mon,...,6=Sat)
   const ALL_DAY_INDICES = [0, 1, 2, 3, 4, 5, 6]; // Sun Mon Tue Wed Thu Fri Sat
   const WEEKDAY_INDICES = [1, 2, 3, 4, 5]; // Mon–Fri only (for row-visibility check)
-  // Sun and Sat get 0.45fr (narrow), weekdays and Weekly P&L get 1fr
-  const GRID_COLS = '0.45fr 1fr 1fr 1fr 1fr 1fr 0.45fr 1fr';
+  // On mobile: 7 equal cols (no Weekly P&L). On desktop: Sun/Sat narrow + Weekly P&L.
+  const GRID_COLS = isMobile ? 'repeat(7, 1fr)' : '0.45fr 1fr 1fr 1fr 1fr 1fr 0.45fr 1fr';
   const weeks: Array<Array<number | null>> = [];
   for (let i = 0; i < cells.length; i += 7) {
     weeks.push(cells.slice(i, i + 7) as Array<number | null>);
@@ -1132,19 +1138,21 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
         {/* Header: Sun–Sat + Week */}
         <div style={{ display: 'grid', gridTemplateColumns: GRID_COLS }} className="bg-slate-900/30">
           <div className="border-b border-r border-slate-600 py-2 text-center text-xs font-medium text-slate-600">
-            Sun
+            {isMobile ? 'Su' : 'Sun'}
           </div>
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => (
+          {(isMobile ? ['Mo', 'Tu', 'We', 'Th', 'Fr'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']).map(d => (
             <div key={d} className="border-b border-r border-slate-600 py-2 text-center text-xs font-medium text-slate-500">
               {d}
             </div>
           ))}
-          <div className="border-b border-r border-slate-600 py-2 text-center text-xs font-medium text-slate-600">
-            Sat
+          <div className={`border-b border-slate-600 py-2 text-center text-xs font-medium text-slate-600${!isMobile ? ' border-r' : ''}`}>
+            {isMobile ? 'Sa' : 'Sat'}
           </div>
-          <div className="border-b border-slate-600 py-2 text-center text-xs font-medium text-white">
-            Weekly P&L
-          </div>
+          {!isMobile && (
+            <div className="border-b border-slate-600 py-2 text-center text-xs font-medium text-white">
+              Weekly P&L
+            </div>
+          )}
         </div>
 
         {/* Week rows */}
@@ -1163,15 +1171,16 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
           return (
             <div
               key={`week-${wi}`}
-              style={{ display: 'grid', gridTemplateColumns: GRID_COLS, gridAutoRows: '84px' }}
+              style={{ display: 'grid', gridTemplateColumns: GRID_COLS, gridAutoRows: isMobile ? '54px' : '84px' }}
             >
               {ALL_DAY_INDICES.map((dayIdx, ci) => {
                 const day = week[dayIdx] ?? null;
+                const isLastCol = !isMobile ? false : ci === ALL_DAY_INDICES.length - 1;
                 if (day === null) {
                   return (
                     <div
                       key={`empty-${wi}-${ci}`}
-                      className={`border-r border-slate-600${!isLastWeek ? ' border-b' : ''}`}
+                      className={`${!isLastCol ? 'border-r ' : ''}border-slate-600${!isLastWeek ? ' border-b' : ''}`}
                     />
                   );
                 }
@@ -1204,7 +1213,8 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                       }
                     }}
                     className={[
-                      'relative flex flex-col border-r border-slate-600 p-2 transition-colors',
+                      `relative flex flex-col ${!isLastCol ? 'border-r ' : ''}border-slate-600 transition-colors`,
+                      isMobile ? 'p-1' : 'p-2',
                       !isLastWeek ? 'border-b' : '',
                       canOpenJournal ? 'cursor-pointer hover:ring-1 hover:ring-amber-400/35 hover:ring-inset' : 'cursor-default',
                       isToday ? 'bg-cyan-500/[0.04]' : (pnl !== undefined ? getCellBg(pnl) : ''),
@@ -1214,22 +1224,22 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                       <span aria-hidden="true" className="pointer-events-none absolute inset-0 border border-cyan-400/45" />
                     )}
                     {isToday ? (
-                      <span className="inline-flex flex-col items-start text-sm font-semibold leading-none text-cyan-400">
+                      <span className={`inline-flex flex-col items-start leading-none text-cyan-400 ${isMobile ? 'text-xs font-semibold' : 'text-sm font-semibold'}`}>
                         <span>{day}</span>
-                        <span className="mt-1 h-[3px] w-[3px] self-start rounded-full bg-cyan-400" />
+                        <span className="mt-0.5 h-[3px] w-[3px] self-start rounded-full bg-cyan-400" />
                       </span>
                     ) : (
-                      <span className="text-sm leading-none text-slate-400">{day}</span>
+                      <span className={`leading-none text-slate-400 ${isMobile ? 'text-xs' : 'text-sm'}`}>{day}</span>
                     )}
                     {pnl !== undefined && (
-                      <div className="mt-auto flex flex-col gap-0.5">
-                        <span className={`text-sm font-semibold ${pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                      <div className="mt-auto flex flex-col" style={{ gap: isMobile ? 0 : 2 }}>
+                        <span className={`font-semibold ${pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ fontSize: isMobile ? 10 : 14, lineHeight: 1.2 }}>
                           {pnl >= 0 ? '+' : ''}
                           {Math.abs(pnl) >= 1000
                             ? `${(pnl / 1000).toFixed(1)}k`
                             : pnl.toFixed(0)}
                         </span>
-                        {tradeCount > 0 && (
+                        {tradeCount > 0 && !isMobile && (
                           <span className="text-xs leading-none text-slate-400 opacity-90">
                             {tradeCount} {tradeCount === 1 ? 'trade' : 'trades'}
                           </span>
@@ -1238,7 +1248,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                     )}
                     {hasJournal && (
                       <span
-                        className="absolute bottom-2 right-2 h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_0_2px_rgba(15,23,42,0.9)]"
+                        className={`absolute rounded-full bg-amber-400 shadow-[0_0_0_2px_rgba(15,23,42,0.9)] ${isMobile ? 'bottom-1 right-1 h-1.5 w-1.5' : 'bottom-2 right-2 h-2.5 w-2.5'}`}
                         aria-label="Daily journal completed"
                       />
                     )}
@@ -1246,23 +1256,25 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                 );
               })}
 
-              {/* Weekly P&L cell */}
-              <div
-                className={`flex flex-col items-center justify-center gap-1 px-2${!isLastWeek ? ' border-b border-slate-600' : ''}`}
-              >
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#ffffff' }}>
-                  Week {visibleWeekNum}
-                </span>
-                <span
-                  className={`tabular-nums ${weekPnl > 0 ? 'text-emerald-300' : weekPnl < 0 ? 'text-red-400' : 'text-white'}`}
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 500 }}
+              {/* Weekly P&L cell — desktop only */}
+              {!isMobile && (
+                <div
+                  className={`flex flex-col items-center justify-center gap-1 px-2${!isLastWeek ? ' border-b border-slate-600' : ''}`}
                 >
-                  {formatPnl(weekPnl)}
-                </span>
-                <span style={{ fontSize: 9, color: '#ffffff' }}>
-                  {weekTradeCount} {weekTradeCount === 1 ? 'trade' : 'trades'}
-                </span>
-              </div>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#ffffff' }}>
+                    Week {visibleWeekNum}
+                  </span>
+                  <span
+                    className={`tabular-nums ${weekPnl > 0 ? 'text-emerald-300' : weekPnl < 0 ? 'text-red-400' : 'text-white'}`}
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 500 }}
+                  >
+                    {formatPnl(weekPnl)}
+                  </span>
+                  <span style={{ fontSize: 9, color: '#ffffff' }}>
+                    {weekTradeCount} {weekTradeCount === 1 ? 'trade' : 'trades'}
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}

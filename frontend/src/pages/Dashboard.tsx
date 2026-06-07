@@ -667,7 +667,7 @@ export default function Dashboard() {
 
             {/* P&L Calendar */}
             <Card style={{ flexShrink: 0 }} data-tour-id="dashboard-calendar">
-              <div style={{ padding: '14px 18px' }}>
+              <div style={{ padding: isMobile ? '10px 8px' : '14px 18px' }}>
                 <MonthlyHeatmap trades={filteredTrades} />
               </div>
             </Card>
