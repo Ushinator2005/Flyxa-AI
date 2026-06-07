@@ -1666,6 +1666,8 @@ export default function Settings() {
             </button>
           }
         >
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ minWidth: 680 }}>
           {/* Table header */}
           <div
             style={{
@@ -1891,6 +1893,8 @@ export default function Settings() {
               </div>
             ))}
           </div>
+          </div>{/* end minWidth wrapper */}
+          </div>{/* end overflow-x wrapper */}
 
           {/* Add another account trigger */}
           <button

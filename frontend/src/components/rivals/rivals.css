@@ -1068,7 +1068,7 @@
 
 @media (max-width: 640px) {
   .rivals-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .rivals-profile-form,
@@ -1085,6 +1085,51 @@
     grid-template-columns: 24px 26px minmax(80px, 1fr) 56px 56px 56px 44px;
     gap: 6px;
     padding: 8px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .rivals-shell {
+    padding: 16px 12px;
+  }
+
+  .rivals-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .rivals-stat {
+    padding: 14px 14px 12px;
+  }
+
+  .rivals-stat-value {
+    font-size: 22px;
+  }
+
+  .rivals-title {
+    font-size: 22px;
+  }
+
+  /* Leaderboard and rivals list: horizontal scroll on very small screens */
+  .rv-card {
+    overflow-x: auto;
+  }
+
+  .rv-comp-head,
+  .rv-comp-row {
+    min-width: 340px;
+    grid-template-columns: 22px 24px minmax(80px, 1fr) 52px 52px 52px 40px;
+    gap: 5px;
+    padding: 8px 10px;
+  }
+
+  .rv-table-head,
+  .rv-row {
+    min-width: 400px;
+  }
+
+  .rv-lb-row {
+    min-width: 300px;
   }
 }
 

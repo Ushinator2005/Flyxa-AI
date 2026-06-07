@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef, type ChangeEvent } f
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  ArrowLeft,
   Download,
   Leaf,
   Moon,
@@ -706,6 +707,13 @@ export default function Journal() {
   );
   const selectedWordCount = selected ? wordCount(getEntryContent(selected)) : 0;
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -739,59 +747,63 @@ export default function Journal() {
           <p style={{ fontSize: '11px', color: T3, marginTop: '3px' }}>Your private trading log — pick up where you left off.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {selected && (
+          {selected && !isMobile && (
             <span style={{ fontSize: '11px', color: T3, fontFamily: 'var(--font-mono)' }}>
               {totalWords} words total
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => { void exportBackup(); }}
-            disabled={backupBusy !== null}
-            style={{
-              height: '32px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: S2,
-              border: `1px solid ${BORDER}`,
-              borderRadius: '5px',
-              padding: '0 10px',
-              color: T2,
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
-              opacity: backupBusy !== null ? 0.7 : 1,
-              flexShrink: 0,
-            }}
-          >
-            <Download size={13} />
-            {backupBusy === 'export' ? 'Exporting...' : 'Export backup'}
-          </button>
-          <button
-            type="button"
-            onClick={triggerBackupImport}
-            disabled={backupBusy !== null}
-            style={{
-              height: '32px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: S2,
-              border: `1px solid ${BORDER}`,
-              borderRadius: '5px',
-              padding: '0 10px',
-              color: T2,
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
-              opacity: backupBusy !== null ? 0.7 : 1,
-              flexShrink: 0,
-            }}
-          >
-            <Upload size={13} />
-            {backupBusy === 'import' ? 'Importing...' : 'Import backup'}
-          </button>
+          {!isMobile && (
+            <>
+              <button
+                type="button"
+                onClick={() => { void exportBackup(); }}
+                disabled={backupBusy !== null}
+                style={{
+                  height: '32px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: S2,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: '5px',
+                  padding: '0 10px',
+                  color: T2,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
+                  opacity: backupBusy !== null ? 0.7 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                <Download size={13} />
+                {backupBusy === 'export' ? 'Exporting...' : 'Export backup'}
+              </button>
+              <button
+                type="button"
+                onClick={triggerBackupImport}
+                disabled={backupBusy !== null}
+                style={{
+                  height: '32px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: S2,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: '5px',
+                  padding: '0 10px',
+                  color: T2,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
+                  opacity: backupBusy !== null ? 0.7 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                <Upload size={13} />
+                {backupBusy === 'import' ? 'Importing...' : 'Import backup'}
+              </button>
+            </>
+          )}
           <button
             type="button"
             data-tour-id="journal-new-entry"
@@ -831,10 +843,10 @@ export default function Journal() {
       </div>
 
       {/* Two-column body */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '300px 1fr', minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '300px 1fr', minHeight: 0, overflow: 'hidden' }}>
 
-        {/* Left: entry list */}
-        <div data-tour-id="journal-entry-list" style={{ borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        {/* Left: entry list — hidden on mobile when entry is selected */}
+        <div data-tour-id="journal-entry-list" style={{ borderRight: isMobile ? 'none' : `1px solid ${BORDER}`, display: isMobile && selected ? 'none' : 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           {/* Search */}
           <div style={{ padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
             <div style={{ position: 'relative' }}>
@@ -900,8 +912,8 @@ export default function Journal() {
           </div>
         </div>
 
-        {/* Right: editor or empty state */}
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        {/* Right: editor or empty state — hidden on mobile when nothing selected */}
+        <div style={{ display: isMobile && !selected ? 'none' : 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           {!selected ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: T3 }}>
               <PenLine size={28} style={{ opacity: 0.4 }} />
@@ -918,21 +930,32 @@ export default function Journal() {
                   alignItems: 'flex-start',
                   justifyContent: 'space-between',
                   gap: '16px',
-                  padding: '16px 20px 12px',
+                  padding: isMobile ? '12px 14px 10px' : '16px 20px 12px',
                   borderBottom: `1px solid ${BORDER}`,
                   flexShrink: 0,
                   flexWrap: 'wrap',
                 }}
               >
-                <div>
-                  <h2 style={{ fontSize: '19px', fontWeight: 600, color: T1, letterSpacing: '-0.03em', margin: 0, lineHeight: 1.1 }}>
-                    {formatEntryDate(selected.date, 'EEEE, MMMM d')}
-                  </h2>
-                  <p style={{ fontSize: '11px', color: T3, marginTop: '5px' }}>
-                    {formatEntryDate(selected.date, 'yyyy')}
-                    <span style={{ margin: '0 5px' }}>|</span>
-                    {selectedWordCount} words written
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => setSelected(null)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: T3, cursor: 'pointer', padding: '2px 0', flexShrink: 0, marginTop: 2, fontSize: 12 }}
+                    >
+                      <ArrowLeft size={14} />
+                    </button>
+                  )}
+                  <div>
+                    <h2 style={{ fontSize: isMobile ? '16px' : '19px', fontWeight: 600, color: T1, letterSpacing: '-0.03em', margin: 0, lineHeight: 1.1 }}>
+                      {formatEntryDate(selected.date, isMobile ? 'EEE, MMM d' : 'EEEE, MMMM d')}
+                    </h2>
+                    <p style={{ fontSize: '11px', color: T3, marginTop: '5px' }}>
+                      {formatEntryDate(selected.date, 'yyyy')}
+                      <span style={{ margin: '0 5px' }}>|</span>
+                      {selectedWordCount} words written
+                    </p>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>

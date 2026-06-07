@@ -1396,6 +1396,13 @@ export default function MarketNews() {
   }, [filter, items, query, sortBy]);
 
   const topBreaking = useMemo(() => items.find(item => item.isBreaking), [items]);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, overflow: 'hidden', fontFamily: SANS, background: PAGE_BG }}>
@@ -1405,39 +1412,41 @@ export default function MarketNews() {
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, fontSize: 18, letterSpacing: '-0.01em', fontWeight: 650 }}>Market News</h1>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-              {[
-                { label: 'Breaking', value: breakingCount, color: RED },
-                { label: 'High', value: highCount, color: AMBER },
-                { label: 'Calendar', value: highCalendarCount, color: COBALT },
-              ].map((stat) => (
-                <span
-                  key={stat.label}
-                  style={{
-                    height: 24,
-                    border: `1px solid ${BORDER}`,
-                    borderRadius: 6,
-                    background: S2,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '0 8px',
-                    fontSize: 10,
-                    color: T3,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    fontWeight: 700,
-                  }}
-                >
-                  {stat.label}
-                  <span style={{ color: stat.color, fontFamily: MONO, fontSize: 12, fontWeight: 800 }}>{stat.value}</span>
-                </span>
-              ))}
-            </div>
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+                {[
+                  { label: 'Breaking', value: breakingCount, color: RED },
+                  { label: 'High', value: highCount, color: AMBER },
+                  { label: 'Calendar', value: highCalendarCount, color: COBALT },
+                ].map((stat) => (
+                  <span
+                    key={stat.label}
+                    style={{
+                      height: 24,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 6,
+                      background: S2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '0 8px',
+                      fontSize: 10,
+                      color: T3,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {stat.label}
+                    <span style={{ color: stat.color, fontFamily: MONO, fontSize: 12, fontWeight: 800 }}>{stat.value}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {lastRefresh && <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>Updated {fmtRelative(lastRefresh.toISOString())}</span>}
+            {!isMobile && lastRefresh && <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>Updated {fmtRelative(lastRefresh.toISOString())}</span>}
             <button
               onClick={() => { void fetchNews(true); void fetchSidebar(); }}
               disabled={loading}
@@ -1462,11 +1471,11 @@ export default function MarketNews() {
           </div>
         </div>
 
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: isMobile ? 'nowrap' : 'wrap' }}>
           <div
             style={{
               flex: 1,
-              minWidth: 220,
+              minWidth: 0,
               borderRadius: 6,
               border: `1px solid ${BORDER}`,
               background: S2,
@@ -1510,17 +1519,30 @@ export default function MarketNews() {
         </div>
       </div>
 
+      {isMobile && (
+        <div style={{ padding: '8px 12px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(o => !o)}
+            style={{ height: 28, borderRadius: 6, border: `1px solid ${sidebarOpen ? COBALT_BORDER : BORDER}`, background: sidebarOpen ? COBALT_DIM : S2, color: sidebarOpen ? COBALT : T2, padding: '0 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          >
+            <Filter size={11} />
+            {sidebarOpen ? 'Hide calendar' : 'Calendar & Sources'}
+          </button>
+        </div>
+      )}
+
       <div
         className="mn-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(360px, 0.68fr) minmax(380px, 0.32fr)',
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(360px, 0.68fr) minmax(380px, 0.32fr)',
           flex: 1,
           minHeight: 0,
           minWidth: 0,
           maxWidth: '100%',
           width: '100%',
-          overflow: 'hidden',
+          overflow: isMobile ? 'auto' : 'hidden',
           gap: 0,
         }}
       >
@@ -1623,11 +1645,13 @@ export default function MarketNews() {
           style={{
             width: '100%',
             minWidth: 0,
-            borderLeft: `1px solid ${BORDER}`,
+            borderLeft: isMobile ? 'none' : `1px solid ${BORDER}`,
+            borderTop: isMobile ? `1px solid ${BORDER}` : 'none',
             background: PAGE_BG,
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: 16,
+            display: isMobile && !sidebarOpen ? 'none' : undefined,
           }}
         >
           <div style={{ display: 'grid', gap: 10 }}>
@@ -1650,9 +1674,9 @@ export default function MarketNews() {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
-        @media (max-width: 1024px) {
+        @media (max-width: 1200px) {
           .mn-grid {
-            display: block !important;
+            grid-template-columns: 1fr !important;
             overflow: auto !important;
           }
           .mn-feed {

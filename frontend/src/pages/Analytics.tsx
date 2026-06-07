@@ -1086,25 +1086,27 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-2">
-          {timeOfDayRows.map(row => (
-            <div key={row.label} className="text-center">
-              <p className="mb-1.5 text-[11px] text-[var(--app-text-muted)]">{row.label}</p>
-              <div
-                className="rounded-md px-2 py-2 text-xs font-medium"
-                style={{
-                  backgroundColor: row.avgPnL === null
-                    ? 'var(--app-panel-strong)'
-                    : row.avgPnL >= 0
-                      ? `rgba(52,211,153,${0.3 + (row.ratio * 0.42)})`
-                      : `rgba(248,113,113,${0.3 + (row.ratio * 0.42)})`,
-                  color: row.avgPnL === null ? '#6d82a7' : row.avgPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
-                }}
-              >
-                {row.avgPnL === null ? '--' : formatSignedCurrency(row.avgPnL)}
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${timeOfDayRows.length}, minmax(72px, 1fr))`, minWidth: `${timeOfDayRows.length * 80}px` }}>
+            {timeOfDayRows.map(row => (
+              <div key={row.label} className="text-center">
+                <p className="mb-1.5 text-[11px] text-[var(--app-text-muted)] whitespace-nowrap">{row.label}</p>
+                <div
+                  className="rounded-md px-1 py-2 text-xs font-medium whitespace-nowrap"
+                  style={{
+                    backgroundColor: row.avgPnL === null
+                      ? 'var(--app-panel-strong)'
+                      : row.avgPnL >= 0
+                        ? `rgba(52,211,153,${0.3 + (row.ratio * 0.42)})`
+                        : `rgba(248,113,113,${0.3 + (row.ratio * 0.42)})`,
+                    color: row.avgPnL === null ? '#6d82a7' : row.avgPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
+                  }}
+                >
+                  {row.avgPnL === null ? '--' : formatSignedCurrency(row.avgPnL)}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         <div className="mt-5 flex items-center justify-between">
