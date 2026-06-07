@@ -231,6 +231,12 @@ export default function Dashboard() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, preferences } = useAppSettings();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
   const storeAccounts = useFlyxaStore(state => state.accounts);
 
   // Fire bottom-right toast notifications when high-impact events are imminent.
@@ -397,10 +403,10 @@ export default function Dashboard() {
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: SANS }}>
 
       {/* ═══════════════ MAIN CONTENT ═══════════════ */}
-      <div style={{ flex: 1, height: '100%', overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+      <div style={{ flex: 1, height: '100%', overflowY: 'auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
 
         {/* Top bar */}
-        <div data-tour-id="dashboard-overview" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div data-tour-id="dashboard-overview" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 600, color: T1, margin: 0, letterSpacing: '-0.02em' }}>
               Dashboard
@@ -422,7 +428,7 @@ export default function Dashboard() {
                   background: S1, border: `1px solid ${BORDER}`,
                   borderRadius: 5, fontSize: 12, fontFamily: SANS,
                   color: T1, outline: 'none', cursor: 'pointer',
-                  minWidth: 170,
+                  minWidth: isMobile ? 120 : 170,
                 }}
                 onFocus={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)'; }}
                 onBlur={e =>  { e.currentTarget.style.borderColor = BORDER; }}
@@ -454,7 +460,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stat cards */}
-        <div data-tour-id="dashboard-metrics" style={{ display: 'grid', gridTemplateColumns: `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: 14, flexShrink: 0 }}>
+        <div data-tour-id="dashboard-metrics" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: isMobile ? 8 : 14, flexShrink: 0 }}>
           {selectedStoreAcct && (() => {
             const sb = selectedStoreAcct.startingBalance ?? 0;
             const liveBalance = sb + summary.netPnL;
@@ -531,7 +537,7 @@ export default function Dashboard() {
         {/* Today vs Your Average strip */}
         {avgComparison && (
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2,
+            display: 'grid', gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)', gap: 2,
             borderRadius: 8, overflow: 'hidden', border: `1px solid ${BORDER}`,
             background: S1, flexShrink: 0,
           }}>
@@ -649,7 +655,7 @@ export default function Dashboard() {
         )}
 
         {/* 2-column content grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 260px', gap: 16, flex: 1, minHeight: 0 }}>
 
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
