@@ -3,11 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
-
   FileText,
   Image as ImageIcon,
   Maximize2,
-
+  Menu,
   Plus,
   Search,
   Trash2,
@@ -2253,6 +2252,18 @@ export default function TradeJournal() {
     ? (activeTrade?.screenshotUrl || selectedEntry.screenshots[0] || selectedEntry.scannedImageUrl || '')
     : '';
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [dayPanelOpen, setDayPanelOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
+  useEffect(() => {
+    const handler = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) setDayPanelOpen(true);
+    };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
   return (
     <div className="tj-shell">
       <input
@@ -2267,11 +2278,23 @@ export default function TradeJournal() {
         }}
       />
 
-      <aside className="tj-day-panel" data-tour-id="scanner-day-panel">
+      <aside className="tj-day-panel" data-tour-id="scanner-day-panel" style={{ display: isMobile && !dayPanelOpen ? 'none' : undefined, width: isMobile ? '100%' : undefined }}>
         <div className="tj-day-header">
           <div className="tj-day-top">
             <p className="tj-month-title">{formatMonth(monthCursor)}</p>
             <span className="tj-nav-group">
+              {isMobile && (
+                <button
+                  type="button"
+                  className="tj-nav"
+                  title="Close day panel"
+                  onClick={() => setDayPanelOpen(false)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 8, paddingRight: 8, fontSize: 11 }}
+                >
+                  <X size={12} />
+                  Close
+                </button>
+              )}
               <button type="button" className="tj-nav" onClick={() => setMonthCursor(prev => shiftMonth(prev, -1))}>
                 <ChevronLeft size={13} />
               </button>
@@ -2390,7 +2413,7 @@ export default function TradeJournal() {
                   key={entry.id}
                   type="button"
                   className={`tj-day-item ${selectedEntryId === entry.id ? 'active' : ''}`}
-                  onClick={() => { setSelectedEntryId(entry.id); setShowScanner(false); }}
+                  onClick={() => { setSelectedEntryId(entry.id); setShowScanner(false); if (isMobile) setDayPanelOpen(false); }}
                 >
                   <div className="tj-date-col">
                     <div className="tj-day-num">{day}</div>
@@ -2425,12 +2448,23 @@ export default function TradeJournal() {
         </div>
       </aside>
 
-      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
+      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel" style={{ display: isMobile && dayPanelOpen ? 'none' : undefined }}>
         {!showScanner && selectedEntry && selectedEntry.trades.length > 0 ? (
           <>
             <div className="tj-sticky-head">
               <div>
                 <div className="tj-entry-title-row">
+                  {isMobile && (
+                    <button
+                      type="button"
+                      className="tj-nav"
+                      onClick={() => setDayPanelOpen(true)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8, padding: '4px 8px', fontSize: 11 }}
+                      title="Show day list"
+                    >
+                      <Menu size={13} />
+                    </button>
+                  )}
                   <p className="tj-entry-title">{formatDateTitle(selectedEntry.date)}</p>
                 </div>
                 <p className="tj-entry-sub">
@@ -2820,6 +2854,8 @@ export default function TradeJournal() {
             scanPreviewUrl={scanPreviewUrl}
             onScanFile={(file) => { void handleScanFile(file); }}
             onAddBlankDay={addBlankDay}
+            isMobile={isMobile}
+            onOpenDayPanel={() => setDayPanelOpen(true)}
           />
         )}
       </section>
