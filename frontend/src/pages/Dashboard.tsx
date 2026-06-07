@@ -702,7 +702,81 @@ export default function Dashboard() {
                     Log first trade
                   </button>
                 </div>
+              ) : isMobile ? (
+                /* ── Mobile: compact list (no table) ── */
+                <div>
+                  {displayTrades.map((trade, i) => {
+                    const rrVal = getTradeRiskReward(trade);
+                    return (
+                      <div
+                        key={trade.id}
+                        style={{
+                          padding: '10px 14px',
+                          borderBottom: i < displayTrades.length - 1 ? `1px solid ${BSUB}` : 'none',
+                          display: 'flex', flexDirection: 'column', gap: 5,
+                        }}
+                      >
+                        {/* Row 1: Dir + Symbol | P&L */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                            {(trade.direction === 'Long' || trade.direction === 'Short')
+                              ? <DirBadge dir={trade.direction} />
+                              : null}
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {trade.symbol || 'N/A'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 13, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontWeight: 500, flexShrink: 0, color: trade.pnl > 0 ? GREEN : trade.pnl < 0 ? RED : AMBER }}>
+                            {fmtUSD(trade.pnl)}
+                          </span>
+                        </div>
+                        {/* Row 2: Date · R:R | Result + actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: T3, fontFamily: MONO }}>
+                            {trade.trade_date ? format(new Date(`${trade.trade_date}T00:00:00`), 'MMM d, yyyy') : '—'}
+                            {rrVal !== null ? ` · ${fmtRR(rrVal)}` : ''}
+                          </span>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                            <ResultBadge trade={trade} />
+                            <button
+                              type="button"
+                              title="View in Journal"
+                              onClick={() => goToTradeInJournal(trade)}
+                              style={{ border: 'none', background: 'transparent', padding: 2, color: T3, display: 'inline-flex', alignItems: 'center', cursor: 'pointer', lineHeight: 0 }}
+                            >
+                              <Eye size={12} />
+                            </button>
+                            {pendingDeleteId === trade.id ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => { deleteTrade(trade.id); setPendingDeleteId(null); }}
+                                  style={{ fontSize: 10, fontFamily: SANS, padding: '2px 6px', borderRadius: 4, border: 'none', background: RED, color: '#fff', cursor: 'pointer', fontWeight: 600 }}
+                                >Del</button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingDeleteId(null)}
+                                  style={{ fontSize: 10, fontFamily: SANS, padding: '2px 6px', borderRadius: 4, border: `1px solid ${BORDER}`, background: 'transparent', color: T2, cursor: 'pointer' }}
+                                >✕</button>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                title="Delete trade"
+                                onClick={() => setPendingDeleteId(trade.id)}
+                                style={{ border: 'none', background: 'transparent', padding: 2, color: T3, display: 'inline-flex', alignItems: 'center', cursor: 'pointer', lineHeight: 0 }}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
+                /* ── Desktop: full table ── */
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
