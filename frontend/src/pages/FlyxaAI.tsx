@@ -1559,7 +1559,7 @@ export default function FlyxaAI() {
   return (
     <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ ...themeVars, backgroundColor: colors.d0, color: colors.t0 }}>
       <div className="grid h-full grid-cols-1 overflow-hidden lg:grid-cols-[178px_minmax(0,1fr)_252px]">
-        <aside className="min-h-0 overflow-y-auto border-r px-2 py-4" style={{ backgroundColor: colors.d1, borderColor: colors.b0 }}>
+        <aside className="hidden lg:block min-h-0 overflow-y-auto border-r px-2 py-4" style={{ backgroundColor: colors.d1, borderColor: colors.b0 }}>
           <div className="px-2">
             <p className="text-[14px] font-bold tracking-[0.1em]" style={{ color: colors.t0 }}>FLYXA</p>
             <p className="mt-0.5 text-[9.5px]" style={{ color: colors.t2 }}>Trading Intelligence</p>
@@ -1593,11 +1593,39 @@ export default function FlyxaAI() {
         </aside>
 
         <main className="min-h-0 overflow-hidden" style={{ backgroundColor: colors.d0 }}>
+          {/* Mobile horizontal nav */}
+          <nav className="flex lg:hidden overflow-x-auto border-b" style={{ borderColor: colors.b0, backgroundColor: colors.d1, flexShrink: 0 }}>
+            {[
+              { key: 'weekly', label: 'Debrief', to: '/flyxa-ai', end: true },
+              { key: 'weekly-report', label: 'Weekly report', to: '/flyxa-ai/weekly-report', end: false },
+              { key: 'execution', label: 'Execution coach', to: '/flyxa-ai/execution-coach', end: false },
+              { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
+              { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai/ask', end: false },
+            ].map(item => (
+              <NavLink key={item.key} to={item.to} end={item.end} style={{ textDecoration: 'none', flexShrink: 0 }}>
+                {({ isActive }) => (
+                  <span
+                    style={{
+                      display: 'block',
+                      padding: '9px 14px',
+                      fontSize: 12,
+                      fontWeight: isActive ? 600 : 400,
+                      borderBottom: `2px solid ${isActive ? colors.acc : 'transparent'}`,
+                      color: isActive ? colors.acc : colors.t1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
           <div className="flex h-full min-h-0 flex-col">
-            <section data-tour-id="flyxa-ai-header" className="border-b px-6 py-5" style={{ borderColor: colors.b0 }}>
-              <div className="flex items-end justify-between gap-6">
+            <section data-tour-id="flyxa-ai-header" className="border-b px-4 py-4 lg:px-6 lg:py-5" style={{ borderColor: colors.b0 }}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>{getPeriodWindow(timeframe, weekOffset).headerLabel}</p>
                     <div className="flex gap-0.5 rounded-[5px] p-0.5" style={{ backgroundColor: colors.d3 }}>
                       {(['1W', '1M', '3M', 'All'] as TimeFrame[]).map(tf => (
@@ -1648,7 +1676,7 @@ export default function FlyxaAI() {
                       </div>
                     )}
                   </div>
-                  <h1 className="mt-2 text-[24px] font-bold tracking-[-0.02em]" style={{ color: colors.t0 }}>
+                  <h1 className="mt-2 text-[18px] font-bold tracking-[-0.02em] lg:text-[24px]" style={{ color: colors.t0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {weeklyDebriefData.weekRange}
                   </h1>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1665,7 +1693,7 @@ export default function FlyxaAI() {
                 </div>
 
                 <div className="flex items-end gap-4">
-                  <svg width={sparkline.width} height={sparkline.height} viewBox={`0 0 ${sparkline.width} ${sparkline.height}`} className="shrink-0">
+                  <svg width={sparkline.width} height={sparkline.height} viewBox={`0 0 ${sparkline.width} ${sparkline.height}`} className="hidden lg:block shrink-0">
                     <line x1={6} y1={sparkline.baselineY} x2={sparkline.width - 6} y2={sparkline.baselineY} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" />
                     <path d={sparkline.areaPath} fill={netRNumeric >= 0 ? 'rgba(34,214,138,0.07)' : 'rgba(255,95,95,0.09)'} />
                     <path d={sparkline.linePath} fill="none" stroke={netRNumeric >= 0 ? colors.grn : colors.red} strokeWidth="1.5" />
@@ -1680,7 +1708,7 @@ export default function FlyxaAI() {
                   </svg>
                   <div className="pb-0.5">
                     <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Net PL</p>
-                    <p className="mt-0.5 text-[36px] font-bold leading-none tracking-[-0.03em]" style={{ color: netRNumeric >= 0 ? colors.grn : colors.red, fontFamily: colors.mono }}>
+                    <p className="mt-0.5 text-[24px] font-bold leading-none tracking-[-0.03em] lg:text-[36px]" style={{ color: netRNumeric >= 0 ? colors.grn : colors.red, fontFamily: colors.mono }}>
                       {weeklyDebriefData.stats.netR.value}
                     </p>
                     <p className="mt-1 text-[10.5px]" style={{ color: colors.t2 }}>
@@ -1761,18 +1789,18 @@ export default function FlyxaAI() {
             <section data-tour-id="flyxa-ai-stats" className="border-t" style={{ borderColor: colors.b0 }}>
               <div className="grid grid-cols-5 gap-px" style={{ backgroundColor: colors.b0 }}>
                 {statCells.map(stat => (
-                  <div key={stat.label} className="px-[15px] py-[13px]" style={{ backgroundColor: colors.d1 }}>
-                    <p className="text-[9px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>{stat.label}</p>
-                    <p className="mt-1 text-[16px] font-bold" style={{ color: statToneColor(stat.tone), fontFamily: colors.mono }}>
+                  <div key={stat.label} className="px-[5px] py-[8px] lg:px-[15px] lg:py-[13px]" style={{ backgroundColor: colors.d1 }}>
+                    <p className="text-[7px] uppercase tracking-[0.06em] lg:text-[9px] lg:tracking-[0.14em]" style={{ color: colors.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stat.label}</p>
+                    <p className="mt-0.5 text-[12px] font-bold lg:mt-1 lg:text-[16px]" style={{ color: statToneColor(stat.tone), fontFamily: colors.mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {stat.value}
                     </p>
-                    <p className="mt-1 text-[10px]" style={{ color: colors.t2 }}>{stat.subLabel}</p>
+                    <p className="mt-1 hidden text-[10px] lg:block" style={{ color: colors.t2 }}>{stat.subLabel}</p>
                   </div>
                 ))}
               </div>
             </section>
 
-            <div className="min-h-0 flex-1 overflow-y-auto border-t px-5 py-4" style={{ borderColor: colors.b0 }}>
+            <div className="min-h-0 flex-1 overflow-y-auto border-t px-4 py-3 lg:px-5 lg:py-4" style={{ borderColor: colors.b0 }}>
               <section data-tour-id="flyxa-ai-reflection">
                 <div className="flex items-center gap-3 rounded-[8px] px-[14px] py-3" style={{ backgroundColor: colors.d2, border: cardBorder }}>
                   <div className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border" style={{ backgroundColor: 'rgba(0,212,168,0.08)', borderColor: 'rgba(0,212,168,0.18)' }}>
@@ -1947,7 +1975,7 @@ export default function FlyxaAI() {
           </div>
         </main>
 
-        <aside className="min-h-0 overflow-y-auto border-l px-4 py-[18px]" style={{ backgroundColor: colors.d1, borderColor: colors.b0 }}>
+        <aside className="hidden lg:block min-h-0 overflow-y-auto border-l px-4 py-[18px]" style={{ backgroundColor: colors.d1, borderColor: colors.b0 }}>
           <section className="rounded-[8px] px-[14px] py-[14px]" style={{ backgroundColor: colors.d2, border: cardBorder }}>
             <div className="flex items-center gap-[14px]">
               <p className="text-[52px] font-bold leading-none" style={{ color: gradeColor(weekGrade), fontFamily: colors.mono }}>{weekGrade}</p>

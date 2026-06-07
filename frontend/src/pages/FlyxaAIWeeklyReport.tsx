@@ -234,7 +234,7 @@ function SlideCover({ stats }: { stats: WeekStats }) {
         background: stats.tradeCount > 0
           ? `radial-gradient(ellipse 700px 480px at 50% 50%, ${glowColor}0e 0%, transparent 68%), ${C.d0}`
           : C.d0,
-        padding: '0 48px',
+        padding: '0 clamp(8px, 4vw, 48px)',
         textAlign: 'center',
       }}
     >
@@ -253,7 +253,7 @@ function SlideCover({ stats }: { stats: WeekStats }) {
         <>
           <div
             style={{
-              fontSize: 88,
+              fontSize: 'clamp(36px, 15vw, 88px)',
               fontWeight: 700,
               color: pnlColor,
               letterSpacing: '-0.04em',
@@ -265,15 +265,15 @@ function SlideCover({ stats }: { stats: WeekStats }) {
             {fmtSigned(stats.netPnl)}
           </div>
 
-          <div style={{ fontSize: 26, color: rColor, fontFamily: C.mono, marginTop: 14, fontWeight: 600, opacity: 0.9 }}>
+          <div style={{ fontSize: 'clamp(16px, 5vw, 26px)', color: rColor, fontFamily: C.mono, marginTop: 'clamp(8px, 2vh, 14px)', fontWeight: 600, opacity: 0.9 }}>
             {fmtR(stats.netR)}
           </div>
 
           {/* Divider */}
-          <div style={{ width: 1, height: 40, background: C.b1, margin: '36px auto' }} />
+          <div style={{ width: 1, height: 'clamp(20px, 4vh, 40px)', background: C.b1, margin: 'clamp(16px, 4vh, 36px) auto' }} />
 
           {/* Stats row */}
-          <div style={{ display: 'flex', gap: 52, alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 'clamp(16px, 6vw, 52px)', alignItems: 'flex-end' }}>
             {[
               { value: stats.tradeCount,   label: 'Trades',   color: C.t0 },
               { value: stats.wins,          label: 'Wins',     color: C.grn },
@@ -281,7 +281,7 @@ function SlideCover({ stats }: { stats: WeekStats }) {
               { value: stats.sessionCount,  label: 'Sessions', color: C.t0 },
             ].map(item => (
               <div key={item.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 40, fontWeight: 700, color: item.color, lineHeight: 1, fontFamily: C.mono }}>{item.value}</div>
+                <div style={{ fontSize: 'clamp(22px, 8vw, 40px)', fontWeight: 700, color: item.color, lineHeight: 1, fontFamily: C.mono }}>{item.value}</div>
                 <div style={{ fontSize: 11, color: C.t2, marginTop: 6, letterSpacing: '0.06em' }}>{item.label}</div>
               </div>
             ))}
@@ -289,11 +289,11 @@ function SlideCover({ stats }: { stats: WeekStats }) {
 
           {/* Win rate bar */}
           {stats.tradeCount > 0 && (
-            <div style={{ marginTop: 36, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 200, height: 3, background: C.d3, borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ marginTop: 'clamp(16px, 4vh, 36px)', display: 'flex', alignItems: 'center', gap: 12, maxWidth: '100%' }}>
+              <div style={{ width: 'clamp(100px, 35vw, 200px)', height: 3, background: C.d3, borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
                 <div style={{ width: `${stats.winRate}%`, height: '100%', background: stats.winRate >= 50 ? C.grn : C.red, borderRadius: 2, transition: 'width 0.6s ease' }} />
               </div>
-              <span style={{ fontSize: 12, color: C.t2, fontFamily: C.mono }}>{stats.winRate}% win rate</span>
+              <span style={{ fontSize: 12, color: C.t2, fontFamily: C.mono, whiteSpace: 'nowrap' }}>{stats.winRate}% win rate</span>
             </div>
           )}
         </>
@@ -609,13 +609,13 @@ export default function FlyxaAIWeeklyReport() {
       {/* ── Top chrome ──────────────────────────────────────── */}
       <div style={{
         flexShrink: 0, display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', padding: '0 28px',
+        justifyContent: 'space-between', padding: '0 clamp(10px, 3vw, 28px)',
         height: 52, borderBottom: `1px solid ${C.b0}`,
       }}>
         {/* Week nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button type="button" onClick={() => setWeekOffset(w => w + 1)} style={chromeBtnStyle}>←</button>
-          <span style={{ fontSize: 12, color: C.t2, minWidth: 160, textAlign: 'center' }}>{stats.weekLabel}</span>
+          <span style={{ fontSize: 12, color: C.t2, minWidth: 'clamp(80px, 25vw, 160px)', textAlign: 'center' }}>{stats.weekLabel}</span>
           <button
             type="button"
             onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
@@ -682,7 +682,7 @@ export default function FlyxaAIWeeklyReport() {
           <div
             key={animKey}
             className={animClass}
-            style={{ position: 'absolute', inset: 0, padding: '40px 64px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            style={{ position: 'absolute', inset: 0, padding: 'clamp(16px, 4vh, 40px) clamp(12px, 5vw, 64px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
           >
             {/* Slide label top-left */}
             <div style={{ fontSize: 10, letterSpacing: '0.22em', color: C.t2, textTransform: 'uppercase', marginBottom: 4, flexShrink: 0 }}>
@@ -711,7 +711,7 @@ export default function FlyxaAIWeeklyReport() {
       {/* ── Bottom chrome ───────────────────────────────────── */}
       <div style={{
         flexShrink: 0, display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', padding: '0 28px',
+        justifyContent: 'space-between', padding: '0 clamp(10px, 3vw, 28px)',
         height: 52, borderTop: `1px solid ${C.b0}`,
       }}>
         <button

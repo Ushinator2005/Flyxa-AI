@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type DragEvent } from 'react';
-import { Camera, Image as ImageIcon, Menu, Upload } from 'lucide-react';
+import { Camera, Image as ImageIcon, Upload } from 'lucide-react';
 
 interface ScannerDropZoneProps {
   isScanning: boolean;
@@ -8,7 +8,6 @@ interface ScannerDropZoneProps {
   onScanFile: (file: File) => void;
   onAddBlankDay: () => void;
   isMobile?: boolean;
-  onOpenDayPanel?: () => void;
 }
 
 export default function ScannerDropZone({
@@ -18,7 +17,6 @@ export default function ScannerDropZone({
   onScanFile,
   onAddBlankDay,
   isMobile = false,
-  onOpenDayPanel,
 }: ScannerDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,19 +54,6 @@ export default function ScannerDropZone({
 
         <div className="tj-empty-wrap">
           <div className="tj-empty-card">
-            {/* Day panel toggle */}
-            {onOpenDayPanel && (
-              <button
-                type="button"
-                className="tj-nav"
-                onClick={onOpenDayPanel}
-                style={{ alignSelf: 'flex-start', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', fontSize: 12 }}
-              >
-                <Menu size={13} />
-                View days
-              </button>
-            )}
-
             <span className="tj-empty-badge"><ImageIcon size={22} /></span>
             <p className="tj-empty-title">Add a Chart Screenshot</p>
             <p className="tj-empty-text">

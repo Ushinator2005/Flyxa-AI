@@ -1640,20 +1640,51 @@ export default function MarketNews() {
           </div>
         </main>
 
+        {/* Mobile backdrop */}
+        {isMobile && sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 199, background: 'rgba(0,0,0,0.45)' }}
+          />
+        )}
+
         <aside
           className="mn-sidebar"
-          style={{
-            width: '100%',
-            minWidth: 0,
-            borderLeft: isMobile ? 'none' : `1px solid ${BORDER}`,
-            borderTop: isMobile ? `1px solid ${BORDER}` : 'none',
+          style={isMobile ? {
+            position: 'fixed',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 'min(320px, 92vw)',
+            zIndex: 200,
             background: PAGE_BG,
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: 16,
-            display: isMobile && !sidebarOpen ? 'none' : undefined,
+            borderLeft: `1px solid ${BORDER}`,
+            transform: sidebarOpen ? 'translateX(0)' : 'translateX(100%)',
+            transition: 'transform 0.22s ease',
+          } : {
+            width: '100%',
+            minWidth: 0,
+            borderLeft: `1px solid ${BORDER}`,
+            background: PAGE_BG,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: 16,
           }}
         >
+          {isMobile && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'transparent', color: T2, cursor: 'pointer' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
           <div style={{ display: 'grid', gap: 10 }}>
             <CalendarPanel
                 events={calendar}

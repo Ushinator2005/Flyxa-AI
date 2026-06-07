@@ -6,7 +6,6 @@ import {
   FileText,
   Image as ImageIcon,
   Maximize2,
-  Menu,
   Plus,
   Search,
   Trash2,
@@ -2278,23 +2277,63 @@ export default function TradeJournal() {
         }}
       />
 
-      <aside className="tj-day-panel" data-tour-id="scanner-day-panel" style={{ display: isMobile && !dayPanelOpen ? 'none' : undefined, width: isMobile ? '100%' : undefined }}>
+      {/* Mobile overlay backdrop */}
+      {isMobile && dayPanelOpen && (
+        <div
+          onClick={() => setDayPanelOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 199, background: 'rgba(0,0,0,0.45)' }}
+        />
+      )}
+
+      {/* Persistent left-edge arrow tab (mobile only) */}
+      {isMobile && (
+        <button
+          type="button"
+          aria-label={dayPanelOpen ? 'Close day panel' : 'Open day panel'}
+          onClick={() => setDayPanelOpen(prev => !prev)}
+          style={{
+            position: 'fixed',
+            left: dayPanelOpen ? 260 : 0,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            zIndex: 201,
+            width: 20,
+            height: 44,
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderLeft: 'none',
+            borderRadius: '0 6px 6px 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'left 0.22s ease',
+            padding: 0,
+          }}
+        >
+          {dayPanelOpen ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+        </button>
+      )}
+
+      <aside
+        className="tj-day-panel"
+        data-tour-id="scanner-day-panel"
+        style={isMobile ? {
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 260,
+          zIndex: 200,
+          overflowY: 'auto',
+          transform: dayPanelOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.22s ease',
+        } : undefined}
+      >
         <div className="tj-day-header">
           <div className="tj-day-top">
             <p className="tj-month-title">{formatMonth(monthCursor)}</p>
             <span className="tj-nav-group">
-              {isMobile && (
-                <button
-                  type="button"
-                  className="tj-nav"
-                  title="Close day panel"
-                  onClick={() => setDayPanelOpen(false)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 8, paddingRight: 8, fontSize: 11 }}
-                >
-                  <X size={12} />
-                  Close
-                </button>
-              )}
               <button type="button" className="tj-nav" onClick={() => setMonthCursor(prev => shiftMonth(prev, -1))}>
                 <ChevronLeft size={13} />
               </button>
@@ -2448,23 +2487,12 @@ export default function TradeJournal() {
         </div>
       </aside>
 
-      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel" style={{ display: isMobile && dayPanelOpen ? 'none' : undefined }}>
+      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
         {!showScanner && selectedEntry && selectedEntry.trades.length > 0 ? (
           <>
             <div className="tj-sticky-head">
               <div>
                 <div className="tj-entry-title-row">
-                  {isMobile && (
-                    <button
-                      type="button"
-                      className="tj-nav"
-                      onClick={() => setDayPanelOpen(true)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8, padding: '4px 8px', fontSize: 11 }}
-                      title="Show day list"
-                    >
-                      <Menu size={13} />
-                    </button>
-                  )}
                   <p className="tj-entry-title">{formatDateTitle(selectedEntry.date)}</p>
                 </div>
                 <p className="tj-entry-sub">
@@ -2855,7 +2883,6 @@ export default function TradeJournal() {
             onScanFile={(file) => { void handleScanFile(file); }}
             onAddBlankDay={addBlankDay}
             isMobile={isMobile}
-            onOpenDayPanel={() => setDayPanelOpen(true)}
           />
         )}
       </section>
