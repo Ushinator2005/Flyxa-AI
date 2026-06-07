@@ -13,6 +13,11 @@
   animation: page-fade-in 0.2s ease-out both;
 }
 
+@keyframes mobile-drawer-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
 @layer base {
   :root {
     --app-bg: #0e0d0d;

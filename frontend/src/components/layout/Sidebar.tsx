@@ -91,7 +91,7 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { accounts, selectedAccountId, setSelectedAccountId } = useAppSettings();
-  const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID);
+  const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived);
   const selectedAcct = accounts.find(a => a.id === selectedAccountId);
   const displayName = (user?.user_metadata?.name as string | undefined)
     || (user?.user_metadata?.full_name as string | undefined)
@@ -441,6 +441,64 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
   );
 }
 
+function MobileDrawer() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('flyxa:open-mobile-nav', handler);
+    return () => window.removeEventListener('flyxa:open-mobile-nav', handler);
+  }, []);
+
+  // Prevent body scroll when drawer is open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 300,
+        display: 'flex',
+      }}
+    >
+      {/* Drawer panel */}
+      <div
+        style={{
+          width: 280,
+          height: '100%',
+          background: S1,
+          borderRight: `1px solid ${BORDER}`,
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          animation: 'mobile-drawer-in 0.22s ease both',
+        }}
+      >
+        <SidebarContent collapsed={false} onNavClick={() => setOpen(false)} />
+      </div>
+      {/* Backdrop */}
+      <div
+        style={{
+          flex: 1,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(2px)',
+        }}
+        onClick={() => setOpen(false)}
+      />
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -455,45 +513,48 @@ export default function Sidebar() {
   }, [collapsed]);
 
   return (
-    <aside
-      className="hidden md:flex flex-col flex-shrink-0"
-      style={{
-        width: collapsed ? 72 : 220,
-        height: '100vh',
-        position: 'sticky',
-        top: 0,
-        overflow: 'visible',
-        background: S1,
-        borderRight: `1px solid ${BORDER}`,
-        transition: 'width 0.2s cubic-bezier(.4,0,.2,1)',
-      }}
-    >
-      <button
-        onClick={() => setCollapsed(current => !current)}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    <>
+      <aside
+        className="hidden md:flex flex-col flex-shrink-0"
         style={{
-          position: 'absolute',
-          top: 16,
-          right: 0,
-          transform: 'translateX(50%)',
-          width: 24,
-          height: 36,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--app-panel-strong)',
-          border: `1px solid ${BORDER}`,
-          borderRadius: 8,
-          color: T2,
-          cursor: 'pointer',
-          boxShadow: '0 6px 16px rgba(0,0,0,0.28)',
-          zIndex: 20,
+          width: collapsed ? 72 : 220,
+          height: '100vh',
+          position: 'sticky',
+          top: 0,
+          overflow: 'visible',
+          background: S1,
+          borderRight: `1px solid ${BORDER}`,
+          transition: 'width 0.2s cubic-bezier(.4,0,.2,1)',
         }}
       >
-        {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-      </button>
-      <SidebarContent collapsed={collapsed} />
-    </aside>
+        <button
+          onClick={() => setCollapsed(current => !current)}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{
+            position: 'absolute',
+            top: 16,
+            right: 0,
+            transform: 'translateX(50%)',
+            width: 24,
+            height: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--app-panel-strong)',
+            border: `1px solid ${BORDER}`,
+            borderRadius: 8,
+            color: T2,
+            cursor: 'pointer',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.28)',
+            zIndex: 20,
+          }}
+        >
+          {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+        </button>
+        <SidebarContent collapsed={collapsed} />
+      </aside>
+      <MobileDrawer />
+    </>
   );
 }

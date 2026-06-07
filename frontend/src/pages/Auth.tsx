@@ -131,12 +131,12 @@ export default function Auth() {
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
         <div className="grid w-full gap-12 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-start lg:gap-20">
 
-          {/* ── Left panel ──────────────────────────────────────────────────────── */}
-          <section className="relative flex flex-col justify-center lg:pb-72">
+          {/* ── Left panel — hidden on mobile ───────────────────────────────────── */}
+          <section className="relative hidden flex-col justify-center lg:flex lg:pb-72">
             <FlyxaLogo
               size={86}
               showWordmark
-              className="mb-8 min-w-[360px]"
+              className="mb-8"
               wordmarkClassName="text-[4rem] font-light tracking-[-0.05em] sm:text-[4.4rem]"
               subtitleClassName="text-[11px] tracking-[0.56em] sm:text-xs"
             />

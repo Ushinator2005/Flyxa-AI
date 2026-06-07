@@ -1,4 +1,4 @@
-import { Settings, ChevronDown } from 'lucide-react';
+import { Settings, ChevronDown, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
@@ -42,6 +42,7 @@ export default function Header() {
   const pageName = pageNames[location.pathname] || 'Flyxa';
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const visibleAccounts = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -59,6 +60,9 @@ export default function Header() {
   const openTradeCheck = () => {
     window.dispatchEvent(new Event('flyxa:open-trade-check'));
   };
+  const openMobileNav = () => {
+    window.dispatchEvent(new CustomEvent('flyxa:open-mobile-nav'));
+  };
 
   return (
     <>
@@ -70,11 +74,35 @@ export default function Header() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 20px',
+        padding: '0 16px',
         flexShrink: 0,
+        gap: 8,
       }}
     >
-<h1 style={{
+      {/* Mobile hamburger — hidden on md+ */}
+      <button
+        type="button"
+        onClick={openMobileNav}
+        className="md:hidden"
+        aria-label="Open navigation"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 34,
+          height: 34,
+          borderRadius: 6,
+          border: '1px solid var(--app-border)',
+          background: 'var(--app-bg)',
+          color: 'var(--app-text-muted)',
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        <Menu size={16} />
+      </button>
+
+      <h1 style={{
         fontSize: 13,
         fontWeight: 600,
         letterSpacing: '0.08em',
@@ -82,12 +110,19 @@ export default function Header() {
         color: 'var(--app-text-subtle)',
         fontFamily: 'var(--font-sans)',
         margin: 0,
+        flex: 1,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
       }}>
         {pageName}
       </h1>
+
       <MarketClock displayTimezone={preferences.timezone} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {/* Custom account dropdown with color dots */}
+
+      {/* Desktop-only controls */}
+      <div className="hidden md:flex" style={{ alignItems: 'center', gap: 10 }}>
+        {/* Account dropdown */}
         <div ref={dropdownRef} style={{ position: 'relative' }}>
           <button
             type="button"
@@ -135,7 +170,6 @@ export default function Header() {
               zIndex: 9999,
               boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
             }}>
-              {/* All Accounts option */}
               <button
                 type="button"
                 onClick={() => { setSelectedAccountId(ALL_ACCOUNTS_ID); setOpen(false); }}
@@ -159,7 +193,7 @@ export default function Header() {
                 {selectedAccountId === ALL_ACCOUNTS_ID && <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--amber)' }}>✓</span>}
               </button>
 
-              {accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID).map(account => (
+              {visibleAccounts.map(account => (
                 <button
                   key={account.id}
                   type="button"
@@ -187,6 +221,7 @@ export default function Header() {
             </div>
           )}
         </div>
+
         <button
           type="button"
           onClick={openTradeCheck}
@@ -246,6 +281,31 @@ export default function Header() {
         >
           <Settings size={15} />
         </button>
+      </div>
+
+      {/* Mobile-only controls */}
+      <div className="flex md:hidden" style={{ alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          onClick={openTradeCheck}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 34,
+            height: 34,
+            borderRadius: 5,
+            border: 'none',
+            background: '#f59e0b',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          aria-label="Open Trade Guard"
+          title="Open Trade Guard"
+        >
+          <span style={{ fontSize: 14 }}>⚡</span>
+        </button>
+        <ThemeToggle compact />
       </div>
     </header>
     </>

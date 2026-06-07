@@ -34,7 +34,7 @@ export default function Layout() {
         {riskLevel !== 'normal' && dailyStatus && (
           <RiskWarningBanner riskLevel={riskLevel} dailyStatus={dailyStatus} />
         )}
-        <main className={isFullBleed ? 'flex-1 overflow-hidden p-0' : 'flex-1 overflow-auto p-8'}>
+        <main className={isFullBleed ? 'flex-1 overflow-hidden p-0' : 'flex-1 overflow-auto p-4 md:p-8'}>
           <div className={isFullBleed ? 'h-full w-full' : 'mx-auto max-w-[1400px]'}>
             <ErrorBoundary>
               <div key={location.key} className="page-transition h-full">
