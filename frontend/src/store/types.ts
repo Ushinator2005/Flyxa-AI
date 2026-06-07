@@ -186,6 +186,7 @@ export interface BillingPayout {
 export interface BillingAccount {
   id: string;
   firm: string;
+  accountType?: string;
   size: string;
   listPrice: number;
   discountCode: string;

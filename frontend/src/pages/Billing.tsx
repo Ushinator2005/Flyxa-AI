@@ -27,6 +27,7 @@ interface PayoutEntry {
 interface BillingAccount {
   id: string;
   firm: string;
+  accountType: string;
   size: string;
   listPrice: number;
   discountCode: string;
@@ -41,6 +42,7 @@ interface BillingAccount {
 
 interface BillingFormState {
   firm: string;
+  accountType: string;
   size: string;
   listPrice: number;
   discountCode: string;
@@ -60,7 +62,9 @@ const PIPELINE_COLS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 
 
 const FIRM_OPTIONS = [
   'Apex Funded',
+  'Alpha Futures',
   'FTMO',
+  'Lucid',
   'MyFundedFutures',
   'Topstep',
   'The Funded Trader',
@@ -68,6 +72,34 @@ const FIRM_OPTIONS = [
   'E8 Funding',
   'Other',
 ] as const;
+
+const FIRM_ACCOUNT_TYPES: Record<string, Array<{ type: string; sizes: string[] }>> = {
+  'Apex Funded': [
+    { type: 'Evaluation', sizes: ['$25,000', '$50,000', '$100,000', '$150,000', '$250,000', '$300,000'] },
+  ],
+  'Alpha Futures': [
+    { type: 'Standard Plan', sizes: ['$50,000', '$100,000', '$150,000'] },
+    { type: 'Advanced Plan', sizes: ['$50,000', '$100,000', '$150,000'] },
+    { type: 'Premium Plan', sizes: ['$50,000', '$100,000', '$150,000'] },
+  ],
+  FTMO: [
+    { type: 'Challenge', sizes: ['€10,000', '€25,000', '€50,000', '€100,000', '€200,000'] },
+  ],
+  Lucid: [
+    { type: 'LucidFlex', sizes: ['$25,000', '$50,000', '$100,000', '$150,000'] },
+    { type: 'LucidPro', sizes: ['$25,000', '$50,000', '$100,000', '$150,000'] },
+    { type: 'LucidDirect', sizes: ['$25,000', '$50,000', '$100,000', '$150,000'] },
+    { type: 'LucidMaxx', sizes: ['$50,000', '$100,000', '$150,000'] },
+  ],
+  MyFundedFutures: [
+    { type: 'Starter', sizes: ['$50,000', '$100,000', '$150,000', '$200,000'] },
+    { type: 'Expert', sizes: ['$50,000', '$100,000', '$150,000', '$200,000'] },
+  ],
+  Topstep: [
+    { type: 'Trading Combine', sizes: ['$50,000', '$100,000', '$150,000'] },
+    { type: 'Express Funded Account', sizes: ['$50,000', '$100,000', '$150,000'] },
+  ],
+};
 
 const FIRM_PRICES: Record<string, Record<string, number>> = {
   'Apex Funded': {
@@ -78,12 +110,23 @@ const FIRM_PRICES: Record<string, Record<string, number>> = {
     '$250,000': 497,
     '$300,000': 597,
   },
+  'Alpha Futures': {
+    '$50,000': 97,
+    '$100,000': 167,
+    '$150,000': 297,
+  },
   FTMO: {
     '€10,000': 155,
     '€25,000': 250,
     '€50,000': 345,
     '€100,000': 540,
     '€200,000': 1080,
+  },
+  Lucid: {
+    '$25,000': 79,
+    '$50,000': 149,
+    '$100,000': 249,
+    '$150,000': 349,
   },
   MyFundedFutures: {
     '$50,000': 165,
@@ -109,6 +152,9 @@ function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
   return {
     id: raw.id,
     firm: raw.firm,
+    accountType: typeof (raw as unknown as { accountType?: string }).accountType === 'string'
+      ? (raw as unknown as { accountType: string }).accountType
+      : getDefaultAccountType(raw.firm),
     size: raw.size,
     listPrice: raw.listPrice,
     discountCode: raw.discountCode,
@@ -179,7 +225,20 @@ function getTodayInputDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getSizesForFirm(firm: string): string[] {
+function getAccountTypesForFirm(firm: string): string[] {
+  return FIRM_ACCOUNT_TYPES[firm]?.map(item => item.type) ?? [];
+}
+
+function getDefaultAccountType(firm: string): string {
+  return getAccountTypesForFirm(firm)[0] ?? 'Custom';
+}
+
+function getSizesForFirm(firm: string, accountType?: string): string[] {
+  const types = FIRM_ACCOUNT_TYPES[firm];
+  if (types?.length) {
+    const selected = types.find(item => item.type === accountType) ?? types[0];
+    return selected.sizes;
+  }
   return Object.keys(FIRM_PRICES[firm] ?? {});
 }
 
@@ -192,10 +251,12 @@ function createId() {
 
 function getDefaultFormState(): BillingFormState {
   const defaultFirm = 'Apex Funded';
+  const defaultAccountType = getDefaultAccountType(defaultFirm);
   const defaultSize = '$100,000';
   const defaultListPrice = FIRM_PRICES[defaultFirm]?.[defaultSize] ?? 0;
   return {
     firm: defaultFirm,
+    accountType: defaultAccountType,
     size: defaultSize,
     listPrice: defaultListPrice,
     discountCode: '',
@@ -305,6 +366,7 @@ export default function Billing() {
     setEditingId(account.id);
     setForm({
       firm: account.firm,
+      accountType: account.accountType ?? getDefaultAccountType(account.firm),
       size: account.size,
       listPrice: account.listPrice,
       discountCode: account.discountCode,
@@ -424,7 +486,9 @@ export default function Billing() {
     return map;
   }, [accounts]);
 
-  const knownSizes = useMemo(() => getSizesForFirm(form.firm), [form.firm]);
+  const accountTypeOptions = useMemo(() => getAccountTypesForFirm(form.firm), [form.firm]);
+  const hasAccountTypeLookup = accountTypeOptions.length > 0;
+  const knownSizes = useMemo(() => getSizesForFirm(form.firm, form.accountType), [form.accountType, form.firm]);
   const hasFirmLookup = knownSizes.length > 0;
   const currentLivePricing = livePricesByFirm[form.firm];
   const selectedSizeIsFallback = Boolean(currentLivePricing?.unavailableSizes?.includes(form.size));
@@ -445,6 +509,7 @@ export default function Billing() {
     const next: BillingAccount = {
       id: editingId ?? createId(),
       firm: form.firm.trim() || 'Other',
+      accountType: form.accountType.trim() || getDefaultAccountType(form.firm.trim() || 'Other'),
       size: form.size.trim() || 'Custom',
       listPrice,
       discountCode: form.discountCode.trim().toUpperCase(),
@@ -476,11 +541,13 @@ export default function Billing() {
   };
 
   const applyFirm = (firm: string) => {
-    const nextSizes = getSizesForFirm(firm);
+    const nextAccountType = getDefaultAccountType(firm);
+    const nextSizes = getSizesForFirm(firm, nextAccountType);
     const nextSize = nextSizes[0] ?? form.size;
     const nextListPrice = getPreferredListPrice(firm, nextSize, form.listPrice);
     setForm(current => ({
       ...current, firm,
+      accountType: nextAccountType,
       size: nextSizes.length > 0 ? nextSize : current.size,
       listPrice: nextListPrice,
     }));
@@ -491,6 +558,18 @@ export default function Billing() {
         current.firm === firm && current.size === nextSize ? { ...current, listPrice: livePrice } : current
       ));
     });
+  };
+
+  const applyAccountType = (accountType: string) => {
+    const nextSizes = getSizesForFirm(form.firm, accountType);
+    const nextSize = nextSizes[0] ?? form.size;
+    const nextListPrice = getPreferredListPrice(form.firm, nextSize, form.listPrice);
+    setForm(current => ({
+      ...current,
+      accountType,
+      size: nextSizes.length > 0 ? nextSize : current.size,
+      listPrice: nextListPrice,
+    }));
   };
 
   const applySize = (size: string) => {
@@ -759,7 +838,10 @@ export default function Billing() {
                         colAccounts.map(a => (
                           <div key={a.id} className="pipeline-card" onClick={() => openEditModal(a)}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
-                              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{a.firm}</p>
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{a.firm}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.accountType}</p>
+                              </div>
                               <button
                                 type="button"
                                 className="billing-action-icon billing-delete"
@@ -807,7 +889,7 @@ export default function Billing() {
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1200 }}>
                 <thead>
                   <tr>
-                    {['Firm', 'Size', 'Purchased', 'Status', 'List Price', 'Discount', 'Actual Price', 'Payouts', 'ROI', 'Notes', 'Actions'].map(header => (
+                    {['Firm', 'Type', 'Size', 'Purchased', 'Status', 'List Price', 'Discount', 'Actual Price', 'Payouts', 'ROI', 'Notes', 'Actions'].map(header => (
                       <th key={header} style={{ textAlign: 'left', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)', padding: '10px 14px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
                         {header}
                       </th>
@@ -817,7 +899,7 @@ export default function Billing() {
                 <tbody>
                   {filteredAccounts.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ padding: '26px 24px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)', borderBottom: '1px solid var(--border-sub)' }}>
+                      <td colSpan={12} style={{ padding: '26px 24px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)', borderBottom: '1px solid var(--border-sub)' }}>
                         <div style={{ display: 'grid', placeItems: 'center', gap: 10 }}>
                           <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)' }}>
                             <CreditCard size={16} />
@@ -840,6 +922,7 @@ export default function Billing() {
                           <td style={cellStyle}>
                             <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{account.firm}</p>
                           </td>
+                          <td style={{ ...cellStyle, fontSize: 12, color: 'var(--txt-2)', whiteSpace: 'nowrap' }}>{account.accountType}</td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt)', whiteSpace: 'nowrap' }}>{account.size}</td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>{formatDateLabel(account.purchaseDate)}</td>
                           <td style={cellStyle}>
@@ -988,6 +1071,18 @@ export default function Billing() {
                 <select className="billing-modal-field" value={form.firm} onChange={e => applyFirm(e.target.value)}>
                   {FIRM_OPTIONS.map(firm => <option key={firm} value={firm}>{firm}</option>)}
                 </select>
+              </div>
+
+              {/* Account Type */}
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Account Type</label>
+                {hasAccountTypeLookup ? (
+                  <select className="billing-modal-field" value={form.accountType} onChange={e => applyAccountType(e.target.value)}>
+                    {accountTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                ) : (
+                  <input className="billing-modal-field" value={form.accountType} onChange={e => setFormField('accountType', e.target.value)} placeholder="Evaluation, funded, instant..." />
+                )}
               </div>
 
               {/* Size */}
