@@ -37,7 +37,9 @@ export default function Layout() {
         <main className={isFullBleed ? 'flex-1 overflow-hidden p-0' : 'flex-1 overflow-auto p-8'}>
           <div className={isFullBleed ? 'h-full w-full' : 'mx-auto max-w-[1400px]'}>
             <ErrorBoundary>
-              <Outlet />
+              <div key={location.key} className="page-transition h-full">
+                <Outlet />
+              </div>
             </ErrorBoundary>
           </div>
         </main>
