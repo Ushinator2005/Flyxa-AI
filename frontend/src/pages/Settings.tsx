@@ -7,8 +7,9 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRivals } from '../hooks/useRivals.js';
-import { supabase } from '../services/api.js';
+import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import { clearCurrentUserStoreCache } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 
@@ -560,6 +561,8 @@ export default function Settings() {
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showResetPanel, setShowResetPanel] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetWorking, setResetWorking] = useState(false);
+  const [resetError, setResetError] = useState('');
   const [profileDraft, setProfileDraft] = useState('');
   const [profileStatus, setProfileStatus] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
@@ -786,6 +789,50 @@ export default function Settings() {
       setProfileStatus(error instanceof Error ? error.message : 'Could not update profile picture.');
     } finally {
       setProfilePhotoUploading(false);
+    }
+  }
+
+  function clearResetLocalKeys() {
+    if (!user?.id) return;
+    const keys = [
+      `tw_accounts_${user.id}`,
+      `tw_preferences_${user.id}`,
+      `tw_selected_account_${user.id}`,
+      `tw_trade_accounts_${user.id}`,
+      `tw_confluence_options_${user.id}`,
+      'flyxa_entries',
+      'flyxa_billing_accounts',
+      'flyxa_trading_plan_state_v1',
+      'flyxa_checklist',
+      'tw_goals_local',
+      'flyxa-store',
+      'flyxa-store-uid',
+      'flyxa-entries-safe',
+      'flyxa-entries-safe-uid',
+      'flyxa-store-saved-at',
+      'flyxa_store_migrated_v1',
+    ];
+    keys.forEach(key => {
+      try { window.localStorage.removeItem(key); } catch { /* ignore */ }
+    });
+  }
+
+  async function handleConfirmResetAllData() {
+    if (resetConfirmText !== 'RESET' || resetWorking) return;
+
+    setResetWorking(true);
+    setResetError('');
+    try {
+      await accountApi.reset();
+      await clearCurrentUserStoreCache();
+      clearResetLocalKeys();
+      resetAllData();
+      setShowResetPanel(false);
+      setResetConfirmText('');
+      window.setTimeout(() => window.location.reload(), 150);
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : 'Could not reset account data.');
+      setResetWorking(false);
     }
   }
 
@@ -2427,7 +2474,7 @@ export default function Settings() {
         <SectionDivider label="Danger Zone" />
         <SectionCard
           title="Reset all data"
-          subtitle="Permanently delete all trades, journal entries, accounts, goals, and backtest sessions. This cannot be undone."
+          subtitle="Permanently wipe this account back to a fresh state. Your username is preserved."
         >
           {!showResetPanel ? (
             <button
@@ -2446,7 +2493,7 @@ export default function Settings() {
           ) : (
             <div style={{ border: '1px solid rgba(239,68,68,0.35)', borderRadius: 8, padding: '16px', background: 'rgba(239,68,68,0.05)' }}>
               <p style={{ margin: '0 0 12px', fontSize: 13, color: '#fca5a5', lineHeight: 1.6 }}>
-                This will permanently erase <strong>all trades, journal entries, accounts, goals, and backtests</strong>. Your settings, scanner colors, and rule templates will be kept.
+                This will permanently erase <strong>trades, journal entries, accounts, goals, backtests, settings, risk rules, pre-session data, friends, and cached backups</strong>. Only your Flyxa username will be kept.
               </p>
               <p style={{ margin: '0 0 10px', fontSize: 12, color: T3 }}>
                 Type <strong style={{ color: '#f87171' }}>RESET</strong> to confirm:
@@ -2465,22 +2512,18 @@ export default function Settings() {
                 />
                 <button
                   type="button"
-                  disabled={resetConfirmText !== 'RESET'}
-                  onClick={() => {
-                    resetAllData();
-                    setShowResetPanel(false);
-                    setResetConfirmText('');
-                  }}
+                  disabled={resetConfirmText !== 'RESET' || resetWorking}
+                  onClick={() => { void handleConfirmResetAllData(); }}
                   style={{
                     height: 34, padding: '0 16px', borderRadius: 6,
                     border: 'none',
-                    background: resetConfirmText === 'RESET' ? '#ef4444' : 'rgba(239,68,68,0.2)',
-                    color: resetConfirmText === 'RESET' ? '#fff' : 'rgba(239,68,68,0.4)',
-                    fontSize: 13, fontWeight: 700, cursor: resetConfirmText === 'RESET' ? 'pointer' : 'not-allowed',
+                    background: resetConfirmText === 'RESET' && !resetWorking ? '#ef4444' : 'rgba(239,68,68,0.2)',
+                    color: resetConfirmText === 'RESET' && !resetWorking ? '#fff' : 'rgba(239,68,68,0.4)',
+                    fontSize: 13, fontWeight: 700, cursor: resetConfirmText === 'RESET' && !resetWorking ? 'pointer' : 'not-allowed',
                     fontFamily: SANS, transition: 'background 0.15s, color 0.15s',
                   }}
                 >
-                  Confirm Reset
+                  {resetWorking ? 'Resetting...' : 'Confirm Reset'}
                 </button>
                 <button
                   type="button"
@@ -2494,6 +2537,11 @@ export default function Settings() {
                   Cancel
                 </button>
               </div>
+              {resetError && (
+                <p style={{ margin: '10px 0 0', color: '#fca5a5', fontSize: 12 }}>
+                  {resetError}
+                </p>
+              )}
             </div>
           )}
         </SectionCard>

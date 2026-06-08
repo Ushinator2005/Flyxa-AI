@@ -262,6 +262,10 @@ export const rivalsApi = {
     api.put<RivalRequestResponse>(`/api/rivals/requests/${id}`, { action }),
 };
 
+export const accountApi = {
+  reset: () => api.post<{ ok: boolean; preserved: string[] }>('/api/account/reset', {}),
+};
+
 export interface BillingLivePricesResponse {
   firm: string;
   prices: Record<string, number>;

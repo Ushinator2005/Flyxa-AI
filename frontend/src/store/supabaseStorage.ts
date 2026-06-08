@@ -305,6 +305,25 @@ export async function flushSupabaseStoreNow(): Promise<void> {
   await flushSaveWithRetry(userId, value);
 }
 
+export async function clearCurrentUserStoreCache(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  pendingValue = null;
+
+  const userId = await getUserId();
+  if (!userId) return;
+
+  try {
+    localStorage.removeItem(localStoreKey(userId));
+    localStorage.removeItem(localSavedAtKey(userId));
+    localStorage.removeItem(localEntriesSafeKey(userId));
+  } catch { /* ignore */ }
+
+  clearLegacyKeys();
+}
+
 // On page close/refresh fire a keepalive fetch so the save completes even if
 // the tab is being destroyed.
 if (typeof window !== 'undefined') {
