@@ -213,11 +213,19 @@ function parseFollowedPlan(v: string): boolean | null {
   return null;
 }
 
+function cleanTag(tag: string): string {
+  return tag
+    .replace(/\s*\(https?:\/\/[^)]*\)\s*/gi, ' ')  // strip "(https://...)" inline links
+    .replace(/https?:\/\/\S+/gi, ' ')               // strip bare URLs
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function parseTags(v: string): string[] {
   if (!v) return [];
   return v
     .split(/[,;|]/)
-    .map(tag => tag.trim())
+    .map(tag => cleanTag(tag))
     .filter(Boolean)
     .filter((tag, index, all) => all.findIndex(item => item.toLowerCase() === tag.toLowerCase()) === index);
 }

@@ -9,7 +9,7 @@ import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsConte
 import { useRivals } from '../hooks/useRivals.js';
 import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { clearCurrentUserStoreCache } from '../store/supabaseStorage.js';
+import { clearCurrentUserStoreCache, flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 
@@ -823,13 +823,16 @@ export default function Settings() {
     setResetWorking(true);
     setResetError('');
     try {
-      await accountApi.reset();
-      await clearCurrentUserStoreCache();
-      clearResetLocalKeys();
-      resetAllData();
+      // Best-effort server-side wipe — don't let a backend error block the local reset
+      try { await accountApi.reset(); } catch { /* ignored — local reset proceeds regardless */ }
+
+      resetAllData();                      // reset Zustand store to initial state
+      await flushSupabaseStoreNow();       // immediately write the empty state to Supabase
+      await clearCurrentUserStoreCache();  // clear per-user localStorage cache
+      clearResetLocalKeys();               // clear legacy localStorage keys
       setShowResetPanel(false);
       setResetConfirmText('');
-      window.setTimeout(() => window.location.reload(), 150);
+      window.location.reload();
     } catch (error) {
       setResetError(error instanceof Error ? error.message : 'Could not reset account data.');
       setResetWorking(false);
