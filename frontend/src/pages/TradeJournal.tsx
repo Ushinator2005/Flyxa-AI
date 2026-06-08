@@ -1513,7 +1513,7 @@ function ExecutionReviewBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
       </div>
       <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={e => update({ note: e.target.value })}
         placeholder="Anything specific about how you managed this trade that you want to remember — good or bad."
-        style={{ width:'100%', minHeight:60, padding:'10px 14px', fontSize:11, fontFamily:'var(--font-sans)', background:'transparent', border:'none', outline:'none', resize:'none', color:'var(--app-text-muted)', boxSizing:'border-box' }} />
+        style={{ width:'100%', minHeight:60, padding:'10px 14px', fontSize:11, fontFamily:'var(--font-sans)', background:'transparent', border:'none', outline:'none', resize:'none', color:'var(--txt)', boxSizing:'border-box' }} />
     </div>
   );
 }
