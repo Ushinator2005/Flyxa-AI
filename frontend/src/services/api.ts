@@ -227,6 +227,7 @@ export interface RivalProfileResponse {
   displayName: string;
   avatarInitials: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   stats?: {
     dailyJournalStreak: number;
     dailyJournalScore: number;
@@ -249,7 +250,7 @@ export interface RivalRequestResponse {
 
 export const rivalsApi = {
   getProfile: () => api.get<RivalProfileResponse | null>('/api/rivals/profile'),
-  updateProfile: (data: { username: string; displayName?: string; avatarColor?: string }) =>
+  updateProfile: (data: { username: string; displayName?: string; avatarColor?: string; avatarUrl?: string | null }) =>
     api.put<RivalProfileResponse>('/api/rivals/profile', data),
   updateStats: (stats: NonNullable<RivalProfileResponse['stats']>) =>
     api.put<RivalProfileResponse>('/api/rivals/profile/stats', { stats }),

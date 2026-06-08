@@ -77,7 +77,7 @@ export default function RivalsList({ rivals, currentUser }: RivalsListProps) {
                   color: rival.avatarColor,
                 }}
               >
-                {rival.avatarInitials}
+                {rival.avatarUrl ? <img src={rival.avatarUrl} alt="" /> : rival.avatarInitials}
               </div>
               <div className="rv-name">
                 <h4 className={isMe ? 'is-me' : undefined}>{rival.displayName}</h4>

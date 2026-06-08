@@ -972,7 +972,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
             onBlur={event => commit('exit', event.target.value)}
             placeholder="-"
           />
-          <div className="tj-pl-diff" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+          <div className="tj-pl-diff" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {renderPointsDiff(exitDelta, 'auto')}
             {entryValue !== undefined && (
               <button
@@ -982,10 +982,23 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
                   setLocal(prev => ({ ...prev, exit: v }));
                   onMutate({ exit: entryValue, exitPrice: entryValue, pnlOverride: 0, priceLevelsSource: 'manual', priceLevelsEdited: true });
                 }}
-                style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, border: '1px solid var(--amber-border, var(--amber))', background: 'var(--amber-dim)', color: 'var(--amber)', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}
+                style={{
+                  fontSize: 11,
+                  padding: '4px 0',
+                  borderRadius: 4,
+                  border: '1px solid var(--amber)',
+                  background: trade.result === 'be' ? 'var(--amber)' : 'var(--amber-dim)',
+                  color: trade.result === 'be' ? '#111' : 'var(--amber)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  width: '100%',
+                  textAlign: 'center',
+                }}
                 title="Set exit to entry price (Breakeven)"
               >
-                BE
+                Break Even
               </button>
             )}
           </div>

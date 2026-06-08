@@ -93,7 +93,7 @@ function normalizeStats(value: unknown): RivalStats {
 async function getProfileByUserId(userId: string) {
   const { data, error } = await supabase
     .from('rival_profiles')
-    .select('user_id, username, display_name, avatar_color, stats')
+    .select('user_id, username, display_name, avatar_color, avatar_url, stats')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -103,7 +103,7 @@ async function getProfileByUserId(userId: string) {
 async function getProfileByUsername(username: string) {
   const { data, error } = await supabase
     .from('rival_profiles')
-    .select('user_id, username, display_name, avatar_color, stats')
+    .select('user_id, username, display_name, avatar_color, avatar_url, stats')
     .eq('username', username)
     .maybeSingle();
   if (error) throw error;
@@ -115,6 +115,7 @@ function toRivalProfile(profile: {
   username: string;
   display_name: string | null;
   avatar_color: string | null;
+  avatar_url?: string | null;
   stats?: unknown;
 }) {
   const username = profile.username;
@@ -124,6 +125,7 @@ function toRivalProfile(profile: {
     displayName: profile.display_name || username,
     avatarInitials: initialsFromUsername(username),
     avatarColor: profile.avatar_color || '#f59e0b',
+    avatarUrl: profile.avatar_url || null,
     stats: normalizeStats(profile.stats ?? EMPTY_STATS),
   };
 }
@@ -156,17 +158,34 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
     const avatarColor = typeof avatarColorRaw === 'string' && /^#[0-9a-fA-F]{6}$/.test(avatarColorRaw)
       ? avatarColorRaw
       : '#f59e0b';
+    const avatarUrlRaw = (req.body as { avatarUrl?: unknown }).avatarUrl;
+    const avatarUrl = typeof avatarUrlRaw === 'string' && avatarUrlRaw.trim()
+      ? avatarUrlRaw.trim().slice(0, 2000)
+      : null;
+
+    const profileUpdate: {
+      user_id: string;
+      username: string;
+      display_name: string;
+      avatar_color: string;
+      avatar_url?: string | null;
+      updated_at: string;
+    } = {
+      user_id: req.userId!,
+      username,
+      display_name: displayName,
+      avatar_color: avatarColor,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (avatarUrlRaw !== undefined) {
+      profileUpdate.avatar_url = avatarUrl;
+    }
 
     const { data, error } = await supabase
       .from('rival_profiles')
-      .upsert({
-        user_id: req.userId!,
-        username,
-        display_name: displayName,
-        avatar_color: avatarColor,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' })
-      .select('user_id, username, display_name, avatar_color, stats')
+      .upsert(profileUpdate, { onConflict: 'user_id' })
+      .select('user_id, username, display_name, avatar_color, avatar_url, stats')
       .single();
 
     if (error) {
@@ -196,7 +215,7 @@ router.put('/profile/stats', authMiddleware, async (req: AuthenticatedRequest, r
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', req.userId!)
-      .select('user_id, username, display_name, avatar_color, stats')
+      .select('user_id, username, display_name, avatar_color, avatar_url, stats')
       .maybeSingle();
 
     if (error) throw error;
@@ -246,7 +265,7 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response,
     if (otherUserIds.length > 0) {
       const { data: profiles, error: profilesError } = await supabase
         .from('rival_profiles')
-        .select('user_id, username, display_name, avatar_color, stats')
+        .select('user_id, username, display_name, avatar_color, avatar_url, stats')
         .in('user_id', otherUserIds);
       if (profilesError) throw profilesError;
       for (const profile of profiles ?? []) profilesById.set(profile.user_id, toRivalProfile(profile));

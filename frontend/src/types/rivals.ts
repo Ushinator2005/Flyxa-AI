@@ -25,6 +25,7 @@ export interface Rival {
   displayName: string;
   avatarInitials: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   mascot: Mascot;
   isMe?: boolean;
 }

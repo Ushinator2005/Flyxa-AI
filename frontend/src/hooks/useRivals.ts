@@ -181,6 +181,7 @@ function rivalFromRequest(request: RivalRequestResponse): Rival | null {
     displayName: profile.displayName,
     avatarInitials: profile.avatarInitials,
     avatarColor: profile.avatarColor,
+    avatarUrl: profile.avatarUrl ?? null,
     mascot: {
       stage: getMascotStage(stats.processScore),
       name: profile.displayName,
@@ -252,7 +253,7 @@ export function useRivals() {
     [rivalRequests]
   );
 
-  const saveProfile = async (data: { username: string; displayName?: string; avatarColor?: string }) => {
+  const saveProfile = async (data: { username: string; displayName?: string; avatarColor?: string; avatarUrl?: string | null }) => {
     const next = await rivalsApi.updateProfile(data);
     setProfile(next);
   };
@@ -285,6 +286,7 @@ export function useRivals() {
       displayName: 'You',
       avatarInitials: 'YU',
       avatarColor: '#f59e0b',
+      avatarUrl: profile?.avatarUrl ?? null,
       isMe: true,
       mascot: {
         stage: getMascotStage(processScore),
@@ -305,7 +307,7 @@ export function useRivals() {
 
     me.mascot.xp = getMascotXP(me.mascot.streakDays, me.mascot.stats);
     return me;
-  }, [backtestSessions.length, dailyJournalEntries, entries]);
+  }, [backtestSessions.length, dailyJournalEntries, entries, profile?.avatarUrl]);
 
   const myStatsSignature = useMemo(() => JSON.stringify(myRival.mascot.stats), [myRival.mascot.stats]);
 

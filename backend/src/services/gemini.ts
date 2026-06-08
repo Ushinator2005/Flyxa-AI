@@ -257,6 +257,12 @@ Any candle positioned to the RIGHT of this boundary is outside the trade — com
 If neither SL nor TP is touched within the P&L box boundary, set exit_reason to null.`
   : `Only scan candles that fall within the colored P&L overlay region. Do not read price action outside the box.`}
 
+PRIMARY SIGNAL — P&L BOX BACKGROUND COLOR (CHECK THIS BEFORE SCANNING CANDLES):
+Look at the dominant background tint of the entire P&L overlay box:
+- Box is predominantly RED or PINK → the trade closed as a LOSS (SL was hit). Bias your candle scan toward finding the SL touch.
+- Box is predominantly TEAL or GREEN → the trade closed as a WIN (TP was hit). Bias your candle scan toward finding the TP touch.
+This box color is highly reliable. If your candle-by-candle analysis contradicts the box color, re-examine — you have likely made an error in the candle scan.
+
 Starting from the entry candle (left edge of the P&L box), scan candles strictly left to right one by one.
 
 IMPORTANT — HOW TO CHECK IF A LEVEL WAS HIT:
@@ -274,13 +280,20 @@ A candle merely entering a colored zone does NOT mean that level was hit — the
 IMPORTANT: If a candle wick extends BEYOND the outer boundary of a colored zone entirely — i.e., the wick tip is visually above the top of the red/pink zone for a SHORT trade, or below the bottom of the red/pink zone for a LONG trade — this is unambiguously an SL hit. A candle that breaks out past the colored zone is the clearest possible SL trigger. Do not treat this as a borderline case.
 Use the exact price numbers from Step 2 to anchor where each boundary is on the price axis. Only confirm a hit when the wick clearly reaches the price label for that level.
 
+CRITICAL MISTAKE TO AVOID — PARTIAL MOVE TOWARD TP BEFORE SL HIT:
+A very common error is to see price partially move toward TP early in the trade (candles entering the TP zone) and conclude TP was hit — when in reality price reversed and later hit SL.
+RULE: A candle entering the TP zone does NOT count as a TP hit. The wick must reach the FAR OUTER PRICE LINE (the actual TP label price). If the candle turns back before reaching that line, TP was NOT hit. Keep scanning — the SL hit may come later.
+Examples:
+- SHORT trade: a candle's LOW dips into the lower teal zone but does NOT reach the BOTTOM edge (tp_price) — this is NOT a TP hit. If a subsequent candle's HIGH reaches the TOP edge (sl_price), that is the SL hit.
+- LONG trade: a candle's HIGH enters the upper teal zone but does NOT reach the TOP edge (tp_price) — this is NOT a TP hit. If a subsequent candle's LOW reaches the BOTTOM edge (sl_price), that is the SL hit.
+
 For LONG trades:
-- SL hit: a candle LOW wick visibly touches or goes below the sl_price line
-- TP hit: a candle HIGH wick visibly touches or exceeds the tp_price line
+- SL hit: a candle LOW wick visibly touches or goes below the sl_price line (BOTTOM of lower zone)
+- TP hit: a candle HIGH wick visibly touches or exceeds the tp_price line (TOP of upper zone)
 
 For SHORT trades:
-- SL hit: a candle HIGH wick visibly touches or exceeds the sl_price line
-- TP hit: a candle LOW wick visibly touches or goes below the tp_price line
+- SL hit: a candle HIGH wick visibly touches or exceeds the sl_price line (TOP of upper zone)
+- TP hit: a candle LOW wick visibly touches or goes below the tp_price line (BOTTOM of lower zone)
 
 THE MOMENT either level is clearly touched within the box boundary, stop scanning immediately.
 Record exit_reason as 'TP' or 'SL'.

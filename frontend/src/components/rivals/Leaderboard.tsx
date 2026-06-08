@@ -130,7 +130,7 @@ export default function Leaderboard({ rivals, currentUserId, defaultMetric }: Le
                 color: rival.avatarColor,
               }}
             >
-              {rival.avatarInitials}
+              {rival.avatarUrl ? <img src={rival.avatarUrl} alt="" /> : rival.avatarInitials}
             </span>
             <span className="rv-name">
               <h4 className={isMe ? 'is-me' : undefined}>{rival.displayName}</h4>

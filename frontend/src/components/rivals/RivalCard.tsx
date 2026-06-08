@@ -54,9 +54,12 @@ export default function RivalCard({ rival, currentUser, isLast }: RivalCardProps
           fontWeight: 500,
           color: rival.avatarColor,
           letterSpacing: '0.04em',
+          overflow: 'hidden',
         }}
       >
-        {rival.avatarInitials}
+        {rival.avatarUrl ? (
+          <img src={rival.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : rival.avatarInitials}
       </div>
 
       {/* Info */}

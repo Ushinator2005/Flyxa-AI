@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Check, Clock3, Plus, X } from 'lucide-react';
 import { getRivalMetricValue } from '../lib/mascotProgression.js';
 import { useRivals } from '../hooks/useRivals.js';
 import type { RivalRequestResponse } from '../services/api.js';
@@ -108,7 +108,7 @@ export default function Rivals() {
               <div className="rv-section-head">
                 <div>
                   <div className="rv-section-kicker">Friend Requests</div>
-                  <div className="rv-section-title">Rival requests</div>
+                  <div className="rv-section-title">Pending invites</div>
                 </div>
               </div>
               <div className="rivals-request-list">
@@ -160,20 +160,29 @@ function RequestRow({
   return (
     <div className="rivals-request-row">
       <div className="rivals-request-avatar" style={{ color: profile?.avatarColor ?? 'var(--rv-text-2)', borderColor: `${profile?.avatarColor ?? '#ffffff'}38`, background: `${profile?.avatarColor ?? '#ffffff'}14` }}>
-        {profile?.avatarInitials ?? '??'}
+        {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : profile?.avatarInitials ?? '??'}
       </div>
       <div className="rivals-request-copy">
         <strong>{title}</strong>
-        <span>{isIncoming ? 'Incoming request' : 'Outgoing request'} - {subtitle}</span>
+        <span>{isIncoming ? 'Wants to join your leaderboard' : 'Invite sent'} · {subtitle}</span>
       </div>
       <div className="rivals-request-actions">
         {isIncoming ? (
           <>
-            <button type="button" disabled={busy} onClick={() => onAction('accept')}>Accept</button>
-            <button type="button" disabled={busy} onClick={() => onAction('decline')}>Decline</button>
+            <button type="button" className="request-accept" disabled={busy} onClick={() => onAction('accept')}>
+              <Check size={13} />
+              Accept
+            </button>
+            <button type="button" className="request-decline" disabled={busy} onClick={() => onAction('decline')}>
+              <X size={13} />
+              Decline
+            </button>
           </>
         ) : (
-          <button type="button" disabled={busy} onClick={() => onAction('cancel')}>Cancel</button>
+          <button type="button" className="request-decline" disabled={busy} onClick={() => onAction('cancel')}>
+            <Clock3 size={13} />
+            Cancel
+          </button>
         )}
       </div>
     </div>

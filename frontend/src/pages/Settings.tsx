@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRivals } from '../hooks/useRivals.js';
+import { supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
@@ -17,6 +18,7 @@ const DEFAULT_TIMEZONE = 'America/New_York';
 const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Passed', 'Blown'];
 const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 120px 170px 150px 90px';
 const ACCOUNT_TABLE_COLUMN_GAP = '16px';
+const PROFILE_IMAGE_BUCKET = 'trade-screenshots';
 const TIMEZONE_REGION_PRIORITY = ['America', 'Europe', 'Asia', 'Pacific'];
 const SESSION_TIME_FIELDS = [
   { key: 'asia', label: 'Asia' },
@@ -557,6 +559,8 @@ export default function Settings() {
   const [profileDraft, setProfileDraft] = useState('');
   const [profileStatus, setProfileStatus] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef<HTMLElement>(null);
   const generalRef = useRef<HTMLElement>(null);
   const displayRef = useRef<HTMLElement>(null);
@@ -732,6 +736,55 @@ export default function Settings() {
     }
   }
 
+  async function handleProfilePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const username = normalizeUsername(profileDraft || profile?.username || '');
+    if (!username) {
+      setProfileStatus('Choose a username before adding a profile picture.');
+      return;
+    }
+    if (!user?.id) {
+      setProfileStatus('Sign in before adding a profile picture.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setProfileStatus('Choose an image file for your profile picture.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileStatus('Profile picture must be under 5 MB.');
+      return;
+    }
+
+    setProfilePhotoUploading(true);
+    setProfileStatus('');
+    try {
+      const ext = file.type.split('/')[1] || 'png';
+      const path = `${user.id}/profile-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const { error } = await supabase.storage.from(PROFILE_IMAGE_BUCKET).upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (error) throw error;
+
+      const { data } = supabase.storage.from(PROFILE_IMAGE_BUCKET).getPublicUrl(path);
+      await saveProfile({
+        username,
+        displayName: username,
+        avatarUrl: data.publicUrl,
+      });
+      setProfileDraft('');
+      setProfileStatus('Profile picture updated.');
+    } catch (error) {
+      setProfileStatus(error instanceof Error ? error.message : 'Could not update profile picture.');
+    } finally {
+      setProfilePhotoUploading(false);
+    }
+  }
+
   function resetNewAccountForm() {
     setNewAccount({
       name: '',
@@ -798,6 +851,7 @@ export default function Settings() {
     || 'Trader';
   const email = user?.email ?? 'No email on file';
   const avatarInitials = (profile?.avatarInitials || displayName.slice(0, 2)).toUpperCase();
+  const avatarUrl = profile?.avatarUrl ?? null;
 
   useEffect(() => {
     const sectionEntries = [
@@ -1210,10 +1264,17 @@ export default function Settings() {
                 gap: '12px',
               }}
             >
+              <input
+                ref={profilePhotoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={event => { void handleProfilePhotoChange(event); }}
+                style={{ display: 'none' }}
+              />
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
+                  width: '52px',
+                  height: '52px',
                   borderRadius: '12px',
                   background: AMBER_DIM,
                   border: `1px solid ${AMBER}`,
@@ -1225,9 +1286,16 @@ export default function Settings() {
                   fontSize: '13px',
                   fontWeight: 700,
                   flexShrink: 0,
+                  overflow: 'hidden',
                 }}
               >
-                {avatarInitials}
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : avatarInitials}
               </div>
               <div style={{ minWidth: 0 }}>
                 <p style={{ color: T1, fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1239,6 +1307,25 @@ export default function Settings() {
                 <p style={{ marginTop: '8px', color: profileUsername ? 'var(--cobalt)' : T3, fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
                   {profileUsername ? `@${profileUsername}` : 'Username not set'}
                 </p>
+                <button
+                  type="button"
+                  disabled={profilePhotoUploading}
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                  style={{
+                    marginTop: '10px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    border: `1px solid ${BORDER}`,
+                    background: profilePhotoUploading ? 'rgba(255,255,255,0.03)' : S1,
+                    color: profilePhotoUploading ? T3 : T2,
+                    padding: '0 10px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: profilePhotoUploading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {profilePhotoUploading ? 'Uploading...' : avatarUrl ? 'Change photo' : 'Add photo'}
+                </button>
               </div>
             </div>
 
