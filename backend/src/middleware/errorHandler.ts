@@ -16,7 +16,9 @@ export function errorHandler(
   const statusCode = err.statusCode || 500;
   const isClientError = statusCode >= 400 && statusCode < 500;
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const message = isClientError || isDevelopment
+  // Show the actual message for deliberately-set status codes (e.g. 503 setup hints)
+  const hasExplicitStatus = err.statusCode !== undefined && err.statusCode !== 500;
+  const message = isClientError || isDevelopment || hasExplicitStatus
     ? err.message || 'Request failed'
     : 'Internal server error';
 
