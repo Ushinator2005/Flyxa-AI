@@ -1954,6 +1954,7 @@ export default function TradeJournal() {
           tp_price: t.tp_price ?? t.entry_price,
           exit_reason: t.pnl > 0 ? 'TP' : t.pnl < 0 ? 'SL' : 'BE',
           pnl: t.pnl,
+          pnlOverride: t.pnl,
           contract_size: t.contract_size ?? 1,
           trade_date: t.trade_date,
           trade_time: t.trade_time ?? '09:30',
