@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useToastStore } from '../../store/toastStore.js';
 
@@ -23,16 +22,6 @@ const toneStyles = {
 export default function ToastStack() {
   const toasts = useToastStore((state) => state.toasts);
   const dismissToast = useToastStore((state) => state.dismissToast);
-
-  useEffect(() => {
-    const timers = toasts
-      .filter((toast) => toast.durationMs !== null)
-      .map((toast) => window.setTimeout(() => dismissToast(toast.id), toast.durationMs ?? 0));
-
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [dismissToast, toasts]);
 
   if (toasts.length === 0) return null;
 

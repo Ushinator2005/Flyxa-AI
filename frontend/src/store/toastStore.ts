@@ -24,7 +24,13 @@ export const useToastStore = create<ToastState>((set) => ({
   pushToast: (toast) => {
     if (shouldSuppressToast()) return '';
     const id = crypto.randomUUID();
-    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
+    const durationMs = toast.durationMs ?? 5000;
+    set((state) => ({ toasts: [...state.toasts, { ...toast, durationMs, id }] }));
+    if (durationMs !== null) {
+      window.setTimeout(() => {
+        useToastStore.getState().dismissToast(id);
+      }, durationMs);
+    }
     return id;
   },
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),

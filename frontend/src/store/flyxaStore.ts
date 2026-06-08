@@ -129,6 +129,7 @@ export interface FlyxaStore extends FlyxaStateData {
   setChartHistory: (records: ChartHistoryRecord[]) => void;
   addAiReflection: (reflection: AiReflection) => void;
   setOathItems: (items: Array<{ id: string; label: string }> | null) => void;
+  resetAllData: () => void;
 }
 
 function todayIso(): string {
@@ -735,6 +736,8 @@ const useFlyxaStore = create<FlyxaStore>()(
       })),
 
       setOathItems: (items) => set(() => ({ oathItems: items })),
+
+      resetAllData: () => set(() => getInitialState()),
 
       setChartHistory: (records) => set(() => ({ chartHistory: records })),
 

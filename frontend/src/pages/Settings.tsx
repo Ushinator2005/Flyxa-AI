@@ -527,6 +527,7 @@ export default function Settings() {
   const setEntries = useFlyxaStore(state => state.setEntries);
   const addPayout = useFlyxaStore(state => state.addPayout);
   const deletePayout = useFlyxaStore(state => state.deletePayout);
+  const resetAllData = useFlyxaStore(state => state.resetAllData);
   const storeAccounts = useFlyxaStore(state => state.accounts);
   const getPayouts = (accountId: string) => storeAccounts.find(a => a.id === accountId)?.payouts ?? [];
   const {
@@ -557,6 +558,8 @@ export default function Settings() {
   });
   const [activeSection, setActiveSection] = useState<string>('profile');
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [showResetPanel, setShowResetPanel] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
   const [profileDraft, setProfileDraft] = useState('');
   const [profileStatus, setProfileStatus] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
@@ -2415,6 +2418,83 @@ export default function Settings() {
             <p style={{ marginTop: '10px', fontSize: '11px', color: T3 }}>
               {confluenceOptions.length} of 64 tags · Click a tag to rename, or × to delete.
             </p>
+          )}
+        </SectionCard>
+      </section>
+
+      {/* ── Danger Zone ── */}
+      <section style={{ scrollMarginTop: '140px', marginTop: 8 }}>
+        <SectionDivider label="Danger Zone" />
+        <SectionCard
+          title="Reset all data"
+          subtitle="Permanently delete all trades, journal entries, accounts, goals, and backtest sessions. This cannot be undone."
+        >
+          {!showResetPanel ? (
+            <button
+              type="button"
+              onClick={() => setShowResetPanel(true)}
+              style={{
+                height: 36, padding: '0 18px', borderRadius: 6,
+                border: '1px solid rgba(239,68,68,0.5)',
+                background: 'rgba(239,68,68,0.08)',
+                color: '#f87171', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: SANS,
+              }}
+            >
+              Reset all data…
+            </button>
+          ) : (
+            <div style={{ border: '1px solid rgba(239,68,68,0.35)', borderRadius: 8, padding: '16px', background: 'rgba(239,68,68,0.05)' }}>
+              <p style={{ margin: '0 0 12px', fontSize: 13, color: '#fca5a5', lineHeight: 1.6 }}>
+                This will permanently erase <strong>all trades, journal entries, accounts, goals, and backtests</strong>. Your settings, scanner colors, and rule templates will be kept.
+              </p>
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: T3 }}>
+                Type <strong style={{ color: '#f87171' }}>RESET</strong> to confirm:
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  value={resetConfirmText}
+                  onChange={e => setResetConfirmText(e.target.value)}
+                  placeholder="RESET"
+                  style={{
+                    height: 34, padding: '0 12px', borderRadius: 6, width: 140,
+                    border: '1px solid rgba(239,68,68,0.4)',
+                    background: 'var(--app-panel-strong)',
+                    color: 'var(--txt)', fontSize: 13, fontFamily: SANS, outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={resetConfirmText !== 'RESET'}
+                  onClick={() => {
+                    resetAllData();
+                    setShowResetPanel(false);
+                    setResetConfirmText('');
+                  }}
+                  style={{
+                    height: 34, padding: '0 16px', borderRadius: 6,
+                    border: 'none',
+                    background: resetConfirmText === 'RESET' ? '#ef4444' : 'rgba(239,68,68,0.2)',
+                    color: resetConfirmText === 'RESET' ? '#fff' : 'rgba(239,68,68,0.4)',
+                    fontSize: 13, fontWeight: 700, cursor: resetConfirmText === 'RESET' ? 'pointer' : 'not-allowed',
+                    fontFamily: SANS, transition: 'background 0.15s, color 0.15s',
+                  }}
+                >
+                  Confirm Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowResetPanel(false); setResetConfirmText(''); }}
+                  style={{
+                    height: 34, padding: '0 14px', borderRadius: 6,
+                    border: `1px solid ${BORDER}`, background: 'transparent',
+                    color: T3, fontSize: 13, cursor: 'pointer', fontFamily: SANS,
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
         </SectionCard>
       </section>
