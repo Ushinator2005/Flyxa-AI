@@ -654,6 +654,10 @@
   border-left-color: var(--amber-bdr);
 }
 
+.tj-trade-card.be {
+  border-left-color: rgba(251, 191, 36, 0.7);
+}
+
 .tj-trade-grade {
   flex-shrink: 0;
   width: 26px;

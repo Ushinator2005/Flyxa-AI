@@ -31,7 +31,7 @@ import './TradeJournal.css';
 
 type RuleState = 'ok' | 'fail' | 'unchecked';
 type EmotionState = 'neutral' | 'green' | 'amber' | 'red';
-type TradeResult = 'win' | 'loss' | 'open';
+type TradeResult = 'win' | 'loss' | 'open' | 'be';
 type TradeDirection = 'LONG' | 'SHORT';
 type DayFilter = 'all' | 'win' | 'loss' | 'untagged';
 
@@ -338,7 +338,7 @@ function withTradeDerivedValues(trade: JournalTrade): JournalTrade {
     ? trade.pnlOverride
     : calcPnl;
   const rr = computeTradeRr(trade, entry);
-  const result: TradeResult = exit === undefined ? 'open' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'open';
+  const result: TradeResult = exit === undefined ? 'open' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'be';
   return {
     ...trade,
     pnl,
@@ -536,7 +536,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
         const exitPrice = typeof trade.exitPrice === 'number' && trade.exitPrice > 0 ? trade.exitPrice : typeof trade.exit === 'number' && trade.exit > 0 ? trade.exit : 0;
         const contracts = typeof trade.contracts === 'number' && trade.contracts > 0 ? trade.contracts : 1;
         const pnl = typeof trade.pnl === 'number' ? trade.pnl : 0;
-        const result: TradeResult = trade.result === 'win' || trade.result === 'loss' || trade.result === 'open'
+        const result: TradeResult = trade.result === 'win' || trade.result === 'loss' || trade.result === 'open' || trade.result === 'be'
           ? trade.result
           : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'open';
         const tradeRef = (() => {
@@ -972,8 +972,22 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
             onBlur={event => commit('exit', event.target.value)}
             placeholder="-"
           />
-          <div className="tj-pl-diff">
+          <div className="tj-pl-diff" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
             {renderPointsDiff(exitDelta, 'auto')}
+            {entryValue !== undefined && (
+              <button
+                type="button"
+                onClick={() => {
+                  const v = String(entryValue);
+                  setLocal(prev => ({ ...prev, exit: v }));
+                  onMutate({ exit: entryValue, exitPrice: entryValue, pnlOverride: 0, priceLevelsSource: 'manual', priceLevelsEdited: true });
+                }}
+                style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, border: '1px solid var(--amber-border, var(--amber))', background: 'var(--amber-dim)', color: 'var(--amber)', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}
+                title="Set exit to entry price (Breakeven)"
+              >
+                BE
+              </button>
+            )}
           </div>
         </div>
       </div>
