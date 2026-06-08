@@ -36,7 +36,7 @@ interface FieldDef {
 
 const FIELDS: FieldDef[] = [
   { key: 'symbol',         label: 'Symbol',        required: true,  hint: 'NQ, ES, AAPL…'         },
-  { key: 'direction',      label: 'Direction',     required: true,  hint: 'Long/Short, Buy/Sell'   },
+  { key: 'direction',      label: 'Direction',     required: false, hint: 'Long/Short, Buy/Sell — auto-inferred from P&L if missing' },
   { key: 'entry_price',    label: 'Entry Price',   required: false, hint: 'Numeric, optional'      },
   { key: 'exit_price',     label: 'Exit Price',    required: false, hint: 'Numeric, optional'      },
   { key: 'pnl',            label: 'P&L',           required: true,  hint: 'Numeric, e.g. 250 or -100' },
@@ -93,12 +93,12 @@ function parseCSV(text: string): { headers: string[]; rows: string[][] } {
 
 // ─── Auto column guesser ──────────────────────────────────────────────────────
 const GUESSES: Record<FieldKey, string[]> = {
-  symbol:         ['symbol', 'instrument', 'contract', 'ticker', 'market', 'asset', 'pair', 'name'],
-  direction:      ['direction', 'position', 'side', 'b/s', 'buy/sell', 'long/short', 'market pos', 'market pos.', 'pos', 'action'],
-  entry_price:    ['entry price', 'entry', 'open price', 'avg price', 'avg entry', 'buy price', 'entry avg', 'entry level'],
-  exit_price:     ['exit price', 'exit', 'close price', 'sell price', 'avg exit', 'exit avg', 'exit level'],
-  pnl:            ['net pnl', 'net p&l', 'net p/l', 'pnl', 'p&l', 'p/l', 'realized pnl', 'realized p&l', 'realized p/l', 'net profit', 'result $', 'gain/loss', 'gain', 'profit'],
-  trade_date:     ['date', 'trade date', 'entry date', 'open date', 'day', 'session date', 'created time', 'created'],
+  symbol:         ['symbol', 'instrument', 'contract', 'ticker', 'market', 'asset', 'pair', 'name', 'product', 'security', 'underlying'],
+  direction:      ['direction', 'position', 'side', 'b/s', 'buy/sell', 'long/short', 'market pos', 'market pos.', 'pos', 'action', 'trade side', 'order side'],
+  entry_price:    ['entry price', 'entry', 'open price', 'avg price', 'avg entry', 'buy price', 'entry avg', 'entry level', 'avg entry price', 'fill price'],
+  exit_price:     ['exit price', 'exit', 'close price', 'sell price', 'avg exit', 'exit avg', 'exit level', 'avg exit price'],
+  pnl:            ['net pnl', 'net p&l', 'net p/l', 'pnl', 'p&l', 'p/l', 'realized pnl', 'realized p&l', 'realized p/l', 'net profit', 'result $', 'gain/loss', 'gain', 'profit', 'profit/loss', 'profit loss', 'closed p&l', 'closed p/l', 'total profit', 'p&l $', 'net amount'],
+  trade_date:     ['date', 'trade date', 'entry date', 'open date', 'day', 'session date', 'created time', 'created', 'close date', 'exit date', 'execution date', 'trade_date', 'closed date'],
   trade_time:     ['entry time', 'time', 'open time', 'open', 'entry_time', 'opened at', 'start time'],
   close_time:     ['exit time', 'close time', 'exit_time', 'close_time', 'closed at', 'end time'],
   contract_size:  ['qty', 'quantity', 'contracts', 'size', 'volume', 'shares', 'lots', 'position size'],
@@ -156,7 +156,8 @@ function parseDate(v: string): string | null {
   }
   const parsed = new Date(d);
   if (!Number.isNaN(parsed.getTime())) {
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+    // Use UTC to avoid timezone-shifting a date-only string into the previous day
+    return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}-${String(parsed.getUTCDate()).padStart(2, '0')}`;
   }
   return null;
 }
@@ -192,10 +193,16 @@ function parseSymbol(v: string): string {
 function parseNum(v: string): number | null {
   if (!v) return null;
   const raw = v.trim();
-  const cleaned = raw.replace(/[+$,()]/g, '').trim();
+  // Strip currency symbols and leading/trailing currency codes (e.g. "USD 250", "250 EUR", "€250", "£-100")
+  const preStripped = raw
+    .replace(/[€£¥₹]/g, '')
+    .replace(/^[A-Za-z]{2,4}\s+/i, '')   // "USD 250" → "250"
+    .replace(/\s+[A-Za-z]{2,4}$/i, '')    // "250 USD" → "250"
+    .trim();
+  const cleaned = preStripped.replace(/[+$,()]/g, '').trim();
   if (!cleaned || /^[-–—]$/.test(cleaned)) return null;
   const n = parseFloat(cleaned);
-  const neg = /^\(.*\)$/.test(raw) || /^[-\u2212]/.test(raw);
+  const neg = /^\(.*\)$/.test(raw) || /^[-\u2212]/.test(raw) || /^[-\u2212]/.test(preStripped);
   return isNaN(n) ? null : neg ? -Math.abs(n) : n;
 }
 
@@ -251,8 +258,15 @@ function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, stri
   const symbol = parseSymbol(get('symbol'));
   if (!symbol) errors.push('Missing symbol');
 
-  const direction = parseDirection(get('direction'));
-  if (!direction) errors.push(`Unknown direction: "${get('direction')}"`);
+  // Parse P&L first so direction can be inferred from its sign
+  const pnlRaw = get('pnl');
+  const pnl = parseNum(pnlRaw);
+  if (pnl === null) errors.push(`Bad P&L: "${pnlRaw}"`);
+
+  // Direction: use mapped column if available and recognised; otherwise infer from P&L sign.
+  // Never error on missing/unrecognised direction — it is always recoverable from P&L.
+  const direction: 'Long' | 'Short' =
+    parseDirection(get('direction')) ?? (pnl !== null ? (pnl >= 0 ? 'Long' : 'Short') : 'Long');
 
   const entryRaw = get('entry_price');
   const entry_price = parseNum(entryRaw);
@@ -262,15 +276,11 @@ function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, stri
   const exit_price = parseNum(exitRaw);
   if (exitRaw.trim() && exit_price === null) errors.push(`Bad exit price: "${exitRaw}"`);
 
-  const pnlRaw = get('pnl');
-  const pnl = parseNum(pnlRaw);
-  if (pnl === null) errors.push(`Bad P&L: "${pnlRaw}"`);
-
   const dateRaw = get('trade_date');
   const trade_date = parseDate(dateRaw);
   if (!trade_date) errors.push(`Bad date: "${dateRaw}"`);
 
-  if (errors.length > 0) return { symbol, direction: direction ?? 'Long', entry_price: entry_price ?? 0, exit_price: exit_price ?? 0, pnl: pnl ?? 0, trade_date: trade_date ?? '', _errors: errors };
+  if (errors.length > 0) return { symbol, direction, entry_price: entry_price ?? 0, exit_price: exit_price ?? 0, pnl: pnl ?? 0, trade_date: trade_date ?? '', _errors: errors };
 
   const timeRaw = get('trade_time');
   const trade_time = parseTime(timeRaw) ?? undefined;
@@ -288,7 +298,7 @@ function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, stri
   const confluences = parseTags(confluenceRaw);
 
   return {
-    symbol, direction: direction!, entry_price: entry_price ?? exit_price ?? 0,
+    symbol, direction, entry_price: entry_price ?? exit_price ?? 0,
     exit_price: exit_price ?? entry_price ?? 0, pnl: pnl!, trade_date: trade_date!,
     trade_time, close_time, contract_size: contracts && contracts > 0 ? contracts : undefined,
     sl_price, tp_price, pre_trade_notes: notes,
