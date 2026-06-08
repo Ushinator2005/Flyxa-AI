@@ -1337,7 +1337,7 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
         <div style={{ padding:'12px 14px', borderRight:'1px solid var(--app-border)' }}>
           <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:6 }}>Emotional State at Entry</div>
           <select value={pe.emotionalState} onChange={e => update({ emotionalState: e.target.value })}
-            style={{ width:'100%', padding:'5px 8px', fontSize:11, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--app-text-muted)', outline:'none', cursor:'pointer' }}>
+            style={{ width:'100%', padding:'5px 8px', fontSize:11, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--txt)', outline:'none', cursor:'pointer' }}>
             <option value="">Select state...</option>
             {EMOTIONAL_STATES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -1355,7 +1355,7 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
           </div>
           {pe.hesitated && (
             <textarea value={hesReason} onChange={e => setHesReason(e.target.value)} onBlur={e => update({ hesitationReason: e.target.value })}
-              placeholder="What made you hesitate?" style={{ width:'100%', minHeight:40, padding:'6px 8px', fontSize:10, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--app-text-muted)', outline:'none', resize:'none', boxSizing:'border-box' }} />
+              placeholder="What made you hesitate?" style={{ width:'100%', minHeight:40, padding:'6px 8px', fontSize:10, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--txt)', outline:'none', resize:'none', boxSizing:'border-box' }} />
           )}
         </div>
       </div>
@@ -1589,7 +1589,7 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
               <input type="text" value={noteValues[card.key] ?? ''} onChange={e => setNoteValues(p => ({ ...p, [card.key]: e.target.value }))}
                 onBlur={e => { update({ notes: { ...r.notes, [card.key]: e.target.value } }); if (!e.target.value) setNoteOpen(p => ({ ...p, [card.key]: false })); }}
                 placeholder="Why this score?"
-                style={{ width:'100%', marginTop:6, padding:'3px 6px', fontSize:10, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:3, color:'var(--app-text-muted)', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', marginTop:6, padding:'3px 6px', fontSize:10, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:3, color:'var(--txt)', outline:'none', boxSizing:'border-box' }} />
             )}
           </div>
         );

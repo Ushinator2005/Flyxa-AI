@@ -128,6 +128,7 @@ const S2 = 'var(--app-panel-strong)';
 const BORDER = 'var(--app-border)';
 const BSUB = 'rgba(255,255,255,0.04)';
 const T1 = 'var(--app-text)';
+const T2 = 'var(--app-text-muted)';
 const T3 = 'var(--app-text-subtle)';
 const SANS = 'var(--font-sans)';
 

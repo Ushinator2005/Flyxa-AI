@@ -30,6 +30,7 @@ type SessionPlanRow = {
 
 const MARKET_OPEN_MINUTES = 9 * 60 + 30;
 const MARKET_CLOSE_MINUTES = 16 * 60;
+const OATH_CHECK_DELAY_MS = 3000;
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -252,6 +253,8 @@ export default function FlyxaAIPreSession() {
   );
   const [oathEditOpen, setOathEditOpen] = useState(false);
   const [oathDraft, setOathDraft] = useState<Array<{ id: string; label: string }>>([]);
+  const [oathCooldownUntil, setOathCooldownUntil] = useState(0);
+  const [oathCooldownNow, setOathCooldownNow] = useState(() => Date.now());
   const [riskEditOpen, setRiskEditOpen] = useState(false);
   const [riskSaving, setRiskSaving] = useState(false);
   const [riskSaveError, setRiskSaveError] = useState('');
