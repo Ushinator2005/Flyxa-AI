@@ -26,16 +26,27 @@ const EMPTY_STATS: RivalStats = {
   avgR: null,
 };
 
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error !== null && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return String(error);
+}
+
 function isMissingRivalsTableError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("public.rival_profiles") || message.includes("public.rival_requests");
+  const message = extractErrorMessage(error);
+  return message.includes("rival_profiles") || message.includes("rival_requests");
 }
 
 function withRivalsSetupHint(error: unknown): Error {
-  if (!isMissingRivalsTableError(error)) return error instanceof Error ? error : new Error(String(error));
-  const setupError = new Error('Rivals database tables are missing. Run Supabase migration 013_create_rivals.sql.');
-  (setupError as Error & { statusCode?: number }).statusCode = 503;
-  return setupError;
+  if (isMissingRivalsTableError(error)) {
+    const setupError = new Error('Rivals database tables are missing. Run Supabase migration 013_create_rivals.sql.');
+    (setupError as Error & { statusCode?: number }).statusCode = 503;
+    return setupError;
+  }
+  if (error instanceof Error) return error;
+  return new Error(extractErrorMessage(error));
 }
 
 function normalizeUsername(value: unknown): string | null {
@@ -163,7 +174,8 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
         res.status(409).json({ error: 'That username is already taken.' });
         return;
       }
-      throw error;
+      res.status(500).json({ error: error.message || 'Failed to save profile.' });
+      return;
     }
 
     res.json(toRivalProfile(data));
