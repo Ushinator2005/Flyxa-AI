@@ -523,7 +523,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
   });
   if (!looksModern) return fromLegacyRecords(value, rulesTemplate);
 
-  return value
+  const normalized = value
     .map(item => {
       const record = item as Record<string, unknown>;
       const date = typeof record.date === 'string' ? record.date : getTodayIso();
@@ -679,6 +679,19 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
       };
     })
     .sort((a, b) => b.date.localeCompare(a.date));
+
+  // Auto-correct: move any trade whose date doesn't match its parent entry to the right entry.
+  const hasMismatch = normalized.some(entry => entry.trades.some(trade => trade.date !== entry.date));
+  if (!hasMismatch) return normalized;
+
+  const byDate = new Map<string, JournalEntry>(normalized.map(e => [e.date, { ...e, trades: [] }]));
+  for (const entry of normalized) {
+    for (const trade of entry.trades) {
+      if (!byDate.has(trade.date)) byDate.set(trade.date, createEmptyEntry(trade.date, rulesTemplate));
+      byDate.get(trade.date)!.trades.push(trade);
+    }
+  }
+  return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 interface PriceLevelsBlockProps {
@@ -2064,7 +2077,8 @@ export default function TradeJournal() {
     }
 
     const currentTradeDate = getTradeDateValue(activeTrade, selectedEntry.date);
-    if (nextDate === currentTradeDate) {
+    // Only skip the move if the date hasn't changed AND the trade is already in the right entry
+    if (nextDate === currentTradeDate && selectedEntry.date === nextDate) {
       setIsTradeDateEditorOpen(false);
       return;
     }
