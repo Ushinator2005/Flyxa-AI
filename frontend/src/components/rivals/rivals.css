@@ -116,51 +116,44 @@
 
 .rivals-stat {
   background: var(--rv-layer);
-  border: 1px solid rgba(255,255,255,0.055);
-  border-radius: 14px;
-  padding: 20px 20px 18px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.04) inset;
+  border: 1px solid var(--rv-border);
+  border-radius: 10px;
+  padding: 16px 18px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 
 .rivals-stat-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--rv-text-3);
-  letter-spacing: 0.04em;
-  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
 }
 
 .rivals-stat-value {
-  font-family: var(--rv-mono);
-  font-size: 30px;
-  line-height: 1;
+  font-size: 24px;
+  line-height: 1.1;
   font-weight: 700;
+  color: var(--rv-text);
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
 .rivals-stat-bar {
-  margin: 14px 0 8px;
-  height: 2px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 999px;
-  overflow: hidden;
+  display: none;
 }
 
 .rivals-stat-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0.7;
+  display: none;
 }
 
 .rivals-stat-note {
-  margin-top: 0;
   color: var(--rv-text-3);
   font-size: 11px;
-  letter-spacing: -0.01em;
+  line-height: 1.4;
 }
 
 .rivals-main-grid {
@@ -258,26 +251,101 @@
   color: var(--rv-amber);
 }
 
+/* ── Pending invites banner ─────────────────────────────────── */
+.rivals-requests-banner {
+  border-radius: 12px;
+  border: 1px solid var(--rv-border);
+  border-left: 3px solid var(--rv-amber);
+  background: var(--rv-layer);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.20);
+  overflow: hidden;
+}
+
+.rivals-requests-banner-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.rivals-requests-banner-header:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.rivals-requests-banner-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: rgba(245,158,11,0.10);
+  border: 1px solid rgba(245,158,11,0.20);
+  display: grid;
+  place-items: center;
+  color: var(--rv-amber);
+  flex-shrink: 0;
+}
+
+.rivals-requests-banner-pulse {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rv-amber);
+  box-shadow: 0 0 0 2px var(--rv-bg, #111);
+}
+
+.rivals-requests-banner-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rv-text);
+}
+
+.rivals-requests-banner-count {
+  height: 17px;
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.25);
+  color: var(--rv-amber);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--rv-mono);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rivals-requests-banner-chevron {
+  color: var(--rv-text-3);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.rivals-requests-banner-body {
+  display: grid;
+  gap: 7px;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--rv-border);
+}
+
+/* ── Request row ─────────────────────────────────────────────── */
 .rivals-request-list {
   display: grid;
   gap: 8px;
   padding: 0 16px 16px;
-}
-
-.rivals-requests-card {
-  border-color: rgba(245,158,11,0.12);
-  background:
-    radial-gradient(circle at top left, rgba(245,158,11,0.08), transparent 34%),
-    var(--rv-layer);
-}
-
-.rivals-requests-card .rv-section-head {
-  padding: 16px 16px 12px;
-  border-bottom: none;
-}
-
-.rivals-requests-card .rv-section-title {
-  font-size: 15px;
 }
 
 .rivals-request-empty {
@@ -293,7 +361,7 @@
   border: 1px solid rgba(245,158,11,0.14);
   border-radius: 10px;
   background:
-    linear-gradient(90deg, rgba(245,158,11,0.07), rgba(255,255,255,0.025) 42%, rgba(255,255,255,0.015)),
+    linear-gradient(90deg, rgba(245,158,11,0.06), rgba(255,255,255,0.02) 50%, transparent),
     var(--rv-layer-2);
 }
 

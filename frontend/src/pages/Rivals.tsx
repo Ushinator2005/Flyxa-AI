@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, Clock3, Plus, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, Clock3, Plus, X } from 'lucide-react';
 import { getRivalMetricValue } from '../lib/mascotProgression.js';
 import { useRivals } from '../hooks/useRivals.js';
 import type { RivalRequestResponse } from '../services/api.js';
@@ -13,6 +13,7 @@ export default function Rivals() {
   const { rivals, addRival, rivalRequests, respondToRequest } = useRivals();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [requestBusyId, setRequestBusyId] = useState<string | null>(null);
+  const [requestsOpen, setRequestsOpen] = useState(true);
   const currentUser = rivals.find(rival => rival.isMe) ?? rivals[0];
 
   const quickStats = useMemo(() => {
@@ -103,15 +104,28 @@ export default function Rivals() {
         </div>
 
         {pendingRequests.length > 0 && (
-          <div className="rivals-setup-grid">
-            <section className="rv-card rivals-requests-card">
-              <div className="rv-section-head">
-                <div>
-                  <div className="rv-section-kicker">Friend Requests</div>
-                  <div className="rv-section-title">Pending invites</div>
-                </div>
-              </div>
-              <div className="rivals-request-list">
+          <div className="rivals-requests-banner">
+            <button
+              type="button"
+              className="rivals-requests-banner-header"
+              onClick={() => setRequestsOpen(o => !o)}
+            >
+              <span className="rivals-requests-banner-icon">
+                <Bell size={14} />
+                <span className="rivals-requests-banner-pulse" />
+              </span>
+              <span className="rivals-requests-banner-label">
+                Pending invites
+                <span className="rivals-requests-banner-count">{pendingRequests.length}</span>
+              </span>
+              <ChevronDown
+                size={15}
+                className="rivals-requests-banner-chevron"
+                style={{ transform: requestsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+              />
+            </button>
+            {requestsOpen && (
+              <div className="rivals-requests-banner-body">
                 {pendingRequests.map(request => (
                   <RequestRow
                     key={request.id}
@@ -121,7 +135,7 @@ export default function Rivals() {
                   />
                 ))}
               </div>
-            </section>
+            )}
           </div>
         )}
 
