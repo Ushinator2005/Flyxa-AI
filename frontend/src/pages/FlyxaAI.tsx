@@ -1,4 +1,4 @@
-import { CSSProperties, useMemo, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Clock3, AlertTriangle } from 'lucide-react';
 import { NavLink, useSearchParams, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
@@ -6,6 +6,7 @@ import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import { aiApi } from '../services/api.js';
 
 type InsightType = 'risk' | 'pattern' | 'psychology' | 'edge';
 type TagTone = 'positive' | 'negative' | 'neutral';
@@ -1237,6 +1238,9 @@ export default function FlyxaAI() {
   const [respondText, setRespondText] = useState('');
   const [timeframe, setTimeframe] = useState<TimeFrame>('1W');
   const [weekOffset, setWeekOffset] = useState(0);
+  const [tradeAnalysisById, setTradeAnalysisById] = useState<Record<string, string>>({});
+  const [tradeAnalysisLoadingId, setTradeAnalysisLoadingId] = useState<string | null>(null);
+  const [tradeAnalysisError, setTradeAnalysisError] = useState<string | null>(null);
   const aiReflections = useFlyxaStore(state => state.aiReflections);
   const addAiReflection = useFlyxaStore(state => state.addAiReflection);
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
@@ -1266,6 +1270,34 @@ export default function FlyxaAI() {
     () => normalizeConfluences(focusedTrade?.confluences),
     [focusedTrade]
   );
+  const focusedTradeAnalysis = focusedTradeId ? tradeAnalysisById[focusedTradeId] : null;
+  const focusedTradeAnalysisLoading = Boolean(focusedTradeId && tradeAnalysisLoadingId === focusedTradeId);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!focusedTradeId || !focusedTrade || tradeAnalysisById[focusedTradeId]) return;
+
+    setTradeAnalysisLoadingId(focusedTradeId);
+    setTradeAnalysisError(null);
+
+    aiApi.analyzeTradeById(focusedTradeId)
+      .then(({ analysis }) => {
+        if (cancelled) return;
+        setTradeAnalysisById(prev => ({ ...prev, [focusedTradeId]: analysis }));
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setTradeAnalysisError(error instanceof Error ? error.message : 'Unable to analyse this trade.');
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setTradeAnalysisLoadingId(current => current === focusedTradeId ? null : current);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusedTradeId, focusedTrade, tradeAnalysisById]);
 
   const sessionsProgress = Math.min(100, (weeklyDebriefData.nextDebrief.sessionsLogged / weeklyDebriefData.nextDebrief.sessionsTarget) * 100);
   const processScoreNumeric = Number.parseInt(weeklyDebriefData.stats.processScore.value, 10);

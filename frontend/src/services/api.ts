@@ -149,7 +149,7 @@ export const aiApi = {
     formData.append('entryTime', entryTime);
     return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData);
   },
-  analyzeTradeById: (tradeId: string) => api.post(`/api/ai/trade-analysis/${tradeId}`, {}),
+  analyzeTradeById: (tradeId: string) => api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, {}),
   analyzePatterns: () => api.post('/api/ai/patterns', {}),
   weeklyReport: (weekStart: string, weekEnd: string) =>
     api.post('/api/ai/weekly-report', { weekStart, weekEnd }),

@@ -264,13 +264,14 @@ You must compare the actual pixel height of each candle wick against the pixel h
 A level is only hit if a candle wick visually reaches or crosses that exact price line on the chart.
 The colored price labels on the right axis are reference markers only — their presence does NOT mean price touched that level.
 Do NOT assume a level was hit just because the label is visible. Only count it if a candle wick inside the box clearly touches or crosses the price line.
-When in doubt, set exit_reason to null rather than guessing.
+When in doubt about borderline cases (wick barely grazing the level), set exit_reason to null. However, if a candle clearly and unambiguously breaks through or beyond the outer boundary of the zone, record the SL/TP hit — do NOT apply doubt to obvious breaches.
 
 CRITICAL — COLORED ZONES vs ACTUAL PRICE LINES:
 The chart shows two filled colored zones that span from the entry price outward to the SL and TP levels.
-A candle entering a colored zone does NOT mean that level was hit — the candle must reach the FAR OUTER EDGE of the zone.
+A candle merely entering a colored zone does NOT mean that level was hit — the candle must reach the FAR OUTER EDGE of the zone.
 - For SHORT trades: the SL line is the TOP boundary of the upper (red/pink) zone. The TP line is the BOTTOM boundary of the lower (teal/blue) zone. A candle that dips below entry and into the teal zone has NOT hit TP unless its LOW wick reaches all the way to the BOTTOM of that zone.
 - For LONG trades: the SL line is the BOTTOM boundary of the lower (red/pink) zone. The TP line is the TOP boundary of the upper (teal/green) zone. A candle that rises above entry and into the teal zone has NOT hit TP unless its HIGH wick reaches all the way to the TOP of that zone.
+IMPORTANT: If a candle wick extends BEYOND the outer boundary of a colored zone entirely — i.e., the wick tip is visually above the top of the red/pink zone for a SHORT trade, or below the bottom of the red/pink zone for a LONG trade — this is unambiguously an SL hit. A candle that breaks out past the colored zone is the clearest possible SL trigger. Do not treat this as a borderline case.
 Use the exact price numbers from Step 2 to anchor where each boundary is on the price axis. Only confirm a hit when the wick clearly reaches the price label for that level.
 
 For LONG trades:

@@ -1540,10 +1540,11 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
 const BEHAVIORAL_FLAGS_LEFT = [
   { id:'chased-entry',    label:'Chased entry — outside the zone' },
   { id:'no-confirmation', label:'Jumped in before confirmation' },
-  { id:'fomo',            label:'FOMO — not in original plan' },
-  { id:'off-playbook',    label:'Off-plan trade' },
+  { id:'off-playbook',    label:'Took unplanned trade' },
   { id:'sized-up',        label:'Oversized position' },
   { id:'added-losing',    label:'Added to a losing position' },
+  { id:'be-too-early',    label:'Moved to breakeven too early' },
+  { id:'overtraded',      label:'Overtraded — too many setups' },
 ];
 const BEHAVIORAL_FLAGS_RIGHT = [
   { id:'moved-stop',   label:'Widened stop loss after entry' },
