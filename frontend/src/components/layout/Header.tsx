@@ -1,4 +1,4 @@
-import { Settings, ChevronDown, Menu } from 'lucide-react';
+import { Settings, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
@@ -60,9 +60,6 @@ export default function Header() {
   const openTradeCheck = () => {
     window.dispatchEvent(new Event('flyxa:open-trade-check'));
   };
-  const openMobileNav = () => {
-    window.dispatchEvent(new CustomEvent('flyxa:open-mobile-nav'));
-  };
 
   return (
     <>
@@ -79,28 +76,6 @@ export default function Header() {
         gap: 8,
       }}
     >
-      {/* Mobile hamburger — hidden on md+ */}
-      <button
-        type="button"
-        onClick={openMobileNav}
-        className="md:hidden"
-        aria-label="Open navigation"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 34,
-          height: 34,
-          borderRadius: 6,
-          border: '1px solid var(--app-border)',
-          background: 'var(--app-bg)',
-          color: 'var(--app-text-muted)',
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      >
-        <Menu size={16} />
-      </button>
 
       <h1 style={{
         fontSize: 13,

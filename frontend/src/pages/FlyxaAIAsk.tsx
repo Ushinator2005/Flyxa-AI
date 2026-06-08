@@ -1,9 +1,24 @@
-import { CSSProperties, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Send, RotateCcw, Sparkles } from 'lucide-react';
-import { useTrades } from '../hooks/useTrades.js';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Send, RotateCcw, Sparkles, X } from 'lucide-react';
+import { useTrades, toApiTrade } from '../hooks/useTrades.js';
 import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
-import { api } from '../services/api.js';
+import { api, aiApi } from '../services/api.js';
+import type { Trade } from '../types/index.js';
+import useFlyxaStore from '../store/flyxaStore.js';
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
+}
+function formatSignedCurrency(value: number) {
+  return `${value >= 0 ? '+' : '-'}${formatCurrency(Math.abs(value))}`;
+}
+function normalizeConfluences(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
+  if (typeof value === 'string') { try { const p = JSON.parse(value); return Array.isArray(p) ? p.filter((v): v is string => typeof v === 'string') : []; } catch { return []; } }
+  return [];
+}
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 const C = {
@@ -130,12 +145,60 @@ const themeVars = {
 
 export default function FlyxaAIAsk() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { trades } = useTrades();
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<AIReply[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Trade review ──────────────────────────────────────────────────────────
+  const [tradeAnalysisById, setTradeAnalysisById] = useState<Record<string, string>>({});
+  const [tradeAnalysisLoadingId, setTradeAnalysisLoadingId] = useState<string | null>(null);
+  const [tradeAnalysisError, setTradeAnalysisError] = useState<string | null>(null);
+
+  const storeEntries = useFlyxaStore(state => state.entries);
+
+  const focusedTradeId = searchParams.get('tradeId');
+  const focusedTrade = useMemo<Trade | null>(() => {
+    if (!focusedTradeId) return null;
+    // Primary: search ApiTrade list (already converted)
+    const byApiId = (trades as Trade[]).find(t => t.id === focusedTradeId);
+    if (byApiId) return byApiId;
+    // Fallback: search raw store entries in case of async hydration or ID edge cases
+    for (const entry of storeEntries) {
+      for (const rawTrade of entry.trades) {
+        if ((rawTrade as { id?: string }).id === focusedTradeId) {
+          return toApiTrade(rawTrade) as Trade;
+        }
+      }
+    }
+    return null;
+  }, [focusedTradeId, trades, storeEntries]);
+  const focusedTradePnl = useMemo(() => (focusedTrade ? Number(focusedTrade.pnl ?? 0) : null), [focusedTrade]);
+  const focusedTradeConfluences = useMemo(() => normalizeConfluences(focusedTrade?.confluences), [focusedTrade]);
+  const focusedTradeAnalysis = focusedTradeId ? tradeAnalysisById[focusedTradeId] : null;
+  const focusedTradeAnalysisLoading = Boolean(focusedTradeId && tradeAnalysisLoadingId === focusedTradeId);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!focusedTradeId || !focusedTrade || tradeAnalysisById[focusedTradeId]) return;
+    setTradeAnalysisLoadingId(focusedTradeId);
+    setTradeAnalysisError(null);
+    aiApi.analyzeTradeById(focusedTradeId, focusedTrade)
+      .then(({ analysis }) => { if (!cancelled) setTradeAnalysisById(prev => ({ ...prev, [focusedTradeId]: analysis })); })
+      .catch(err => { if (!cancelled) setTradeAnalysisError(err instanceof Error ? err.message : 'Unable to analyse this trade.'); })
+      .finally(() => { if (!cancelled) setTradeAnalysisLoadingId(cur => cur === focusedTradeId ? null : cur); });
+    return () => { cancelled = true; };
+  }, [focusedTradeId, focusedTrade, tradeAnalysisById]);
+
+  const clearFocus = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('tradeId');
+    setSearchParams(next);
+    setTradeAnalysisError(null);
+  };
 
   useEffect(() => {
     if (history.length > 0) {
@@ -316,6 +379,114 @@ export default function FlyxaAIAsk() {
             </div>
           </div>
 
+          {/* Trade Review */}
+          {focusedTradeId && (
+            <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.b0}` }}>
+              <div style={{
+                borderRadius: 10, border: `1px solid rgba(245,158,11,0.32)`,
+                background: `rgba(245,158,11,0.04)`, padding: '14px 16px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+                  <div>
+                    <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.acc, margin: 0 }}>Selected trade AI review</p>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: C.t0, margin: '4px 0 0' }}>
+                      {focusedTrade
+                        ? `${(focusedTrade as unknown as Record<string,string>).symbol || 'N/A'} ${(focusedTrade as unknown as Record<string,string>).direction || ''} · ${(focusedTrade as unknown as Record<string,string>).trade_date || ''} ${(focusedTrade as unknown as Record<string,string>).trade_time || ''}`
+                        : storeEntries.length === 0 ? 'Loading...' : 'Trade not found'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={clearFocus} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t2, padding: 2, flexShrink: 0 }}>
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {focusedTrade ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12, color: C.t1, marginBottom: 12 }}>
+                      <span>
+                        P&L: <span style={{ color: focusedTradePnl !== null && focusedTradePnl >= 0 ? C.grn : C.red, fontWeight: 600 }}>
+                          {focusedTradePnl !== null ? formatSignedCurrency(focusedTradePnl) : '$0.00'}
+                        </span>
+                      </span>
+                      <span>
+                        Plan: <span style={{ color: typeof (focusedTrade as unknown as Record<string,unknown>).followed_plan !== 'boolean' ? C.t2 : ((focusedTrade as unknown as Record<string,unknown>).followed_plan ? C.grn : C.red) }}>
+                          {typeof (focusedTrade as unknown as Record<string,unknown>).followed_plan !== 'boolean' ? 'Not logged' : ((focusedTrade as unknown as Record<string,unknown>).followed_plan ? 'Followed' : 'Drifted')}
+                        </span>
+                      </span>
+                      {focusedTradeConfluences.length > 0 && (
+                        <span>Confluences: <span style={{ color: C.t0 }}>{focusedTradeConfluences.join(', ')}</span></span>
+                      )}
+                    </div>
+
+                    <div style={{ borderRadius: 8, border: `1px solid rgba(245,158,11,0.18)`, background: 'rgba(10,10,10,0.42)', padding: '12px 14px', minHeight: 80 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.acc, margin: 0 }}>Flyxa trade review</p>
+                          <p style={{ fontSize: 11.5, color: C.t2, margin: '2px 0 0' }}>Trade quality, risk, execution, psychology, and one next adjustment.</p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {focusedTradeAnalysisLoading && (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {[0,1,2].map(i => (
+                                <span key={i} style={{ display: 'block', width: 6, height: 6, borderRadius: '50%', background: C.acc, animation: `analysing-pulse 1s ease-in-out ${i*0.16}s infinite` }} />
+                              ))}
+                            </div>
+                          )}
+                          {tradeAnalysisError && !focusedTradeAnalysisLoading && (
+                            <button type="button" onClick={() => {
+                              if (!focusedTradeId) return;
+                              setTradeAnalysisError(null);
+                              setTradeAnalysisLoadingId(null);
+                              setTradeAnalysisById(prev => { const n = {...prev}; delete n[focusedTradeId]; return n; });
+                            }} style={{ fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: `1px solid ${C.b1}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: C.sans }}>
+                              Retry
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {focusedTradeAnalysisLoading && (
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                            <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
+                              <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round"/>
+                              <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
+                              <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
+                              <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
+                            </svg>
+                            <div>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, margin: 0 }}>Analysing execution quality</p>
+                              <p style={{ fontSize: 12, color: C.t1, margin: '2px 0 0' }}>Reading entry, stop, target, exit, emotion, notes, and plan adherence...</p>
+                            </div>
+                          </div>
+                          {[82,96,68].map((w, i) => (
+                            <div key={w} style={{ height: 7, borderRadius: 99, marginBottom: 8, width: `${w}%`, background: 'linear-gradient(90deg, rgba(255,255,255,0.05), rgba(245,158,11,0.20), rgba(255,255,255,0.05))', backgroundSize: '220% 100%', animation: `analysing-shimmer 1.35s linear ${i*0.12}s infinite` }} />
+                          ))}
+                        </div>
+                      )}
+
+                      {tradeAnalysisError && !focusedTradeAnalysisLoading && (
+                        <p style={{ fontSize: 12, color: C.red, margin: '8px 0 0' }}>{tradeAnalysisError}</p>
+                      )}
+
+                      {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
+                        <div style={{ fontSize: 13, lineHeight: 1.7, color: C.t1, marginTop: 8 }}>
+                          {focusedTradeAnalysis.split(/\n{2,}/).map((para, i) => (
+                            <p key={i} style={{ margin: '0 0 10px', whiteSpace: 'pre-line' }}>{para.trim()}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ fontSize: 12, color: C.t1, margin: 0 }}>
+                    {storeEntries.length === 0 ? 'Loading your trades...' : 'Trade not found in your history.'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Responses */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
             {/* Loading card */}
@@ -459,6 +630,18 @@ export default function FlyxaAIAsk() {
         @keyframes pulse {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes analysing-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        @keyframes analysing-shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        @keyframes flyxa-logo-pulse {
+          0%, 100% { opacity: 0.22; filter: drop-shadow(0 0 0px rgba(245,158,11,0)); }
+          50% { opacity: 1; filter: drop-shadow(0 0 7px rgba(245,158,11,0.7)); }
         }
       `}</style>
     </div>

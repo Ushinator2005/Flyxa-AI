@@ -194,7 +194,7 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
   };
 }
 
-function toApiTrade(trade: StoreTrade): ApiTrade {
+export function toApiTrade(trade: StoreTrade): ApiTrade {
   const session = getSession(trade.time);
   const tradeTime = trade.time || (trade as unknown as { entryTime?: string }).entryTime || '09:30';
   const emotionalState = deriveEmotionalState(trade);

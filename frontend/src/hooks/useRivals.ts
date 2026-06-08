@@ -164,6 +164,8 @@ function normalizeRivalStats(rival: Rival): Rival {
         tradingJournalScore,
         backtestSessions,
         processScore,
+        winRate: raw.winRate ?? null,
+        avgR: raw.avgR ?? null,
       },
     },
   };
@@ -172,6 +174,7 @@ function normalizeRivalStats(rival: Rival): Rival {
 function rivalFromRequest(request: RivalRequestResponse): Rival | null {
   if (request.status !== 'accepted' || !request.profile) return null;
   const profile = request.profile;
+  const stats = profile.stats ?? { dailyJournalStreak: 0, dailyJournalScore: 0, tradingJournalScore: 0, backtestSessions: 0, processScore: 0, winRate: null, avgR: null };
   return normalizeRivalStats({
     id: `rival-user-${profile.userId}`,
     username: profile.username,
@@ -179,10 +182,10 @@ function rivalFromRequest(request: RivalRequestResponse): Rival | null {
     avatarInitials: profile.avatarInitials,
     avatarColor: profile.avatarColor,
     mascot: {
-      stage: 'seed',
+      stage: getMascotStage(stats.processScore),
       name: profile.displayName,
-      streakDays: 0,
-      stats: { dailyJournalStreak: 0, dailyJournalScore: 0, tradingJournalScore: 0, backtestSessions: 0, processScore: 0 },
+      streakDays: stats.dailyJournalStreak,
+      stats,
       xp: 0,
     },
   });
@@ -303,6 +306,15 @@ export function useRivals() {
     me.mascot.xp = getMascotXP(me.mascot.streakDays, me.mascot.stats);
     return me;
   }, [backtestSessions.length, dailyJournalEntries, entries]);
+
+  const myStatsSignature = useMemo(() => JSON.stringify(myRival.mascot.stats), [myRival.mascot.stats]);
+
+  useEffect(() => {
+    if (!profile) return;
+    rivalsApi.updateStats(myRival.mascot.stats).catch(() => {
+      // Rival stats are public leaderboard metadata. The page still works if sync fails.
+    });
+  }, [myStatsSignature, myRival.mascot.stats, profile]);
 
   const rivals = useMemo(() => {
     const remoteIds = new Set(backendRivals.map(rival => rival.username.toLowerCase()));

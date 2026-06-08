@@ -65,6 +65,7 @@ export default function DatePicker({
 }: DatePickerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number; right?: number } | null>(null);
   const selectedDate = parseIsoDate(value);
@@ -77,7 +78,10 @@ export default function DatePicker({
   useEffect(() => {
     if (!open) return;
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (
+        !rootRef.current?.contains(event.target as Node) &&
+        !popupRef.current?.contains(event.target as Node)
+      ) setOpen(false);
     };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
@@ -147,6 +151,7 @@ export default function DatePicker({
 
       {open && popupPos && createPortal(
         <div
+          ref={popupRef}
           role="dialog"
           aria-label="Choose date"
           style={{

@@ -108,6 +108,17 @@ router.post('/flyxa-chat', authMiddleware, async (req: AuthenticatedRequest, res
 router.post('/trade-analysis/:tradeId', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { tradeId } = req.params;
+    const requestTrade = req.body?.trade;
+
+    if (requestTrade && typeof requestTrade === 'object' && requestTrade.symbol) {
+      const analysis = await analyzeIndividualTrade({
+        ...requestTrade,
+        id: typeof requestTrade.id === 'string' ? requestTrade.id : tradeId,
+        user_id: req.userId!,
+      } as Trade);
+      res.json({ analysis });
+      return;
+    }
 
     const { data: trade, error } = await supabase
       .from('trades')

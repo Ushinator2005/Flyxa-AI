@@ -34,16 +34,36 @@ const RISK_EMOTIONS = ['revenge', 'fomo', 'fearful', 'frustrated', 'bored', 'imp
 const FLAG_LABELS: Record<string, string> = {
   'chased-entry':    'Chased entry',
   'no-confirmation': 'Jumped in early',
-  'fomo':            'FOMO trade',
-  'off-playbook':    'Off plan',
+  'off-playbook':    'Unplanned trade',
   'sized-up':        'Oversized',
   'added-losing':    'Added to loser',
+  'be-too-early':    'BE too early',
+  'overtraded':      'Overtraded',
   'moved-stop':      'Widened stop',
   'exit-early':      'Exited early',
   'moved-target':    'Moved / ignored TP',
   'past-inval':      'Held past invalidation',
+  'boredom-trade':   'Boredom trade',
   'revenge':         'Revenge trade',
-  'past-limit':      'Past daily limit',
+  'reentry-stop':    'Re-entered after stop',
+};
+
+// Weighted penalties matching TradeJournal
+const FLAG_PENALTIES: Record<string, number> = {
+  'sized-up':       20,
+  'revenge':        20,
+  'added-losing':   20,
+  'off-playbook':   12,
+  'reentry-stop':   12,
+  'past-inval':     12,
+  'moved-stop':     12,
+  'boredom-trade':  12,
+  'chased-entry':    6,
+  'no-confirmation': 6,
+  'overtraded':      6,
+  'exit-early':      6,
+  'moved-target':    6,
+  'be-too-early':    4,
 };
 
 function toneForPct(value: number): Tone {
@@ -70,7 +90,7 @@ function computeProcessScore(trade: RichTrade): number | null {
 
   if (scores.length === 0) return null;
   const avg = scores.reduce((sum, value) => sum + value, 0) / scores.length;
-  const flagPenalty = (trade.behavioralFlags?.length ?? 0) * 8;
+  const flagPenalty = (trade.behavioralFlags ?? []).reduce((total, id) => total + (FLAG_PENALTIES[id] ?? 8), 0);
   return Math.max(0, Math.min(100, Math.round(avg * 20 - flagPenalty)));
 }
 

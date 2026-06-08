@@ -6,6 +6,25 @@ import { AuthenticatedRequest } from '../types/index';
 const router = Router();
 
 type RequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
+type RivalStats = {
+  dailyJournalStreak: number;
+  dailyJournalScore: number;
+  tradingJournalScore: number;
+  backtestSessions: number;
+  processScore: number;
+  winRate: number | null;
+  avgR: number | null;
+};
+
+const EMPTY_STATS: RivalStats = {
+  dailyJournalStreak: 0,
+  dailyJournalScore: 0,
+  tradingJournalScore: 0,
+  backtestSessions: 0,
+  processScore: 0,
+  winRate: null,
+  avgR: null,
+};
 
 function isMissingRivalsTableError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -29,10 +48,41 @@ function initialsFromUsername(username: string): string {
   return username.slice(0, 2).toUpperCase();
 }
 
+function clampScore(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function nonNegativeInt(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.round(numeric));
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : null;
+}
+
+function normalizeStats(value: unknown): RivalStats {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    dailyJournalStreak: nonNegativeInt(raw.dailyJournalStreak),
+    dailyJournalScore: clampScore(raw.dailyJournalScore),
+    tradingJournalScore: clampScore(raw.tradingJournalScore),
+    backtestSessions: nonNegativeInt(raw.backtestSessions),
+    processScore: clampScore(raw.processScore),
+    winRate: nullableNumber(raw.winRate),
+    avgR: nullableNumber(raw.avgR),
+  };
+}
+
 async function getProfileByUserId(userId: string) {
   const { data, error } = await supabase
     .from('rival_profiles')
-    .select('user_id, username, display_name, avatar_color')
+    .select('user_id, username, display_name, avatar_color, stats')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -42,7 +92,7 @@ async function getProfileByUserId(userId: string) {
 async function getProfileByUsername(username: string) {
   const { data, error } = await supabase
     .from('rival_profiles')
-    .select('user_id, username, display_name, avatar_color')
+    .select('user_id, username, display_name, avatar_color, stats')
     .eq('username', username)
     .maybeSingle();
   if (error) throw error;
@@ -54,6 +104,7 @@ function toRivalProfile(profile: {
   username: string;
   display_name: string | null;
   avatar_color: string | null;
+  stats?: unknown;
 }) {
   const username = profile.username;
   return {
@@ -62,6 +113,7 @@ function toRivalProfile(profile: {
     displayName: profile.display_name || username,
     avatarInitials: initialsFromUsername(username),
     avatarColor: profile.avatar_color || '#f59e0b',
+    stats: normalizeStats(profile.stats ?? EMPTY_STATS),
   };
 }
 
@@ -103,7 +155,7 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
         avatar_color: avatarColor,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' })
-      .select('user_id, username, display_name, avatar_color')
+      .select('user_id, username, display_name, avatar_color, stats')
       .single();
 
     if (error) {
@@ -112,6 +164,33 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
         return;
       }
       throw error;
+    }
+
+    res.json(toRivalProfile(data));
+  } catch (err) {
+    next(withRivalsSetupHint(err));
+  }
+});
+
+// PUT /profile/stats
+router.put('/profile/stats', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const stats = normalizeStats((req.body as { stats?: unknown }).stats);
+
+    const { data, error } = await supabase
+      .from('rival_profiles')
+      .update({
+        stats,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', req.userId!)
+      .select('user_id, username, display_name, avatar_color, stats')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      res.status(404).json({ error: 'Create your rival profile before publishing leaderboard stats.' });
+      return;
     }
 
     res.json(toRivalProfile(data));
@@ -155,7 +234,7 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response,
     if (otherUserIds.length > 0) {
       const { data: profiles, error: profilesError } = await supabase
         .from('rival_profiles')
-        .select('user_id, username, display_name, avatar_color')
+        .select('user_id, username, display_name, avatar_color, stats')
         .in('user_id', otherUserIds);
       if (profilesError) throw profilesError;
       for (const profile of profiles ?? []) profilesById.set(profile.user_id, toRivalProfile(profile));
@@ -265,7 +344,18 @@ router.put('/requests/:id', authMiddleware, async (req: AuthenticatedRequest, re
       .single();
 
     if (error) throw error;
-    res.json(data);
+
+    const otherUserId = data.requester_id === req.userId ? data.recipient_id : data.requester_id;
+    const profile = await getProfileByUserId(otherUserId);
+
+    res.json({
+      id: data.id,
+      status: data.status as RequestStatus,
+      direction: data.requester_id === req.userId ? 'outgoing' : 'incoming',
+      createdAt: data.created_at,
+      respondedAt: data.responded_at,
+      profile: profile ? toRivalProfile(profile) : null,
+    });
   } catch (err) {
     next(withRivalsSetupHint(err));
   }

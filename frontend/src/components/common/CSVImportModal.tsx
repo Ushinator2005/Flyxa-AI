@@ -49,7 +49,7 @@ const FIELDS: FieldDef[] = [
   { key: 'pre_trade_notes',label: 'Notes',         required: false, hint: 'Text'                   },
   { key: 'followed_plan',  label: 'Followed Plan', required: false, hint: 'yes/no, true/false'     },
   { key: 'emotional_state',label: 'Emotion',       required: false, hint: 'Calm, Anxious...'       },
-  { key: 'confluences',    label: 'Tags',          required: false, hint: 'Setup tags, confluences' },
+  { key: 'confluences',    label: 'Confluences',   required: false, hint: 'Setup tags, model, bias, entry signal' },
 ];
 
 // ─── CSV parser ───────────────────────────────────────────────────────────────
@@ -94,10 +94,10 @@ function parseCSV(text: string): { headers: string[]; rows: string[][] } {
 // ─── Auto column guesser ──────────────────────────────────────────────────────
 const GUESSES: Record<FieldKey, string[]> = {
   symbol:         ['symbol', 'instrument', 'contract', 'ticker', 'market', 'asset', 'pair', 'name'],
-  direction:      ['direction', 'market pos', 'market pos.', 'side', 'b/s', 'buy/sell', 'type', 'action', 'pos', 'bias', 'long/short'],
+  direction:      ['direction', 'position', 'side', 'b/s', 'buy/sell', 'long/short', 'market pos', 'market pos.', 'pos', 'action'],
   entry_price:    ['entry price', 'entry', 'open price', 'avg price', 'avg entry', 'buy price', 'entry avg', 'entry level'],
   exit_price:     ['exit price', 'exit', 'close price', 'sell price', 'avg exit', 'exit avg', 'exit level'],
-  pnl:            ['profit', 'pnl', 'p&l', 'p/l', 'net p/l', 'net profit', 'realized pnl', 'realized p&l', 'realized p/l', 'gain/loss', 'gain', 'net p&l', 'result $', 'profit/loss', 'profit loss'],
+  pnl:            ['net pnl', 'net p&l', 'net p/l', 'pnl', 'p&l', 'p/l', 'realized pnl', 'realized p&l', 'realized p/l', 'net profit', 'result $', 'gain/loss', 'gain', 'profit'],
   trade_date:     ['date', 'trade date', 'entry date', 'open date', 'day', 'session date', 'created time', 'created'],
   trade_time:     ['entry time', 'time', 'open time', 'open', 'entry_time', 'opened at', 'start time'],
   close_time:     ['exit time', 'close time', 'exit_time', 'close_time', 'closed at', 'end time'],
@@ -107,13 +107,18 @@ const GUESSES: Record<FieldKey, string[]> = {
   pre_trade_notes:['notes', 'comment', 'comments', 'remarks', 'note', 'description', 'reflection', 'review', 'lesson', 'thesis'],
   followed_plan:  ['followed plan', 'plan', 'follow plan', 'followed_plan', 'followed rules', 'rules followed', 'on plan'],
   emotional_state:['emotion', 'emotional state', 'mood', 'feeling', 'state', 'mindset', 'psychology'],
-  confluences:    ['tags', 'tag', 'setup', 'strategy', 'mistake', 'mistakes', 'confluence', 'confluences'],
+  confluences:    ['confluence', 'confluences', 'model', 'setup', 'strategy', 'entry signal', 'entry signals', 'type of trade', 'trade type', 'narrative', 'bias', 'tags', 'tag'],
 };
 
 function autoGuessMapping(headers: string[]): Record<FieldKey, string> {
   const lower = headers.map(h => h.toLowerCase().trim());
   const mapping: Partial<Record<FieldKey, string>> = {};
   for (const field of FIELDS) {
+    for (const guess of GUESSES[field.key]) {
+      const idx = lower.findIndex(h => h === guess);
+      if (idx !== -1) { mapping[field.key] = headers[idx]; break; }
+    }
+    if (mapping[field.key]) continue;
     for (const guess of GUESSES[field.key]) {
       const idx = lower.findIndex(h => h === guess || h.includes(guess));
       if (idx !== -1) { mapping[field.key] = headers[idx]; break; }
@@ -173,12 +178,24 @@ function parseTime(v: string): string | null {
   return null;
 }
 
+function parseSymbol(v: string): string {
+  return v
+    .trim()
+    .replace(/\s*\(https?:\/\/[^)]*\)\s*/gi, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\s+\d{2}-\d{2}$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
 function parseNum(v: string): number | null {
   if (!v) return null;
-  const cleaned = v.replace(/[+$,()]/g, '').trim();
+  const raw = v.trim();
+  const cleaned = raw.replace(/[+$,()]/g, '').trim();
   if (!cleaned || /^[-–—]$/.test(cleaned)) return null;
   const n = parseFloat(cleaned);
-  const neg = /^\(.*\)$/.test(v.trim());
+  const neg = /^\(.*\)$/.test(raw) || /^[-\u2212]/.test(raw);
   return isNaN(n) ? null : neg ? -Math.abs(n) : n;
 }
 
@@ -218,16 +235,20 @@ type ImportedTrade = {
   _errors: string[];
 };
 
-function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, string>): ImportedTrade | null {
+function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, string>, confluenceColumns: string[] = []): ImportedTrade | null {
   const get = (field: FieldKey): string => {
     const col = mapping[field];
     if (!col) return '';
     const idx = headers.indexOf(col);
     return idx >= 0 ? (row[idx] ?? '') : '';
   };
+  const getColumn = (col: string): string => {
+    const idx = headers.indexOf(col);
+    return idx >= 0 ? (row[idx] ?? '') : '';
+  };
 
   const errors: string[] = [];
-  const symbol = get('symbol').trim().replace(/\s+\d{2}-\d{2}$/, '').toUpperCase();
+  const symbol = parseSymbol(get('symbol'));
   if (!symbol) errors.push('Missing symbol');
 
   const direction = parseDirection(get('direction'));
@@ -261,7 +282,10 @@ function mapRow(row: string[], headers: string[], mapping: Record<FieldKey, stri
   const notes = get('pre_trade_notes').trim() || undefined;
   const fp = parseFollowedPlan(get('followed_plan'));
   const emotion = get('emotional_state').trim() || undefined;
-  const confluences = parseTags(get('confluences'));
+  const confluenceRaw = confluenceColumns.length > 0
+    ? confluenceColumns.map(getColumn).filter(Boolean).join(', ')
+    : get('confluences');
+  const confluences = parseTags(confluenceRaw);
 
   return {
     symbol, direction: direction!, entry_price: entry_price ?? exit_price ?? 0,
@@ -308,14 +332,18 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
   const [importResult, setImportResult] = useState<{ ok: number; fail: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [previewLimit, setPreviewLimit] = useState<number | 'all'>(20);
+  const [confluenceColumns, setConfluenceColumns] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const processText = useCallback((text: string) => {
     const { headers: h, rows: r } = parseCSV(text);
     if (h.length === 0) { setFileError('Could not parse CSV — check the file has a header row.'); return; }
     if (r.length === 0) { setFileError('CSV has headers but no data rows.'); return; }
+    const guessed = autoGuessMapping(h);
     setHeaders(h); setRows(r);
-    setMapping(autoGuessMapping(h));
+    setMapping(guessed);
+    setConfluenceColumns(guessed.confluences ? [guessed.confluences] : []);
     setFileError(''); setStep('map');
   }, []);
 
@@ -333,9 +361,9 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
   }, [handleFile]);
 
   const handleGoPreview = useCallback(() => {
-    setParsed(rows.map(r => mapRow(r, headers, mapping as Record<FieldKey, string>)));
+    setParsed(rows.map(r => mapRow(r, headers, mapping as Record<FieldKey, string>, confluenceColumns)));
     setStep('preview');
-  }, [rows, headers, mapping]);
+  }, [rows, headers, mapping, confluenceColumns]);
 
   const handleImport = useCallback(async () => {
     const valid = parsed.filter((t): t is ImportedTrade => t !== null && t._errors.length === 0);
@@ -354,6 +382,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
   const errorCount = parsed.filter(t => !t || t._errors.length > 0).length;
   const requiredMapped = FIELDS.filter(f => f.required).every(f => mapping[f.key]);
   const currentIdx = STEP_ORDER.indexOf(step);
+  const visiblePreviewRows = previewLimit === 'all' ? parsed : parsed.slice(0, previewLimit);
 
   return (
     <div
@@ -542,7 +571,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                 {' '}Match each field to a column in your file.
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px' }}>
-                {FIELDS.map(field => (
+                {FIELDS.filter(field => field.key !== 'confluences').map(field => (
                   <div key={field.key}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
                       <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: field.required ? C.acc : C.t2 }}>
@@ -570,6 +599,76 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                     <span style={{ fontSize: 10, color: C.t2, marginTop: 3, display: 'block' }}>{field.hint}</span>
                   </div>
                 ))}
+              </div>
+              <div
+                style={{
+                  marginTop: 18,
+                  padding: 14,
+                  borderRadius: 8,
+                  border: `1px solid ${confluenceColumns.length > 0 ? 'rgba(245,158,11,0.32)' : C.b0}`,
+                  background: 'rgba(245,158,11,0.035)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.acc }}>
+                      Confluences
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 11.5, lineHeight: 1.5, color: C.t1 }}>
+                      Select every column that describes your setup or edge. Flyxa will combine them into trade tags.
+                    </div>
+                  </div>
+                  {confluenceColumns.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setConfluenceColumns([])}
+                      style={{ background: 'none', border: 'none', color: C.t2, fontSize: 11, cursor: 'pointer', padding: 0 }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+                  {headers.map(header => {
+                    const selected = confluenceColumns.includes(header);
+                    return (
+                      <label
+                        key={header}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          minWidth: 0,
+                          padding: '7px 9px',
+                          borderRadius: 6,
+                          border: `1px solid ${selected ? 'rgba(245,158,11,0.38)' : C.b0}`,
+                          background: selected ? 'rgba(245,158,11,0.09)' : C.d2,
+                          color: selected ? C.t0 : C.t1,
+                          fontSize: 11,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={e => {
+                            setConfluenceColumns(cols => e.target.checked
+                              ? Array.from(new Set([...cols, header]))
+                              : cols.filter(col => col !== header));
+                            setMapping(m => ({ ...m, confluences: e.target.checked ? header : (m.confluences === header ? undefined : m.confluences) }));
+                          }}
+                          style={{ accentColor: C.acc, flexShrink: 0 }}
+                        />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{header}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {confluenceColumns.length > 0 && (
+                  <div style={{ marginTop: 9, fontSize: 11, color: C.t2 }}>
+                    Selected: <span style={{ color: C.t0 }}>{confluenceColumns.join(' · ')}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -599,6 +698,35 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                 </span>
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: C.t2 }}>
+                  Showing <span style={{ color: C.t0, fontWeight: 650 }}>{visiblePreviewRows.length}</span> of <span style={{ color: C.t0, fontWeight: 650 }}>{parsed.length}</span> rows
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.t2 }}>
+                  Rows
+                  <select
+                    value={previewLimit}
+                    onChange={e => setPreviewLimit(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                    style={{
+                      height: 28,
+                      borderRadius: 6,
+                      padding: '0 8px',
+                      border: `1px solid ${C.b0}`,
+                      background: C.d2,
+                      color: C.t0,
+                      fontSize: 11,
+                      fontFamily: C.sans,
+                      outline: 'none',
+                    }}
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value="all">All</option>
+                  </select>
+                </label>
+              </div>
+
               <div style={{ overflowX: 'auto', borderRadius: 7, border: `1px solid ${C.b0}` }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                   <thead>
@@ -616,7 +744,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                     </tr>
                   </thead>
                   <tbody>
-                    {parsed.slice(0, 20).map((t, i) => {
+                    {visiblePreviewRows.map((t, i) => {
                       const ok = t && t._errors.length === 0;
                       return (
                         <tr key={i} style={{ borderBottom: `1px solid ${C.b0}`, background: ok ? 'transparent' : `${C.red}06` }}>
@@ -644,9 +772,9 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                   </tbody>
                 </table>
               </div>
-              {parsed.length > 20 && (
+              {previewLimit === 'all' && parsed.length > 100 && (
                 <div style={{ fontSize: 11, color: C.t2, marginTop: 8 }}>
-                  Showing first 20 of {parsed.length} rows
+                  Rendering all {parsed.length} rows may feel slower on very large CSV files.
                 </div>
               )}
             </div>

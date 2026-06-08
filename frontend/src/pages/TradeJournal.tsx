@@ -774,17 +774,17 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
       <div className="tj-account-check-list">
         {accounts.filter(account =>
           account.id !== DEFAULT_ACCOUNT_ID &&
-          !account.archived &&
+          (!account.archived || selectedAccountIds.includes(account.id)) &&
           (account.status !== 'Blown'   || selectedAccountIds.includes(account.id)) &&
           (account.status !== 'Passed'  || selectedAccountIds.includes(account.id))
         ).map(account => {
-          const isInactive = account.status === 'Blown' || account.status === 'Passed';
-          const statusLabel = account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
+          const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
+          const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
           return (
             <label
               key={account.id}
               className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
-              title={account.status === 'Passed' ? 'Passed accounts cannot be allocated to new trades' : undefined}
+              title={account.archived ? 'Archived account' : account.status === 'Passed' ? 'Passed accounts cannot be allocated to new trades' : undefined}
             >
               <input
                 type="checkbox"
@@ -1038,6 +1038,28 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
 
 
 
+// ── Behavioral flag penalty weights ──────────────────────────────────────────
+const FLAG_PENALTIES: Record<string, number> = {
+  // Critical — direct account risk / emotional breakdown
+  'sized-up':       20,
+  'revenge':        20,
+  'added-losing':   20,
+  // Serious — discipline failures that damage edge
+  'off-playbook':   12,
+  'reentry-stop':   12,
+  'past-inval':     12,
+  'moved-stop':     12,
+  'boredom-trade':  12,
+  // Minor — execution imperfections
+  'chased-entry':    6,
+  'no-confirmation': 6,
+  'overtraded':      6,
+  'exit-early':      6,
+  'moved-target':    6,
+  // Minimal — conservative mistakes
+  'be-too-early':    4,
+};
+
 // ── Helper: computeProcessScore ──────────────────────────────────────────────
 function computeProcessScore(trade: JournalTrade): number {
   const r = trade.psychologyRatings;
@@ -1047,7 +1069,7 @@ function computeProcessScore(trade: JournalTrade): number {
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
   let score = avg * 20;
   const flags = trade.behavioralFlags ?? [];
-  score -= flags.length * 8;
+  score -= flags.reduce((total, id) => total + (FLAG_PENALTIES[id] ?? 8), 0);
   const er = trade.executionReview;
   if (er && er.enteredAtLevel && er.waitedForConfirmation && er.correctSize && er.exitedAtPlan && er.movedStopCorrectly && er.resistedEarlyExit) score += 5;
   if ((trade.preEntry?.confidenceAtEntry ?? 0) >= 4) score += 5;
@@ -1377,7 +1399,7 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
               <div style={{ fontSize:9, color:'var(--app-text-subtle)', fontStyle:'italic' }}>{col.sub}</div>
             </div>
             <textarea value={local[col.key]} onChange={e => setLocal(p => ({ ...p, [col.key]: e.target.value }))} onBlur={e => commit(col.key, e.target.value)} placeholder={col.placeholder}
-              style={{ width:'100%', minHeight:72, padding:'10px 12px', fontSize:11, fontFamily:'var(--font-sans)', background:'transparent', border:'none', outline:'none', resize:'none', color:'var(--app-text-muted)', boxSizing:'border-box' }} />
+              className="tj-reflect" style={{ minHeight:72, fontSize:12, padding:'10px 12px', display:'block' }} />
           </div>
         ))}
       </div>
@@ -1547,12 +1569,13 @@ const BEHAVIORAL_FLAGS_LEFT = [
   { id:'overtraded',      label:'Overtraded — too many setups' },
 ];
 const BEHAVIORAL_FLAGS_RIGHT = [
-  { id:'moved-stop',   label:'Widened stop loss after entry' },
-  { id:'exit-early',   label:'Exited too early (fear)' },
-  { id:'moved-target', label:'Moved or ignored take profit' },
-  { id:'past-inval',   label:'Held past invalidation' },
-  { id:'revenge',      label:'Revenge trade after a loss' },
-  { id:'past-limit',   label:'Traded after hitting daily limit' },
+  { id:'moved-stop',    label:'Widened stop loss after entry' },
+  { id:'exit-early',    label:'Exited too early (fear)' },
+  { id:'moved-target',  label:'Moved or ignored take profit' },
+  { id:'past-inval',    label:'Held past invalidation' },
+  { id:'boredom-trade', label:'Traded out of boredom' },
+  { id:'revenge',       label:'Revenge trade after a loss' },
+  { id:'reentry-stop',  label:'Re-entered immediately after stop out' },
 ];
 
 function BehavioralFlagsBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
@@ -1728,7 +1751,7 @@ function PhysicalStateBlock({ entry, onMutateEntry }: { entry: JournalEntry; onM
 }
 
 // ── I — ProcessScoreBlock ─────────────────────────────────────────────────────
-function ProcessScoreBlock({ trade, entries, navigate }: { trade: JournalTrade; entries: JournalEntry[]; navigate: (path: string) => void }) {
+function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade: JournalTrade; entries: JournalEntry[]; navigate: (path: string) => void; onSaveEntries: () => void }) {
   const score = computeProcessScore(trade);
   const grade = score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B+' : score >= 60 ? 'B' : score >= 50 ? 'C+' : 'C';
   const scoreColor = score >= 70 ? 'var(--green)' : score >= 50 ? 'var(--amber)' : 'var(--red)';
@@ -1772,7 +1795,7 @@ function ProcessScoreBlock({ trade, entries, navigate }: { trade: JournalTrade; 
         </div>
         <div style={{ fontSize:24, fontWeight:700, fontFamily:'var(--font-mono)', color:scoreColor }}>{score > 0 ? grade : '—'}</div>
       </div>
-      <button type="button" onClick={() => navigate(`/flyxa-ai?tradeId=${trade.id}`)}
+      <button type="button" onClick={() => { onSaveEntries(); navigate(`/flyxa-ai/ask?tradeId=${trade.id}`); }}
         style={{ width:'100%', padding:'10px 16px', fontSize:12, fontWeight:600, fontFamily:'var(--font-sans)', background:'var(--cobalt)', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
         ✦ Analyse this trade with Flyxa AI →
       </button>
@@ -2393,19 +2416,18 @@ export default function TradeJournal() {
               <button type="button" className="tj-nav" onClick={() => setMonthCursor(prev => shiftMonth(prev, 1))}>
                 <ChevronRight size={13} />
               </button>
-              <button
-                data-tour-id="scanner-import"
-                type="button"
-                className="tj-nav"
-                title="Import trades from Notion or broker CSV"
-                onClick={() => setShowCSVImport(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 8, paddingRight: 8, fontSize: 11, color: 'var(--amber)' }}
-              >
-                <Upload size={12} />
-                Import CSV
-              </button>
             </span>
           </div>
+          <button
+            data-tour-id="scanner-import"
+            type="button"
+            className="tj-import-csv-btn"
+            title="Import trades from Notion or broker CSV"
+            onClick={() => setShowCSVImport(true)}
+          >
+            <Upload size={13} />
+            <span>Import trades from CSV</span>
+          </button>
 
           <div className="tj-month-grid">
             <div className="tj-month-cell">
@@ -2922,6 +2944,7 @@ export default function TradeJournal() {
                       trade={activeTrade}
                       entries={entries}
                       navigate={navigate}
+                      onSaveEntries={() => mutateEntries(p => p)}
                     />
                   )}
                 </>

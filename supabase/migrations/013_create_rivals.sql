@@ -3,6 +3,7 @@ create table if not exists public.rival_profiles (
   username text not null unique,
   display_name text,
   avatar_color text not null default '#f59e0b',
+  stats jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint rival_profiles_username_format check (username ~ '^[a-z0-9_]{3,24}$')

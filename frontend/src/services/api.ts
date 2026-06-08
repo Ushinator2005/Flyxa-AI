@@ -149,7 +149,7 @@ export const aiApi = {
     formData.append('entryTime', entryTime);
     return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData);
   },
-  analyzeTradeById: (tradeId: string) => api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, {}),
+  analyzeTradeById: (tradeId: string, trade?: Partial<Trade>) => api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, { trade }),
   analyzePatterns: () => api.post('/api/ai/patterns', {}),
   weeklyReport: (weekStart: string, weekEnd: string) =>
     api.post('/api/ai/weekly-report', { weekStart, weekEnd }),
@@ -227,6 +227,15 @@ export interface RivalProfileResponse {
   displayName: string;
   avatarInitials: string;
   avatarColor: string;
+  stats?: {
+    dailyJournalStreak: number;
+    dailyJournalScore: number;
+    tradingJournalScore: number;
+    backtestSessions: number;
+    processScore: number;
+    winRate?: number | null;
+    avgR?: number | null;
+  };
 }
 
 export interface RivalRequestResponse {
@@ -242,6 +251,8 @@ export const rivalsApi = {
   getProfile: () => api.get<RivalProfileResponse | null>('/api/rivals/profile'),
   updateProfile: (data: { username: string; displayName?: string; avatarColor?: string }) =>
     api.put<RivalProfileResponse>('/api/rivals/profile', data),
+  updateStats: (stats: NonNullable<RivalProfileResponse['stats']>) =>
+    api.put<RivalProfileResponse>('/api/rivals/profile/stats', { stats }),
   search: (username: string) =>
     api.get<RivalProfileResponse | null>(`/api/rivals/search?username=${encodeURIComponent(username)}`),
   getAll: () => api.get<RivalRequestResponse[]>('/api/rivals'),

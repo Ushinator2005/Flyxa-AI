@@ -1,12 +1,11 @@
 import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Clock3, AlertTriangle } from 'lucide-react';
-import { NavLink, useSearchParams, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { aiApi } from '../services/api.js';
 
 type InsightType = 'risk' | 'pattern' | 'psychology' | 'edge';
 type TagTone = 'positive' | 'negative' | 'neutral';
@@ -1232,15 +1231,11 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
 export default function FlyxaAI() {
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount } = useAppSettings();
-  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [respondOpen, setRespondOpen] = useState(false);
   const [respondText, setRespondText] = useState('');
   const [timeframe, setTimeframe] = useState<TimeFrame>('1W');
   const [weekOffset, setWeekOffset] = useState(0);
-  const [tradeAnalysisById, setTradeAnalysisById] = useState<Record<string, string>>({});
-  const [tradeAnalysisLoadingId, setTradeAnalysisLoadingId] = useState<string | null>(null);
-  const [tradeAnalysisError, setTradeAnalysisError] = useState<string | null>(null);
   const aiReflections = useFlyxaStore(state => state.aiReflections);
   const addAiReflection = useFlyxaStore(state => state.addAiReflection);
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
@@ -1257,48 +1252,6 @@ export default function FlyxaAI() {
     () => buildData(safeAccountTrades, timeframe, weekOffset),
     [safeAccountTrades, timeframe, weekOffset]
   );
-  const focusedTradeId = searchParams.get('tradeId');
-  const focusedTrade = useMemo(
-    () => (focusedTradeId ? safeAccountTrades.find(trade => trade.id === focusedTradeId) ?? null : null),
-    [focusedTradeId, safeAccountTrades]
-  );
-  const focusedTradePnl = useMemo(
-    () => (focusedTrade ? Number(focusedTrade.pnl ?? 0) : null),
-    [focusedTrade]
-  );
-  const focusedTradeConfluences = useMemo(
-    () => normalizeConfluences(focusedTrade?.confluences),
-    [focusedTrade]
-  );
-  const focusedTradeAnalysis = focusedTradeId ? tradeAnalysisById[focusedTradeId] : null;
-  const focusedTradeAnalysisLoading = Boolean(focusedTradeId && tradeAnalysisLoadingId === focusedTradeId);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!focusedTradeId || !focusedTrade || tradeAnalysisById[focusedTradeId]) return;
-
-    setTradeAnalysisLoadingId(focusedTradeId);
-    setTradeAnalysisError(null);
-
-    aiApi.analyzeTradeById(focusedTradeId)
-      .then(({ analysis }) => {
-        if (cancelled) return;
-        setTradeAnalysisById(prev => ({ ...prev, [focusedTradeId]: analysis }));
-      })
-      .catch(error => {
-        if (cancelled) return;
-        setTradeAnalysisError(error instanceof Error ? error.message : 'Unable to analyse this trade.');
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setTradeAnalysisLoadingId(current => current === focusedTradeId ? null : current);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [focusedTradeId, focusedTrade, tradeAnalysisById]);
-
   const sessionsProgress = Math.min(100, (weeklyDebriefData.nextDebrief.sessionsLogged / weeklyDebriefData.nextDebrief.sessionsTarget) * 100);
   const processScoreNumeric = Number.parseInt(weeklyDebriefData.stats.processScore.value, 10);
   const boundedScore = Math.max(0, Math.min(100, Number.isFinite(processScoreNumeric) ? processScoreNumeric : 0));
@@ -1749,54 +1702,8 @@ export default function FlyxaAI() {
                   </div>
                 </div>
               </div>
-              {focusedTradeId && (
-                <div className="mt-4 rounded-[8px] border px-4 py-3" style={{ borderColor: colors.b1, backgroundColor: colors.d2 }}>
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Trade Deep Dive</p>
-                      <p className="mt-1 text-[13px] font-semibold" style={{ color: colors.t0 }}>
-                        {focusedTrade ? `${focusedTrade.symbol || 'N/A'} ${focusedTrade.direction || ''} · ${focusedTrade.trade_date || 'Unknown date'} ${focusedTrade.trade_time || ''}` : 'Trade not found in this account'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = new URLSearchParams(searchParams);
-                        next.delete('tradeId');
-                        setSearchParams(next);
-                      }}
-                      className="text-[11px] underline-offset-2 hover:underline"
-                      style={{ color: colors.acc }}
-                    >
-                      Clear focus
-                    </button>
-                  </div>
-                  {focusedTrade ? (
-                    <div className="mt-2 grid gap-2 text-[11.5px] leading-relaxed" style={{ color: colors.t1 }}>
-                      <p>
-                        Result: <span style={{ color: focusedTradePnl !== null && focusedTradePnl >= 0 ? colors.grn : colors.red, fontFamily: colors.mono }}>{focusedTradePnl !== null ? formatSignedCurrency(focusedTradePnl) : '$0.00'}</span>
-                        {' '}({focusedTrade.pnl > 0 ? 'win' : focusedTrade.pnl < 0 ? 'loss' : 'flat'}) · P&L <span style={{ fontFamily: colors.mono }}>{formatCurrency(Number(focusedTrade.pnl || 0))}</span>
-                      </p>
-                      <p>
-                        Plan adherence: <span style={{ color: typeof focusedTrade.followed_plan !== 'boolean' ? colors.t2 : (focusedTrade.followed_plan ? colors.grn : colors.red) }}>
-                          {typeof focusedTrade.followed_plan !== 'boolean'
-                            ? 'Not logged'
-                            : (focusedTrade.followed_plan ? 'Followed plan' : 'Plan drift flagged')}
-                        </span>
-                        {' '}· Emotion: <span style={{ color: colors.t0 }}>{focusedTrade.emotional_state || 'Not logged'}</span>
-                      </p>
-                      <p>
-                        Confluences: <span style={{ color: colors.t0 }}>{focusedTradeConfluences.length ? focusedTradeConfluences.join(', ') : 'None tagged'}</span>
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[11.5px]" style={{ color: colors.t1 }}>
-                      This trade ID was passed from journal, but it is not available in the currently selected account filter.
-                    </p>
-                  )}
-                </div>
-              )}
             </section>
+
 
             {safeAccountTrades.length === 0 && (
               <section className="border-t px-6 py-5" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
