@@ -98,11 +98,17 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
     || user?.email?.split('@')[0]
     || 'Trader';
   const [rivalUsername, setRivalUsername] = useState<string | null>(null);
+  const [rivalAvatarUrl, setRivalAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     rivalsApi.getProfile()
-      .then(p => { if (!cancelled && p?.username) setRivalUsername(p.username); })
+      .then(p => {
+        if (!cancelled) {
+          if (p?.username) setRivalUsername(p.username);
+          if (p?.avatarUrl) setRivalAvatarUrl(p.avatarUrl);
+        }
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -110,7 +116,10 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
   useEffect(() => {
     const handler = () => {
       rivalsApi.getProfile()
-        .then(p => { if (p?.username) setRivalUsername(p.username); })
+        .then(p => {
+          if (p?.username) setRivalUsername(p.username);
+          if (p?.avatarUrl) setRivalAvatarUrl(p.avatarUrl);
+        })
         .catch(() => {});
     };
     window.addEventListener('flyxa:profile-saved', handler);
@@ -370,14 +379,19 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
             title="Open profile settings"
             style={{
               width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-              background: AMBER_DIM, border: `1px solid ${AMBER_BORD}`,
+              background: rivalAvatarUrl ? 'transparent' : AMBER_DIM,
+              border: `1px solid ${AMBER_BORD}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 700, color: AMBER, fontFamily: MONO,
               cursor: 'pointer',
               padding: 0,
+              overflow: 'hidden',
             }}
           >
-            {displayName.slice(0, 2).toUpperCase()}
+            {rivalAvatarUrl
+              ? <img src={rivalAvatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : displayName.slice(0, 2).toUpperCase()
+            }
           </button>
           <button
             onClick={signOut}
@@ -397,13 +411,18 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
             title="Open profile settings"
             style={{
             width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-            background: AMBER_DIM, border: `1px solid ${AMBER_BORD}`,
+            background: rivalAvatarUrl ? 'transparent' : AMBER_DIM,
+            border: `1px solid ${AMBER_BORD}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 11, fontWeight: 700, color: AMBER, fontFamily: MONO,
             cursor: 'pointer',
             padding: 0,
+            overflow: 'hidden',
           }}>
-            {displayName.slice(0, 2).toUpperCase()}
+            {rivalAvatarUrl
+              ? <img src={rivalAvatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : displayName.slice(0, 2).toUpperCase()
+            }
           </button>
           <button
             type="button"
