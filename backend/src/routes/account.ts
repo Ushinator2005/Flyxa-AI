@@ -7,7 +7,8 @@ const router = Router();
 
 async function deleteOwnRows(table: string, userId: string): Promise<void> {
   const { error } = await supabase.from(table).delete().eq('user_id', userId);
-  if (error && error.code !== '42P01') throw error;
+  // 42P01 = table does not exist, 42703 = column does not exist — both are safe to ignore
+  if (error && error.code !== '42P01' && error.code !== '42703') throw error;
 }
 
 // POST /api/account/reset
@@ -27,29 +28,34 @@ router.post('/reset', authMiddleware, async (req: AuthenticatedRequest, res: Res
       deleteOwnRows('user_store', userId),
     ]);
 
-    await supabase
+    // rival_requests uses different column names — handle table-not-found gracefully
+    const { error: rrError } = await supabase
       .from('rival_requests')
       .delete()
       .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`);
+    if (rrError && rrError.code !== '42P01' && rrError.code !== '42703') throw rrError;
 
-    const { data: profile } = await supabase
-      .from('rival_profiles')
-      .select('username')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (profile?.username) {
-      await supabase
+    // Reset rival profile stats but keep the username
+    try {
+      const { data: profile } = await supabase
         .from('rival_profiles')
-        .update({
-          display_name: profile.username,
-          avatar_color: '#f59e0b',
-          avatar_url: null,
-          stats: {},
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId);
-    }
+        .select('username')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (profile?.username) {
+        await supabase
+          .from('rival_profiles')
+          .update({
+            display_name: profile.username,
+            avatar_color: '#f59e0b',
+            avatar_url: null,
+            stats: {},
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+      }
+    } catch { /* rival_profiles table may not exist — safe to skip */ }
 
     res.json({ ok: true, preserved: ['username'] });
   } catch (err) {

@@ -9,7 +9,7 @@ import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsConte
 import { useRivals } from '../hooks/useRivals.js';
 import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { clearCurrentUserStoreCache, flushSupabaseStoreNow } from '../store/supabaseStorage.js';
+import { clearCurrentUserStoreCache } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 
@@ -823,13 +823,15 @@ export default function Settings() {
     setResetWorking(true);
     setResetError('');
     try {
-      // Best-effort server-side wipe — don't let a backend error block the local reset
-      try { await accountApi.reset(); } catch { /* ignored — local reset proceeds regardless */ }
+      // Server-side wipe: deletes user_store AND store_entries_backup from Supabase.
+      // Both tables must be cleared — otherwise store_entries_backup acts as a
+      // recovery source and brings all data back on the next page load.
+      await accountApi.reset();
 
-      resetAllData();                      // reset Zustand store to initial state
-      await flushSupabaseStoreNow();       // immediately write the empty state to Supabase
-      await clearCurrentUserStoreCache();  // clear per-user localStorage cache
-      clearResetLocalKeys();               // clear legacy localStorage keys
+      // Clear all local caches so there is nothing to restore from on reload.
+      await clearCurrentUserStoreCache();
+      clearResetLocalKeys();
+
       setShowResetPanel(false);
       setResetConfirmText('');
       window.location.reload();
