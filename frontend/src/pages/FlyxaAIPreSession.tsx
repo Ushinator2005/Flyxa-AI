@@ -271,6 +271,22 @@ export default function FlyxaAIPreSession() {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!oathCooldownUntil) return;
+    setOathCooldownNow(Date.now());
+
+    const interval = window.setInterval(() => {
+      const timestamp = Date.now();
+      setOathCooldownNow(timestamp);
+      if (timestamp >= oathCooldownUntil) {
+        setOathCooldownUntil(0);
+        window.clearInterval(interval);
+      }
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [oathCooldownUntil]);
+
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
     [filterTradesBySelectedAccount, trades]
@@ -619,6 +635,15 @@ export default function FlyxaAIPreSession() {
     });
   };
 
+  const oathCooldownRemaining = Math.max(0, Math.ceil((oathCooldownUntil - oathCooldownNow) / 1000));
+  const oathCooldownActive = oathCooldownRemaining > 0;
+
+  const toggleOathChecklist = (item: ChecklistItem) => {
+    if (oathCooldownActive) return;
+    toggleChecklist(item);
+    setOathCooldownUntil(Date.now() + OATH_CHECK_DELAY_MS);
+  };
+
   const sessionAlreadyStarted = useMemo(() => {
     if (!storedPreSession?.startedAt) return false;
     return getTimeZoneParts(new Date(storedPreSession.startedAt), preferences.timezone).date === todayIso;
@@ -791,6 +816,11 @@ export default function FlyxaAIPreSession() {
                   <h2 style={{ fontSize: 15, fontWeight: 700, color: C.t0, letterSpacing: '-0.02em' }}>Trader Oath</h2>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {oathCooldownActive && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: C.t2, fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.02em' }}>
+                      read next · {oathCooldownRemaining}s
+                    </span>
+                  )}
                   <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: oathCompleted === activeOathItems.length ? 'rgba(34,214,138,0.12)' : 'rgba(245,158,11,0.1)', border: `1px solid ${oathCompleted === activeOathItems.length ? 'rgba(34,214,138,0.3)' : 'rgba(245,158,11,0.25)'}`, color: oathCompleted === activeOathItems.length ? C.grn : C.acc, fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>
                     {oathCompleted}/{activeOathItems.length}
                   </span>
@@ -827,15 +857,17 @@ export default function FlyxaAIPreSession() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '10px 14px 14px' }}>
                   {activeOathItems.map(item => {
                     const checked = Boolean(checklistState[item.id]);
+                    const locked = oathCooldownActive;
                     return (
-                      <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
+                      <button key={item.id} type="button" disabled={locked} onClick={() => toggleOathChecklist(item)} style={{
                         display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 14px',
                         borderRadius: 9,
                         border: `1px solid ${checked ? 'rgba(245,158,11,0.18)' : 'transparent'}`,
                         borderLeft: `2px solid ${checked ? C.acc : 'transparent'}`,
                         backgroundColor: checked ? 'rgba(245,158,11,0.05)' : 'transparent',
-                        cursor: 'pointer', textAlign: 'left', width: '100%',
-                        transition: 'background 0.15s ease, border-color 0.15s ease',
+                        cursor: locked ? 'not-allowed' : 'pointer', textAlign: 'left', width: '100%',
+                        opacity: locked && !checked ? 0.58 : 1,
+                        transition: 'background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease',
                       }}>
                         {customCheckbox(checked)}
                         <p style={{ fontSize: 12.5, lineHeight: 1.6, color: checked ? C.t1 : C.t0, flex: 1, letterSpacing: '-0.01em', transition: 'color 0.15s ease' }}>{item.label}</p>
