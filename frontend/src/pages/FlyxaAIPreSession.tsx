@@ -650,7 +650,7 @@ export default function FlyxaAIPreSession() {
   }, [storedPreSession?.startedAt, todayIso, preferences.timezone]);
 
   const startSession = () => {
-    if (sessionAlreadyStarted) { navigate('/journal'); return; }
+    if (sessionAlreadyStarted) { navigate('/session'); return; }
     const committedAt = new Date().toISOString();
     const parsedLoss = parseFloat(sessionMaxLoss);
     const parsedTarget = parseFloat(sessionTarget);
@@ -676,7 +676,7 @@ export default function FlyxaAIPreSession() {
     };
     setPreSessionAction(sessionData);
     setPreSessionForDate(todayIso, sessionData);
-    navigate('/journal');
+    navigate('/session');
   };
 
   if (loading) {
@@ -781,7 +781,7 @@ export default function FlyxaAIPreSession() {
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {sessionAlreadyStarted ? (
-                  <button type="button" onClick={() => navigate('/journal')} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.grn}55`, backgroundColor: `${C.grn}12`, color: C.grn, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                  <button type="button" onClick={() => navigate('/session')} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.grn}55`, backgroundColor: `${C.grn}12`, color: C.grn, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                     Session open — continue →
                   </button>
                 ) : (

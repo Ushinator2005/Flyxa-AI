@@ -24,6 +24,7 @@ export default function Layout() {
     || location.pathname === '/goals'
     || location.pathname === '/'
     || location.pathname === '/journal'
+    || location.pathname === '/session'
     || isJournalWorkspace;
 
   return (

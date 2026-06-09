@@ -33,6 +33,7 @@ const Goals = lazy(() => import('./pages/Goals.js'));
 const Rivals = lazy(() => import('./pages/Rivals.js'));
 const Settings = lazy(() => import('./pages/Settings.js'));
 const TradeCheck = lazy(() => import('./pages/TradeCheck.js'));
+const SessionActive = lazy(() => import('./pages/SessionActive.js'));
 
 function RouteFallback() {
   return (
@@ -385,6 +386,7 @@ export default function App() {
               <Route path="/billing" element={<Billing />} />
               <Route path="/chart" element={<Navigate to="/backtest" replace />} />
               <Route path="/psychology" element={<PsychologyTracker />} />
+              <Route path="/session" element={<SessionActive />} />
               <Route path="/journal" element={<Journal />} />
               <Route path="/goals" element={<Goals />} />
               <Route path="/rivals" element={<Rivals />} />
