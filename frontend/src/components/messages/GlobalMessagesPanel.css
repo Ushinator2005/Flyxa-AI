@@ -1,0 +1,384 @@
+/* Backdrop overlay */
+.gmp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.55);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.gmp-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Slide-in panel */
+.gmp-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 60;
+  height: 100vh;
+  width: min(380px, 100vw);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.26s ease;
+  border-left: 1px solid var(--app-border);
+  background: var(--app-panel);
+  box-shadow: -24px 0 48px rgba(2, 6, 23, 0.45);
+}
+
+.gmp-panel.open {
+  transform: translateX(0);
+}
+
+/* Amber accent line at top */
+.gmp-topline {
+  height: 2px;
+  background: var(--amber);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* Shared header */
+.gmp-header {
+  border-bottom: 1px solid var(--app-border);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Icon badge shown in inbox header */
+.gmp-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 158, 11, 0.10);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  color: var(--amber);
+  flex-shrink: 0;
+}
+
+/* Chat avatar (rival pic) in chat header */
+.gmp-chat-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.gmp-chat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gmp-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.gmp-header-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gmp-header-sub {
+  font-size: 11px;
+  color: var(--app-text-subtle);
+  margin: 2px 0 0;
+}
+
+/* Close button */
+.gmp-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--app-text-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.14s ease;
+}
+
+.gmp-close:hover {
+  border-color: var(--app-border);
+  color: var(--app-text);
+  background: var(--app-panel-strong);
+}
+
+/* Back button (chat → inbox) */
+.gmp-back {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--app-text-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.14s ease;
+}
+
+.gmp-back:hover {
+  border-color: var(--app-border);
+  color: var(--app-text);
+  background: var(--app-panel-strong);
+}
+
+/* ── Inbox view ── */
+.gmp-inbox-body {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+}
+
+.gmp-inbox-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.gmp-inbox-body::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--app-border);
+}
+
+.gmp-inbox-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid var(--app-border);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.13s ease;
+}
+
+.gmp-inbox-row:hover {
+  background: var(--app-panel-strong);
+}
+
+.gmp-inbox-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.gmp-inbox-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gmp-inbox-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.gmp-inbox-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gmp-inbox-sub {
+  font-size: 11px;
+  color: var(--app-text-subtle);
+  margin: 2px 0 0;
+}
+
+.gmp-inbox-arrow {
+  color: var(--app-text-subtle);
+  flex-shrink: 0;
+}
+
+/* ── Chat view ── */
+.gmp-chat-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+}
+
+.gmp-chat-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.gmp-chat-body::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--app-border);
+}
+
+.gmp-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--app-text-subtle);
+  font-size: 13px;
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.gmp-empty svg {
+  opacity: 0.3;
+  margin-bottom: 4px;
+}
+
+.gmp-msg-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.gmp-msg-row.me {
+  align-items: flex-end;
+}
+
+.gmp-msg-row.them {
+  align-items: flex-start;
+}
+
+.gmp-msg {
+  max-width: 82%;
+  border-radius: 13px;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.gmp-msg.them {
+  border: 1px solid var(--app-border);
+  background: var(--app-panel-strong);
+  color: var(--app-text-muted);
+  border-bottom-left-radius: 4px;
+}
+
+.gmp-msg.me {
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.10);
+  color: #dfeaff;
+  border-bottom-right-radius: 4px;
+}
+
+.gmp-msg-time {
+  font-size: 10px;
+  color: var(--app-text-subtle);
+  margin-top: 3px;
+  padding: 0 3px;
+}
+
+.gmp-chat-footer {
+  border-top: 1px solid var(--app-border);
+  padding: 10px 12px 12px;
+  flex-shrink: 0;
+}
+
+.gmp-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.gmp-input {
+  flex: 1;
+  min-height: 42px;
+  max-height: 110px;
+  resize: none;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-panel-strong);
+  color: var(--app-text);
+  font-size: 13px;
+  padding: 10px 11px;
+  outline: none;
+  line-height: 1.4;
+  font-family: var(--font-sans);
+}
+
+.gmp-input::placeholder {
+  color: var(--app-text-subtle);
+}
+
+.gmp-input:focus {
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.gmp-send {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.38);
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: filter 0.14s ease, transform 0.14s ease, opacity 0.14s ease;
+}
+
+.gmp-send:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.gmp-send:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .gmp-panel {
+    width: 100vw;
+  }
+}

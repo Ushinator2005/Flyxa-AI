@@ -9,6 +9,7 @@ import InSessionTradeCheckDock from '../common/InSessionTradeCheckDock.js';
 import WebsiteTour from '../common/WebsiteTour.js';
 import UsernamePrompt from '../common/UsernamePrompt.js';
 import ErrorBoundary from '../common/ErrorBoundary.js';
+import GlobalMessagesPanel from '../messages/GlobalMessagesPanel.js';
 import { useRisk } from '../../contexts/RiskContext.js';
 
 export default function Layout() {
@@ -49,6 +50,7 @@ export default function Layout() {
       <SessionHUD />
       <WebsiteTour />
       <UsernamePrompt />
+      <GlobalMessagesPanel />
     </div>
   );
 }

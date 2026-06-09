@@ -1,4 +1,4 @@
-import { Settings, ChevronDown } from 'lucide-react';
+import { Settings, ChevronDown, MessageSquare } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
@@ -235,6 +235,29 @@ export default function Header() {
         <ThemeToggle compact />
         <button
           type="button"
+          onClick={() => window.dispatchEvent(new Event('flyxa:open-messages'))}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 34,
+            width: 34,
+            borderRadius: 6,
+            border: '1px solid var(--app-border)',
+            background: 'var(--app-bg)',
+            color: 'var(--app-text-muted)',
+            cursor: 'pointer',
+            transition: 'border-color 180ms ease, color 180ms ease',
+          }}
+          onMouseEnter={e => { const el = e.currentTarget; el.style.borderColor = 'rgba(255,255,255,0.14)'; el.style.color = 'var(--app-text)'; }}
+          onMouseLeave={e => { const el = e.currentTarget; el.style.borderColor = 'var(--app-border)'; el.style.color = 'var(--app-text-muted)'; }}
+          aria-label="Open messages"
+          title="Messages"
+        >
+          <MessageSquare size={15} />
+        </button>
+        <button
+          type="button"
           onClick={() => navigate('/settings')}
           style={{
             display: 'inline-flex',
@@ -281,6 +304,27 @@ export default function Header() {
           <span style={{ fontSize: 14 }}>⚡</span>
         </button>
         <ThemeToggle compact />
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event('flyxa:open-messages'))}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 34,
+            height: 34,
+            borderRadius: 6,
+            border: '1px solid var(--app-border)',
+            background: 'var(--app-bg)',
+            color: 'var(--app-text-muted)',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          aria-label="Open messages"
+          title="Messages"
+        >
+          <MessageSquare size={15} />
+        </button>
       </div>
     </header>
     </>
