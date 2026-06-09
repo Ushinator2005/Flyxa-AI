@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ExtractedTradeData } from '../types/index';
 
-const GEMINI_MODEL_FALLBACK_CHAIN = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+const GEMINI_MODEL_FALLBACK_CHAIN = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 const GEMINI_MAX_RETRIES_PER_MODEL = 4;
 const GEMINI_BASE_RETRY_DELAY_MS = 2000;
 
