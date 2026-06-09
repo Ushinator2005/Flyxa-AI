@@ -1383,47 +1383,64 @@ function XAccountsModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
-      <div style={{ display: 'grid', gap: 18, fontFamily: SANS, paddingTop: 2 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'grid', gap: 14, fontFamily: SANS, padding: '2px 2px 0' }}>
+        <div style={{ display: 'grid', gap: 12, paddingRight: 34 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
             <span
               style={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: 8,
-                border: `1px solid ${AMBER_BORDER}`,
-                background: AMBER_DIM,
-                color: AMBER,
+                borderRadius: 7,
+                border: '1px solid rgba(255, 255, 255, 0.14)',
+                background: '#000000',
+                color: '#ffffff',
                 flexShrink: 0,
               }}
             >
-              <TwitterXLogo size={18} />
+              <TwitterXLogo size={17} />
             </span>
             <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, color: T1, fontSize: 18, fontWeight: 800 }}>X accounts</p>
-              <p style={{ margin: '5px 0 0', color: T2, fontSize: 12, lineHeight: 1.45 }}>
-                Choose which accounts Flyxa should pull into Market News.
+              <p style={{ margin: 0, color: T1, fontSize: 17, fontWeight: 800 }}>X accounts</p>
+              <p style={{ margin: '4px 0 0', color: T2, fontSize: 12, lineHeight: 1.45 }}>
+                Add the accounts you want Flyxa to monitor in Market News.
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0, paddingRight: 28 }}>
-            <div style={{ minWidth: 74, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 9px', background: S1 }}>
-              <p style={{ margin: 0, color: T1, fontSize: 15, fontWeight: 800 }}>{enabledCount}</p>
-              <p style={{ margin: '1px 0 0', color: T3, fontSize: 10, fontWeight: 650 }}>active</p>
-            </div>
-            <div style={{ minWidth: 74, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 9px', background: S1 }}>
-              <p style={{ margin: 0, color: T1, fontSize: 15, fontWeight: 800 }}>{xAccounts.length}</p>
-              <p style={{ margin: '1px 0 0', color: T3, fontSize: 10, fontWeight: 650 }}>of 10 added</p>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              { label: 'Active', value: enabledCount },
+              { label: 'Added', value: `${xAccounts.length} / 10` },
+            ].map(stat => (
+              <div
+                key={stat.label}
+                style={{
+                  minHeight: 42,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  background: S1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <span style={{ color: T3, fontSize: 11, fontWeight: 700 }}>{stat.label}</span>
+                <span style={{ color: T1, fontSize: 13, fontWeight: 800 }}>{stat.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, background: S1, padding: 12, display: 'grid', gap: 9 }}>
-          <label style={{ color: T2, fontSize: 11, fontWeight: 750 }}>Add account handles</label>
-          <div style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, background: S1, padding: 10, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <label style={{ color: T2, fontSize: 11, fontWeight: 750 }}>Add account handles</label>
+            <span style={{ color: T3, fontSize: 10 }}>{xAccounts.length >= 10 ? 'Limit reached' : 'Comma separated'}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 86px', gap: 8, minWidth: 0 }}>
             <input
               value={xDraft}
               onChange={event => onXDraftChange(event.target.value)}
@@ -1433,9 +1450,8 @@ function XAccountsModal({
               disabled={!prefs.x || xAccounts.length >= 10}
               placeholder="@financialjuice, @unusual_whales"
               style={{
-                flex: 1,
                 minWidth: 0,
-                height: 40,
+                height: 38,
                 borderRadius: 8,
                 border: `1px solid ${BORDER}`,
                 background: S2,
@@ -1452,8 +1468,7 @@ function XAccountsModal({
               onClick={onXAdd}
               disabled={!canAdd}
               style={{
-                minWidth: 92,
-                height: 40,
+                height: 38,
                 borderRadius: 8,
                 border: `1px solid ${canAdd ? AMBER_BORDER : BORDER}`,
                 background: canAdd ? AMBER : S2,
@@ -1469,31 +1484,35 @@ function XAccountsModal({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: 'grid', gap: 7 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
             <p style={{ margin: 0, color: T2, fontSize: 11, fontWeight: 750 }}>Saved accounts</p>
             <p style={{ margin: 0, color: T3, fontSize: 11 }}>{xAccounts.length === 0 ? 'None yet' : `${enabledCount} active`}</p>
           </div>
-          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', background: S1 }}>
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', background: S1, minHeight: 116 }}>
             {xAccounts.length === 0 ? (
-              <div style={{ padding: '26px 18px', textAlign: 'center', color: T3, fontSize: 12, display: 'grid', justifyItems: 'center', gap: 9 }}>
+              <div style={{ minHeight: 116, padding: '18px', color: T3, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 13 }}>
                 <span
                   style={{
-                    width: 34,
-                    height: 34,
+                    width: 32,
+                    height: 32,
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    borderRadius: 8,
-                    border: `1px solid ${BORDER}`,
-                    background: S2,
-                    color: T2,
+                    borderRadius: 7,
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: '#000000',
+                    color: '#ffffff',
                   }}
                 >
                   <TwitterXLogo size={15} />
                 </span>
-                <span style={{ color: T2, fontSize: 13, fontWeight: 700 }}>No accounts added yet</span>
-                <span style={{ maxWidth: 300, lineHeight: 1.45 }}>Add handles above to include their latest posts in your news refresh.</span>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, color: T2, fontSize: 13, fontWeight: 750 }}>No accounts added yet</p>
+                  <p style={{ margin: '4px 0 0', maxWidth: 310, lineHeight: 1.45 }}>
+                    Add handles above to include their latest posts in your refresh.
+                  </p>
+                </div>
               </div>
             ) : (
               xAccounts.map((account, index) => (

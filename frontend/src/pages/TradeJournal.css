@@ -1496,6 +1496,59 @@
   gap: 12px;
 }
 
+.tj-direction-card {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tj-direction-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.tj-direction-btn {
+  min-width: 70px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--txt-3);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
+}
+
+.tj-direction-btn:hover {
+  color: var(--txt);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tj-direction-btn.long.active {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: var(--cobalt-dim);
+  color: #8ab6ff;
+}
+
+.tj-direction-btn.short.active {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
 .tj-size-inline {
   display: flex;
   align-items: center;

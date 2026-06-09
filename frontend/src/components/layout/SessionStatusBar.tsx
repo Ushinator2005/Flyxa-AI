@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useFlyxaStore from '../../store/flyxaStore.js';
 import { useRisk } from '../../contexts/RiskContext.js';
 
@@ -42,6 +42,7 @@ export default function SessionStatusBar() {
   const setPreSession = useFlyxaStore(state => state.setPreSession);
   const { dailyStatus } = useRisk();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Read Guard's session trades from localStorage; update via storage event (cross-tab)
   // and a polling interval (same-tab iframe writes don't always fire storage events)
@@ -196,6 +197,27 @@ export default function SessionStatusBar() {
 
       {/* Spacer */}
       <div style={{ flex: 1, minWidth: 12 }} />
+
+      {location.pathname !== '/session' && (
+        <button
+          type="button"
+          onClick={() => navigate('/session')}
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: '#22d68a',
+            background: 'rgba(34,214,138,0.08)',
+            border: '1px solid rgba(34,214,138,0.24)',
+            borderRadius: 4,
+            padding: '2px 10px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            letterSpacing: '0.02em',
+          }}
+        >
+          View session
+        </button>
+      )}
 
       {/* End session */}
       <button

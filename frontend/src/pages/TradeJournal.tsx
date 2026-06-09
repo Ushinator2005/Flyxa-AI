@@ -705,6 +705,35 @@ interface ContractSizingBlockProps {
   onMutate: (fields: Partial<JournalTrade>) => void;
 }
 
+function DirectionSelectorBlock({ trade, onMutate }: ContractSizingBlockProps) {
+  const options: Array<{ value: TradeDirection; label: string }> = [
+    { value: 'LONG', label: 'Long' },
+    { value: 'SHORT', label: 'Short' },
+  ];
+
+  return (
+    <div className="tj-direction-card">
+      <div className="tj-size-inline">
+        <span className="tj-size-title">DIRECTION</span>
+        <span className="tj-size-caption">Manual trade</span>
+      </div>
+      <div className="tj-direction-toggle" role="group" aria-label="Trade direction">
+        {options.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            className={`tj-direction-btn ${option.value.toLowerCase()} ${trade.direction === option.value ? 'active' : ''}`}
+            onClick={() => onMutate({ direction: option.value, priceLevelsSource: 'manual', priceLevelsEdited: true })}
+            aria-pressed={trade.direction === option.value}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ContractSizingBlock({ trade, onMutate }: ContractSizingBlockProps) {
   const [localContracts, setLocalContracts] = useState(String(Math.max(1, Math.round(trade.contracts || 1))));
 
@@ -2881,6 +2910,12 @@ export default function TradeJournal() {
                   <div className="tj-section-head">
                     <span className="tj-section-title">Contract Sizing</span>
                   </div>
+                  {activeTrade.priceLevelsSource !== 'ai' && (
+                    <DirectionSelectorBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                  )}
                   <AccountSelectorBlock
                     trade={activeTrade}
                     onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
