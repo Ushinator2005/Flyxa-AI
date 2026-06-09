@@ -159,13 +159,12 @@ export default function GlobalMessagesPanel() {
           <>
             {/* Inbox header */}
             <div className="gmp-header">
-              <div className="gmp-header-icon">
-                <MessageSquare size={15} />
-              </div>
               <div className="gmp-header-info">
-                <p className="gmp-header-name">Messages</p>
-                <p className="gmp-header-sub">
-                  {rivals.length} rival{rivals.length !== 1 ? 's' : ''}
+                <p className="gmp-header-label">Messages</p>
+                <p className="gmp-header-name">
+                  {rivals.length > 0
+                    ? `${rivals.length} rival${rivals.length !== 1 ? 's' : ''}`
+                    : 'No rivals yet'}
                 </p>
               </div>
               <button className="gmp-close" onClick={close} aria-label="Close messages">

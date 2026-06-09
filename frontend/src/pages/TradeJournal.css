@@ -1241,11 +1241,11 @@
 }
 
 .tj-empty-badge {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: 10px;
-  background: var(--amber-dim);
-  border: 1px solid rgba(245, 166, 35, 0.3);
+  background: transparent;
+  border: none;
   color: var(--amber);
   display: inline-flex;
   align-items: center;

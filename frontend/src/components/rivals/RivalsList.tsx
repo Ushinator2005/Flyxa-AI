@@ -89,10 +89,10 @@ export default function RivalsList({ rivals, currentUser, onOpenChat }: RivalsLi
               </div>
             </div>
 
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.dailyJournalScore, dailyJournal)}`}>{dailyJournal}</div>
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.tradingJournalScore, tradingJournal)}`}>{tradingJournal}%</div>
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.backtestSessions, backtest)}`}>{backtest}</div>
-            <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.processScore, processScore)}`}>{processScore}</div>
+            <div className="rv-cell delta-even">{dailyJournal}</div>
+            <div className="rv-cell delta-even">{tradingJournal}%</div>
+            <div className="rv-cell delta-even">{backtest}</div>
+            <div className="rv-cell delta-even">{processScore}</div>
 
             <div className="rv-action">
               {!isMe && rival.userId && onOpenChat && (

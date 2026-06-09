@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type DragEvent } from 'react';
-import { Camera, Image as ImageIcon, Upload } from 'lucide-react';
+import { Camera, Image as ImageIcon } from 'lucide-react';
+import FlyxaLogo from '../common/FlyxaLogo.js';
 
 interface ScannerDropZoneProps {
   isScanning: boolean;
@@ -139,7 +140,7 @@ export default function ScannerDropZone({
       />
       <div className="tj-empty-wrap">
         <div className={`tj-empty-card ${isDragging ? 'drag' : ''}`}>
-          <span className="tj-empty-badge"><Upload size={20} /></span>
+          <span className="tj-empty-badge"><FlyxaLogo size={52} showWordmark={false} /></span>
           <p className="tj-empty-title">Drop a Chart Screenshot</p>
           <p className="tj-empty-text">
             Flyxa reads your <span style={{ color: 'var(--amber)' }}>entry</span>,{' '}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Bot, MessageSquare, Send, Sparkles, X } from 'lucide-react';
 import { aiApi } from '../../services/api.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
@@ -33,6 +33,14 @@ function formatCurrency(value: number): string {
 
 export default function FlyxaChatWidget() {
   const [open, setOpen] = useState(false);
+
+  // Close when the messages panel opens so they don't overlap
+  useEffect(() => {
+    const handler = () => setOpen(false);
+    window.addEventListener('flyxa:open-messages', handler);
+    return () => window.removeEventListener('flyxa:open-messages', handler);
+  }, []);
+
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage]);
