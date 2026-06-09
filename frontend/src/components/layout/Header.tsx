@@ -1,9 +1,10 @@
-import { Settings, ChevronDown, MessageSquare } from 'lucide-react';
+import { Settings, ChevronDown, MessageSquare, Radio } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
 import { ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import MarketClock from './MarketClock.js';
+import useFlyxaStore from '../../store/flyxaStore.js';
 
 function accountStatusColor(status: string): string {
   const s = status.toLowerCase();
@@ -40,10 +41,12 @@ export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const { accounts, selectedAccountId, setSelectedAccountId, preferences } = useAppSettings();
+  const sessionLive = useFlyxaStore(state => Boolean(state.preSession?.startedAt));
   const pageName = pageNames[location.pathname] || 'Flyxa';
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const visibleAccounts = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived);
+  const showSessionButton = sessionLive && location.pathname !== '/session';
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -198,6 +201,44 @@ export default function Header() {
           )}
         </div>
 
+        {showSessionButton && (
+          <button
+            type="button"
+            onClick={() => navigate('/session')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              height: 34,
+              padding: '0 12px',
+              borderRadius: 6,
+              border: '1px solid rgba(34, 197, 94, 0.34)',
+              background: 'rgba(34, 197, 94, 0.10)',
+              color: '#22c55e',
+              cursor: 'pointer',
+              transition: 'border-color 180ms ease, background 180ms ease',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 11,
+              fontWeight: 750,
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget;
+              el.style.borderColor = 'rgba(34, 197, 94, 0.56)';
+              el.style.background = 'rgba(34, 197, 94, 0.16)';
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget;
+              el.style.borderColor = 'rgba(34, 197, 94, 0.34)';
+              el.style.background = 'rgba(34, 197, 94, 0.10)';
+            }}
+            aria-label="Open active session"
+            title="Open active session"
+          >
+            <Radio size={14} />
+            Session
+          </button>
+        )}
+
         <button
           type="button"
           onClick={openTradeCheck}
@@ -284,6 +325,29 @@ export default function Header() {
 
       {/* Mobile-only controls */}
       <div className="flex md:hidden" style={{ alignItems: 'center', gap: 8 }}>
+        {showSessionButton && (
+          <button
+            type="button"
+            onClick={() => navigate('/session')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 34,
+              height: 34,
+              borderRadius: 6,
+              border: '1px solid rgba(34, 197, 94, 0.34)',
+              background: 'rgba(34, 197, 94, 0.10)',
+              color: '#22c55e',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+            aria-label="Open active session"
+            title="Open active session"
+          >
+            <Radio size={15} />
+          </button>
+        )}
         <button
           type="button"
           onClick={openTradeCheck}
