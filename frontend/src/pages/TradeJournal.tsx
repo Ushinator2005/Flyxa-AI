@@ -51,6 +51,11 @@ interface JournalTrade {
   tp?: number;
   priceLevelsSource?: 'ai' | 'manual';
   priceLevelsEdited?: boolean;
+  breakevenRestore?: {
+    exit?: number;
+    exitPrice: number;
+    pnlOverride?: number;
+  };
   accountId?: string;
   accountIds?: string[];
   contracts: number;
@@ -566,6 +571,14 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           tp: typeof trade.tp === 'number' && Number.isFinite(trade.tp) && trade.tp > 0 ? trade.tp : undefined,
           priceLevelsSource: trade.priceLevelsSource === 'ai' ? 'ai' : 'manual',
           priceLevelsEdited: trade.priceLevelsEdited === true,
+          breakevenRestore: (() => {
+            const restore = trade.breakevenRestore as Record<string, unknown> | undefined;
+            if (!restore || typeof restore !== 'object') return undefined;
+            const exit = typeof restore.exit === 'number' && Number.isFinite(restore.exit) ? restore.exit : undefined;
+            const exitPrice = typeof restore.exitPrice === 'number' && Number.isFinite(restore.exitPrice) ? restore.exitPrice : 0;
+            const pnlOverride = typeof restore.pnlOverride === 'number' && Number.isFinite(restore.pnlOverride) ? restore.pnlOverride : undefined;
+            return { exit, exitPrice, pnlOverride };
+          })(),
           contracts,
           rr: typeof trade.rr === 'number' ? trade.rr : 0,
           pnl,
@@ -894,9 +907,11 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
     if (field === 'entry') {
       nextFields.entry = parsed;
       nextFields.entryPrice = parsed ?? 0;
+      nextFields.breakevenRestore = undefined;
     } else if (field === 'exit') {
       nextFields.exit = parsed;
       nextFields.exitPrice = parsed ?? 0;
+      nextFields.breakevenRestore = undefined;
     } else if (field === 'sl') {
       nextFields.sl = parsed;
     } else {
@@ -932,6 +947,43 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
     return reward / risk;
   })();
 
+  const isBreakevenActive = entryValue !== undefined
+    && exitValue !== undefined
+    && Math.abs(exitValue - entryValue) < 0.000001
+    && effectivePnl === 0;
+
+  const handleBreakevenToggle = () => {
+    if (entryValue === undefined) return;
+    if (isBreakevenActive && trade.breakevenRestore) {
+      const restore = trade.breakevenRestore;
+      const restoredExit = restore.exit !== undefined ? String(restore.exit) : '';
+      setLocal(prev => ({ ...prev, exit: restoredExit }));
+      onMutate({
+        exit: restore.exit,
+        exitPrice: restore.exitPrice,
+        pnlOverride: restore.pnlOverride,
+        breakevenRestore: undefined,
+        priceLevelsSource: 'manual',
+        priceLevelsEdited: true,
+      });
+      return;
+    }
+
+    const v = String(entryValue);
+    setLocal(prev => ({ ...prev, exit: v }));
+    onMutate({
+      exit: entryValue,
+      exitPrice: entryValue,
+      pnlOverride: 0,
+      breakevenRestore: {
+        exit: exitValue,
+        exitPrice: trade.exitPrice,
+        pnlOverride: trade.pnlOverride,
+      },
+      priceLevelsSource: 'manual',
+      priceLevelsEdited: true,
+    });
+  };
 
   const sourceText = trade.priceLevelsEdited ? 'Manually set' : trade.priceLevelsSource === 'ai' ? 'AI extracted' : 'Manually set';
   const renderPointsDiff = (delta: number | null, mode: 'pos' | 'neg' | 'auto') => {
@@ -1007,18 +1059,14 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
             {entryValue !== undefined && (
               <button
                 type="button"
-                onClick={() => {
-                  const v = String(entryValue);
-                  setLocal(prev => ({ ...prev, exit: v }));
-                  onMutate({ exit: entryValue, exitPrice: entryValue, pnlOverride: 0, priceLevelsSource: 'manual', priceLevelsEdited: true });
-                }}
+                onClick={handleBreakevenToggle}
                 style={{
                   fontSize: 11,
                   padding: '4px 0',
                   borderRadius: 4,
                   border: '1px solid var(--amber)',
-                  background: trade.result === 'be' ? 'var(--amber)' : 'var(--amber-dim)',
-                  color: trade.result === 'be' ? '#111' : 'var(--amber)',
+                  background: isBreakevenActive ? 'var(--amber)' : 'var(--amber-dim)',
+                  color: isBreakevenActive ? '#111' : 'var(--amber)',
                   cursor: 'pointer',
                   fontFamily: 'var(--font-sans)',
                   fontWeight: 700,
@@ -1026,9 +1074,9 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
                   width: '100%',
                   textAlign: 'center',
                 }}
-                title="Set exit to entry price (Breakeven)"
+                title={isBreakevenActive && trade.breakevenRestore ? 'Restore previous exit' : 'Set exit to entry price (Breakeven)'}
               >
-                Break Even
+                {isBreakevenActive && trade.breakevenRestore ? 'Undo BE' : 'Break Even'}
               </button>
             )}
           </div>

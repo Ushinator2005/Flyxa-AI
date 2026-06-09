@@ -197,7 +197,7 @@ export default function SessionActive() {
 
   const handleEnd = () => {
     setPreSession(null);
-    navigate('/flyxa-ai');
+    navigate('/post-session');
   };
 
   // ── Render ──────────────────────────────────────────────
