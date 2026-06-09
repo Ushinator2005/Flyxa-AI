@@ -917,7 +917,7 @@ export default function Backtest() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 140px', gap: 12, marginBottom: 16 }}>
               {/* Symbol */}
               <div>
-                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-3)', marginBottom: 6 }}>Symbol</p>
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Symbol</p>
                 <div ref={symbolSearchRef} style={{ position: 'relative' }}>
                   <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', pointerEvents: 'none' }} />
                   <input
@@ -947,7 +947,7 @@ export default function Backtest() {
               </div>
               {/* Timeframe */}
               <div>
-                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-3)', marginBottom: 6 }}>Timeframe</p>
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Timeframe</p>
                 <select value={timeframe} onChange={e => setTimeframe(e.target.value as ReplayTimeframe)}
                   style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, color: 'var(--txt)', padding: '0 8px', cursor: 'pointer' }}>
                   {TIMEFRAME_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
@@ -955,7 +955,7 @@ export default function Backtest() {
               </div>
               {/* Range */}
               <div>
-                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-3)', marginBottom: 6 }}>Range</p>
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Range</p>
                 <select value={range} onChange={e => setRange(e.target.value as ReplayRange)}
                   style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, color: 'var(--txt)', padding: '0 8px', cursor: 'pointer' }}>
                   {RANGE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
@@ -963,7 +963,7 @@ export default function Backtest() {
               </div>
               {/* Starting Balance */}
               <div>
-                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-3)', marginBottom: 6 }}>Starting Balance</p>
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Starting Balance</p>
                 <input type="number" value={startingBalance} onChange={e => setStartingBalance(e.target.value)}
                   style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, color: 'var(--txt)', padding: '0 10px', boxSizing: 'border-box' }}
                   placeholder="25000" />
@@ -1067,8 +1067,8 @@ export default function Backtest() {
           }}
         >
           <div>
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--txt-3)', margin: '0 0 4px' }}>
-              BACKTEST
+            <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', margin: '0 0 4px' }}>
+              Backtest
             </p>
             <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--txt)', margin: '0 0 3px', lineHeight: 1.2 }}>
               Backtest
@@ -1131,7 +1131,7 @@ export default function Backtest() {
                   >
                     <card.Icon size={16} />
                   </div>
-                  <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-3)', margin: 0 }}>
+                  <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', margin: 0 }}>
                     {card.label}
                   </p>
                 </div>
@@ -1183,8 +1183,8 @@ export default function Backtest() {
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', margin: '0 0 4px' }}>
-                CURRENT FOCUS
+              <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', margin: '0 0 4px' }}>
+                Current focus
               </p>
               {activeSession ? (
                 <>
@@ -1263,8 +1263,8 @@ export default function Backtest() {
               }}
             >
               <div>
-                <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', margin: '0 0 3px' }}>
-                  SESSION LIBRARY
+                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', margin: '0 0 3px' }}>
+                  Session library
                 </p>
                 <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', margin: 0 }}>
                   {totalSessions} saved configuration{totalSessions !== 1 ? 's' : ''}
@@ -1363,14 +1363,12 @@ export default function Backtest() {
                       <th
                         key={`${column}-${index}`}
                         style={{
-                          fontSize: 10,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.08em',
+                          fontSize: 11,
+                          fontWeight: 500,
                           color: 'var(--txt-3)',
                           padding: '10px 20px',
                           borderBottom: '1px solid var(--border)',
                           textAlign: index === 5 ? 'right' : 'left',
-                          fontWeight: 600,
                         }}
                       >
                         {column}

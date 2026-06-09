@@ -45,9 +45,7 @@
 
 .goal-panel-eyebrow {
   margin: 0 0 6px;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--txt-3);
   font-family: var(--font-mono);
 }
@@ -126,8 +124,6 @@
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.11em;
   color: var(--txt-3);
   font-weight: 600;
 }
@@ -159,14 +155,12 @@
 }
 
 .goal-field label {
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--txt-3);
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .goal-field label span {

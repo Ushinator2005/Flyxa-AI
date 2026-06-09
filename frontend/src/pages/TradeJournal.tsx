@@ -687,8 +687,9 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
   const byDate = new Map<string, JournalEntry>(normalized.map(e => [e.date, { ...e, trades: [] }]));
   for (const entry of normalized) {
     for (const trade of entry.trades) {
-      if (!byDate.has(trade.date)) byDate.set(trade.date, createEmptyEntry(trade.date, rulesTemplate));
-      byDate.get(trade.date)!.trades.push(trade);
+      const tradeDate = trade.date ?? entry.date;
+      if (!byDate.has(tradeDate)) byDate.set(tradeDate, createEmptyEntry(tradeDate, rulesTemplate));
+      byDate.get(tradeDate)!.trades.push({ ...trade, date: tradeDate });
     }
   }
   return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));

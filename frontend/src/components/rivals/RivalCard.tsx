@@ -109,9 +109,7 @@ export default function RivalCard({ rival, currentUser, isLast }: RivalCardProps
               <div
                 style={{
                   fontFamily: "'DM Mono', monospace",
-                  fontSize: 8.5,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
+                  fontSize: 11,
                   color: 'rgba(148,163,184,0.40)',
                 }}
               >

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Btn, MetricCard, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
 import {
   Area,
   AreaChart,
@@ -188,25 +188,6 @@ function normalizeConfluences(value: unknown): string[] {
   return normalized;
 }
 
-function MetricCard({
-  label,
-  value,
-  subtitle,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  subtitle: string;
-  valueClassName: string;
-}) {
-  return (
-    <div className="min-h-[112px] rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-      <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">{label}</p>
-      <p className={`mt-2 text-[22px] font-semibold leading-tight ${valueClassName}`}>{value}</p>
-      <p className="mt-2 text-xs leading-[1.3] text-[var(--app-text-muted)]">{subtitle}</p>
-    </div>
-  );
-}
 
 export default function Analytics() {
   const { trades, loading } = useTrades();
@@ -646,160 +627,89 @@ export default function Analytics() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div data-tour-id="analytics-header" className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-[18px] font-semibold leading-tight text-[var(--app-text)]">Analytics</h1>
-          <p className="mt-1 text-xs text-[var(--app-text-muted)]">Performance breakdown for your selected period</p>
-        </div>
-
-        <div data-tour-id="analytics-period-filter" className="flex flex-wrap gap-2">
-          {PERIOD_OPTIONS.map(option => {
-            const active = period === option.key;
-            return (
-              <button
+      <PageHeader
+        data-tour-id="analytics-header"
+        title="Analytics"
+        sub="Performance breakdown for your selected period"
+        actions={
+          <div data-tour-id="analytics-period-filter" style={{ display: 'flex', gap: 4 }}>
+            {PERIOD_OPTIONS.map(option => (
+              <Btn
                 key={option.key}
-                type="button"
+                variant={period === option.key ? 'primary' : 'ghost'}
+                size="sm"
                 onClick={() => setPeriod(option.key)}
-                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  active
-                    ? 'border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]'
-                    : 'border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-text-muted)] hover:text-[var(--app-text)]'
-                }`}
               >
                 {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+              </Btn>
+            ))}
+          </div>
+        }
+      />
 
       {accountTrades.length === 0 ? (
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-5 py-6">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Analytics locked</p>
-          <h2 className="mt-2 text-[16px] font-semibold text-[var(--app-text)]">Log trades to unlock performance breakdowns</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--app-text-muted)]">
-            Once you add trades, this page will show equity curve, win rate, session performance, confluence quality, and time-of-day stats.
-          </p>
-          <Link
-            to="/scanner"
-            className="mt-4 inline-flex h-9 items-center rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--app-bg)]"
-          >
-            Log first trade
-          </Link>
-        </section>
+        <SectionPanel>
+          <EmptyState
+            title="Log trades to unlock performance breakdowns"
+            sub="Once you add trades, this page will show equity curve, win rate, session performance, confluence quality, and time-of-day stats."
+            action={{ label: 'Log first trade', onClick: () => window.location.href = '/scanner' }}
+          />
+        </SectionPanel>
       ) : filteredTrades.length === 0 ? (
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-5 py-5">
-          <h2 className="text-[15px] font-semibold text-[var(--app-text)]">No trades in this period</h2>
-          <p className="mt-2 text-sm text-[var(--app-text-muted)]">Switch to All or choose a wider period to review your full history.</p>
-        </section>
+        <SectionPanel>
+          <EmptyState
+            title="No trades in this period"
+            sub="Switch to All or choose a wider period to review your full history."
+          />
+        </SectionPanel>
       ) : null}
 
       <div data-tour-id="analytics-metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <MetricCard
           label="Net P&L"
           value={formatSignedCurrency(metrics.netPnL)}
-          subtitle={
-            netPnLChange === null
-              ? `Live for ${periodSubtitle}`
-              : `${netPnLChange >= 0 ? '+' : ''}${netPnLChange.toFixed(1)}% vs previous period`
-          }
-          valueClassName={metrics.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
+          sub={netPnLChange === null ? `Live for ${periodSubtitle}` : `${netPnLChange >= 0 ? '+' : ''}${netPnLChange.toFixed(1)}% vs previous period`}
+          valueTone={metrics.netPnL >= 0 ? 'positive' : 'negative'}
+          accent={metrics.netPnL >= 0 ? 'green' : 'red'}
         />
         <MetricCard
           label="Expectancy"
           value={metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--'}
-          subtitle="avg edge per trade"
-          valueClassName={metrics.expectedValue >= 0 ? 'text-emerald-400' : 'text-red-400'}
+          sub="avg edge per trade"
+          valueTone={metrics.expectedValue >= 0 ? 'positive' : 'negative'}
         />
         <MetricCard
           label="Max Drawdown"
           value={maxDrawdown > 0 ? `-${formatCurrency(maxDrawdown)}` : '$0'}
-          subtitle="peak-to-trough loss"
-          valueClassName={maxDrawdown > 0 ? 'text-red-400' : 'text-[var(--app-text)]'}
+          sub="peak-to-trough loss"
+          valueTone={maxDrawdown > 0 ? 'negative' : 'neutral'}
+          accent={maxDrawdown > 0 ? 'red' : 'none'}
         />
-        {/* Win Rate card with gauge */}
-        <div className="min-h-[112px] rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Win Rate</p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <div>
-              <p className="text-[22px] font-semibold leading-tight text-[var(--app-text)]">{`${metrics.winRate.toFixed(0)}%`}</p>
-              <p className="mt-2 text-xs text-[var(--app-text-muted)]">{`${metrics.wins.length}W / ${metrics.losses.length}L`}</p>
-            </div>
-            <div className="flex flex-shrink-0 flex-col items-center gap-1">
-              {(() => {
-                const T = Math.PI * 40;
-                const sc = metrics.wins.length + metrics.losses.length;
-                const wArc = sc > 0 ? (metrics.wins.length / sc) * T : 0;
-                const lArc = sc > 0 ? (metrics.losses.length / sc) * T : 0;
-                return (
-                  <svg viewBox="0 0 96 54" width="92" height="52">
-                    <path d="M 8 50 A 40 40 0 0 1 88 50" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="7" strokeLinecap="round" />
-                    {sc > 0 && wArc > 0 && (
-                      <path d="M 8 50 A 40 40 0 0 1 88 50" fill="none"
-                        stroke={DASHBOARD_GREEN} strokeWidth="7" strokeLinecap="round"
-                        strokeDasharray={`${wArc} ${T}`} strokeDashoffset={0}
-                      />
-                    )}
-                    {sc > 0 && lArc > 0 && (
-                      <path d="M 8 50 A 40 40 0 0 1 88 50" fill="none"
-                        stroke={DASHBOARD_RED} strokeWidth="7" strokeLinecap="round"
-                        strokeDasharray={`${lArc} ${T}`} strokeDashoffset={-wArc}
-                      />
-                    )}
-                  </svg>
-                );
-              })()}
-              <span className="font-mono text-[10px] text-[var(--app-text-subtle)]">{metrics.wins.length} · {metrics.losses.length}</span>
-            </div>
-          </div>
-        </div>
+        <MetricCard
+          label="Win Rate"
+          value={`${metrics.winRate.toFixed(0)}%`}
+          sub={`${metrics.wins.length}W / ${metrics.losses.length}L`}
+        />
         <MetricCard
           label="Profit Factor"
           value={metrics.profitFactor >= 999 ? '∞' : metrics.profitFactor.toFixed(2)}
-          subtitle={metrics.profitFactor >= 1 ? 'Above breakeven' : 'Below breakeven'}
-          valueClassName={metrics.profitFactor >= 1 ? 'text-[var(--accent)]' : 'text-[#f87171]'}
+          sub={metrics.profitFactor >= 1 ? 'Above breakeven' : 'Below breakeven'}
+          valueTone={metrics.profitFactor >= 1 ? 'positive' : 'negative'}
+          accent={metrics.profitFactor >= 1 ? 'amber' : 'red'}
         />
         <MetricCard
           label="Total Trades"
           value={String(metrics.totalTrades)}
-          subtitle={`${metrics.tradesPerDay.toFixed(1)}/ day avg`}
-          valueClassName="text-[var(--app-text)]"
+          sub={`${metrics.tradesPerDay.toFixed(1)}/day avg`}
         />
       </div>
 
-      {/* Edge Metrics strip — Expectancy, Avg Win, Avg Loss, Max Drawdown */}
       {filteredTrades.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg P/L</p>
-            <p className={`mt-1.5 text-lg font-semibold ${metrics.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatSignedCurrency(metrics.avgPnL)}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.totalTrades} trade{metrics.totalTrades === 1 ? '' : 's'} average</p>
-          </div>
-          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg Win</p>
-            <p className="mt-1.5 text-lg font-semibold text-emerald-400">
-              {metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.wins.length} winning trade{metrics.wins.length !== 1 ? 's' : ''}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg Loss</p>
-            <p className="mt-1.5 text-lg font-semibold text-red-400">
-              {metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">{metrics.losses.length} losing trade{metrics.losses.length !== 1 ? 's' : ''}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--app-text-subtle)]">Avg RR</p>
-            <p className="mt-1.5 text-lg font-semibold text-[var(--app-text)]">
-              {metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--app-text-muted)]">
-              {metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'}
-            </p>
-          </div>
+          <MetricCard label="Avg P/L" value={formatSignedCurrency(metrics.avgPnL)} sub={`${metrics.totalTrades} trade${metrics.totalTrades === 1 ? '' : 's'} average`} valueTone={metrics.avgPnL >= 0 ? 'positive' : 'negative'} />
+          <MetricCard label="Avg Win" value={metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'} sub={`${metrics.wins.length} winning trade${metrics.wins.length !== 1 ? 's' : ''}`} valueTone="positive" accent="green" />
+          <MetricCard label="Avg Loss" value={metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'} sub={`${metrics.losses.length} losing trade${metrics.losses.length !== 1 ? 's' : ''}`} valueTone="negative" accent="red" />
+          <MetricCard label="Avg RR" value={metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'} sub={metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'} />
         </div>
       )}
 

@@ -445,7 +445,7 @@ export default function TradeForm({
   const sub: React.CSSProperties = { background: P2, border: `1px solid ${BD}`, borderRadius: 6, padding: '12px 14px' };
 
   const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-    <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: T3, marginBottom: 12 }}>
+    <p style={{ fontSize: 11, fontWeight: 600, color: T3, marginBottom: 12 }}>
       {children}
     </p>
   );
@@ -566,11 +566,9 @@ export default function TradeForm({
                     border: `1px solid ${AMBER_BD}`,
                     background: AMBER_DIM,
                     padding: '2px 6px',
-                    fontSize: 10,
-                    fontWeight: 700,
+                    fontSize: 11,
+                    fontWeight: 600,
                     color: AMBER,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
                   }}
                 >
                   AI Scanned
@@ -737,7 +735,7 @@ export default function TradeForm({
           <div style={{ ...sub, marginTop: 8, display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: T3 }}>Net P&amp;L</p>
+                <p style={{ fontSize: 11, color: T3 }}>Net P&amp;L</p>
                 {pnlOverride !== null && (
                   <button
                     type="button"
@@ -785,7 +783,7 @@ export default function TradeForm({
               )}
             </div>
             <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: T3, marginBottom: 3 }}>R:R</p>
+              <p style={{ fontSize: 11, color: T3, marginBottom: 3 }}>R:R</p>
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: T1 }}>
                 {rr === 'N/A' ? 'N/A' : formatRiskRewardRatio(Number(rr))}
               </p>
@@ -898,7 +896,7 @@ export default function TradeForm({
       {/* Row 3: Confluences (full width) */}
       <div style={panel}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: T3, margin: 0 }}>Confluences</p>
+          <p style={{ fontSize: 11, fontWeight: 600, color: T3, margin: 0 }}>Confluences</p>
           <button type="button" onClick={() => navigate('/settings#journal')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, color: 'var(--cobalt)', fontFamily: 'var(--font-sans)' }}>Manage tags →</button>
         </div>
         <div className="scanner-confluence-row">
@@ -946,7 +944,7 @@ export default function TradeForm({
           {/* Pre-trade Thesis — 3 col */}
           <div style={sub}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: '#34d399' }}>Pre-trade Thesis</p>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#34d399' }}>Pre-trade Thesis</p>
               <p style={{ fontSize: 11, color: T3 }}>Capture trade logic before outcome bias creeps in.</p>
             </div>
             <div className="scanner-three-col">
@@ -969,7 +967,7 @@ export default function TradeForm({
           <div className="scanner-notes-two-col">
             <div style={sub}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: T2 }}>Process Grade</p>
+                <p style={{ fontSize: 11, fontWeight: 600, color: T2 }}>Process Grade</p>
                 <p style={{ fontSize: 11, color: T3 }}>Rate quality, not P&amp;L.</p>
               </div>
               <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
@@ -991,7 +989,7 @@ export default function TradeForm({
 
             <div style={sub}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: AMBER }}>Additional Notes</p>
+                <p style={{ fontSize: 11, fontWeight: 600, color: AMBER }}>Additional Notes</p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <textarea className="input-field resize-none" rows={2} value={form.pre_trade_notes || ''} onChange={e => set('pre_trade_notes', e.target.value)} placeholder="Additional pre-trade observations." />
@@ -1003,7 +1001,7 @@ export default function TradeForm({
           {/* Reflection — 3 col */}
           <div style={sub}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: AMBER }}>Reflection</p>
+              <p style={{ fontSize: 11, fontWeight: 600, color: AMBER }}>Reflection</p>
               <p style={{ fontSize: 11, color: T3 }}>Force specific learning after the trade.</p>
             </div>
             <div className="scanner-three-col">

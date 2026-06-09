@@ -1,32 +1,9 @@
 .goals-page {
-  --bg: var(--app-bg);
-  --surface-1: var(--app-panel);
-  --surface-2: var(--app-panel-strong);
-  --surface-3: rgba(255, 255, 255, 0.055);
-  --border: var(--app-border);
-  --border-sub: rgba(255, 255, 255, 0.05);
-  --amber: var(--accent);
-  --amber-dim: var(--accent-dim);
-  --amber-bdr: var(--accent-border);
-  --cobalt: #60a5fa;
-  --cobalt-text: #93c5fd;
-  --cobalt-dim: rgba(96, 165, 250, 0.12);
-  --cobalt-bdr: rgba(96, 165, 250, 0.26);
-  --green: #34d399;
-  --green-dim: rgba(52, 211, 153, 0.12);
-  --green-bdr: rgba(52, 211, 153, 0.26);
-  --red: #f87171;
-  --red-dim: rgba(248, 113, 113, 0.12);
-  --txt: var(--app-text);
-  --txt-2: var(--app-text-muted);
-  --txt-3: var(--app-text-subtle);
-  --black: #000;
-  --emerald: #10B981;
-  --emerald-dim: rgba(16, 185, 129, 0.12);
-  --emerald-bdr: rgba(16, 185, 129, 0.28);
-  --purple: #A855F7;
-  --purple-dim: rgba(168, 85, 247, 0.12);
-  --purple-bdr: rgba(168, 85, 247, 0.3);
+  /* Local aliases used in this file — point to canonical tokens */
+  --amber-bdr:    var(--color-amber-border);
+  --cobalt-text:  #93c5fd;                    /* lighter blue for text-on-dark */
+  --cobalt-bdr:   var(--color-blue-border);
+  --green-bdr:    var(--color-green-border);
   min-height: 100%;
   height: 100%;
   display: flex;
@@ -75,10 +52,8 @@
 .goals-eyebrow {
   margin: 0 0 6px;
   color: var(--txt-3);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .goals-eyebrow::before {
@@ -231,9 +206,7 @@
   margin-left: auto;
   flex-shrink: 0;
   color: var(--txt-3);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
 }
 
 .goals-content {
@@ -556,9 +529,7 @@
 
 .goals-pct-label {
   color: var(--txt-3);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 11px;
 }
 
 .goals-progress-track {
@@ -629,10 +600,8 @@
   justify-content: space-between;
   margin-bottom: 7px;
   color: var(--txt-3);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
 }
 
 .goals-milestones header strong {
@@ -893,10 +862,8 @@
 
 .goals-field > span {
   color: var(--txt-3);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .goals-field input,

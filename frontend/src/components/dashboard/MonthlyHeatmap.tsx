@@ -246,9 +246,7 @@ function SectionTitle({ label }: { label: string }) {
       style={{
         margin: 0,
         marginBottom: 6,
-        fontSize: 9,
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em',
+        fontSize: 11,
         color: 'var(--txt-3)',
       }}
     >
@@ -473,9 +471,7 @@ function DailyJournalModal({
                 style={{
                   margin: 0,
                   marginBottom: 4,
-                  fontSize: 10,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
+                  fontSize: 11,
                   color: 'var(--txt-3)',
                 }}
               >
@@ -1261,7 +1257,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                 <div
                   className={`flex flex-col items-center justify-center gap-1 px-2${!isLastWeek ? ' border-b border-slate-600' : ''}`}
                 >
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#ffffff' }}>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: '#ffffff' }}>
                     Week {visibleWeekNum}
                   </span>
                   <span

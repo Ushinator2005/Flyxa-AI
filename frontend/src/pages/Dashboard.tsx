@@ -1,9 +1,10 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X,
 } from 'lucide-react';
+import { Btn, Badge, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
 import {
   PieChart, Pie, Cell,
 } from 'recharts';
@@ -29,17 +30,14 @@ const COBALT_DIM  = 'rgba(96,165,250,0.12)';
 const AMBER       = '#f59e0b';
 const AMBER_DIM   = 'rgba(245,158,11,0.12)';
 const GREEN       = '#34d399';
-const GREEN_DIM   = 'rgba(52,211,153,0.12)';
 const RED         = '#f87171';
 const RED_DIM     = 'rgba(248,113,113,0.12)';
 const S1          = 'var(--app-panel)';
-const S2          = 'var(--app-panel-strong)';
 const BORDER      = 'var(--app-border)';
 const BSUB        = 'rgba(255,255,255,0.04)';
 const T1          = 'var(--app-text)';
 const T2          = 'var(--app-text-muted)';
 const T3          = 'var(--app-text-subtle)';
-const CHIP_BG     = 'rgba(255,255,255,0.035)';
 const MONO        = 'var(--font-mono)';
 const SANS        = 'var(--font-sans)';
 
@@ -93,137 +91,19 @@ function wallTimeToUtcMs(dateSlice: string, timeHHMM: string, tz: string): numbe
   }
 }
 
-function winRateBadge(winRate: number): string {
-  const diff = Math.round(winRate - 50);
-  if (diff === 0) return 'At target';
-  return `${Math.abs(diff)}% ${diff > 0 ? 'above' : 'below'} target`;
-}
-
 // ── Sub-components ───────────────────────────────────────────────
 
-type BadgeTone = 'positive' | 'negative' | 'neutral';
-
-function DeltaBadge({ label, tone = 'neutral' }: { label?: string; tone?: BadgeTone }) {
-  if (label === undefined) return null;
-  const toneColor = tone === 'positive' ? GREEN : tone === 'negative' ? RED : T3;
-  if (tone === 'neutral') {
-    return (
-      <span style={{
-        fontSize: 11, fontFamily: MONO, color: T3,
-        background: CHIP_BG,
-        border: `1px solid ${BSUB}`,
-        padding: '2px 7px', borderRadius: 4,
-      }}>{label}</span>
-    );
-  }
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      fontSize: 11, fontFamily: MONO, fontVariantNumeric: 'tabular-nums',
-      color: toneColor,
-      background: CHIP_BG,
-      border: `1px solid ${BSUB}`,
-      padding: '2px 7px', borderRadius: 4,
-    }}>
-      {label}
-    </span>
-  );
-}
-
 function DirBadge({ dir }: { dir: 'Long' | 'Short' }) {
-  const long = dir === 'Long';
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 600, fontFamily: SANS, letterSpacing: '0.06em',
-      color: long ? COBALT : '#f87171',
-      background: long ? COBALT_DIM : RED_DIM,
-      padding: '2px 7px', borderRadius: 3,
-    }}>
-      {dir.toUpperCase()}
-    </span>
-  );
-}
-
-function Pill({ color, bg, children }: { color: string; bg: string; children: string }) {
-  return (
-    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: SANS, color, background: bg, padding: '2px 7px', borderRadius: 3 }}>
-      {children}
-    </span>
-  );
+  return <Badge tone={dir === 'Long' ? 'blue' : 'red'}>{dir.toUpperCase()}</Badge>;
 }
 
 function ResultBadge({ trade }: { trade: Trade }) {
   const open = !trade.exit_price || trade.exit_price === 0;
-  if (open)          return <Pill color={AMBER} bg={AMBER_DIM}>OPEN</Pill>;
-  if (trade.pnl > 0) return <Pill color={GREEN} bg={GREEN_DIM}>WIN</Pill>;
-  return                    <Pill color={RED}   bg={RED_DIM}>LOSS</Pill>;
+  if (open)          return <Badge tone="amber">OPEN</Badge>;
+  if (trade.pnl > 0) return <Badge tone="green">WIN</Badge>;
+  return                    <Badge tone="red">LOSS</Badge>;
 }
 
-function Card({ children, style, ...props }: React.HTMLAttributes<HTMLDivElement> & { style?: React.CSSProperties }) {
-  return (
-    <div {...props} style={{ background: S1, border: `1px solid ${BORDER}`, borderRadius: 8, ...style }}>
-      {children}
-    </div>
-  );
-}
-
-function CardHeader({ title, sub, right }: { title: string; sub?: string; right?: React.ReactNode }) {
-  return (
-    <div style={{
-      padding: '14px 18px',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      borderBottom: `1px solid ${BSUB}`,
-    }}>
-      <div>
-        <p style={{ fontSize: 13, fontWeight: 600, color: T1, margin: 0, marginBottom: sub ? 2 : 0 }}>{title}</p>
-        {sub && <p style={{ fontSize: 11, color: T3, margin: 0 }}>{sub}</p>}
-      </div>
-      {right}
-    </div>
-  );
-}
-
-function StatCard({ color, label, value, badgeLabel, badgeTone = 'neutral', valueTone = 'neutral', compact = false }: {
-  color: string;
-  label: string; value: string;
-  badgeLabel?: string; badgeTone?: BadgeTone;
-  valueTone?: BadgeTone;
-  compact?: boolean;
-}) {
-  const valueColor = valueTone === 'positive' ? GREEN : valueTone === 'negative' ? RED : T1;
-  return (
-    <div style={{
-      background: S1,
-      border: `1px solid ${BORDER}`,
-      borderRadius: 8,
-      overflow: 'hidden',
-      position: 'relative',
-    }}>
-      {/* Top accent line */}
-      <div style={{ height: 2, background: `linear-gradient(90deg, ${color}, transparent)` }} />
-      <div style={{ padding: compact ? '10px 12px 12px' : '14px 16px 16px' }}>
-        {/* Header row: label */}
-        <div style={{ marginBottom: compact ? 6 : 12 }}>
-          <p style={{ fontSize: compact ? 9 : 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T2, margin: 0 }}>
-            {label}
-          </p>
-        </div>
-        {/* Value */}
-        <p style={{
-          fontSize: compact ? 18 : 26, fontWeight: 500, fontFamily: MONO,
-          fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em',
-          fontFeatureSettings: "'zero' 1",
-          lineHeight: 1, marginBottom: compact ? 6 : 10, color: valueColor,
-        }}>
-          {value}
-        </p>
-        <DeltaBadge label={badgeLabel} tone={badgeTone} />
-      </div>
-    </div>
-  );
-}
-
-const GAUGE_ARC = Math.PI * 40;
 
 // ── Main component ────────────────────────────────────────────────
 export default function Dashboard() {
@@ -334,19 +214,22 @@ export default function Dashboard() {
     });
   }, [weekOffset]);
 
-  const { wins, losses, winRingData, gaugeScored, gaugeWinArc, gaugeLossArc } = useMemo(() => {
+  const { wins, losses, breakevens, winRingData } = useMemo(() => {
     const w = filteredTrades.filter(t => t.pnl > 0).length;
     const l = filteredTrades.filter(t => t.pnl < 0).length;
-    const scored = w + l;
+    const b = filteredTrades.filter(t => t.pnl === 0 && (t.exit_price ?? 0) > 0).length;
+    const total = w + l + b;
     return {
       wins: w,
       losses: l,
-      winRingData: scored > 0
-        ? [{ v: w, c: GREEN }, { v: l, c: 'rgba(255,255,255,0.06)' }]
+      breakevens: b,
+      winRingData: total > 0
+        ? [
+            { v: w, c: GREEN },
+            { v: l, c: RED },
+            ...(b > 0 ? [{ v: b, c: AMBER }] : []),
+          ]
         : [{ v: 1, c: 'rgba(255,255,255,0.06)' }],
-      gaugeScored: scored,
-      gaugeWinArc:  scored > 0 ? (w / scored) * GAUGE_ARC : 0,
-      gaugeLossArc: scored > 0 ? (l / scored) * GAUGE_ARC : 0,
     };
   }, [filteredTrades]);
 
@@ -407,211 +290,154 @@ export default function Dashboard() {
       <div style={{ flex: 1, height: '100%', overflowY: 'auto', padding: isMobile ? 12 : 24, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
 
         {/* Top bar */}
-        <div data-tour-id="dashboard-overview" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
-          <div>
-            <h1 style={{ fontSize: 18, fontWeight: 600, color: T1, margin: 0, letterSpacing: '-0.02em' }}>
-              Dashboard
-            </h1>
-            <p style={{ fontSize: 12, color: T3, margin: '3px 0 0' }}>
-              {format(new Date(), 'EEEE, MMMM d')}
-              {' · '}
-              <span style={{ color: T2 }}>{acctName}</span>
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div data-tour-id="dashboard-account-filter" style={{ position: 'relative' }}>
-              <select
-                value={selectedAccountId}
-                onChange={e => setSelectedAccountId(e.target.value)}
-                style={{
-                  height: 34, paddingLeft: 12, paddingRight: 28,
-                  appearance: 'none',
-                  background: S1, border: `1px solid ${BORDER}`,
-                  borderRadius: 5, fontSize: 12, fontFamily: SANS,
-                  color: T1, outline: 'none', cursor: 'pointer',
-                  minWidth: isMobile ? 120 : 170,
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)'; }}
-                onBlur={e =>  { e.currentTarget.style.borderColor = BORDER; }}
-              >
-                <option value={ALL_ACCOUNTS_ID}>All Accounts</option>
-                {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived).map(a => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-              <span style={{ pointerEvents: 'none', position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: T3 }}>▼</span>
-            </div>
-            <button
-              data-tour-id="dashboard-log-trade"
-              onClick={() => navigate('/scanner')}
-              style={{
-                height: 34, padding: '0 14px',
-                background: '#f59e0b', border: 'none', borderRadius: 5,
-                fontSize: 12, fontWeight: 600, color: '#000', cursor: 'pointer',
-                fontFamily: SANS, display: 'flex', alignItems: 'center', gap: 6,
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-            >
-              <TrendingUp size={13} />
-              Log trade
-            </button>
-          </div>
-        </div>
-
-        {/* Stat cards */}
-        <div data-tour-id="dashboard-metrics" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : `repeat(${selectedStoreAcct ? 5 : 4}, 1fr)`, gap: isMobile ? 8 : 14, flexShrink: 0 }}>
-          {selectedStoreAcct && (() => {
-            const sbRaw = selectedStoreAcct.startingBalance;
-            const sb = sbRaw ?? 0;
-            const totalPayouts = (selectedStoreAcct.payouts ?? []).reduce((s, p) => s + p.amount, 0);
-            const liveBalance = sb + summary.netPnL - totalPayouts;
-            return (
-              <StatCard
-                color={COBALT}
-                label="Account Balance"
-                value={fmtUSD(liveBalance)}
-                badgeLabel={totalPayouts > 0 ? `Payouts taken: ${fmtUSD(totalPayouts)}` : sbRaw !== undefined ? `Started ${fmtUSD(sb)}` : 'Set starting balance in Settings'}
-                valueTone={liveBalance >= sb ? 'positive' : 'negative'}
-                compact={isMobile}
-              />
-            );
-          })()}
-          <StatCard
-            color={AMBER}
-            label="Net P&L"
-            value={fmtUSD(summary.netPnL)}
-            badgeLabel={todayTrades.length > 0 ? `Today ${fmtSignedCompactUSD(todayPnL)}` : 'No trades today'}
-            badgeTone={todayTrades.length === 0 ? 'neutral' : todayPnL >= 0 ? 'positive' : 'negative'}
-            valueTone={summary.netPnL > 0 ? 'positive' : summary.netPnL < 0 ? 'negative' : 'neutral'}
-            compact={isMobile}
-          />
-          {/* Win Rate card with gauge */}
-          <div style={{ background: S1, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
-            <div style={{ height: 2, background: `linear-gradient(90deg, ${COBALT}, transparent)` }} />
-            <div style={{ padding: isMobile ? '10px 12px 12px' : '14px 16px 16px' }}>
-              <p style={{ fontSize: isMobile ? 9 : 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T2, margin: `0 0 ${isMobile ? 6 : 12}px` }}>Win Rate</p>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div>
-                  <p style={{ fontSize: isMobile ? 18 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em', fontFeatureSettings: "'zero' 1", lineHeight: 1, marginBottom: isMobile ? 6 : 10, color: T1 }}>
-                    {fmtPct(summary.winRate)}
-                  </p>
-                  <DeltaBadge label={summary.totalTrades > 0 ? winRateBadge(summary.winRate) : 'No closed trades'} tone={summary.totalTrades === 0 ? 'neutral' : summary.winRate >= 50 ? 'positive' : 'negative'} />
-                </div>
-                <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <svg viewBox="0 0 96 54" width="92" height="52">
-                    <path d="M 8 50 A 40 40 0 0 1 88 50" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="7" strokeLinecap="round" />
-                    {gaugeScored > 0 && gaugeWinArc > 0 && (
-                      <path d="M 8 50 A 40 40 0 0 1 88 50" fill="none"
-                        stroke={GREEN} strokeWidth="7" strokeLinecap="round"
-                        strokeDasharray={`${gaugeWinArc} ${GAUGE_ARC}`}
-                        strokeDashoffset={0}
-                      />
-                    )}
-                    {gaugeScored > 0 && gaugeLossArc > 0 && (
-                      <path d="M 8 50 A 40 40 0 0 1 88 50" fill="none"
-                        stroke={RED} strokeWidth="7" strokeLinecap="round"
-                        strokeDasharray={`${gaugeLossArc} ${GAUGE_ARC}`}
-                        strokeDashoffset={-gaugeWinArc}
-                      />
-                    )}
-                  </svg>
-                  <span style={{ fontSize: 10, fontFamily: MONO, color: T3 }}>{wins}W · {losses}L</span>
-                </div>
+        <PageHeader
+          data-tour-id="dashboard-overview"
+          title="Dashboard"
+          sub={<>{format(new Date(), 'EEEE, MMMM d')} · <span style={{ color: 'var(--color-text-muted)' }}>{acctName}</span></>}
+          actions={
+            <>
+              <div data-tour-id="dashboard-account-filter" style={{ position: 'relative' }}>
+                <select
+                  value={selectedAccountId}
+                  onChange={e => setSelectedAccountId(e.target.value)}
+                  style={{
+                    height: 34, paddingLeft: 12, paddingRight: 28,
+                    appearance: 'none',
+                    background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)',
+                    color: 'var(--color-text)', outline: 'none', cursor: 'pointer',
+                    minWidth: isMobile ? 120 : 170,
+                  }}
+                >
+                  <option value={ALL_ACCOUNTS_ID}>All Accounts</option>
+                  {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived).map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+                <span style={{ pointerEvents: 'none', position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: 'var(--color-text-subtle)' }}>▼</span>
               </div>
-            </div>
-          </div>
-          <StatCard
-            color={GREEN}
-            label="Avg R:R"
-            value={fmtRR(summary.avgRR)}
-            badgeLabel={summary.avgRR > 0 ? (summary.avgRR >= 1 ? 'Above 1:1' : 'Below 1:1') : 'No ratio yet'}
-            badgeTone={summary.avgRR === 0 ? 'neutral' : summary.avgRR >= 1 ? 'positive' : 'negative'}
-            valueTone="neutral"
-            compact={isMobile}
-          />
-          <StatCard
-            color={RED}
-            label="Trades"
-            value={String(summary.totalTrades)}
-            badgeLabel={`${todayTrades.length} Today`}
-            valueTone="neutral"
-            compact={isMobile}
-          />
-        </div>
+              <Btn
+                data-tour-id="dashboard-log-trade"
+                variant="primary"
+                size="md"
+                icon={<TrendingUp size={13} />}
+                onClick={() => navigate('/scanner')}
+              >
+                Log trade
+              </Btn>
+            </>
+          }
+        />
 
-        {/* Today vs Your Average strip */}
-        {avgComparison && (
-          <div style={{
-            display: 'grid', gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)', gap: 2,
-            borderRadius: 8, overflow: 'hidden', border: `1px solid ${BORDER}`,
-            background: S1, flexShrink: 0,
-          }}>
-            {/* Header row spanning all 3 */}
-            <div style={{ gridColumn: '1 / -1', padding: '9px 16px 8px', borderBottom: `1px solid rgba(255,255,255,0.04)`, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: T3 }}>Today vs your average</span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)' }}>·</span>
-              <span style={{ fontSize: 10, color: T3 }}>based on {new Set(filteredTrades.filter(t => t.trade_date !== todayStr).map(t => t.trade_date)).size} prior trading days</span>
+        {/* Command Strip */}
+        {(() => {
+          const todayW  = todayTrades.filter(t => t.pnl > 0).length;
+          const todayL  = todayTrades.filter(t => t.pnl < 0).length;
+          const todayBE = todayTrades.filter(t => t.pnl === 0 && (t.exit_price ?? 0) > 0).length;
+          const todayWR = (todayW + todayL) > 0 ? (todayW / (todayW + todayL)) * 100 : null;
+          const nextEv  = todayHighImpact.find(ev => {
+            const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
+            return t !== null && t > now && !Boolean(ev.actual);
+          });
+          const nextEvMs = nextEv ? wallTimeToUtcMs(nextEv.date, nextEv.time, calendarTimeZone) : null;
+          const secsLeft = nextEvMs !== null ? Math.max(0, Math.floor((nextEvMs - now) / 1000)) : null;
+          const cntdown  = secsLeft !== null
+            ? secsLeft >= 3600 ? `${Math.floor(secsLeft / 3600)}h ${Math.floor((secsLeft % 3600) / 60)}m`
+            : secsLeft >= 60   ? `${Math.floor(secsLeft / 60)}m ${secsLeft % 60}s`
+            : `${secsLeft}s`
+            : null;
+          const sbRaw   = selectedStoreAcct?.startingBalance;
+          const sb      = sbRaw ?? 0;
+          const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s, p) => s + p.amount, 0);
+          const liveBal = sb + summary.netPnL - payouts;
+          const refLabel = selectedStoreAcct ? 'BALANCE' : 'NET P&L';
+          const refValue = selectedStoreAcct ? fmtUSD(liveBal) : fmtUSD(summary.netPnL);
+          const refTone  = selectedStoreAcct
+            ? (liveBal >= sb ? GREEN : RED)
+            : summary.netPnL > 0 ? GREEN : summary.netPnL < 0 ? RED : T2;
+          const refSub   = selectedStoreAcct
+            ? `Net P&L ${fmtSignedCompactUSD(summary.netPnL)}`
+            : `${summary.totalTrades} total trades`;
+          const D  = 'rgba(255,255,255,0.05)';
+          const cs = { padding: isMobile ? '14px 14px' : '16px 20px', borderRight: `1px solid ${D}`, borderBottom: `1px solid ${D}` };
+          return (
+            <div data-tour-id="dashboard-metrics" style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : '1.5fr 1fr 1fr 1fr 1fr',
+              border: `1px solid ${BORDER}`,
+              borderRadius: 10,
+              background: S1,
+              overflow: 'hidden',
+              flexShrink: 0,
+            }}>
+
+              {/* TODAY */}
+              <div style={cs}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>TODAY</p>
+                <p style={{ fontSize: isMobile ? 22 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: todayPnL > 0 ? GREEN : todayPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
+                  {todayTrades.length > 0 ? fmtUSD(todayPnL) : '—'}
+                </p>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>
+                  {todayTrades.length > 0 ? (
+                    <>{todayTrades.length} trade{todayTrades.length !== 1 ? 's' : ''}{avgComparison ? <span style={{ color: (avgComparison.today.pnl - avgComparison.avg.pnl) >= 0 ? GREEN : RED, fontFamily: MONO }}>{' '}{fmtSignedCompactUSD(avgComparison.today.pnl - avgComparison.avg.pnl)} vs avg</span> : null}</>
+                  ) : 'No trades yet'}
+                </p>
+              </div>
+
+              {/* SESSION */}
+              <div style={cs}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>SESSION</p>
+                <div style={{ display: 'flex', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.22)', fontSize: 13, fontWeight: 700, fontFamily: SANS, color: GREEN }}>{todayW}W</span>
+                  <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.22)', fontSize: 13, fontWeight: 700, fontFamily: SANS, color: RED }}>{todayL}L</span>
+                  {todayBE > 0 && <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.22)', fontSize: 13, fontWeight: 700, fontFamily: SANS, color: AMBER }}>{todayBE}BE</span>}
+                </div>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>
+                  {todayWR !== null ? `${todayWR.toFixed(0)}% win rate today` : 'No closed trades'}
+                </p>
+              </div>
+
+              {/* EXECUTION */}
+              <div style={cs}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>EXECUTION</p>
+                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1, margin: '0 0 5px', lineHeight: 1 }}>
+                  {fmtPct(summary.winRate)}
+                </p>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}><span style={{ fontFamily: MONO }}>{fmtRR(summary.avgRR)}</span> avg R:R</p>
+              </div>
+
+              {/* REFERENCE — account balance or all-time net P&L */}
+              <div style={cs}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{refLabel}</p>
+                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: '0 0 5px', lineHeight: 1 }}>
+                  {refValue}
+                </p>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>{refSub}</p>
+              </div>
+
+              {/* UP NEXT */}
+              <div style={{ ...cs, ...(isMobile && { gridColumn: '1 / -1' }) }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>UP NEXT</p>
+                {nextEv ? (
+                  <>
+                    <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: RED, margin: '0 0 5px', lineHeight: 1 }}>
+                      {cntdown ?? '--'}
+                    </p>
+                    <p style={{ fontSize: 11, color: T3, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {nextEv.event}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, color: T3, margin: '0 0 5px', lineHeight: 1 }}>—</p>
+                    <p style={{ fontSize: 11, color: T3, margin: 0 }}>All clear today</p>
+                  </>
+                )}
+              </div>
+
             </div>
-            {/* P&L */}
-            {(() => {
-              const diff = avgComparison.today.pnl - avgComparison.avg.pnl;
-              const ahead = diff > 0;
-              return (
-                <div style={{ padding: '10px 16px 12px', borderRight: `1px solid rgba(255,255,255,0.04)` }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3, margin: '0 0 6px' }}>P&amp;L</p>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 18, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: avgComparison.today.pnl >= 0 ? GREEN : RED }}>
-                      {fmtUSD(avgComparison.today.pnl)}
-                    </span>
-                    <span style={{ fontSize: 10, color: ahead ? GREEN : RED, fontFamily: MONO }}>
-                      {ahead ? '▲' : '▼'} {fmtUSD(Math.abs(diff))}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 11, color: T3, margin: '3px 0 0', fontFamily: MONO }}>avg {fmtUSD(avgComparison.avg.pnl)}</p>
-                </div>
-              );
-            })()}
-            {/* Win Rate */}
-            {(() => {
-              const diff = avgComparison.today.winRate - avgComparison.avg.winRate;
-              const ahead = diff > 0;
-              return (
-                <div style={{ padding: '10px 16px 12px', borderRight: `1px solid rgba(255,255,255,0.04)` }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3, margin: '0 0 6px' }}>Win Rate</p>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 18, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1 }}>
-                      {avgComparison.today.winRate.toFixed(0)}%
-                    </span>
-                    <span style={{ fontSize: 10, color: Math.abs(diff) < 1 ? T3 : ahead ? GREEN : RED, fontFamily: MONO }}>
-                      {ahead ? '▲' : '▼'} {Math.abs(diff).toFixed(0)}pp
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 11, color: T3, margin: '3px 0 0', fontFamily: MONO }}>avg {avgComparison.avg.winRate.toFixed(0)}%</p>
-                </div>
-              );
-            })()}
-            {/* Trades */}
-            {(() => {
-              const diff = avgComparison.today.tradeCount - avgComparison.avg.tradeCount;
-              return (
-                <div style={{ padding: '10px 16px 12px' }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3, margin: '0 0 6px' }}>Trades</p>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 18, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1 }}>
-                      {avgComparison.today.tradeCount}
-                    </span>
-                    <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>
-                      {diff >= 0 ? '+' : ''}{diff.toFixed(1)} vs avg
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 11, color: T3, margin: '3px 0 0', fontFamily: MONO }}>avg {avgComparison.avg.tradeCount.toFixed(1)}/day</p>
-                </div>
-              );
-            })()}
-          </div>
-        )}
+          );
+        })()}
 
         {/* Pre-session brief prompt */}
         {!preSessionDone && (
@@ -625,29 +451,20 @@ export default function Dashboard() {
             <span style={{ width: 3, alignSelf: 'stretch', background: AMBER, flexShrink: 0 }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flex: 1, minWidth: 0 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: AMBER, flexShrink: 0, boxShadow: `0 0 6px ${AMBER}` }} />
-              <p style={{ fontSize: 12, fontWeight: 500, color: AMBER, margin: 0, letterSpacing: '0.01em' }}>
+              <p style={{ fontSize: 12, fontWeight: 500, color: AMBER, margin: 0 }}>
                 No pre-session brief today
               </p>
               <span style={{ fontSize: 11, color: T3, margin: 0 }}>·</span>
               <p style={{ fontSize: 11, color: T3, margin: 0 }}>You haven't locked in your plan yet.</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 10 }}>
-              <button
+              <Btn
+                size="sm"
+                variant="outline"
                 onClick={() => { dismissPreSession(); navigate('/pre-session'); }}
-                style={{
-                  height: 26, padding: '0 11px', flexShrink: 0,
-                  background: 'transparent',
-                  border: '1px solid rgba(245,158,11,0.35)',
-                  borderRadius: 4,
-                  fontSize: 11, fontWeight: 600, color: AMBER,
-                  cursor: 'pointer', fontFamily: SANS,
-                  letterSpacing: '0.01em',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.1)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
               >
                 Begin
-              </button>
+              </Btn>
               <button
                 onClick={dismissPreSession}
                 style={{ background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer', color: T3, flexShrink: 0, display: 'flex', alignItems: 'center', opacity: 0.6 }}
@@ -668,42 +485,26 @@ export default function Dashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
             {/* P&L Calendar */}
-            <Card style={{ flexShrink: 0 }} data-tour-id="dashboard-calendar">
+            <SectionPanel flush style={{ flexShrink: 0 }} data-tour-id="dashboard-calendar">
               <div style={{ padding: isMobile ? '10px 8px' : '14px 18px' }}>
                 <MonthlyHeatmap trades={filteredTrades} />
               </div>
-            </Card>
+            </SectionPanel>
 
             {/* Recent Trades table */}
-            <Card data-tour-id="dashboard-recent-trades">
-              <CardHeader
-                title="Recent Trades"
-                sub={`${displayTrades.length} trade${displayTrades.length !== 1 ? 's' : ''}`}
-                right={
-                  <button style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    fontSize: 11, fontFamily: SANS, color: T2,
-                    background: S2, border: `1px solid ${BORDER}`,
-                    borderRadius: 4, padding: '5px 10px', cursor: 'pointer',
-                  }}>
-                    <Filter size={11} /> Filter
-                  </button>
-                }
-              />
+            <SectionPanel
+              data-tour-id="dashboard-recent-trades"
+              title="Recent Trades"
+              subtitle={`${displayTrades.length} trade${displayTrades.length !== 1 ? 's' : ''}`}
+              right={<Btn variant="ghost" size="sm" icon={<Filter size={11} />}>Filter</Btn>}
+              flush
+            >
               {displayTrades.length === 0 ? (
-                <div style={{ padding: '34px 18px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: T1, margin: '0 0 6px' }}>No trades logged yet</p>
-                  <p style={{ fontSize: 12, color: T3, margin: '0 0 14px' }}>
-                    Add your first chart screenshot to unlock the dashboard, calendar, analytics, and Flyxa AI feedback.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/scanner')}
-                    style={{ height: 32, borderRadius: 5, border: 'none', background: AMBER, color: '#090909', fontSize: 12, fontWeight: 700, padding: '0 12px', cursor: 'pointer' }}
-                  >
-                    Log first trade
-                  </button>
-                </div>
+                <EmptyState
+                  title="No trades logged yet"
+                  sub="Add your first chart screenshot to unlock the dashboard, calendar, analytics, and Flyxa AI feedback."
+                  action={{ label: 'Log first trade', onClick: () => navigate('/scanner') }}
+                />
               ) : isMobile ? (
                 /* ── Mobile: compact list (no table) ── */
                 <div>
@@ -788,8 +589,8 @@ export default function Dashboard() {
                             padding: '9px 14px',
                             paddingRight: col === 'Result' ? 36 : 14,
                             textAlign: col === 'P&L' || col === 'Result' ? 'right' : 'left',
-                            fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
-                            textTransform: 'uppercase', color: T3, whiteSpace: 'nowrap',
+                            fontSize: 11, fontWeight: 500,
+                            color: T3, whiteSpace: 'nowrap',
                             borderBottom: `1px solid ${BSUB}`, fontFamily: SANS,
                           }}>{col}</th>
                         ))}
@@ -878,14 +679,14 @@ export default function Dashboard() {
                   </table>
                 </div>
               )}
-            </Card>
+            </SectionPanel>
           </div>
 
           {/* Right column — widgets */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
 
             {/* Win Rate ring */}
-            <Card style={{ padding: 16, flexShrink: 0 }}>
+            <SectionPanel style={{ flexShrink: 0 }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: T1, marginBottom: 14 }}>Win Rate</p>
               <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
                 <PieChart width={132} height={132}>
@@ -903,87 +704,40 @@ export default function Dashboard() {
                   <div style={{ fontSize: 20, fontWeight: 400, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1, lineHeight: 1 }}>
                     {fmtPct(summary.winRate)}
                   </div>
-                  <div style={{ fontSize: 10, color: T3, marginTop: 3, letterSpacing: '0.06em' }}>Win Rate</div>
+                  <div style={{ fontSize: 10, color: T3, marginTop: 3 }}>Win Rate</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-                {[{ label: `${wins} wins`, color: GREEN }, { label: `${losses} losses`, color: RED }].map(l => (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {[
+                  { label: `${wins} wins`, color: GREEN },
+                  { label: `${losses} losses`, color: RED },
+                  ...(breakevens > 0 ? [{ label: `${breakevens} BE`, color: AMBER }] : []),
+                ].map(l => (
                   <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: T2 }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color }} />
                     {l.label}
                   </span>
                 ))}
               </div>
-            </Card>
+            </SectionPanel>
 
             {/* Calendar strip */}
-            <Card style={{ padding: 16, flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: T1, margin: 0 }}>
-                  Today, {format(new Date(), 'MMM d')}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <SectionPanel
+              title={`Today, ${format(new Date(), 'MMM d')}`}
+              subtitle={`Week of ${format(weekDays[0], 'MMM d')}${weekOffset !== 0 ? ` (${weekOffset > 0 ? '+' : ''}${weekOffset}w)` : ''}`}
+              right={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {weekOffset !== 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setWeekOffset(0)}
-                      style={{
-                        height: 20,
-                        padding: '0 7px',
-                        borderRadius: 4,
-                        border: `1px solid ${BORDER}`,
-                        background: 'transparent',
-                        color: T2,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Now
-                    </button>
+                    <Btn size="sm" variant="ghost" onClick={() => setWeekOffset(0)}>Now</Btn>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setWeekOffset(prev => prev - 1)}
-                    aria-label="Previous week"
-                    style={{
-                      width: 20,
-                      height: 20,
-                      display: 'grid',
-                      placeItems: 'center',
-                      borderRadius: 4,
-                      border: `1px solid ${BORDER}`,
-                      background: 'transparent',
-                      color: T2,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <ChevronLeft size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWeekOffset(prev => prev + 1)}
-                    aria-label="Next week"
-                    style={{
-                      width: 20,
-                      height: 20,
-                      display: 'grid',
-                      placeItems: 'center',
-                      borderRadius: 4,
-                      border: `1px solid ${BORDER}`,
-                      background: 'transparent',
-                      color: T2,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <ChevronRight size={12} />
-                  </button>
+                  <Btn size="sm" variant="ghost" icon={<ChevronLeft size={12} />}
+                    aria-label="Previous week" onClick={() => setWeekOffset(prev => prev - 1)} />
+                  <Btn size="sm" variant="ghost" icon={<ChevronRight size={12} />}
+                    aria-label="Next week" onClick={() => setWeekOffset(prev => prev + 1)} />
                 </div>
-              </div>
-              <p style={{ fontSize: 10, color: T3, marginBottom: 12 }}>
-                Week of {format(weekDays[0], 'MMM d')}
-                {weekOffset !== 0 ? ` (${weekOffset > 0 ? '+' : ''}${weekOffset}w)` : ''}
-              </p>
+              }
+              style={{ flexShrink: 0 }}
+            >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
                 {weekDays.map(day => {
                   const ds      = format(day, 'yyyy-MM-dd');
@@ -997,7 +751,7 @@ export default function Dashboard() {
                       padding: '5px 2px', borderRadius: 5,
                       background: isToday ? AMBER_DIM : 'transparent',
                     }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: isToday ? AMBER : T3 }}>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: isToday ? AMBER : T3 }}>
                         {format(day, 'EEE').slice(0, 2)}
                       </span>
                       <span style={{ fontSize: 12, fontWeight: 500, color: isToday ? AMBER : T1 }}>
@@ -1011,23 +765,27 @@ export default function Dashboard() {
                   );
                 })}
               </div>
-            </Card>
+            </SectionPanel>
 
-            {/* High-impact economic events today */}
-            <Card style={{ padding: 0, flexShrink: 0, border: `1px solid rgba(248,113,113,0.28)`, boxShadow: '0 0 24px rgba(248,113,113,0.09)', overflow: 'hidden' }}>
-              {/* Accent bar */}
-              <div style={{ height: 3, background: 'linear-gradient(90deg, #f87171, rgba(248,113,113,0.1))' }} />
-              <div style={{ padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: RED, boxShadow: `0 0 8px ${RED}`, flexShrink: 0 }} />
-                    <p style={{ fontSize: 12, fontWeight: 700, color: T1, margin: 0, letterSpacing: '0.01em' }}>High Impact Today</p>
-                  </div>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 3, color: RED, background: RED_DIM, border: `1px solid rgba(248,113,113,0.3)` }}>USD</span>
-                </div>
-                {todayHighImpact.length === 0 ? (
-                  <p style={{ fontSize: 11, color: T3, margin: 0, padding: '6px 0' }}>No high-impact events today.</p>
-                ) : (() => {
+            {/* High-impact economic events today — intentional red theme */}
+            <SectionPanel
+              title={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: RED, boxShadow: `0 0 8px ${RED}`, flexShrink: 0 }} />
+                  High Impact Today
+                </span>
+              }
+              right={<Badge tone="red">USD</Badge>}
+              style={{
+                flexShrink: 0,
+                border: `1px solid rgba(248,113,113,0.28)`,
+                borderTop: `3px solid ${RED}`,
+                boxShadow: '0 0 24px rgba(248,113,113,0.09)',
+              }}
+            >
+              {todayHighImpact.length === 0 ? (
+                <p style={{ fontSize: 11, color: T3, margin: 0, padding: '6px 0' }}>No high-impact events today.</p>
+              ) : (() => {
                   const nextUpIndex = todayHighImpact.findIndex(ev => {
                     const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
                     return t !== null && t > now && !Boolean(ev.actual);
@@ -1100,12 +858,10 @@ export default function Dashboard() {
                     </div>
                   );
                 })()}
-              </div>
-            </Card>
+            </SectionPanel>
 
             {/* Daily trade log */}
-            <Card style={{ padding: 16, flex: 1 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: T1, marginBottom: 12 }}>Today's Log</p>
+            <SectionPanel title="Today's Log" style={{ flex: 1 }}>
               {todayTrades.length === 0 ? (
                 <p style={{ fontSize: 12, color: T3, textAlign: 'center', padding: '16px 0' }}>No trades today.</p>
               ) : (
@@ -1136,7 +892,7 @@ export default function Dashboard() {
                   })}
                 </div>
               )}
-            </Card>
+            </SectionPanel>
           </div>
         </div>
       </div>
@@ -1175,8 +931,8 @@ export default function Dashboard() {
                   boxShadow: `0 0 6px ${COBALT}`,
                 }} />
                 <span style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: '0.09em',
-                  textTransform: 'uppercase', color: COBALT, fontFamily: SANS,
+                  fontSize: 11, fontWeight: 600,
+                  color: COBALT, fontFamily: SANS,
                 }}>
                   Breaking News
                 </span>

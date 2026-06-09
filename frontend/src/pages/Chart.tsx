@@ -543,7 +543,7 @@ export default function Chart() {
         {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 700, color: 'var(--txt-3)', marginBottom: 6 }}>
+            <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>
               TradingView replay shell
             </p>
             <h1 style={{ fontSize: 26, fontWeight: 600, color: 'var(--txt)', margin: 0, lineHeight: 1.2, fontFamily: "'Instrument Serif', Georgia, serif" }}>
@@ -571,7 +571,7 @@ export default function Chart() {
             { label: 'Most Used Timeframe',  value: dashboardStats.favoriteTimeframe, sub: 'by frequency' },
           ] as const).map(card => (
             <div key={card.label} style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-3)', marginBottom: 8 }}>{card.label}</p>
+              <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 8 }}>{card.label}</p>
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 500, color: 'var(--txt)', marginBottom: 5 }}>{card.value}</p>
               <p style={{ fontSize: 11, color: 'var(--txt-3)' }}>{card.sub}</p>
             </div>
@@ -584,7 +584,7 @@ export default function Chart() {
             <Play size={16} style={{ color: 'var(--amber-500)' }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--txt-3)', marginBottom: 4 }}>Current Focus</p>
+            <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 4 }}>Current focus</p>
             {savedConfig ? (
               <>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)', marginBottom: 3 }}>
@@ -611,7 +611,7 @@ export default function Chart() {
         <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
             <div>
-              <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--txt-3)', marginBottom: 2 }}>Session Library</p>
+              <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 2 }}>Session library</p>
               <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--txt)', margin: 0 }}>{dashboardStats.totalSessions} saved configuration{dashboardStats.totalSessions !== 1 ? 's' : ''}</p>
             </div>
             <button
@@ -628,7 +628,7 @@ export default function Chart() {
               <thead>
                 <tr>
                   {(['Market', 'Timeframe', 'Date Range', 'Balance', 'Opened', ''] as const).map((col, i) => (
-                    <th key={col + i} style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', padding: '10px 18px', borderBottom: '1px solid var(--border)', textAlign: i === 5 ? 'right' : 'left', fontWeight: 600 }}>
+                    <th key={col + i} style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', padding: '10px 18px', borderBottom: '1px solid var(--border)', textAlign: i === 5 ? 'right' : 'left' }}>
                       {col}
                     </th>
                   ))}
@@ -696,7 +696,7 @@ export default function Chart() {
             <div style={{ position: 'relative', zIndex: 10, width: '100%', maxWidth: 720, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--txt-3)', marginBottom: 4 }}>Backtest Session</p>
+                  <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 4 }}>Backtest session</p>
                   <h2 style={{ fontSize: 22, fontWeight: 600, color: 'var(--txt)', fontFamily: "'Instrument Serif', Georgia, serif", margin: 0 }}>Configure Your Backtest</h2>
                   <p style={{ fontSize: 13, color: 'var(--txt-3)', maxWidth: 500 }}>
                     Choose the asset, timeframe, backtest window, and account balance. The chart will open with those settings applied.

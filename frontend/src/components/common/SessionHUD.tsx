@@ -166,10 +166,8 @@ export default function SessionHUD() {
               boxShadow: `0 0 6px ${accent}90`,
             }} />
             <span style={{
-              fontSize: 9.5,
-              fontWeight: 700,
-              letterSpacing: '0.11em',
-              textTransform: 'uppercase',
+              fontSize: 11,
+              fontWeight: 600,
               color: '#5c5751',
             }}>
               {isLocked ? 'Session locked' : "Today's session"}
@@ -266,7 +264,7 @@ export default function SessionHUD() {
         {hasLossLimit && (
           <div style={{ padding: '10px 12px 12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 9.5, color: '#3a3835', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: 11, color: '#3a3835' }}>
                 Daily loss limit
               </span>
               <span style={{

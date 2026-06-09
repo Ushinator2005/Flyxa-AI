@@ -27,7 +27,7 @@
 
 .flyxa-chat-card-topline {
   height: 2px;
-  background: linear-gradient(90deg, var(--amber), var(--cobalt));
+  background: var(--amber);
   opacity: 0.84;
 }
 
@@ -233,7 +233,7 @@
 
 .flyxa-msg.user {
   border: 1px solid var(--cobalt-border);
-  background: linear-gradient(135deg, var(--cobalt-dim), rgba(110, 168, 254, 0.24));
+  background: var(--cobalt-dim);
   color: #dfeaff;
 }
 
@@ -299,7 +299,7 @@
   height: 45px;
   border-radius: 11px;
   border: 1px solid var(--cobalt-border);
-  background: linear-gradient(135deg, var(--cobalt), #4f8af0);
+  background: var(--cobalt);
   color: #eaf2ff;
   display: inline-flex;
   align-items: center;

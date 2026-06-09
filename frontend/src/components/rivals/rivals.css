@@ -21,9 +21,9 @@
   --rv-text: var(--app-text);
   --rv-text-2: var(--app-text-muted);
   --rv-text-3: var(--app-text-subtle);
-  --rv-gold: #f6c343;
-  --rv-silver: #aab6c7;
-  --rv-bronze: #c48b4e;
+  --rv-gold:   var(--color-gold);
+  --rv-silver: var(--color-silver);
+  --rv-bronze: var(--color-bronze);
   --rv-sans: var(--font-sans);
   --rv-mono: var(--font-mono);
   height: 100%;
@@ -126,11 +126,9 @@
 }
 
 .rivals-stat-label {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--rv-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
 }
 
 .rivals-stat-value {
@@ -192,9 +190,7 @@
 
 .rivals-profile-current span {
   color: var(--rv-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .rivals-profile-current strong {
@@ -476,11 +472,9 @@
 }
 
 .rv-section-kicker {
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--rv-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .rv-section-title {
@@ -562,11 +556,9 @@
 }
 
 .mascot-stage-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--rv-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .mascot-stage-value {
@@ -642,11 +634,9 @@
 }
 
 .mascot-bar-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  font-size: 11px;
   color: var(--rv-text-3);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .mascot-bar-value {
@@ -688,11 +678,9 @@
 }
 
 .rv-table-head span {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--rv-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .rv-table-head .align-r {
@@ -826,10 +814,8 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   padding: 11px 10px 10px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
@@ -913,10 +899,8 @@
 .rv-value small {
   display: block;
   margin-top: 2px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--rv-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   font-family: var(--rv-mono);
 }
 
@@ -1035,10 +1019,8 @@
 }
 
 .rv-comp-col-label {
-  font-size: 9.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--rv-text-3);
   text-align: right;
 }
@@ -1052,10 +1034,8 @@
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
-  font-size: 9.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--rv-text-3);
   transition: color 0.14s ease;
   font-family: var(--rv-sans);
@@ -1112,10 +1092,8 @@
 
 .rv-my-stats-kicker {
   display: block;
-  font-size: 9.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--rv-text-3);
   margin-bottom: 10px;
 }
@@ -1132,10 +1110,8 @@
 }
 
 .rv-my-stat span {
-  font-size: 9.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--rv-text-3);
 }
 

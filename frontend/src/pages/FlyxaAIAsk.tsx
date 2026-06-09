@@ -58,19 +58,17 @@ function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string
       overflow: 'hidden',
       marginBottom: 12,
     }}>
-      {/* Top gradient bar */}
+      {/* Top accent bar */}
       <div style={{
         height: 2,
-        background: r.error
-          ? C.red
-          : `linear-gradient(90deg, ${C.acc} 0%, ${C.grn} 100%)`,
+        background: r.error ? C.red : C.acc,
+        opacity: 0.6,
       }} />
 
       <div style={{ padding: '14px 16px' }}>
         {/* Question label */}
         <div style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-          textTransform: 'uppercase', color: C.t2, marginBottom: 6,
+          fontSize: 11, fontWeight: 500, color: C.t2, marginBottom: 6,
         }}>
           Your question
         </div>
@@ -495,7 +493,7 @@ export default function FlyxaAIAsk() {
                 borderRadius: 10, border: `1px solid ${C.b0}`, background: C.d2,
                 padding: '16px', marginBottom: 12,
               }}>
-                <div style={{ height: 2, background: `linear-gradient(90deg, ${C.acc}60, ${C.grn}60)`, marginBottom: 14, borderRadius: 1 }} />
+                <div style={{ height: 2, background: C.acc, opacity: 0.4, marginBottom: 14, borderRadius: 1 }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {[0, 1, 2].map(i => (

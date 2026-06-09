@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, useMemo, useState } from 'react';
 import { Clock3, AlertTriangle } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
@@ -79,10 +79,8 @@ const insightTypeStyles: Record<InsightType, { accent: string }> = {
 };
 
 const tinyMetaLabelStyle: CSSProperties = {
-  fontSize: 9.5,
+  fontSize: 11,
   fontWeight: 500,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
   color: colors.t2,
 };
 

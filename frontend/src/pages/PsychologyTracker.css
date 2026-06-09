@@ -69,9 +69,7 @@
 
 .psy-kpi p {
   margin: 0 0 6px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--txt-3);
 }
 
@@ -197,8 +195,6 @@
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--txt-2);
   font-weight: 600;
 }
@@ -212,10 +208,8 @@
   border: 1px solid var(--app-border);
   background: var(--surface-2);
   color: var(--txt-3);
-  font-size: 10px;
+  font-size: 11px;
   padding: 3px 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .psy-form-grid {
@@ -233,8 +227,6 @@
 .psy-field label {
   font-size: 11px;
   color: var(--txt-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .psy-field input,
@@ -324,8 +316,6 @@
 .psy-score-line span {
   font-size: 11px;
   color: var(--txt-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .psy-score-line strong {
@@ -427,10 +417,8 @@
 
 .psy-impact-hero span {
   display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--txt-3);
 }
 

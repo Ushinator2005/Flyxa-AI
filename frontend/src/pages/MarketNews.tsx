@@ -5,6 +5,7 @@ import {
   ChevronUp,
   ExternalLink,
   Filter,
+  Plus,
   RefreshCw,
   Search,
   Settings2,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { aiApi, marketDataApi, NewsFilterItem } from '../services/api.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import Modal from '../components/common/Modal.js';
 import {
   DEFAULT_CALENDAR_TIME_ZONE,
   FEED_CALENDAR_TIME_ZONE,
@@ -79,6 +81,7 @@ interface CalendarEvent {
 interface NewsCache {
   items: NewsFilterItem[];
   fetchedAt: number;
+  sourceKey?: string;
 }
 
 interface CalendarCache {
@@ -88,19 +91,81 @@ interface CalendarCache {
   timeZone: string;
 }
 
+interface XAccountPref {
+  username: string;
+  enabled: boolean;
+}
+
 interface SourcePrefs {
   finnhub: boolean;
   polygon: boolean;
   x: boolean;
+  xUsernames: string;
+  xAccounts: XAccountPref[];
   economicCalendar: boolean;
   aiFilter: boolean;
 }
 
-function readCache(): NewsCache | null {
+function normalizeXUsernameInput(value: string): string {
+  return parseXUsernames(value).join(', ');
+}
+
+function parseXUsernames(value: string): string[] {
+  return Array.from(new Set(
+    value
+      .split(',')
+      .map(username => username.trim().replace(/^@/, '').toLowerCase())
+      .filter(username => /^[a-z0-9_]{1,15}$/.test(username))
+  )).slice(0, 10);
+}
+
+function normalizeXAccounts(value: unknown, fallbackUsernames = ''): XAccountPref[] {
+  const fromObjects = Array.isArray(value)
+    ? value
+        .map(item => {
+          if (!item || typeof item !== 'object') return null;
+          const record = item as { username?: unknown; enabled?: unknown };
+          const username = parseXUsernames(String(record.username ?? ''))[0];
+          return username ? { username, enabled: record.enabled !== false } : null;
+        })
+        .filter((item): item is XAccountPref => item !== null)
+    : [];
+
+  const source = fromObjects.length
+    ? fromObjects
+    : parseXUsernames(fallbackUsernames).map(username => ({ username, enabled: true }));
+
+  const seen = new Set<string>();
+  return source.filter(account => {
+    if (seen.has(account.username)) return false;
+    seen.add(account.username);
+    return true;
+  }).slice(0, 10);
+}
+
+function getEnabledXUsernames(prefs: SourcePrefs): string {
+  const accounts = prefs.xAccounts.length
+    ? prefs.xAccounts
+    : parseXUsernames(prefs.xUsernames).map(username => ({ username, enabled: true }));
+  return accounts.filter(account => account.enabled).map(account => account.username).join(', ');
+}
+
+function getNewsSourceKey(prefs: SourcePrefs): string {
+  return JSON.stringify({
+    finnhub: prefs.finnhub,
+    polygon: prefs.polygon,
+    x: prefs.x,
+    xUsernames: getEnabledXUsernames(prefs),
+    aiFilter: prefs.aiFilter,
+  });
+}
+
+function readCache(sourceKey: string): NewsCache | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as NewsCache;
+    if (parsed.sourceKey !== sourceKey) return null;
     if (Date.now() - parsed.fetchedAt > CACHE_TTL) return null;
     if (!Array.isArray(parsed.items) || parsed.items.length === 0) return null;
     return parsed;
@@ -109,10 +174,10 @@ function readCache(): NewsCache | null {
   }
 }
 
-function writeCache(items: NewsFilterItem[]) {
+function writeCache(items: NewsFilterItem[], sourceKey: string) {
   if (!items.length) return;
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ items, fetchedAt: Date.now() }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ items, fetchedAt: Date.now(), sourceKey }));
   } catch {
     // ignore storage failures
   }
@@ -147,15 +212,19 @@ function writeCalendarCache(result: CalendarResult, timeZone: string) {
 }
 
 function readSourcePrefs(): SourcePrefs {
-  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, economicCalendar: true, aiFilter: true };
+  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, xUsernames: '', xAccounts: [], economicCalendar: true, aiFilter: true };
   try {
     const raw = localStorage.getItem(SOURCES_KEY);
     if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as Partial<SourcePrefs>;
+    const parsed = JSON.parse(raw) as Partial<SourcePrefs> & { xAccounts?: unknown };
+    const xUsernames = typeof parsed.xUsernames === 'string' ? normalizeXUsernameInput(parsed.xUsernames) : defaults.xUsernames;
+    const xAccounts = normalizeXAccounts(parsed.xAccounts, xUsernames);
     return {
       finnhub: parsed.finnhub ?? defaults.finnhub,
       polygon: parsed.polygon ?? defaults.polygon,
       x: parsed.x ?? defaults.x,
+      xUsernames,
+      xAccounts,
       economicCalendar: parsed.economicCalendar ?? defaults.economicCalendar,
       aiFilter: parsed.aiFilter ?? defaults.aiFilter,
     };
@@ -165,7 +234,13 @@ function readSourcePrefs(): SourcePrefs {
 }
 
 function writeSourcePrefs(prefs: SourcePrefs) {
-  localStorage.setItem(SOURCES_KEY, JSON.stringify(prefs));
+  const xAccounts = normalizeXAccounts(prefs.xAccounts, prefs.xUsernames);
+  const nextPrefs = {
+    ...prefs,
+    xAccounts,
+    xUsernames: xAccounts.filter(account => account.enabled).map(account => account.username).join(', '),
+  };
+  localStorage.setItem(SOURCES_KEY, JSON.stringify(nextPrefs));
 }
 
 function fmtRelative(iso: string): string {
@@ -1092,9 +1167,7 @@ function CalendarPanel({
                       style={{
                         padding: '9px 10px',
                         borderRadius: 7,
-                        background: isHigh
-                          ? `linear-gradient(90deg, rgba(240,82,82,0.16) 0%, rgba(240,82,82,0.08) 35%, ${S2} 100%)`
-                          : S2,
+                        background: S2,
                         border: isHigh ? `1px solid ${RED_BORDER}` : `1px solid ${BORDER}`,
                         borderLeft: `4px solid ${impactColor(event.impact)}`,
                         minWidth: 0,
@@ -1155,7 +1228,18 @@ function CalendarPanel({
     </section>
   );
 }
-function SourcesPanel({ prefs, onChange }: { prefs: SourcePrefs; onChange: (value: SourcePrefs) => void }) {
+function SourcesPanel({
+  prefs,
+  onChange,
+  onOpenXAccounts,
+}: {
+  prefs: SourcePrefs;
+  onChange: (value: SourcePrefs) => void;
+  onOpenXAccounts: () => void;
+}) {
+  const xAccounts = prefs.xAccounts;
+  const enabledCount = xAccounts.filter(account => account.enabled).length;
+
   return (
     <section style={sidebarCardStyle()}>
       <p
@@ -1213,7 +1297,273 @@ function SourcesPanel({ prefs, onChange }: { prefs: SourcePrefs; onChange: (valu
           );
         })}
       </div>
+      <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 10 }}>
+        <button
+          type="button"
+          onClick={onOpenXAccounts}
+          style={{
+            width: '100%',
+            minHeight: 42,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            borderRadius: 8,
+            border: `1px solid ${AMBER_BORDER}`,
+            background: `linear-gradient(180deg, ${AMBER_DIM}, rgba(251, 146, 60, 0.07))`,
+            color: AMBER,
+            padding: '0 11px',
+            cursor: 'pointer',
+            fontFamily: SANS,
+            boxShadow: '0 0 0 1px rgba(251, 146, 60, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18)',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            <span
+              style={{
+                width: 22,
+                height: 22,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 7,
+                border: `1px solid ${AMBER_BORDER}`,
+                background: 'rgba(251, 146, 60, 0.16)',
+                flexShrink: 0,
+              }}
+            >
+              <Plus size={13} />
+            </span>
+            <span style={{ display: 'grid', gap: 2, minWidth: 0, textAlign: 'left' }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: T1 }}>Add X accounts</span>
+              <span style={{ color: T3, fontSize: 10, fontWeight: 650 }}>{enabledCount} of {xAccounts.length || 0} active</span>
+            </span>
+          </span>
+          <ChevronDown size={14} />
+        </button>
+      </div>
     </section>
+  );
+}
+
+function TwitterXLogo({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M17.9 3h3.1l-6.8 7.8 8 10.2h-6.3l-5-6.5-5.7 6.5H2.1l7.3-8.3L1.8 3h6.5l4.5 5.9L17.9 3Zm-1.1 16.2h1.7L7.4 4.7H5.6l11.2 14.5Z"
+      />
+    </svg>
+  );
+}
+
+function XAccountsModal({
+  isOpen,
+  onClose,
+  prefs,
+  xDraft,
+  onXDraftChange,
+  onXAdd,
+  onXToggle,
+  onXRemove,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  prefs: SourcePrefs;
+  xDraft: string;
+  onXDraftChange: (value: string) => void;
+  onXAdd: () => void;
+  onXToggle: (username: string, enabled: boolean) => void;
+  onXRemove: (username: string) => void;
+}) {
+  const xAccounts = normalizeXAccounts(prefs.xAccounts, prefs.xUsernames);
+  const enabledCount = xAccounts.filter(account => account.enabled).length;
+  const parsedDraftCount = parseXUsernames(xDraft).filter(username => !xAccounts.some(account => account.username === username)).length;
+  const canAdd = prefs.x && xAccounts.length < 10 && parsedDraftCount > 0;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="lg">
+      <div style={{ display: 'grid', gap: 18, fontFamily: SANS, paddingTop: 2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', gap: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <span
+              style={{
+                width: 38,
+                height: 38,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 8,
+                border: `1px solid ${AMBER_BORDER}`,
+                background: AMBER_DIM,
+                color: AMBER,
+                flexShrink: 0,
+              }}
+            >
+              <TwitterXLogo size={18} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, color: T1, fontSize: 18, fontWeight: 800 }}>X accounts</p>
+              <p style={{ margin: '5px 0 0', color: T2, fontSize: 12, lineHeight: 1.45 }}>
+                Choose which accounts Flyxa should pull into Market News.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, paddingRight: 28 }}>
+            <div style={{ minWidth: 74, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 9px', background: S1 }}>
+              <p style={{ margin: 0, color: T1, fontSize: 15, fontWeight: 800 }}>{enabledCount}</p>
+              <p style={{ margin: '1px 0 0', color: T3, fontSize: 10, fontWeight: 650 }}>active</p>
+            </div>
+            <div style={{ minWidth: 74, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 9px', background: S1 }}>
+              <p style={{ margin: 0, color: T1, fontSize: 15, fontWeight: 800 }}>{xAccounts.length}</p>
+              <p style={{ margin: '1px 0 0', color: T3, fontSize: 10, fontWeight: 650 }}>of 10 added</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, background: S1, padding: 12, display: 'grid', gap: 9 }}>
+          <label style={{ color: T2, fontSize: 11, fontWeight: 750 }}>Add account handles</label>
+          <div style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+            <input
+              value={xDraft}
+              onChange={event => onXDraftChange(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && canAdd) onXAdd();
+              }}
+              disabled={!prefs.x || xAccounts.length >= 10}
+              placeholder="@financialjuice, @unusual_whales"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: 40,
+                borderRadius: 8,
+                border: `1px solid ${BORDER}`,
+                background: S2,
+                color: T1,
+                padding: '0 12px',
+                outline: 'none',
+                fontSize: 13,
+                fontFamily: SANS,
+                opacity: prefs.x && xAccounts.length < 10 ? 1 : 0.5,
+              }}
+            />
+            <button
+              type="button"
+              onClick={onXAdd}
+              disabled={!canAdd}
+              style={{
+                minWidth: 92,
+                height: 40,
+                borderRadius: 8,
+                border: `1px solid ${canAdd ? AMBER_BORDER : BORDER}`,
+                background: canAdd ? AMBER : S2,
+                color: canAdd ? '#111111' : T3,
+                cursor: canAdd ? 'pointer' : 'not-allowed',
+                fontWeight: 800,
+                fontSize: 12,
+                fontFamily: SANS,
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+            <p style={{ margin: 0, color: T2, fontSize: 11, fontWeight: 750 }}>Saved accounts</p>
+            <p style={{ margin: 0, color: T3, fontSize: 11 }}>{xAccounts.length === 0 ? 'None yet' : `${enabledCount} active`}</p>
+          </div>
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', background: S1 }}>
+            {xAccounts.length === 0 ? (
+              <div style={{ padding: '26px 18px', textAlign: 'center', color: T3, fontSize: 12, display: 'grid', justifyItems: 'center', gap: 9 }}>
+                <span
+                  style={{
+                    width: 34,
+                    height: 34,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 8,
+                    border: `1px solid ${BORDER}`,
+                    background: S2,
+                    color: T2,
+                  }}
+                >
+                  <TwitterXLogo size={15} />
+                </span>
+                <span style={{ color: T2, fontSize: 13, fontWeight: 700 }}>No accounts added yet</span>
+                <span style={{ maxWidth: 300, lineHeight: 1.45 }}>Add handles above to include their latest posts in your news refresh.</span>
+              </div>
+            ) : (
+              xAccounts.map((account, index) => (
+                <div
+                  key={account.username}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '11px 12px',
+                    borderTop: index === 0 ? 'none' : `1px solid ${BORDER}`,
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, color: T1, fontSize: 13, fontWeight: 750, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      @{account.username}
+                    </p>
+                    <p style={{ margin: '3px 0 0', color: account.enabled ? GREEN : T3, fontSize: 11 }}>
+                      {account.enabled ? 'Included in refreshes' : 'Saved but paused'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onXToggle(account.username, !account.enabled)}
+                    style={{
+                      minWidth: 76,
+                      height: 30,
+                      borderRadius: 999,
+                      border: `1px solid ${account.enabled ? GREEN_BORDER : BORDER}`,
+                      background: account.enabled ? GREEN_DIM : S2,
+                      color: account.enabled ? GREEN : T2,
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      fontFamily: SANS,
+                    }}
+                  >
+                    {account.enabled ? 'On' : 'Off'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove @${account.username}`}
+                    onClick={() => onXRemove(account.username)}
+                    style={{
+                      width: 30,
+                      height: 30,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 8,
+                      border: `1px solid ${BORDER}`,
+                      background: 'transparent',
+                      color: T3,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <p style={{ margin: 0, color: T3, fontSize: 11, lineHeight: 1.45 }}>
+          X accounts require the backend bearer token. Toggled-off accounts stay saved but are excluded from refreshes.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
@@ -1233,14 +1583,17 @@ export default function MarketNews() {
     low: true,
   });
   const [prefs, setPrefs] = useState<SourcePrefs>(readSourcePrefs);
+  const [xAccountDraft, setXAccountDraft] = useState('');
+  const [xAccountsModalOpen, setXAccountsModalOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<'impact' | 'newest'>('impact');
   const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchNews = useCallback(async (force = false) => {
+    const sourceKey = getNewsSourceKey(prefs);
     if (!force) {
-      const cached = readCache();
+      const cached = readCache(sourceKey);
       if (cached) {
         setItems(cached.items);
         setLastRefresh(new Date(cached.fetchedAt));
@@ -1254,7 +1607,7 @@ export default function MarketNews() {
       const [finnhubRaw, polygonRaw, xRaw] = await Promise.allSettled([
         prefs.finnhub ? fetchFinnhubNews() : Promise.resolve([]),
         prefs.polygon ? fetchPolygonNews() : Promise.resolve([]),
-        prefs.x ? marketDataApi.getXNews() : Promise.resolve([]),
+        prefs.x ? marketDataApi.getXNews(getEnabledXUsernames(prefs)) : Promise.resolve([]),
       ]);
 
       const combined: RawHeadline[] = [
@@ -1266,7 +1619,7 @@ export default function MarketNews() {
       if (combined.length === 0) {
         setError(
           !FINNHUB_KEY && !POLYGON_KEY
-            ? 'Add a news source key, or configure X_BEARER_TOKEN and X_MARKET_NEWS_USERNAMES in backend/.env.'
+            ? 'Add a news source key, or configure X_BEARER_TOKEN and add X accounts.'
             : 'No headlines returned. Restart the dev server to pick up API keys, then refresh.',
         );
         setLoading(false);
@@ -1304,7 +1657,7 @@ export default function MarketNews() {
 
       setItems(finalItems);
       setIsRawFallback(rawFallback);
-      writeCache(finalItems);
+      writeCache(finalItems, sourceKey);
       setLastRefresh(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load news');
@@ -1370,8 +1723,43 @@ export default function MarketNews() {
   }, [calendarWeekOffset, fetchSidebar]);
 
   const handlePrefsChange = (next: SourcePrefs) => {
-    setPrefs(next);
-    writeSourcePrefs(next);
+    const normalized = {
+      ...next,
+      xAccounts: normalizeXAccounts(next.xAccounts, next.xUsernames),
+    };
+    normalized.xUsernames = getEnabledXUsernames(normalized);
+    setPrefs(normalized);
+    writeSourcePrefs(normalized);
+  };
+
+  const addXAccountsFromDraft = () => {
+    const currentAccounts = normalizeXAccounts(prefs.xAccounts, prefs.xUsernames);
+    const existingEnabledByUsername = new Map(currentAccounts.map(account => [account.username, account.enabled] as const));
+    const nextAccounts = Array.from(new Set([
+      ...currentAccounts.map(account => account.username),
+      ...parseXUsernames(xAccountDraft),
+    ])).slice(0, 10).map(username => ({
+      username,
+      enabled: existingEnabledByUsername.get(username) ?? true,
+    }));
+    if (nextAccounts.length !== currentAccounts.length) {
+      handlePrefsChange({ ...prefs, xAccounts: nextAccounts });
+    }
+    setXAccountDraft('');
+  };
+
+  const toggleXAccount = (username: string, enabled: boolean) => {
+    handlePrefsChange({
+      ...prefs,
+      xAccounts: normalizeXAccounts(prefs.xAccounts, prefs.xUsernames).map(account => (
+        account.username === username ? { ...account, enabled } : account
+      )),
+    });
+  };
+
+  const removeXAccount = (username: string) => {
+    const nextAccounts = normalizeXAccounts(prefs.xAccounts, prefs.xUsernames).filter(account => account.username !== username);
+    handlePrefsChange({ ...prefs, xAccounts: nextAccounts });
   };
 
   const breakingCount = useMemo(() => items.filter(item => item.isBreaking).length, [items]);
@@ -1695,10 +2083,25 @@ export default function MarketNews() {
                 weekOffset={calendarWeekOffset}
                 onWeekOffsetChange={setCalendarWeekOffset}
               />
-            <SourcesPanel prefs={prefs} onChange={handlePrefsChange} />
+            <SourcesPanel
+              prefs={prefs}
+              onChange={handlePrefsChange}
+              onOpenXAccounts={() => setXAccountsModalOpen(true)}
+            />
           </div>
         </aside>
       </div>
+
+      <XAccountsModal
+        isOpen={xAccountsModalOpen}
+        onClose={() => setXAccountsModalOpen(false)}
+        prefs={prefs}
+        xDraft={xAccountDraft}
+        onXDraftChange={setXAccountDraft}
+        onXAdd={addXAccountsFromDraft}
+        onXToggle={toggleXAccount}
+        onXRemove={removeXAccount}
+      />
 
       <style>{`
         @keyframes spin {

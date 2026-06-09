@@ -34,11 +34,18 @@ type XUserPostsResponse = {
   data?: Array<{ id: string; text: string; created_at?: string }>;
 };
 
-function getConfiguredXUsernames(): string[] {
-  return (process.env.X_MARKET_NEWS_USERNAMES ?? '')
+function parseXUsernames(value: unknown): string[] {
+  return String(value ?? '')
     .split(',')
     .map(username => username.trim().replace(/^@/, '').toLowerCase())
-    .filter(username => /^[a-z0-9_]{1,15}$/.test(username))
+    .filter(username => /^[a-z0-9_]{1,15}$/.test(username));
+}
+
+function getConfiguredXUsernames(extraUsernames?: unknown): string[] {
+  return Array.from(new Set([
+    ...parseXUsernames(process.env.X_MARKET_NEWS_USERNAMES),
+    ...parseXUsernames(extraUsernames),
+  ]))
     .slice(0, X_MAX_ACCOUNTS);
 }
 
@@ -307,10 +314,10 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
   }
 });
 
-router.get('/x-news', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/x-news', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const bearerToken = process.env.X_BEARER_TOKEN?.trim();
-    const usernames = getConfiguredXUsernames();
+    const usernames = getConfiguredXUsernames(req.query.accounts);
 
     if (!bearerToken || usernames.length === 0) {
       return res.json([]);

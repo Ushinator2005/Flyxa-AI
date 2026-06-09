@@ -40,8 +40,7 @@ const colors = {
 };
 
 const tinyMetaLabelStyle: CSSProperties = {
-  fontSize: 9.5, fontWeight: 500, letterSpacing: '0.12em',
-  textTransform: 'uppercase', color: colors.t2,
+  fontSize: 11, fontWeight: 500, color: colors.t2,
 };
 
 const cardBorder = `1px solid ${colors.b0}`;

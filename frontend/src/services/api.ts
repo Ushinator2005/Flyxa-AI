@@ -218,7 +218,10 @@ export const marketDataApi = {
       `/api/market-data/chart?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`
     ),
   getFfCalendar: () => api.get<Array<Record<string, unknown>>>('/api/market-data/ff-calendar'),
-  getXNews: () => api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>('/api/market-data/x-news'),
+  getXNews: (accounts?: string) => {
+    const query = accounts?.trim() ? `?accounts=${encodeURIComponent(accounts)}` : '';
+    return api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>(`/api/market-data/x-news${query}`);
+  },
 };
 
 export interface RivalProfileResponse {

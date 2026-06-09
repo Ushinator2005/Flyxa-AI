@@ -29,9 +29,7 @@ const inputStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: 'block',
   fontFamily: "'DM Mono', monospace",
-  fontSize: 10,
-  letterSpacing: '0.10em',
-  textTransform: 'uppercase',
+  fontSize: 11,
   color: 'rgba(148,163,184,0.60)',
   marginBottom: 6,
 };
@@ -159,9 +157,7 @@ export default function AddGoalModal({ isOpen, onClose, onAddGoal, editGoal }: A
             <p
               style={{
                 fontFamily: "'DM Mono', monospace",
-                fontSize: 9,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
+                fontSize: 11,
                 color: accent,
                 marginBottom: 4,
               }}

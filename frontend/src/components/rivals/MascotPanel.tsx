@@ -42,10 +42,8 @@ const SANS = 'var(--font-sans)';
 
 const labelStyle = {
   fontFamily: SANS,
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase' as const,
+  fontSize: 11,
+  fontWeight: 500,
   color: T3,
 };
 
@@ -202,9 +200,7 @@ export default function MascotPanel({ mascot, lastJournalDate }: MascotPanelProp
                 <span
                   style={{
                     fontFamily: MONO,
-                    fontSize: 8,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
+                    fontSize: 10,
                     color: textColor,
                     textAlign: 'center',
                   }}

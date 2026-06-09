@@ -30,20 +30,25 @@ function accountStatusColor(status: string): string {
   return T3;
 }
 
-const navItems: { path: string; icon: typeof LayoutDashboard; label: string; extraActivePaths?: string[] }[] = [
-  { path: '/',                         icon: LayoutDashboard, label: 'Dashboard'       },
-  { path: '/pre-session',              icon: ClipboardCheck,  label: 'Session',        extraActivePaths: ['/post-session'] },
-  { path: '/scanner',                  icon: ScanLine,        label: 'Trade Scanner'   },
-  { path: '/journal',                  icon: FileText,        label: 'Daily Journal'   },
-  { path: '/market-news',              icon: Newspaper,       label: 'Market News'     },
-  { path: '/flyxa-ai',                 icon: Brain,           label: 'Flyxa AI'        },
-  { path: '/analytics',                icon: BarChart2,       label: 'Analytics'       },
-  { path: '/backtest',                 icon: Target,          label: 'Backtest'        },
-  { path: '/trading-plan',             icon: FileText,        label: 'Trading Plan'    },
-  { path: '/psychology',               icon: Brain,           label: 'Psychology'      },
-  { path: '/goals',                    icon: Crosshair,       label: 'Goals'           },
-  { path: '/rivals',                   icon: Swords,          label: 'Rivals'          },
-  { path: '/achievements',             icon: Trophy,          label: 'Achievements'    },
+type NavItemDef = { path: string; icon: typeof LayoutDashboard; label: string; extraActivePaths?: string[] };
+
+const primaryNavItems: NavItemDef[] = [
+  { path: '/',             icon: LayoutDashboard, label: 'Dashboard',    extraActivePaths: [] },
+  { path: '/pre-session',  icon: ClipboardCheck,  label: 'Session',      extraActivePaths: ['/post-session'] },
+  { path: '/scanner',      icon: ScanLine,        label: 'Trade Scanner' },
+  { path: '/journal',      icon: FileText,        label: 'Daily Journal' },
+  { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
+  { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
+  { path: '/analytics',    icon: BarChart2,       label: 'Analytics'     },
+  { path: '/trading-plan', icon: FileText,        label: 'Trading Plan'  },
+  { path: '/rivals',       icon: Swords,          label: 'Rivals'        },
+];
+
+const moreNavItems: NavItemDef[] = [
+  { path: '/backtest',     icon: Target,          label: 'Backtest'      },
+  { path: '/psychology',   icon: Brain,           label: 'Psychology'    },
+  { path: '/goals',        icon: Crosshair,       label: 'Goals'         },
+  { path: '/achievements', icon: Trophy,          label: 'Achievements'  },
 ];
 
 function NavItem({
@@ -89,6 +94,7 @@ function NavItem({
 
 function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; collapsed: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, signOut } = useAuth();
   const { accounts, selectedAccountId, setSelectedAccountId } = useAppSettings();
   const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived);
@@ -99,6 +105,13 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
     || 'Trader';
   const [rivalUsername, setRivalUsername] = useState<string | null>(null);
   const [rivalAvatarUrl, setRivalAvatarUrl] = useState<string | null>(null);
+
+  // "More" section — auto-open when current route is one of the more items
+  const moreActive = moreNavItems.some(item =>
+    location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+  );
+  const [moreOpen, setMoreOpen] = useState(moreActive);
+  useEffect(() => { if (moreActive) setMoreOpen(true); }, [location.pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,16 +203,10 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
       {/* Nav + Accounts */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '12px 6px' : '12px 8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Main nav */}
+        {/* Primary nav */}
         <div>
-          {!collapsed && (
-            <p style={{
-              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-              color: T3, padding: '0 12px', marginBottom: 5,
-            }}>Main</p>
-          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {navItems.map(item => (
+            {primaryNavItems.map(item => (
               <NavItem
                 key={item.path}
                 path={item.path}
@@ -212,6 +219,59 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
               />
             ))}
           </div>
+        </div>
+
+        {/* More (collapsed by default) */}
+        <div>
+          {!collapsed ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setMoreOpen(o => !o)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 8, padding: '0 8px 0 12px', marginBottom: moreOpen ? 4 : 0,
+                  width: '100%', border: 'none', background: 'transparent', cursor: 'pointer',
+                }}
+              >
+                <p style={{ fontSize: 11, fontWeight: 500, color: T3, margin: 0 }}>More</p>
+                <ChevronDown
+                  size={13}
+                  style={{ color: T3, transform: moreOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+                />
+              </button>
+              {moreOpen && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {moreNavItems.map(item => (
+                    <NavItem
+                      key={item.path}
+                      path={item.path}
+                      icon={item.icon}
+                      label={item.label}
+                      onClick={onNavClick}
+                      collapsed={false}
+                      extraActivePaths={item.extraActivePaths}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            /* Collapsed: show all more icons (tooltip shows label) */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {moreNavItems.map(item => (
+                <NavItem
+                  key={item.path}
+                  path={item.path}
+                  icon={item.icon}
+                  label={item.label}
+                  onClick={onNavClick}
+                  collapsed={true}
+                  extraActivePaths={item.extraActivePaths}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Accounts */}
@@ -250,7 +310,7 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
                 marginBottom: 5,
               }}>
                 <p style={{
-                  fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+                  fontSize: 11, fontWeight: 500,
                   color: T3, margin: 0,
                 }}>Accounts</p>
                 <button

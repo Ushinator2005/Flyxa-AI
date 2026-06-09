@@ -34,10 +34,8 @@ export default function StatCard({ title, value, change, icon, color = 'default'
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
+            fontSize: 11,
+            fontWeight: 500,
             color: 'var(--app-text-subtle)',
             marginBottom: 10,
             fontFamily: 'var(--font-sans)',

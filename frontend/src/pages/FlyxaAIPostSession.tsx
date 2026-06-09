@@ -18,8 +18,7 @@ const C = {
 
 const CARD_BORDER = `1px solid ${C.b0}`;
 const SECTION_LABEL: CSSProperties = {
-  fontSize: 9.5, fontWeight: 500, letterSpacing: '0.12em',
-  textTransform: 'uppercase', color: C.t2,
+  fontSize: 11, fontWeight: 500, color: C.t2,
 };
 
 function todayIso(): string {

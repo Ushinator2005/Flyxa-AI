@@ -699,7 +699,7 @@ export default function FlyxaAIPreSession() {
     <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <header data-tour-id="pre-session-header" style={{ padding: '13px 20px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Session</p>
+          <p style={{ fontSize: 11, color: C.t2, fontWeight: 500 }}>Session</p>
           <h1 style={{ fontSize: 18, fontWeight: 800, color: C.t0, letterSpacing: '-0.02em', marginTop: 2 }}>Session Command Center</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
@@ -761,7 +761,7 @@ export default function FlyxaAIPreSession() {
                   { label: 'Last', value: lastSession ? formatSignedCurrency(lastSession.netPnl) : '--', color: lastSession && lastSession.netPnl < 0 ? C.red : C.grn },
                 ].map(item => (
                   <article key={item.label} style={{ borderRadius: 10, backgroundColor: C.d1, padding: '13px 14px', border: '1px solid rgba(255,255,255,0.055)', boxShadow: '0 1px 8px rgba(0,0,0,0.22)' }}>
-                    <p style={{ fontSize: 9.5, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 9 }}>{item.label}</p>
+                    <p style={{ fontSize: 11, color: C.t2, fontWeight: 500, marginBottom: 9 }}>{item.label}</p>
                     <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 20, color: item.color, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{item.value}</p>
                   </article>
                 ))}
@@ -797,7 +797,7 @@ export default function FlyxaAIPreSession() {
 
             {priorFlow && (
               <section style={{ border: `1px solid ${priorFlow.biggestLeak ? `${C.red}55` : `${C.grn}44`}`, borderRadius: 10, backgroundColor: priorFlow.biggestLeak ? 'rgba(239,68,68,0.075)' : 'rgba(34,197,94,0.065)', padding: 14 }}>
-                <p style={{ fontSize: 10, color: priorFlow.biggestLeak ? C.red : C.grn, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800 }}>Tomorrow&apos;s Rule</p>
+                <p style={{ fontSize: 11, color: priorFlow.biggestLeak ? C.red : C.grn, fontWeight: 700 }}>Tomorrow&apos;s Rule</p>
                 <p style={{ marginTop: 7, fontSize: 15, fontWeight: 800, color: C.t0, lineHeight: 1.45 }}>{priorFlow.tomorrowRule}</p>
                 <p style={{ marginTop: 6, fontSize: 12, color: C.t1, lineHeight: 1.55 }}>
                   From {priorFlow.date}: {priorFlow.summary}
@@ -812,7 +812,7 @@ export default function FlyxaAIPreSession() {
               {/* Header */}
               <div style={{ padding: '14px 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <p style={{ fontSize: 9.5, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 3 }}>Pre-session commitment</p>
+                  <p style={{ fontSize: 11, color: C.t2, fontWeight: 500, marginBottom: 3 }}>Pre-session commitment</p>
                   <h2 style={{ fontSize: 15, fontWeight: 700, color: C.t0, letterSpacing: '-0.02em' }}>Trader Oath</h2>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -890,7 +890,7 @@ export default function FlyxaAIPreSession() {
                     { label: 'Technical', items: technicalChecklistItems },
                   ].map(group => (
                     <div key={group.label}>
-                      <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7, fontWeight: 700 }}>{group.label}</p>
+                      <p style={{ fontSize: 11, color: C.t2, marginBottom: 7, fontWeight: 600 }}>{group.label}</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                         {group.items.map(item => {
                           const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
@@ -956,7 +956,7 @@ export default function FlyxaAIPreSession() {
 
           <aside data-tour-id="pre-session-inputs" style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 0 }}>
             <section data-tour-id="pre-session-mindset" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 8 }}>State of mind</p>
+              <p style={{ fontSize: 11, color: C.t2, fontWeight: 700, marginBottom: 8 }}>State of mind</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 4 }}>
                 {emotions.map(em => {
                   const sel = emotion === em;
@@ -981,7 +981,7 @@ export default function FlyxaAIPreSession() {
             </section>
 
             <section data-tour-id="pre-session-risk" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 10 }}>Market bias</p>
+              <p style={{ fontSize: 11, color: C.t2, fontWeight: 700, marginBottom: 10 }}>Market bias</p>
               {(['ES', 'NQ'] as const).map(instrument => (
                 <div key={instrument} style={{ marginBottom: 10 }}>
                   <p style={{ fontSize: 10, fontFamily: 'monospace', color: C.t2, marginBottom: 5, letterSpacing: '0.06em' }}>{instrument}</p>
@@ -1000,7 +1000,7 @@ export default function FlyxaAIPreSession() {
 
             <section style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800 }}>Risk limits</p>
+                <p style={{ fontSize: 11, color: C.t2, fontWeight: 700 }}>Risk limits</p>
                 <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor} style={{ fontSize: 10, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{riskEditOpen ? 'cancel' : 'edit'}</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
@@ -1043,7 +1043,7 @@ export default function FlyxaAIPreSession() {
             </section>
 
             <section data-tour-id="pre-session-behavior" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 10 }}>Behavior scan</p>
+              <p style={{ fontSize: 11, color: C.t2, fontWeight: 700, marginBottom: 10 }}>Behavior scan</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {[
                   { label: 'Plan adherence', value: recentBehavior.planAdherence === null ? '-' : `${recentBehavior.planAdherence}%`, color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 },

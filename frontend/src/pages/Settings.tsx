@@ -2,6 +2,7 @@
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, Scan, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
+import { SectionPanel } from '../components/ds/SectionPanel.js';
 import DatePicker from '../components/common/DatePicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
@@ -209,11 +210,9 @@ function SectionDivider({ label }: { label: string }) {
     <div className="mb-5 flex items-center gap-3">
       <span
         style={{
-          color: T3,
-          fontSize: '10px',
+          color: T2,
+          fontSize: '11px',
           fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.09em',
           whiteSpace: 'nowrap',
         }}
       >
@@ -230,11 +229,9 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
       style={{
         display: 'block',
         marginBottom: '6px',
-        fontSize: '10px',
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.07em',
-        color: T3,
+        fontSize: '11px',
+        fontWeight: 500,
+        color: T2,
       }}
     >
       {children}
@@ -484,38 +481,6 @@ function StatusSelect({
   );
 }
 
-function SectionCard({
-  title,
-  subtitle,
-  children,
-  headerRight,
-}: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-  headerRight?: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        background: S1,
-        border: `1px solid ${BORDER}`,
-        borderRadius: '8px',
-        padding: '16px',
-      }}
-    >
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: T1, marginBottom: '4px' }}>{title}</p>
-          <p style={{ fontSize: '12px', color: T3 }}>{subtitle}</p>
-        </div>
-        {headerRight}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 // â”€â”€â”€ main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function Settings() {
@@ -528,7 +493,6 @@ export default function Settings() {
   const setEntries = useFlyxaStore(state => state.setEntries);
   const addPayout = useFlyxaStore(state => state.addPayout);
   const deletePayout = useFlyxaStore(state => state.deletePayout);
-  const resetAllData = useFlyxaStore(state => state.resetAllData);
   const storeAccounts = useFlyxaStore(state => state.accounts);
   const getPayouts = (accountId: string) => storeAccounts.find(a => a.id === accountId)?.payouts ?? [];
   const {
@@ -1110,7 +1074,7 @@ export default function Settings() {
       {/* Profile section */}
       <section ref={profileRef} data-tour-id="settings-profile" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Profile" />
-        <SectionCard
+        <SectionPanel
           title="Data safety"
           subtitle="Confirm which login owns the data currently loaded on this device."
         >
@@ -1221,7 +1185,6 @@ export default function Settings() {
                       fontFamily: SANS,
                       cursor: btn.disabled ? 'not-allowed' : 'pointer',
                       opacity: btn.disabled ? 0.38 : 1,
-                      letterSpacing: '0.04em',
                       transition: 'background 0.15s, border-color 0.15s',
                     }}
                     onMouseEnter={e => {
@@ -1273,7 +1236,6 @@ export default function Settings() {
                   fontWeight: 600,
                   fontFamily: SANS,
                   cursor: 'pointer',
-                  letterSpacing: '0.04em',
                   transition: 'background 0.15s, border-color 0.15s',
                 }}
                 onMouseEnter={e => {
@@ -1303,8 +1265,8 @@ export default function Settings() {
             </div>
 
           </div>
-        </SectionCard>
-        <SectionCard
+        </SectionPanel>
+        <SectionPanel
           title="Your profile"
           subtitle="Set the username other traders use to find you and send rival requests."
         >
@@ -1445,13 +1407,13 @@ export default function Settings() {
               )}
             </div>
           </div>
-        </SectionCard>
+        </SectionPanel>
       </section>
 
       {/* General section */}
       <section ref={generalRef} style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="General" />
-        <SectionCard
+        <SectionPanel
           title="Workspace preferences"
           subtitle="Control the global look and formatting defaults for the app."
         >
@@ -1461,11 +1423,9 @@ export default function Settings() {
                 style={{
                   display: 'block',
                   marginBottom: '6px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                    color: T3,
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: T2,
                 }}
               >
                 Theme
@@ -1484,11 +1444,9 @@ export default function Settings() {
                 style={{
                   display: 'block',
                   marginBottom: '6px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                    color: T3,
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: T2,
                 }}
               >
                 Date Format
@@ -1508,11 +1466,9 @@ export default function Settings() {
                 style={{
                   display: 'block',
                   marginBottom: '6px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                    color: T3,
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: T2,
                 }}
               >
                 Currency Symbol
@@ -1533,11 +1489,9 @@ export default function Settings() {
                 style={{
                   display: 'block',
                   marginBottom: '6px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                    color: T3,
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: T2,
                 }}
               >
                 Timezone
@@ -1556,10 +1510,10 @@ export default function Settings() {
               </WorkspaceSelect>
             </label>
           </div>
-        </SectionCard>
+        </SectionPanel>
 
         <div style={{ marginTop: '16px' }}>
-          <SectionCard
+          <SectionPanel
             title="Session times"
             subtitle="Set your default Asia, London, Pre Market, and New York trading windows."
           >
@@ -1602,10 +1556,8 @@ export default function Settings() {
                           color: sessionColor,
                           borderRadius: '999px',
                           padding: '3px 8px',
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          letterSpacing: '0.04em',
-                          textTransform: 'uppercase',
+                          fontSize: '11px',
+                          fontWeight: 500,
                         }}
                       >
                         {formatSessionWindow(startValue, endValue)}
@@ -1680,11 +1632,11 @@ export default function Settings() {
                 );
               })}
             </div>
-          </SectionCard>
+          </SectionPanel>
         </div>
 
         <div style={{ marginTop: '16px' }}>
-          <SectionCard
+          <SectionPanel
             title="Product tour"
             subtitle="Reopen the feature walkthrough if you want to review the app tab by tab."
           >
@@ -1705,14 +1657,14 @@ export default function Settings() {
             >
               Restart Website Tour
             </button>
-          </SectionCard>
+          </SectionPanel>
         </div>
       </section>
 
       {/* Display section */}
       <section ref={displayRef} style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Display" />
-        <SectionCard
+        <SectionPanel
           title="Chart defaults"
           subtitle="Choose the chart defaults you want when opening new views."
         >
@@ -1742,13 +1694,13 @@ export default function Settings() {
               </StyledSelect>
             </label>
           </div>
-        </SectionCard>
+        </SectionPanel>
       </section>
 
       {/* Scanner section */}
       <section ref={scannerRef} data-tour-id="settings-scanner" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Scanner" />
-        <SectionCard
+        <SectionPanel
           title="Chart zone colors"
           subtitle="Match these colors to the zone boxes drawn on your TradingView chart so the AI can identify each level correctly."
         >
@@ -1780,16 +1732,16 @@ export default function Settings() {
           <p style={{ marginTop: '12px', fontSize: '11px', color: T3, lineHeight: 1.6 }}>
             Click a swatch to open the color picker and match it to the zone color on your TradingView chart.
           </p>
-        </SectionCard>
+        </SectionPanel>
       </section>
 
       {/* Accounts section */}
       <section ref={accountsRef} data-tour-id="settings-accounts" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Accounts" />
-        <SectionCard
+        <SectionPanel
           title="Trading accounts"
           subtitle="Manage the trading accounts available across the dashboard and journal."
-          headerRight={
+          right={
             <button
               type="button"
               data-tour-id="settings-add-account"
@@ -1835,10 +1787,8 @@ export default function Settings() {
               <span
                 key={col}
                 style={{
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.07em',
+                  fontSize: '11px',
+                  fontWeight: 500,
                   color: T3,
                 }}
               >
@@ -1960,7 +1910,6 @@ export default function Settings() {
                           fontWeight: 600,
                           cursor: 'pointer',
                           transition: 'background 0.15s, color 0.15s, border-color 0.15s',
-                          letterSpacing: '0.02em',
                         }}
                       >
                         <DollarSign size={12} />
@@ -2048,7 +1997,7 @@ export default function Settings() {
                     {/* Add payout form */}
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Date</label>
+                        <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--app-text-muted)' }}>Date</label>
                         <DatePicker
                           value={payoutDate}
                           onChange={setPayoutDate}
@@ -2058,7 +2007,7 @@ export default function Settings() {
                         />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Amount ($)</label>
+                        <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--app-text-muted)' }}>Amount ($)</label>
                         <input
                           type="number"
                           min="0"
@@ -2070,7 +2019,7 @@ export default function Settings() {
                         />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Note</label>
+                        <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--app-text-muted)' }}>Note</label>
                         <input
                           type="text"
                           placeholder="optional"
@@ -2212,8 +2161,8 @@ export default function Settings() {
           {/* Archived accounts */}
           {accounts.some(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived) && (
             <div style={{ marginTop: '20px', borderTop: `1px solid ${BSUB}`, paddingTop: '16px' }}>
-              <p style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: T3, marginBottom: '10px' }}>
-                Archived Accounts
+              <p style={{ fontSize: '11px', fontWeight: 600, color: T2, marginBottom: '10px' }}>
+                Archived accounts
               </p>
               {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived).map(account => (
                 <div key={account.id} style={{ marginBottom: '6px' }}>
@@ -2304,13 +2253,13 @@ export default function Settings() {
               ))}
             </div>
           )}
-        </SectionCard>
+        </SectionPanel>
       </section>
 
       {/* Journal section */}
       <section ref={journalRef} style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Journal" />
-        <SectionCard
+        <SectionPanel
           title="Confluence tags"
           subtitle="Pre-defined tags you can quickly apply when logging trades in the journal. Click a tag to rename it."
         >
@@ -2471,13 +2420,13 @@ export default function Settings() {
               {confluenceOptions.length} of 64 tags · Click a tag to rename, or × to delete.
             </p>
           )}
-        </SectionCard>
+        </SectionPanel>
       </section>
 
       {/* ── Danger Zone ── */}
       <section style={{ scrollMarginTop: '140px', marginTop: 8 }}>
         <SectionDivider label="Danger Zone" />
-        <SectionCard
+        <SectionPanel
           title="Reset all data"
           subtitle="Permanently wipe this account back to a fresh state. Your username is preserved."
         >
@@ -2549,7 +2498,7 @@ export default function Settings() {
               )}
             </div>
           )}
-        </SectionCard>
+        </SectionPanel>
       </section>
 
       {showSavedToast && (
