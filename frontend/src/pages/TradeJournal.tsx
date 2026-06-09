@@ -2086,11 +2086,13 @@ export default function TradeJournal() {
     const existing = entries.find(entry => entry.date === date);
     if (existing) {
       setSelectedEntryId(existing.id);
+      setShowScanner(false);
       return;
     }
     const blank = createEmptyEntry(date, rulesTemplate);
     mutateEntries(prev => [blank, ...prev]);
     setSelectedEntryId(blank.id);
+    setShowScanner(false);
   }, [entries, mutateEntries, rulesTemplate, selectedEntry?.date]);
 
   const saveTradeDate = useCallback(() => {
@@ -2606,7 +2608,7 @@ export default function TradeJournal() {
       </aside>
 
       <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
-        {!showScanner && selectedEntry && selectedEntry.trades.length > 0 ? (
+        {!showScanner && selectedEntry ? (
           <>
             <div className="tj-sticky-head">
               <div>
