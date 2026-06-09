@@ -392,4 +392,108 @@ router.put('/requests/:id', authMiddleware, async (req: AuthenticatedRequest, re
   }
 });
 
+// ── Messages ──────────────────────────────────────────────────────────────────
+// Supabase migration (run once in dashboard):
+//
+//   CREATE TABLE IF NOT EXISTS rival_messages (
+//     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//     sender_id UUID NOT NULL,
+//     receiver_id UUID NOT NULL,
+//     content TEXT NOT NULL CHECK (char_length(content) BETWEEN 1 AND 1000),
+//     created_at TIMESTAMPTZ DEFAULT NOW()
+//   );
+//   CREATE INDEX ON rival_messages (sender_id, receiver_id, created_at DESC);
+//   CREATE INDEX ON rival_messages (receiver_id, created_at DESC);
+
+// GET /messages/:rivalUserId — fetch conversation thread
+router.get('/messages/:rivalUserId', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const rivalUserId = req.params.rivalUserId;
+    if (!rivalUserId || typeof rivalUserId !== 'string') {
+      res.status(400).json({ error: 'Invalid rival user ID.' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('rival_messages')
+      .select('id, sender_id, content, created_at')
+      .or(
+        `and(sender_id.eq.${req.userId!},receiver_id.eq.${rivalUserId}),` +
+        `and(sender_id.eq.${rivalUserId},receiver_id.eq.${req.userId!})`
+      )
+      .order('created_at', { ascending: true })
+      .limit(60);
+
+    if (error) throw error;
+
+    res.json((data ?? []).map(msg => ({
+      id: msg.id,
+      senderId: msg.sender_id,
+      content: msg.content,
+      createdAt: msg.created_at,
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /messages — send a message to a rival
+router.post('/messages', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const toUserId = typeof (req.body as { toUserId?: unknown }).toUserId === 'string'
+      ? ((req.body as { toUserId: string }).toUserId).trim()
+      : null;
+    const content = typeof (req.body as { content?: unknown }).content === 'string'
+      ? ((req.body as { content: string }).content).trim()
+      : null;
+
+    if (!toUserId) {
+      res.status(400).json({ error: 'toUserId is required.' });
+      return;
+    }
+    if (!content || content.length < 1 || content.length > 1000) {
+      res.status(400).json({ error: 'Message must be 1–1000 characters.' });
+      return;
+    }
+    if (toUserId === req.userId) {
+      res.status(400).json({ error: 'Cannot message yourself.' });
+      return;
+    }
+
+    // Ensure an accepted rival relationship exists (anti-spam)
+    const { data: relationship, error: relError } = await supabase
+      .from('rival_requests')
+      .select('id')
+      .eq('status', 'accepted')
+      .or(
+        `and(requester_id.eq.${req.userId!},recipient_id.eq.${toUserId}),` +
+        `and(requester_id.eq.${toUserId},recipient_id.eq.${req.userId!})`
+      )
+      .maybeSingle();
+
+    if (relError) throw relError;
+    if (!relationship) {
+      res.status(403).json({ error: 'You can only message accepted rivals.' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('rival_messages')
+      .insert({ sender_id: req.userId!, receiver_id: toUserId, content })
+      .select('id, sender_id, content, created_at')
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      id: data.id,
+      senderId: data.sender_id,
+      content: data.content,
+      createdAt: data.created_at,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

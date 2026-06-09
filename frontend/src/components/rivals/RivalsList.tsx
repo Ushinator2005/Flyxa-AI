@@ -1,9 +1,11 @@
-﻿import type { Rival } from '../../types/rivals.js';
+﻿import { MessageSquare } from 'lucide-react';
+import type { Rival } from '../../types/rivals.js';
 import { compareMetric, getMascotLabel } from '../../lib/mascotProgression.js';
 
 interface RivalsListProps {
   rivals: Rival[];
   currentUser: Rival;
+  onOpenChat?: (rival: Rival) => void;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -34,7 +36,7 @@ function valueClass(mine: number, theirs: number): 'delta-win' | 'delta-lose' | 
   return 'delta-even';
 }
 
-export default function RivalsList({ rivals, currentUser }: RivalsListProps) {
+export default function RivalsList({ rivals, currentUser, onOpenChat }: RivalsListProps) {
   const ordered = [...rivals].sort((a, b) => {
     if (a.isMe) return -1;
     if (b.isMe) return 1;
@@ -93,6 +95,15 @@ export default function RivalsList({ rivals, currentUser }: RivalsListProps) {
             <div className={`rv-cell ${isMe ? 'delta-even' : valueClass(currentUser.mascot.stats.processScore, processScore)}`}>{processScore}</div>
 
             <div className="rv-action">
+              {!isMe && rival.userId && onOpenChat && (
+                <button
+                  className="rv-chat-btn"
+                  onClick={() => onOpenChat(rival)}
+                  title={`Message ${rival.displayName}`}
+                >
+                  <MessageSquare size={13} />
+                </button>
+              )}
               <span className={`rv-badge ${isMe ? 'me' : ''}`}>{isMe ? 'YOU' : 'VS'}</span>
             </div>
           </div>

@@ -269,6 +269,20 @@ export const accountApi = {
   reset: () => api.post<{ ok: boolean; preserved: string[] }>('/api/account/reset', {}),
 };
 
+export interface RivalMessage {
+  id: string;
+  senderId: string;
+  content: string;
+  createdAt: string;
+}
+
+export const rivalMessagesApi = {
+  get: (rivalUserId: string) =>
+    api.get<RivalMessage[]>(`/api/rivals/messages/${rivalUserId}`),
+  send: (toUserId: string, content: string) =>
+    api.post<RivalMessage>('/api/rivals/messages', { toUserId, content }),
+};
+
 export interface BillingLivePricesResponse {
   firm: string;
   prices: Record<string, number>;

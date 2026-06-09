@@ -2,18 +2,27 @@ import { useMemo, useState } from 'react';
 import { Bell, Check, ChevronDown, Clock3, Plus, X } from 'lucide-react';
 import { getRivalMetricValue } from '../lib/mascotProgression.js';
 import { useRivals } from '../hooks/useRivals.js';
+import type { Rival } from '../types/rivals.js';
 import type { RivalRequestResponse } from '../services/api.js';
 import MascotCard from '../components/rivals/MascotCard.js';
 import RivalsList from '../components/rivals/RivalsList.js';
 import Leaderboard from '../components/rivals/Leaderboard.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
+import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
 import '../components/rivals/rivals.css';
 
 export default function Rivals() {
-  const { rivals, addRival, rivalRequests, respondToRequest } = useRivals();
+  const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [requestBusyId, setRequestBusyId] = useState<string | null>(null);
   const [requestsOpen, setRequestsOpen] = useState(true);
+  const [activeChatRival, setActiveChatRival] = useState<Rival | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const openChat = (rival: Rival) => {
+    setActiveChatRival(rival);
+    setChatOpen(true);
+  };
   const currentUser = rivals.find(rival => rival.isMe) ?? rivals[0];
 
   const quickStats = useMemo(() => {
@@ -142,7 +151,7 @@ export default function Rivals() {
         <div className="rivals-main-grid">
           <MascotCard mascot={currentUser.mascot} />
           <div className="rivals-stack">
-            <RivalsList rivals={rivals} currentUser={currentUser} />
+            <RivalsList rivals={rivals} currentUser={currentUser} onOpenChat={openChat} />
             <Leaderboard rivals={rivals} currentUserId={currentUser.id} defaultMetric="processScore" />
           </div>
         </div>
@@ -152,6 +161,13 @@ export default function Rivals() {
         open={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         onSubmit={username => addRival(username)}
+      />
+
+      <RivalChatPanel
+        open={chatOpen}
+        rival={activeChatRival}
+        myUserId={profile?.userId ?? null}
+        onClose={() => setChatOpen(false)}
       />
     </div>
   );

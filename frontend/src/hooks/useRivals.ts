@@ -177,6 +177,7 @@ function rivalFromRequest(request: RivalRequestResponse): Rival | null {
   const stats = profile.stats ?? { dailyJournalStreak: 0, dailyJournalScore: 0, tradingJournalScore: 0, backtestSessions: 0, processScore: 0, winRate: null, avgR: null };
   return normalizeRivalStats({
     id: `rival-user-${profile.userId}`,
+    userId: profile.userId,
     username: profile.username,
     displayName: profile.displayName,
     avatarInitials: profile.avatarInitials,
@@ -247,6 +248,25 @@ export function useRivals() {
       cancelled = true;
     };
   }, [profileVersion]);
+
+  // Poll every 20s so both sides see friend request changes without refreshing
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      rivalsApi.getAll().then(setRivalRequests).catch(() => {});
+    }, 20_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Also refresh immediately when the user returns to this tab
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible') {
+        rivalsApi.getAll().then(setRivalRequests).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, []);
 
   const backendRivals = useMemo(
     () => rivalRequests.map(rivalFromRequest).filter((rival): rival is Rival => Boolean(rival)),
