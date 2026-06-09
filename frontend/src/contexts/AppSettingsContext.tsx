@@ -186,7 +186,7 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
   try {
     const [settingsResult, accountsResult] = await Promise.all([
       supabase.from('user_store').select('app_settings').eq('user_id', userId).maybeSingle(),
-      supabase.from('trading_accounts').select('id, name, broker, type, status, color, starting_balance, created_at').eq('user_id', userId),
+      supabase.from('trading_accounts').select('id, name, broker, type, status, color, starting_balance, archived, created_at').eq('user_id', userId),
     ]);
 
     if (settingsResult.error) return null;
@@ -212,23 +212,30 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
           color: (a.color as string | null) ?? '#6366f1',
           createdAt: a.created_at as string,
           ...(a.starting_balance != null ? { startingBalance: Number(a.starting_balance) } : {}),
+          ...(a.archived === true ? { archived: true } : {}),
         }));
 
       if (missingAccounts.length > 0) {
         row.accounts = [...(row.accounts ?? []), ...missingAccounts];
       }
 
-      // Also merge starting_balance for any existing accounts that are missing it
-      const balanceMap = new Map<string, number | null>(
-        accountsResult.data.map(a => [a.id as string, a.starting_balance != null ? Number(a.starting_balance) : null])
+      // Merge starting_balance and archived for existing accounts using trading_accounts as fallback
+      const dbFieldMap = new Map<string, { balance: number | null; archived: boolean }>(
+        accountsResult.data.map(a => [a.id as string, {
+          balance: a.starting_balance != null ? Number(a.starting_balance) : null,
+          archived: a.archived === true,
+        }])
       );
-      row.accounts = (row.accounts ?? []).map(account => ({
-        ...account,
-        startingBalance: account.startingBalance
-          ?? (balanceMap.has(account.id) && balanceMap.get(account.id) != null
-            ? (balanceMap.get(account.id) as number)
-            : undefined),
-      }));
+      row.accounts = (row.accounts ?? []).map(account => {
+        const dbFields = dbFieldMap.get(account.id);
+        return {
+          ...account,
+          startingBalance: account.startingBalance
+            ?? (dbFields?.balance != null ? dbFields.balance : undefined),
+          // Recover archived flag from trading_accounts if app_settings lost it
+          ...(account.archived === true || dbFields?.archived === true ? { archived: true } : {}),
+        };
+      });
     }
 
     // Only fall through to localStorage migration if there is truly nothing to load
@@ -302,6 +309,11 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   // Load from Supabase on user login
   useEffect(() => {
     if (!user) {
+      // Cancel any pending debounced save so it cannot fire after state resets to defaults
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
       setAccounts([DEFAULT_ACCOUNT]);
       setPreferences(DEFAULT_PREFERENCES);
       setConfluenceOptions([...DEFAULT_CONFLUENCE_OPTIONS]);
@@ -508,6 +520,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         ...('status' in updates ? { status: updates.status } : {}),
         ...('color' in updates ? { color: updates.color } : {}),
         ...('startingBalance' in updates ? { starting_balance: updates.startingBalance ?? null } : {}),
+        ...('archived' in updates ? { archived: !!updates.archived } : {}),
         updated_at: new Date().toISOString(),
       }).eq('id', accountId).eq('user_id', user.id).then(({ error }) => {
         if (error && !error.message.includes('starting_balance')) {

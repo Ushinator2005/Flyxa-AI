@@ -230,20 +230,14 @@ export function useRivals() {
 
   useEffect(() => {
     let cancelled = false;
-    rivalsApi.getProfile()
-      .then((data) => {
-        if (!cancelled) setProfile(data);
-      })
-      .catch(() => {
-        if (!cancelled) setProfile(null);
-      });
-    rivalsApi.getAll()
-      .then((requests) => {
-        if (!cancelled) setRivalRequests(requests);
-      })
-      .catch(() => {
-        if (!cancelled) setRivalRequests([]);
-      });
+    Promise.all([
+      rivalsApi.getProfile().catch(() => null),
+      rivalsApi.getAll().catch(() => []),
+    ]).then(([profileData, requestsData]) => {
+      if (cancelled) return;
+      setProfile(profileData);
+      setRivalRequests(requestsData ?? []);
+    });
     return () => {
       cancelled = true;
     };
