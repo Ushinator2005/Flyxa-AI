@@ -61,7 +61,7 @@ function inlineChips(text: string): React.ReactNode {
   });
 }
 
-interface ReviewSection { label: string; verdict: string | null; bullets: string[]; prose: string[]; tags: string[]; rule: string | null; }
+interface ReviewSection { label: string; verdict: string | null; bullets: string[]; insights: string[]; prose: string[]; tags: string[]; rule: string | null; }
 
 function parseReviewSections(text: string): ReviewSection[] {
   const sections: ReviewSection[] = [];
@@ -70,11 +70,13 @@ function parseReviewSections(text: string): ReviewSection[] {
     const line = raw.trimEnd();
     if (line.startsWith('## ')) {
       if (current) sections.push(current);
-      current = { label: line.slice(3).trim(), verdict: null, bullets: [], prose: [], tags: [], rule: null };
+      current = { label: line.slice(3).trim(), verdict: null, bullets: [], insights: [], prose: [], tags: [], rule: null };
     } else if (current) {
       const trimmed = line.trim();
       if (/^\*\*.*\*\*$/.test(trimmed) && !current.verdict) {
         current.verdict = trimmed.slice(2, -2);
+      } else if (/^> /.test(line)) {
+        current.insights.push(line.replace(/^> /, '').trim());
       } else if (/^TAGS:/i.test(trimmed)) {
         current.tags = trimmed.replace(/^TAGS:\s*/i, '').split(',').map(t => t.trim()).filter(Boolean);
       } else if (/^RULE:/i.test(trimmed)) {
@@ -175,7 +177,7 @@ function renderReviewSections(text: string): React.ReactNode {
 
             {/* Verdict */}
             {section.verdict && (
-              <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.5, margin: '0 0 10px', letterSpacing: '-0.01em' }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: C.t0, lineHeight: 1.45, margin: '0 0 12px', letterSpacing: '-0.02em' }}>
                 {inlineChips(section.verdict)}
               </p>
             )}
@@ -188,13 +190,24 @@ function renderReviewSections(text: string): React.ReactNode {
               </div>
             )}
 
-            {/* Bullets */}
+            {/* Bullets — data rows (stats section) */}
             {section.bullets.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {section.bullets.map((b, bi) => (
                   <div key={bi} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '5px 0', borderTop: `1px solid rgba(255,255,255,0.04)` }}>
                     <span style={{ flexShrink: 0, marginTop: 7, width: 3, height: 3, borderRadius: '50%', background: C.acc, opacity: 0.5 }} />
                     <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.65 }}>{inlineChips(b)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Insight blocks — What Happened section */}
+            {section.insights.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }}>
+                {section.insights.map((ins, ii) => (
+                  <div key={ii} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 10px', background: ii % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', borderRadius: 5, borderLeft: `2px solid rgba(245,158,11,${0.15 + ii * 0.07})` }}>
+                    <span style={{ fontSize: 12.5, color: C.t0, lineHeight: 1.6, fontWeight: 450 }}>{inlineChips(ins)}</span>
                   </div>
                 ))}
               </div>
@@ -209,13 +222,15 @@ function renderReviewSections(text: string): React.ReactNode {
               </div>
             )}
 
-            {/* Prose — analysis body text */}
-            {section.prose.length > 0 && (
-              <p style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.75, margin: section.bullets.length > 0 ? '10px 0 0' : '0', letterSpacing: '0.01em' }}>
+            {/* Prose fallback (if AI didn't use > format) */}
+            {section.prose.length > 0 && section.insights.length === 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }}>
                 {section.prose.map((p, pi) => (
-                  <React.Fragment key={pi}>{pi > 0 && ' '}{inlineChips(p)}</React.Fragment>
+                  <div key={pi} style={{ padding: '7px 10px', borderLeft: `2px solid rgba(245,158,11,${0.15 + pi * 0.07})`, borderRadius: 5, background: pi % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+                    <span style={{ fontSize: 12.5, color: C.t0, lineHeight: 1.6 }}>{inlineChips(p)}</span>
+                  </div>
                 ))}
-              </p>
+              </div>
             )}
           </div>
         );
@@ -587,8 +602,14 @@ export default function FlyxaAIAsk() {
                       >?</span>
                     )}
                     {tip && tooltip && (
-                      <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0, background: C.d3, border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 6, padding: '8px 10px', zIndex: 10, pointerEvents: 'none' }}>
-                        <p style={{ fontSize: 10.5, color: C.t1, margin: 0, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{tooltip}</p>
+                      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, minWidth: 220, background: '#1a1917', border: `1px solid rgba(255,255,255,0.14)`, borderRadius: 7, padding: '10px 12px', zIndex: 50, pointerEvents: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
+                        <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.acc, margin: '0 0 7px' }}>How it's scored</p>
+                        {tooltip.split('\n').map((line, li) => (
+                          <div key={li} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0', borderTop: li > 0 ? `1px solid rgba(255,255,255,0.05)` : 'none' }}>
+                            <span style={{ fontSize: 11, color: C.t1 }}>{line.split(':')[0]}</span>
+                            <span style={{ fontSize: 11, color: C.t0, fontWeight: 600, whiteSpace: 'nowrap' }}>{line.split(':').slice(1).join(':').trim()}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -644,7 +665,7 @@ export default function FlyxaAIAsk() {
                   {/* ── Score cards ── */}
                   {scores && (
                     <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                      <ScoreCard label="Process" value={scores.process} total={100} tooltip={"Plan followed: +44pts\nEmotional state: Calm +28, Confident +22,\nTired +10, Anxious +6, FOMO +2, Revenge +0\nPre-trade notes: +14pts\nPost-trade notes: +8pts\nConfidence level: up to +6pts"} />
+                      <ScoreCard label="Process" value={scores.process} total={100} tooltip={"Plan followed: +44 pts\nCalm / Confident: +28 / +22 pts\nTired / Anxious: +10 / +6 pts\nFOMO / Revenge: +2 / +0 pts\nPre-trade notes: +14 pts\nPost-trade notes: +8 pts\nConfidence (1–10): up to +6 pts"} />
                       <ScoreCard label="Setup Quality" value={scores.setupQuality} total={100} />
                       <ScoreCard label="Execution" value={scores.execution} total={100} />
                       <ScoreCard label="Confidence" value={confidence} total={10} display={`${confidence}/10`} />
@@ -689,7 +710,7 @@ export default function FlyxaAIAsk() {
                   {/* ── Review content ── */}
                   {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
                     <>
-                      <div style={{ maxHeight: 440, overflowY: 'auto', paddingRight: 2 }}>
+                      <div style={{ maxHeight: 620, overflowY: 'auto', paddingRight: 2 }}>
                         {renderReviewSections(focusedTradeAnalysis)}
                       </div>
                       {/* Footer */}

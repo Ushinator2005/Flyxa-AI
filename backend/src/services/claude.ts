@@ -2146,8 +2146,11 @@ Anchor the analysis in their data. Three bullet points — each must contain a s
 TAGS: [2-4 tags, comma separated, chosen from: Emotional override, Post-loss reaction, Plan drifted, Revenge pattern, FOMO entry, Confidence mismatch, Strong setup, Clean execution, Discipline win]
 
 ## What Happened
-**[One sharp verdict sentence — what does this trade actually represent, beyond the surface result]**
-Write 3–4 sentences of genuine analysis. Reason across the trade data and their history: Why did this specific decision get made? What does the setup quality combined with the emotional state and plan adherence tell you about the failure or success mode? What is the causal chain? What does this trade reveal about where their edge actually lives vs where they think it does? Cite their stats to support the reasoning.
+**[One sharp verdict sentence — what this trade actually represents, beyond the surface result]**
+> [First insight — WHY this decision was made. One sentence, max 18 words. Include a number where possible.]
+> [Second insight — what the setup quality + emotional state + plan adherence together reveal. One sentence.]
+> [Third insight — the causal chain or the pattern this fits. What does it prove about where their edge lives or breaks. One sentence with a stat.]
+> [Fourth insight — the one thing the trader needs to hear that they can't see from the data alone. Sharp and direct.]
 
 ## The Rule
 **[State the single most important rule this trade proves they need — make it specific to their pattern, not generic advice]**
