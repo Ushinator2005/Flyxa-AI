@@ -7,6 +7,7 @@
 
 .achv-hero,
 .achv-focus-card,
+.achv-payout-gallery,
 .achv-targets,
 .achv-streak-card,
 .achv-badge,
@@ -176,6 +177,160 @@
   color: var(--amber);
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.24);
+}
+
+.achv-payout-gallery {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.achv-payout-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.achv-payout-head h2 {
+  margin: 7px 0 0;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 780;
+  letter-spacing: 0;
+  color: var(--green);
+}
+
+.achv-payout-head p {
+  margin: 8px 0 0;
+  max-width: 420px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.achv-payout-input {
+  display: none;
+}
+
+.achv-payout-upload {
+  height: 34px;
+  border-radius: 7px;
+  border: 1px solid rgba(34, 197, 94, 0.32);
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 750;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.achv-payout-upload:hover {
+  border-color: rgba(34, 197, 94, 0.52);
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.achv-payout-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.achv-payout-photo {
+  margin: 0;
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-panel-strong);
+  overflow: hidden;
+  position: relative;
+}
+
+.achv-payout-photo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.achv-payout-photo figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 7px;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.82));
+}
+
+.achv-payout-photo figcaption span {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.achv-payout-photo figcaption button {
+  width: 23px;
+  height: 23px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.52);
+  color: rgba(255, 255, 255, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.achv-payout-photo figcaption button:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.achv-payout-empty {
+  min-height: 148px;
+  border: 1px dashed var(--app-border);
+  border-radius: 7px;
+  background: var(--app-panel-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px;
+  color: var(--app-text-subtle);
+}
+
+.achv-payout-empty svg {
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+.achv-payout-empty div {
+  display: grid;
+  gap: 3px;
+}
+
+.achv-payout-empty strong {
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
+.achv-payout-empty span {
+  color: var(--app-text-subtle);
+  font-size: 11.5px;
 }
 
 .achv-targets {
@@ -609,11 +764,13 @@
 
 @media (max-width: 560px) {
   .achv-streak-grid,
-  .achv-grid {
+  .achv-grid,
+  .achv-payout-photo-grid {
     grid-template-columns: 1fr;
   }
 
-  .achv-focus-card {
+  .achv-focus-card,
+  .achv-payout-head {
     flex-direction: column;
   }
 }

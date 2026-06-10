@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -22,10 +22,14 @@ import {
   ClipboardCheck,
   ListChecks,
   PenLine,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { useAchievements } from '../hooks/useAchievements.js';
 import type { Achievement as AchievementItem } from '../hooks/useAchievements.js';
 import type { AchievementCategory, AchievementRarity } from '../utils/streaks.js';
+import useFlyxaStore from '../store/flyxaStore.js';
+import { formatCurrency } from '../utils/calculations.js';
 import './Achievements.css';
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -59,8 +63,17 @@ const CATEGORIES: Array<{ value: AchievementCategory | 'all'; label: string }> =
   { value: 'consistency', label: 'Consistency' },
 ];
 
+const PAYOUT_GALLERY_KEY = 'flyxa_payout_gallery_photos_v1';
+
 type Tone = 'green' | 'blue' | 'purple' | 'amber';
 type RarityClass = 'common' | 'rare' | 'epic' | 'legendary';
+
+interface PayoutPhoto {
+  id: string;
+  src: string;
+  name: string;
+  createdAt: string;
+}
 
 function AchievementIcon({ name, size = 20 }: { name: string; size?: number }) {
   const Icon = ICON_MAP[name] ?? Trophy;
@@ -166,10 +179,46 @@ function AchievementBadge({ achievement }: { achievement: AchievementItem }) {
   );
 }
 
+function readPayoutPhotos(): PayoutPhoto[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PAYOUT_GALLERY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(item => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Partial<PayoutPhoto>;
+        if (typeof record.id !== 'string' || typeof record.src !== 'string') return null;
+        return {
+          id: record.id,
+          src: record.src,
+          name: typeof record.name === 'string' ? record.name : 'Payout proof',
+          createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
+        };
+      })
+      .filter((item): item is PayoutPhoto => item !== null);
+  } catch {
+    return [];
+  }
+}
+
 export default function Achievements() {
   const { stats, achievements, unlockedCount, totalCount, loading } = useAchievements();
+  const accounts = useFlyxaStore(state => state.accounts);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [payoutPhotos, setPayoutPhotos] = useState<PayoutPhoto[]>(readPayoutPhotos);
   const [category, setCategory] = useState<AchievementCategory | 'all'>('all');
   const [showLocked, setShowLocked] = useState(true);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAYOUT_GALLERY_KEY, JSON.stringify(payoutPhotos));
+    } catch {
+      // Ignore storage quota errors; the in-memory gallery still works for the session.
+    }
+  }, [payoutPhotos]);
 
   const visibleAchievements = useMemo(() => {
     const filtered = achievements.filter(achievement => {
@@ -229,6 +278,41 @@ export default function Achievements() {
     };
   }, [stats]);
 
+  const payoutGallery = useMemo(() => {
+    const payouts = accounts.flatMap(account => (
+      (account.payouts ?? []).map(payout => ({
+        ...payout,
+        accountName: account.name,
+        firm: account.firm,
+      }))
+    )).sort((a, b) => b.date.localeCompare(a.date));
+    const total = payouts.reduce((sum, payout) => sum + Math.max(0, payout.amount), 0);
+    return { payouts, total };
+  }, [accounts]);
+  void focusContent;
+
+  const handlePayoutPhotoUpload = (files: FileList | null) => {
+    if (!files?.length) return;
+    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/')).slice(0, 8);
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const src = typeof reader.result === 'string' ? reader.result : '';
+        if (!src) return;
+        setPayoutPhotos(prev => [
+          {
+            id: crypto.randomUUID(),
+            src,
+            name: file.name,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev,
+        ].slice(0, 24));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   return (
     <div className="achv-page animate-fade-in">
       <header className="achv-hero">
@@ -250,15 +334,57 @@ export default function Achievements() {
       </header>
 
       <section className="achv-focus-grid">
-        <article className="achv-focus-card">
-          <div>
-            <span className="achv-focus-label">Current focus</span>
-            <h2>{focusContent.heading}</h2>
-            <p>{focusContent.body}</p>
+        <article className="achv-payout-gallery">
+          <div className="achv-payout-head">
+            <div>
+              <span className="achv-focus-label">Payout gallery</span>
+              <h2>{formatCurrency(payoutGallery.total)}</h2>
+              <p>{payoutPhotos.length} photo{payoutPhotos.length === 1 ? '' : 's'} saved. {payoutGallery.payouts.length} payout{payoutGallery.payouts.length === 1 ? '' : 's'} recorded across your accounts.</p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="achv-payout-input"
+              onChange={event => {
+                handlePayoutPhotoUpload(event.target.files);
+                event.target.value = '';
+              }}
+            />
+            <button type="button" className="achv-payout-upload" onClick={() => fileInputRef.current?.click()}>
+              <Upload size={14} />
+              Add photos
+            </button>
           </div>
-          <div className="achv-focus-mark">
-            {focusContent.icon}
-          </div>
+
+          {payoutPhotos.length > 0 ? (
+            <div className="achv-payout-photo-grid">
+              {payoutPhotos.map(photo => (
+                <figure key={photo.id} className="achv-payout-photo">
+                  <img src={photo.src} alt={photo.name} />
+                  <figcaption>
+                    <span>{new Date(photo.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <button
+                      type="button"
+                      aria-label="Delete payout photo"
+                      onClick={() => setPayoutPhotos(prev => prev.filter(item => item.id !== photo.id))}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : (
+            <div className="achv-payout-empty">
+              <Upload size={18} />
+              <div>
+                <strong>No payout photos yet</strong>
+                <span>Upload screenshots or photos of payouts to build your gallery.</span>
+              </div>
+            </div>
+          )}
         </article>
 
         <section className="achv-targets" aria-label="Next achievements">

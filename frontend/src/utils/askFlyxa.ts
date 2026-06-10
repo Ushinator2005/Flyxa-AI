@@ -583,7 +583,7 @@ export const QUICK_QUESTIONS = [
 
 // ─── computeAllStats ──────────────────────────────────────────────────────────
 // Computes all relevant trade statistics as a serialisable JSON object.
-// Passed to the backend so Claude can reason over real numbers.
+// Passed to the backend so the AI can reason over real numbers.
 
 const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
