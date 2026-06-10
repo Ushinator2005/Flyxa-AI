@@ -2134,16 +2134,25 @@ Emotion: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | F
 Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
 Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${contextBlock}
 
-Respond with exactly 3 sections. Cite the trader's actual win rates, P&L, and patterns to make the feedback specific and undeniable.
+Respond with exactly 3 sections in this exact format. Each section: one bold verdict line, then exactly 3 bullet points. No paragraphs. No padding. Every number must be from the trader's actual data where available.
 
 ## Your Pattern
-How does this trade fit their historical data? Reference their emotion stats, session performance, confluence win rates, or plan adherence numbers to show what the data says about trades like this one.
+**[One sharp sentence: what the data says about trades like this one — cite their actual win rates or P&L by emotion/session/confluence]**
+- [Stat comparing this emotional state or session to their baseline]
+- [Stat about plan adherence or a confluence used in this trade]
+- [What pattern this trade fits — or breaks]
 
 ## This Trade
-What actually happened — was the execution and risk in line with their edge? Use specific prices and P&L.
+**[One sharp verdict on this specific trade — was it in their edge or not]**
+- [Entry/exit/stop specifics with numbers]
+- [Risk management — R:R, position sizing, or stop placement]
+- [The one thing that decided the outcome of this trade]
 
 ## Edge Adjustment
-One specific change, backed by their own stats, that would improve future trades like this.`,
+**[One specific, actionable change — make it sound like a rule, not a suggestion]**
+- [Stat from their data that proves this change matters]
+- [What this looks like in practice on the next trade]
+- [What they should expect if they apply it — based on their numbers]`,
       },
     ],
   });

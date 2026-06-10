@@ -39,54 +39,94 @@ const C = {
 };
 
 // ─── Markdown renderer ─────────────────────────────────────────────────────────
+// Auto-highlights $numbers, percentages, and X.Xx ratios in amber
 function renderInline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/);
+  // Split on bold/italic markers AND on numbers worth highlighting
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|-?\$[\d,]+(?:\.\d+)?|(?<!\w)\d+(?:\.\d+)?%|\b\d+\.\d+x\b)/);
   return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ color: C.t0, fontWeight: 600 }}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith('*') && part.endsWith('*')) return <em key={i} style={{ color: C.t0, fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} style={{ color: C.t0, fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={i} style={{ color: C.t1, fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
+    }
+    // Highlight numbers: $amount, XX%, X.Xx
+    if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part)) {
+      return <span key={i} style={{ color: C.acc, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{part}</span>;
+    }
     return part;
   });
 }
+
+const SECTION_LABELS: Record<string, string> = {
+  'your pattern': 'Your Pattern',
+  'this trade': 'This Trade',
+  'edge adjustment': 'Edge Adjustment',
+};
 
 function renderMarkdown(text: string): React.ReactNode[] {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
   let k = 0;
+  let sectionIndex = 0;
   let i = 0;
+
   while (i < lines.length) {
     const line = lines[i];
+
     if (line.startsWith('## ')) {
+      const raw = line.slice(3).trim();
+      const label = SECTION_LABELS[raw.toLowerCase()] ?? raw;
+      const num = String(sectionIndex + 1).padStart(2, '0');
+      sectionIndex++;
       out.push(
-        <p key={k++} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: C.acc, margin: '16px 0 6px', padding: '6px 0 6px', borderBottom: `1px solid rgba(245,158,11,0.18)` }}>
-          {line.slice(3)}
-        </p>
+        <div key={k++} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: `${sectionIndex === 1 ? 4 : 20}px 0 10px` }}>
+          <span style={{
+            flexShrink: 0, width: 26, height: 26, borderRadius: 6,
+            background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.28)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, fontWeight: 800, color: C.acc, letterSpacing: '0.04em',
+            fontFamily: 'var(--font-mono, monospace)',
+          }}>{num}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.acc }}>{label}</span>
+        </div>
       );
       i++;
-    } else if (line.startsWith('### ')) {
+
+    } else if (/^\*\*[^*]+\*\*$/.test(line.trim())) {
+      // Full-line bold = verdict headline
+      const verdict = line.trim().slice(2, -2);
       out.push(
-        <p key={k++} style={{ fontSize: 12, fontWeight: 600, color: C.t0, margin: '10px 0 4px' }}>
-          {renderInline(line.slice(4))}
-        </p>
+        <p key={k++} style={{
+          fontSize: 14, fontWeight: 700, color: C.t0, lineHeight: 1.45,
+          margin: '0 0 10px', padding: '8px 12px',
+          background: 'rgba(255,255,255,0.03)', borderLeft: `2px solid ${C.acc}`,
+          borderRadius: '0 5px 5px 0',
+        }}>{verdict}</p>
       );
       i++;
-    } else if (line.trim() === '---') {
-      out.push(<hr key={k++} style={{ border: 'none', borderTop: `1px solid ${C.b0}`, margin: '12px 0' }} />);
-      i++;
+
     } else if (/^[-*] /.test(line)) {
       const items: string[] = [];
       while (i < lines.length && /^[-*] /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
       out.push(
-        <ul key={k++} style={{ margin: '4px 0 8px', paddingLeft: 18, listStyle: 'none' }}>
+        <div key={k++} style={{ display: 'flex', flexDirection: 'column', gap: 1, margin: '0 0 4px' }}>
           {items.map((item, j) => (
-            <li key={j} style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.65, marginBottom: 4, paddingLeft: 4, position: 'relative' }}>
-              <span style={{ position: 'absolute', left: -12, color: C.acc, fontWeight: 700 }}>·</span>
-              {renderInline(item)}
-            </li>
+            <div key={j} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', borderBottom: j < items.length - 1 ? `1px solid rgba(255,255,255,0.04)` : 'none' }}>
+              <span style={{ flexShrink: 0, width: 4, height: 4, borderRadius: '50%', background: C.acc, marginTop: 6, opacity: 0.7 }} />
+              <span style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.6 }}>{renderInline(item)}</span>
+            </div>
           ))}
-        </ul>
+        </div>
       );
+
+    } else if (line.trim() === '---') {
+      out.push(<hr key={k++} style={{ border: 'none', borderTop: `1px solid ${C.b0}`, margin: '14px 0' }} />);
+      i++;
+
     } else if (line.trim() === '') {
       i++;
+
     } else {
       out.push(
         <p key={k++} style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.7, margin: '0 0 8px' }}>
