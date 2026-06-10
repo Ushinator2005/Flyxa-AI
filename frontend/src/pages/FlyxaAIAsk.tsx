@@ -1,6 +1,6 @@
 import React, { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Send, RotateCcw, Sparkles, X, AlertTriangle, CheckCircle2, Zap, ArrowRight } from 'lucide-react';
+import { Send, RotateCcw, Sparkles, X, ArrowRight } from 'lucide-react';
 import { useTrades, toApiTrade } from '../hooks/useTrades.js';
 import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
 import { api, aiApi } from '../services/api.js';
@@ -143,9 +143,9 @@ function getDataTags(trade: Trade): string[] {
 }
 
 const SECTION_META = [
-  { key: 'your pattern',    num: '01', Icon: AlertTriangle, label: 'Your Pattern'    },
-  { key: 'this trade',      num: '02', Icon: CheckCircle2,  label: 'This Trade'      },
-  { key: 'edge adjustment', num: '03', Icon: Zap,           label: 'Edge Adjustment' },
+  { key: 'your pattern',    num: '01', label: 'Your Pattern'    },
+  { key: 'this trade',      num: '02', label: 'This Trade'      },
+  { key: 'edge adjustment', num: '03', label: 'Edge Adjustment' },
 ];
 
 function renderReviewSections(text: string): React.ReactNode {
@@ -154,15 +154,17 @@ function renderReviewSections(text: string): React.ReactNode {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {sections.map((section, si) => {
-        const meta = SECTION_META.find(m => m.key === section.label.toLowerCase()) ?? { ...SECTION_META[0], num: String(si+1).padStart(2,'0'), label: section.label };
-        const Icon = meta.Icon;
+        const meta = SECTION_META.find(m => m.key === section.label.toLowerCase()) ?? { num: String(si+1).padStart(2,'0'), label: section.label };
         const isLast = si === sections.length - 1;
         return (
           <div key={si} style={{ padding: '14px 0', borderBottom: isLast ? 'none' : `1px solid rgba(255,255,255,0.05)` }}>
             {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 9, fontWeight: 800, color: C.acc, opacity: 0.5, fontFamily: 'var(--font-mono, monospace)', letterSpacing: '0.06em' }}>{meta.num}</span>
-              <Icon size={13} color={C.acc} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 11 }}>
+              <span style={{
+                fontSize: 15, fontWeight: 800, color: C.acc,
+                fontFamily: 'var(--font-mono, monospace)', letterSpacing: '-0.02em', lineHeight: 1,
+              }}>{meta.num}</span>
+              <span style={{ width: 1, height: 14, background: 'rgba(245,158,11,0.25)', flexShrink: 0 }} />
               <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t0 }}>{meta.label}</span>
               <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
             </div>
@@ -561,12 +563,27 @@ export default function FlyxaAIAsk() {
             const followed = ft?.followed_plan === true;
             const followedLogged = typeof ft?.followed_plan === 'boolean';
 
-            const ScoreCard = ({ label, value, total, display }: { label: string; value: number; total: number; display?: string }) => {
+            const ScoreCard = ({ label, value, total, display, tooltip }: { label: string; value: number; total: number; display?: string; tooltip?: string }) => {
               const pct = Math.round((value / total) * 100);
               const color = pct >= 70 ? C.grn : pct >= 40 ? C.acc : C.red;
+              const [tip, setTip] = React.useState(false);
               return (
-                <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', background: 'rgba(255,255,255,0.025)', border: `1px solid rgba(255,255,255,0.07)`, borderRadius: 7 }}>
-                  <p style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.t2, margin: '0 0 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</p>
+                <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', background: 'rgba(255,255,255,0.025)', border: `1px solid rgba(255,255,255,0.07)`, borderRadius: 7, position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5 }}>
+                    <p style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.t2, margin: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</p>
+                    {tooltip && (
+                      <span
+                        onMouseEnter={() => setTip(true)}
+                        onMouseLeave={() => setTip(false)}
+                        style={{ flexShrink: 0, width: 13, height: 13, borderRadius: '50%', border: `1px solid rgba(255,255,255,0.18)`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default', fontSize: 8, fontWeight: 700, color: C.t2, lineHeight: 1 }}
+                      >?</span>
+                    )}
+                    {tip && tooltip && (
+                      <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0, background: C.d3, border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 6, padding: '8px 10px', zIndex: 10, pointerEvents: 'none' }}>
+                        <p style={{ fontSize: 10.5, color: C.t1, margin: 0, lineHeight: 1.6, whiteSpace: 'pre-line' }}>{tooltip}</p>
+                      </div>
+                    )}
+                  </div>
                   <p style={{ fontSize: 15, fontWeight: 700, color, margin: '0 0 5px', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1 }}>{display ?? `${value}/${total}`}</p>
                   <div style={{ height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.07)' }}>
                     <div style={{ height: '100%', borderRadius: 99, width: `${Math.min(100, pct)}%`, background: color, transition: 'width 0.4s ease' }} />
@@ -574,6 +591,7 @@ export default function FlyxaAIAsk() {
                 </div>
               );
             };
+            const confidence = Number((ft?.confidence_level as number | undefined) ?? 5);
 
             return (
               <div style={{ borderBottom: `1px solid ${C.b0}` }}>
@@ -618,10 +636,10 @@ export default function FlyxaAIAsk() {
                   {/* ── Score cards ── */}
                   {scores && (
                     <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                      <ScoreCard label="Process" value={scores.process} total={100} />
+                      <ScoreCard label="Process" value={scores.process} total={100} tooltip={"Plan followed: +44pts\nEmotional state: Calm +28, Confident +22,\nTired +10, Anxious +6, FOMO +2, Revenge +0\nPre-trade notes: +14pts\nPost-trade notes: +8pts\nConfidence level: up to +6pts"} />
                       <ScoreCard label="Setup Quality" value={scores.setupQuality} total={100} />
                       <ScoreCard label="Execution" value={scores.execution} total={100} />
-                      <ScoreCard label="R:R Achieved" value={Math.min(scores.rrAchieved, scores.rrTarget)} total={Math.max(scores.rrTarget, 0.01)} display={scores.rrAchievedDisplay} />
+                      <ScoreCard label="Confidence" value={confidence} total={10} display={`${confidence}/10`} />
                     </div>
                   )}
 
