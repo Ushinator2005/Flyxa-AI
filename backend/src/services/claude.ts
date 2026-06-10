@@ -2139,6 +2139,7 @@ OUTPUT FORMAT — copy this structure exactly, replace bracketed text only:
 - [Emotion stat: e.g. "Calm: 61% WR vs Anxious: 33% WR across 47 trades"]
 - [Plan adherence or confluence stat from their data]
 - [One sentence: does this trade align with or break their pattern]
+TAGS: [2-4 short behavioral tags, comma-separated, from: Emotional override, Revenge pattern, Plan drifted, FOMO entry, Overconfident, Strong setup, Clean execution, Discipline win, Post-loss reaction, Confidence mismatch]
 
 ## This Trade
 **[Single sentence verdict on execution quality]**
@@ -2148,6 +2149,7 @@ OUTPUT FORMAT — copy this structure exactly, replace bracketed text only:
 
 ## Edge Adjustment
 **[One rule, stated as a rule — not a suggestion]**
+RULE: [The rule in one sentence, suitable for a trading plan — e.g. "No trades when emotional state is Revenge Trading."]
 - [The stat from their data that makes this rule non-negotiable]
 - [Exactly what to do differently on the next similar setup]
 - [Expected outcome if applied, based on their numbers]`,

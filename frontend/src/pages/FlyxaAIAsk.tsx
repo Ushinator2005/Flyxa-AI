@@ -1,6 +1,6 @@
 import React, { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Send, RotateCcw, Sparkles, X } from 'lucide-react';
+import { Send, RotateCcw, Sparkles, X, AlertTriangle, CheckCircle2, Zap, ArrowRight } from 'lucide-react';
 import { useTrades, toApiTrade } from '../hooks/useTrades.js';
 import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
 import { api, aiApi } from '../services/api.js';
@@ -61,7 +61,7 @@ function inlineChips(text: string): React.ReactNode {
   });
 }
 
-interface ReviewSection { label: string; verdict: string | null; bullets: string[]; prose: string[]; }
+interface ReviewSection { label: string; verdict: string | null; bullets: string[]; prose: string[]; tags: string[]; rule: string | null; }
 
 function parseReviewSections(text: string): ReviewSection[] {
   const sections: ReviewSection[] = [];
@@ -70,11 +70,15 @@ function parseReviewSections(text: string): ReviewSection[] {
     const line = raw.trimEnd();
     if (line.startsWith('## ')) {
       if (current) sections.push(current);
-      current = { label: line.slice(3).trim(), verdict: null, bullets: [], prose: [] };
+      current = { label: line.slice(3).trim(), verdict: null, bullets: [], prose: [], tags: [], rule: null };
     } else if (current) {
       const trimmed = line.trim();
       if (/^\*\*.*\*\*$/.test(trimmed) && !current.verdict) {
         current.verdict = trimmed.slice(2, -2);
+      } else if (/^TAGS:/i.test(trimmed)) {
+        current.tags = trimmed.replace(/^TAGS:\s*/i, '').split(',').map(t => t.trim()).filter(Boolean);
+      } else if (/^RULE:/i.test(trimmed)) {
+        current.rule = trimmed.replace(/^RULE:\s*/i, '');
       } else if (/^[-*] /.test(line)) {
         current.bullets.push(line.replace(/^[-*] /, ''));
       } else if (trimmed) {
@@ -86,74 +90,122 @@ function parseReviewSections(text: string): ReviewSection[] {
   return sections;
 }
 
-const SECTION_META: Record<string, { num: string; accent: string }> = {
-  'your pattern':    { num: '01', accent: 'rgba(245,158,11,1)' },
-  'this trade':      { num: '02', accent: 'rgba(245,158,11,1)' },
-  'edge adjustment': { num: '03', accent: 'rgba(245,158,11,1)' },
-};
+// ── Score computation ──────────────────────────────────────────────────────────
+function computeTradeScores(trade: Trade) {
+  const t = trade as unknown as Record<string, unknown>;
+  const entryPrice = Number(t.entry_price ?? 0);
+  const slPrice = Number(t.sl_price ?? 0);
+  const tpPrice = Number(t.tp_price ?? 0);
+  const pnl = Number(t.pnl ?? 0);
+  const contracts = Number(t.contract_size ?? 1);
+  const pointValue = Number(t.point_value ?? 1);
+  const rr = slPrice && entryPrice && tpPrice ? Math.abs(tpPrice - entryPrice) / Math.abs(slPrice - entryPrice) : 0;
+  const emotion = String(t.emotional_state ?? '');
+  const followed = t.followed_plan === true;
+  const confs = Array.isArray(t.confluences) ? (t.confluences as string[]).length : 0;
+  const confidence = Number(t.confidence_level ?? 5);
+  const exitReason = String(t.exit_reason ?? '');
+  const hasPreNotes = Boolean(t.pre_trade_notes);
+  const hasPostNotes = Boolean(t.post_trade_notes);
+
+  const emotionBonus: Record<string, number> = { Calm: 28, Confident: 22, Tired: 10, Anxious: 6, 'Overconfident': 5, FOMO: 2, 'Revenge Trading': 0 };
+  const process = Math.min(100, Math.round(
+    (followed ? 44 : 8) + (emotionBonus[emotion] ?? 12) + (hasPreNotes ? 14 : 0) + (hasPostNotes ? 8 : 0) + Math.min(6, confidence * 0.6)
+  ));
+
+  const setupQuality = Math.min(100, Math.round(
+    Math.min(42, confs * 9) + (rr >= 3 ? 38 : rr >= 2 ? 30 : rr >= 1.5 ? 22 : rr >= 1 ? 14 : 5) + Math.min(20, confidence * 2)
+  ));
+
+  const execBase: Record<string, number> = { TP: 82, BE: 52, SL: 22 };
+  const execution = Math.min(100, Math.round((execBase[exitReason] ?? 22) + Math.min(18, confidence * 1.8)));
+
+  const stopDist = Math.abs(slPrice - entryPrice);
+  const riskAmt = stopDist * contracts * pointValue;
+  const rrAchieved = riskAmt > 0 ? Math.abs(pnl) / riskAmt : 0;
+  const rrAchievedDisplay = pnl > 0 ? `${rrAchieved.toFixed(2)}R` : `0/${rr.toFixed(2)}R`;
+
+  return { process, setupQuality, execution, rrAchievedDisplay, rrTarget: rr, rrAchieved };
+}
+
+// ── Behavioral tags from trade data ───────────────────────────────────────────
+function getDataTags(trade: Trade): string[] {
+  const t = trade as unknown as Record<string, unknown>;
+  const tags: string[] = [];
+  if (t.followed_plan === false) tags.push('Plan drifted');
+  const emotion = String(t.emotional_state ?? '');
+  if (emotion === 'Revenge Trading') tags.push('Revenge pattern');
+  if (emotion === 'FOMO') tags.push('FOMO entry');
+  if (emotion === 'Overconfident') tags.push('Overconfident');
+  if (['Revenge Trading', 'FOMO'].includes(emotion) && t.followed_plan === false) tags.push('Emotional override');
+  if (Array.isArray(t.behavioral_flags)) tags.push(...(t.behavioral_flags as string[]));
+  return [...new Set(tags)];
+}
+
+const SECTION_META = [
+  { key: 'your pattern',    num: '01', Icon: AlertTriangle, label: 'Your Pattern'    },
+  { key: 'this trade',      num: '02', Icon: CheckCircle2,  label: 'This Trade'      },
+  { key: 'edge adjustment', num: '03', Icon: Zap,           label: 'Edge Adjustment' },
+];
 
 function renderReviewSections(text: string): React.ReactNode {
   const sections = parseReviewSections(text);
-  if (sections.length === 0) {
-    // Fallback: plain text
-    return <p style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.7 }}>{text}</p>;
-  }
+  if (sections.length === 0) return <p style={{ fontSize: 12, color: C.t1, lineHeight: 1.7 }}>{text}</p>;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {sections.map((section, si) => {
-        const key = section.label.toLowerCase();
-        const meta = SECTION_META[key] ?? { num: String(si + 1).padStart(2, '0'), accent: C.acc };
+        const meta = SECTION_META.find(m => m.key === section.label.toLowerCase()) ?? { ...SECTION_META[0], num: String(si+1).padStart(2,'0'), label: section.label };
+        const Icon = meta.Icon;
         const isLast = si === sections.length - 1;
         return (
-          <div key={si} style={{ paddingBottom: isLast ? 0 : 18, marginBottom: isLast ? 0 : 18, borderBottom: isLast ? 'none' : `1px solid rgba(255,255,255,0.05)` }}>
-            {/* Section header */}
+          <div key={si} style={{ padding: '14px 0', borderBottom: isLast ? 'none' : `1px solid rgba(255,255,255,0.05)` }}>
+            {/* Header row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{
-                fontFamily: 'var(--font-mono, monospace)', fontSize: 9.5, fontWeight: 800,
-                color: meta.accent, letterSpacing: '0.08em', opacity: 0.6,
-              }}>{meta.num}</span>
-              <span style={{
-                fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em',
-                textTransform: 'uppercase', color: C.t0,
-              }}>{section.label}</span>
-              <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)', marginLeft: 4 }} />
+              <span style={{ fontSize: 9, fontWeight: 800, color: C.acc, opacity: 0.5, fontFamily: 'var(--font-mono, monospace)', letterSpacing: '0.06em' }}>{meta.num}</span>
+              <Icon size={13} color={C.acc} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t0 }}>{meta.label}</span>
+              <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
             </div>
 
             {/* Verdict */}
             {section.verdict && (
-              <p style={{
-                fontSize: 13.5, fontWeight: 600, color: C.t0, lineHeight: 1.5,
-                margin: '0 0 10px', letterSpacing: '-0.01em',
-              }}>{inlineChips(section.verdict)}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.5, margin: '0 0 10px', letterSpacing: '-0.01em' }}>
+                {inlineChips(section.verdict)}
+              </p>
+            )}
+
+            {/* Rule callout (Edge Adjustment) */}
+            {section.rule && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '0 0 10px', padding: '8px 10px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 6 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, color: C.acc, letterSpacing: '0.1em', textTransform: 'uppercase', paddingTop: 1, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)' }}>RULE</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.t0, lineHeight: 1.55 }}>{section.rule}</span>
+              </div>
             )}
 
             {/* Bullets */}
             {section.bullets.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {section.bullets.map((b, bi) => (
-                  <div key={bi} style={{
-                    display: 'flex', gap: 10, alignItems: 'flex-start',
-                    padding: '6px 0',
-                    borderTop: bi === 0 ? `1px solid rgba(255,255,255,0.05)` : 'none',
-                    borderBottom: `1px solid rgba(255,255,255,0.05)`,
-                  }}>
-                    <span style={{
-                      flexShrink: 0, marginTop: 6, width: 3, height: 3,
-                      borderRadius: '50%', background: meta.accent, opacity: 0.55,
-                    }} />
-                    <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.65 }}>
-                      {inlineChips(b)}
-                    </span>
+                  <div key={bi} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '5px 0', borderTop: `1px solid rgba(255,255,255,0.04)` }}>
+                    <span style={{ flexShrink: 0, marginTop: 7, width: 3, height: 3, borderRadius: '50%', background: C.acc, opacity: 0.5 }} />
+                    <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.65 }}>{inlineChips(b)}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Prose fallback (if AI ignored format) */}
+            {/* Behavioral tags */}
+            {section.tags.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>
+                {section.tags.map((tag, ti) => (
+                  <span key={ti} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.22)', color: C.acc, letterSpacing: '0.02em' }}>{tag}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Prose fallback */}
             {section.prose.map((p, pi) => (
-              <p key={pi} style={{ fontSize: 12, color: C.t1, lineHeight: 1.7, margin: '6px 0 0' }}>
-                {inlineChips(p)}
-              </p>
+              <p key={pi} style={{ fontSize: 12, color: C.t1, lineHeight: 1.7, margin: '6px 0 0' }}>{inlineChips(p)}</p>
             ))}
           </div>
         );
@@ -502,97 +554,131 @@ export default function FlyxaAIAsk() {
           </div>
 
           {/* Trade Review */}
-          {focusedTradeId && (
-            <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.b0}` }}>
-              <div style={{
-                borderRadius: 10, border: `1px solid rgba(245,158,11,0.32)`,
-                background: `rgba(245,158,11,0.04)`, padding: '14px 16px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.acc, margin: 0 }}>Selected trade AI review</p>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: C.t0, margin: '4px 0 0' }}>
-                      {focusedTrade
-                        ? `${(focusedTrade as unknown as Record<string,string>).symbol || 'N/A'} ${(focusedTrade as unknown as Record<string,string>).direction || ''} · ${(focusedTrade as unknown as Record<string,string>).trade_date || ''} ${(focusedTrade as unknown as Record<string,string>).trade_time || ''}`
-                        : storeEntries.length === 0 ? 'Loading...' : 'Trade not found'}
-                    </p>
+          {focusedTradeId && (() => {
+            const ft = focusedTrade as unknown as Record<string, unknown> | null;
+            const scores = ft ? computeTradeScores(focusedTrade!) : null;
+            const dataTags = ft ? getDataTags(focusedTrade!) : [];
+            const followed = ft?.followed_plan === true;
+            const followedLogged = typeof ft?.followed_plan === 'boolean';
+
+            const ScoreCard = ({ label, value, total, display }: { label: string; value: number; total: number; display?: string }) => {
+              const pct = Math.round((value / total) * 100);
+              const color = pct >= 70 ? C.grn : pct >= 40 ? C.acc : C.red;
+              return (
+                <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', background: 'rgba(255,255,255,0.025)', border: `1px solid rgba(255,255,255,0.07)`, borderRadius: 7 }}>
+                  <p style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.t2, margin: '0 0 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color, margin: '0 0 5px', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1 }}>{display ?? `${value}/${total}`}</p>
+                  <div style={{ height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.07)' }}>
+                    <div style={{ height: '100%', borderRadius: 99, width: `${Math.min(100, pct)}%`, background: color, transition: 'width 0.4s ease' }} />
                   </div>
-                  <button type="button" onClick={clearFocus} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t2, padding: 2, flexShrink: 0 }}>
-                    <X size={14} />
+                </div>
+              );
+            };
+
+            return (
+              <div style={{ borderBottom: `1px solid ${C.b0}` }}>
+                {/* ── Top bar ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 24px', background: 'rgba(245,158,11,0.05)', borderBottom: `1px solid rgba(245,158,11,0.15)` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.acc, fontFamily: 'var(--font-mono, monospace)' }}>+ Flyxa AI Review</span>
+                  </div>
+                  <button type="button" onClick={clearFocus} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t2, padding: 2, display: 'flex' }}>
+                    <X size={13} />
                   </button>
                 </div>
 
-                {focusedTrade ? (
-                  <>
-                    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12, color: C.t1, marginBottom: 12 }}>
-                      <span>
-                        P&L: <span style={{ color: focusedTradePnl !== null && focusedTradePnl >= 0 ? C.grn : C.red, fontWeight: 600 }}>
-                          {focusedTradePnl !== null ? formatSignedCurrency(focusedTradePnl) : '$0.00'}
-                        </span>
+                <div style={{ padding: '12px 24px 16px' }}>
+                  {/* ── Trade identity + tags ── */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}>
+                        {ft ? `${String(ft.symbol ?? 'N/A')} ${String(ft.direction ?? '')} · ${String(ft.trade_date ?? '')}` : 'Loading...'}
                       </span>
-                      <span>
-                        Plan: <span style={{ color: typeof (focusedTrade as unknown as Record<string,unknown>).followed_plan !== 'boolean' ? C.t2 : ((focusedTrade as unknown as Record<string,unknown>).followed_plan ? C.grn : C.red) }}>
-                          {typeof (focusedTrade as unknown as Record<string,unknown>).followed_plan !== 'boolean' ? 'Not logged' : ((focusedTrade as unknown as Record<string,unknown>).followed_plan ? 'Followed' : 'Drifted')}
+                      {focusedTradePnl !== null && (
+                        <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono, monospace)', color: focusedTradePnl >= 0 ? C.grn : C.red }}>
+                          {formatSignedCurrency(focusedTradePnl)}
                         </span>
-                      </span>
-                      {focusedTradeConfluences.length > 0 && (
-                        <span>Confluences: <span style={{ color: C.t0 }}>{focusedTradeConfluences.join(', ')}</span></span>
                       )}
                     </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {followedLogged && (
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: followed ? 'rgba(34,214,138,0.1)' : 'rgba(245,158,11,0.12)', border: `1px solid ${followed ? 'rgba(34,214,138,0.25)' : 'rgba(245,158,11,0.28)'}`, color: followed ? C.grn : C.acc }}>
+                          {followed ? 'Plan Followed' : 'Plan Drifted'}
+                        </span>
+                      )}
+                      {focusedTradeConfluences.map((c, i) => (
+                        <span key={i} style={{ fontSize: 10, fontWeight: 500, padding: '2px 7px', borderRadius: 4, background: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.09)`, color: C.t1 }}>{c}</span>
+                      ))}
+                      {dataTags.filter(t => t !== 'Plan drifted').map((tag, i) => (
+                        <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: 'rgba(240,82,82,0.09)', border: '1px solid rgba(240,82,82,0.2)', color: C.red }}>{tag}</span>
+                      ))}
+                    </div>
+                  </div>
 
-                    {/* Loading state */}
-                    {focusedTradeAnalysisLoading && (
-                      <div style={{ padding: '4px 0 8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                          <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
-                            <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round"/>
-                            <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
-                            <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
-                            <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
-                          </svg>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: C.t1, margin: 0, letterSpacing: '0.02em' }}>Analysing your trade history...</p>
-                          <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
-                            {[0,1,2].map(i => (
-                              <span key={i} style={{ display: 'block', width: 5, height: 5, borderRadius: '50%', background: C.acc, animation: `analysing-pulse 1s ease-in-out ${i*0.16}s infinite` }} />
-                            ))}
-                          </div>
+                  {/* ── Score cards ── */}
+                  {scores && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                      <ScoreCard label="Process" value={scores.process} total={100} />
+                      <ScoreCard label="Setup Quality" value={scores.setupQuality} total={100} />
+                      <ScoreCard label="Execution" value={scores.execution} total={100} />
+                      <ScoreCard label="R:R Achieved" value={Math.min(scores.rrAchieved, scores.rrTarget)} total={Math.max(scores.rrTarget, 0.01)} display={scores.rrAchievedDisplay} />
+                    </div>
+                  )}
+
+                  {/* ── Loading ── */}
+                  {focusedTradeAnalysisLoading && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                        <svg width="20" height="20" viewBox="0 0 64 64" fill="none" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
+                          <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round"/>
+                          <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
+                          <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
+                          <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
+                        </svg>
+                        <p style={{ fontSize: 11.5, color: C.t1, margin: 0 }}>Cross-referencing {trades.length} trades...</p>
+                        <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
+                          {[0,1,2].map(i => <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: C.acc, display: 'block', animation: `analysing-pulse 1s ease-in-out ${i*0.16}s infinite` }} />)}
                         </div>
-                        {[88,72,94].map((w, i) => (
-                          <div key={w} style={{ height: 5, borderRadius: 99, marginBottom: 7, width: `${w}%`, background: 'linear-gradient(90deg, rgba(255,255,255,0.04), rgba(245,158,11,0.18), rgba(255,255,255,0.04))', backgroundSize: '220% 100%', animation: `analysing-shimmer 1.35s linear ${i*0.12}s infinite` }} />
-                        ))}
                       </div>
-                    )}
+                      {[86, 70, 92].map((w, i) => (
+                        <div key={w} style={{ height: 4, borderRadius: 99, marginBottom: 6, width: `${w}%`, background: 'linear-gradient(90deg,rgba(255,255,255,0.04),rgba(245,158,11,0.16),rgba(255,255,255,0.04))', backgroundSize: '220% 100%', animation: `analysing-shimmer 1.35s linear ${i*0.12}s infinite` }} />
+                      ))}
+                    </div>
+                  )}
 
-                    {/* Error */}
-                    {tradeAnalysisError && !focusedTradeAnalysisLoading && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
-                        <p style={{ fontSize: 12, color: C.red, margin: 0, flex: 1 }}>{tradeAnalysisError}</p>
-                        <button type="button" onClick={() => {
-                          if (!focusedTradeId) return;
-                          setTradeAnalysisError(null);
-                          setTradeAnalysisLoadingId(null);
-                          setTradeAnalysisById(prev => { const n = {...prev}; delete n[focusedTradeId]; return n; });
-                        }} style={{ fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: `1px solid ${C.b1}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: C.sans, flexShrink: 0 }}>
-                          Retry
-                        </button>
-                      </div>
-                    )}
+                  {/* ── Error ── */}
+                  {tradeAnalysisError && !focusedTradeAnalysisLoading && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <p style={{ fontSize: 12, color: C.red, margin: 0, flex: 1 }}>{tradeAnalysisError}</p>
+                      <button type="button" onClick={() => {
+                        if (!focusedTradeId) return;
+                        setTradeAnalysisError(null); setTradeAnalysisLoadingId(null);
+                        setTradeAnalysisById(prev => { const n = {...prev}; delete n[focusedTradeId]; return n; });
+                      }} style={{ fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: `1px solid ${C.b1}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: C.sans }}>
+                        Retry
+                      </button>
+                    </div>
+                  )}
 
-                    {/* Review content */}
-                    {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
-                      <div style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 2 }}>
+                  {/* ── Review content ── */}
+                  {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
+                    <>
+                      <div style={{ maxHeight: 440, overflowY: 'auto', paddingRight: 2 }}>
                         {renderReviewSections(focusedTradeAnalysis)}
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <p style={{ fontSize: 12, color: C.t1, margin: 0 }}>
-                    {storeEntries.length === 0 ? 'Loading your trades...' : 'Trade not found in your history.'}
-                  </p>
-                )}
+                      {/* Footer */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 10, borderTop: `1px solid rgba(255,255,255,0.05)` }}>
+                        <span style={{ fontSize: 10.5, color: C.t2 }}>Based on {trades.length} logged trade{trades.length !== 1 ? 's' : ''}</span>
+                        <button type="button" onClick={() => {}} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: C.sans }}>
+                          View full pattern history <ArrowRight size={11} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Responses */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
