@@ -2067,3 +2067,130 @@
   color: var(--app-text);
   border-bottom-color: var(--amber);
 }
+
+/* ── Editable stat inputs ── */
+.tj-stat-editable {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--txt);
+  cursor: text;
+  /* hide number spinners */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.tj-stat-editable::-webkit-inner-spin-button,
+.tj-stat-editable::-webkit-outer-spin-button { -webkit-appearance: none; }
+/* time input colon colour fix */
+.tj-stat-editable::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+
+/* ── Add images button ── */
+.tj-add-imgs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--txt-3);
+  font-size: 10px;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+  white-space: nowrap;
+}
+.tj-add-imgs-btn:hover {
+  border-color: var(--cobalt);
+  color: var(--cobalt);
+  background: var(--cobalt-dim, rgba(59,130,246,0.08));
+}
+
+/* ── Image carousel wrapper ── */
+.tj-shot-viewer {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: min(100%, 620px);
+  margin-inline: auto;
+  margin-bottom: 14px;
+}
+.tj-shot-viewer .tj-shot-single {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  margin-inline: 0;
+  margin-bottom: 0;
+}
+
+/* ── Slide animations ── */
+@keyframes tjSlideFromRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes tjSlideFromLeft {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.tj-shot-slide-right {
+  animation: tjSlideFromRight 0.22s ease;
+}
+.tj-shot-slide-left {
+  animation: tjSlideFromLeft 0.22s ease;
+}
+
+/* ── Right-side nav strip ── */
+.tj-shot-side-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 0;
+  flex-shrink: 0;
+}
+.tj-shot-side-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--txt-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.tj-shot-side-btn:hover {
+  border-color: rgba(245,166,35,0.6);
+  color: var(--amber);
+  background: rgba(245,166,35,0.06);
+}
+.tj-shot-side-dots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.tj-side-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.18);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.18s, transform 0.18s;
+}
+.tj-side-dot.active {
+  background: rgba(245,166,35,0.85);
+  transform: scale(1.3);
+}

@@ -64,6 +64,7 @@ interface JournalTrade {
   pnlOverride?: number;
   result: TradeResult;
   screenshotUrl?: string;
+  supportingImages?: string[];
   reflection?: {
     thesis: string;
     execution: string;
@@ -112,6 +113,7 @@ interface JournalEntry {
   id: string;
   date: string;
   account?: string;
+  accountIds?: string[];
   scannedImageUrl?: string;
   trades: JournalTrade[];
   screenshots: string[];
@@ -584,6 +586,9 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           pnl,
           result,
           screenshotUrl: typeof trade.screenshotUrl === 'string' ? trade.screenshotUrl : typeof trade.scannedImageUrl === 'string' ? trade.scannedImageUrl : undefined,
+          supportingImages: Array.isArray(trade.supportingImages)
+            ? (trade.supportingImages as unknown[]).filter((u): u is string => typeof u === 'string')
+            : undefined,
           accountId: typeof trade.accountId === 'string' && trade.accountId ? trade.accountId : typeof trade.account === 'string' && trade.account ? trade.account : undefined,
           accountIds: Array.from(new Set([
             ...(Array.isArray(trade.accountIds) ? trade.accountIds.filter((id): id is string => typeof id === 'string' && id.length > 0) : []),
@@ -680,6 +685,10 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
       return {
         id: typeof record.id === 'string' ? record.id : crypto.randomUUID(),
         date,
+        account: typeof record.account === 'string' && record.account ? record.account : undefined,
+        accountIds: Array.isArray(record.accountIds)
+          ? (record.accountIds as unknown[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
+          : undefined,
         scannedImageUrl: typeof record.scannedImageUrl === 'string' ? record.scannedImageUrl : undefined,
         trades,
         screenshots,
@@ -865,6 +874,57 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
   );
 }
 
+function BlankDayAccountSelector({ entry, onMutate }: { entry: JournalEntry; onMutate: (fields: Partial<JournalEntry>) => void }) {
+  const { accounts } = useAppSettings();
+  const selectedAccountIds = Array.from(new Set([
+    ...(entry.accountIds ?? []),
+    ...(entry.account ? [entry.account] : []),
+  ].filter((id): id is string => typeof id === 'string' && id.length > 0)));
+
+  const toggleAccount = (accountId: string, checked: boolean) => {
+    const nextIds = checked
+      ? Array.from(new Set([...selectedAccountIds, accountId]))
+      : selectedAccountIds.filter(id => id !== accountId);
+    onMutate({ accountIds: nextIds, account: nextIds[0] });
+  };
+
+  return (
+    <div className="tj-account-card">
+      <span className="tj-size-title">ACCOUNTS</span>
+      <div className="tj-account-check-list">
+        {accounts.filter(account =>
+          account.id !== DEFAULT_ACCOUNT_ID &&
+          (!account.archived || selectedAccountIds.includes(account.id)) &&
+          (account.status !== 'Blown'  || selectedAccountIds.includes(account.id)) &&
+          (account.status !== 'Passed' || selectedAccountIds.includes(account.id))
+        ).map(account => {
+          const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
+          const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
+          return (
+            <label
+              key={account.id}
+              className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedAccountIds.includes(account.id)}
+                onChange={e => toggleAccount(account.id, e.target.checked)}
+                disabled={isInactive}
+              />
+              <span>{account.name}{statusLabel}</span>
+            </label>
+          );
+        })}
+      </div>
+      {(() => {
+        const selected = accounts.find(a => a.id === selectedAccountIds[0]);
+        if (!selected) return null;
+        const dotColor = ACCOUNT_STATUS_DOT[selected.status] ?? '#888';
+        return <span className="tj-account-dot" style={{ background: dotColor }} title={selected.status} />;
+      })()}
+    </div>
+  );
+}
 
 function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
   const entry = getTradeEntry(trade);
@@ -2003,6 +2063,14 @@ export default function TradeJournal() {
 
   const screenshotInputRef = useRef<HTMLInputElement>(null);
   const screenshotSlotRef = useRef<number | null>(null);
+  const supportingImageInputRef = useRef<HTMLInputElement>(null);
+
+  const [viewingImageIndex, setViewingImageIndex] = useState(0);
+  const [slideDir, setSlideDir] = useState<'left' | 'right'>('right');
+
+  // Editable entry time / duration drafts
+  const [draftEntryTime, setDraftEntryTime] = useState('');
+  const [draftDuration, setDraftDuration] = useState('');
 
   const mutateEntries = useCallback((updater: (prev: JournalEntry[]) => JournalEntry[]) => {
     const current = normalizeEntries(useFlyxaStore.getState().entries as unknown[], rulesTemplate);
@@ -2452,11 +2520,52 @@ export default function TradeJournal() {
     screenshotSlotRef.current = null;
   }, [activeTradeId, mutateEntries, selectedEntry, user]);
 
+  const onSupportingImageFile = useCallback(async (file: File) => {
+    if (!activeTrade || !selectedEntry) return;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(new Error('Could not read image.'));
+      reader.readAsDataURL(file);
+    });
+    const url = user ? await uploadScreenshot(dataUrl, user.id) : dataUrl;
+    mutateTradeFields(activeTrade.id, {
+      supportingImages: [...(activeTrade.supportingImages ?? []), url],
+    });
+    // navigate to the newly added image
+    setViewingImageIndex((activeTrade.supportingImages?.length ?? 0) + 1);
+  }, [activeTrade, mutateTradeFields, selectedEntry, user]);
+
+  // Reset image carousel when switching trades
+  useEffect(() => {
+    setViewingImageIndex(0);
+  }, [activeTradeId]);
+
+  // Sync editable drafts when active trade changes
+  useEffect(() => {
+    setDraftEntryTime(activeTrade?.entryTime ?? '');
+    setDraftDuration(activeTrade?.durationMinutes != null ? String(activeTrade.durationMinutes) : '');
+  }, [activeTrade?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Only show a screenshot when the entry has trades — don't surface the scanner
   // image on blank days where the AI found no trades.
   const primaryScreenshot = selectedEntry && selectedEntry.trades.length > 0
     ? (activeTrade?.screenshotUrl || selectedEntry.screenshots[0] || selectedEntry.scannedImageUrl || '')
     : '';
+
+  const allTradeImages = [
+    ...(primaryScreenshot ? [primaryScreenshot] : []),
+    ...(activeTrade?.supportingImages ?? []),
+  ];
+  const clampedIndex = Math.min(viewingImageIndex, Math.max(0, allTradeImages.length - 1));
+  const currentImage = allTradeImages[clampedIndex] ?? '';
+
+  function navImage(dir: 'left' | 'right') {
+    setSlideDir(dir);
+    setViewingImageIndex(i =>
+      dir === 'right' ? Math.min(i + 1, allTradeImages.length - 1) : Math.max(i - 1, 0),
+    );
+  }
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [dayPanelOpen, setDayPanelOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
@@ -2480,6 +2589,17 @@ export default function TradeJournal() {
         onChange={event => {
           const file = event.target.files?.[0];
           if (file) void onShotFile(file);
+          event.target.value = '';
+        }}
+      />
+      <input
+        ref={supportingImageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={event => {
+          const file = event.target.files?.[0];
+          if (file) void onSupportingImageFile(file);
           event.target.value = '';
         }}
       />
@@ -2804,42 +2924,160 @@ export default function TradeJournal() {
                 </div>
                 <div className="tj-stat">
                   <div className="tj-stat-label">Trade Length</div>
-                  <div className="tj-stat-value">{formatDurationLabel(resolveTradeDurationMinutes(activeTrade))}</div>
+                  {activeTrade ? (
+                    <input
+                      type="number"
+                      className="tj-stat-value tj-stat-editable"
+                      value={draftDuration}
+                      min={0}
+                      placeholder="—"
+                      title="Duration in minutes"
+                      onChange={e => setDraftDuration(e.target.value)}
+                      onBlur={() => {
+                        if (!activeTrade) return;
+                        const mins = parseInt(draftDuration, 10);
+                        mutateTradeFields(activeTrade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
+                      }}
+                    />
+                  ) : (
+                    <div className="tj-stat-value">{formatDurationLabel(resolveTradeDurationMinutes(activeTrade))}</div>
+                  )}
                 </div>
                 <div className="tj-stat">
                   <div className="tj-stat-label">Entry Time</div>
-                  <div className="tj-stat-value">{activeTrade?.entryTime || '--:--'}</div>
+                  {activeTrade ? (
+                    <input
+                      type="time"
+                      className="tj-stat-value tj-stat-editable"
+                      value={draftEntryTime}
+                      onChange={e => setDraftEntryTime(e.target.value)}
+                      onBlur={() => {
+                        if (activeTrade && draftEntryTime !== activeTrade.entryTime) {
+                          mutateTradeFields(activeTrade.id, { entryTime: draftEntryTime });
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="tj-stat-value">--:--</div>
+                  )}
                 </div>
               </div>
 
               <div className="tj-section-head first">
                 <span className="tj-section-title">Screenshot</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {allTradeImages.length > 1 && (
+                    <span style={{ fontSize: 10, color: 'var(--txt-3)', fontVariantNumeric: 'tabular-nums' }}>
+                      {clampedIndex + 1} / {allTradeImages.length}
+                    </span>
+                  )}
+                  {activeTrade && (
+                    <button
+                      type="button"
+                      className="tj-add-imgs-btn"
+                      title="Add supporting image"
+                      onClick={() => supportingImageInputRef.current?.click()}
+                    >
+                      <Plus size={10} />
+                      Add image
+                    </button>
+                  )}
+                </span>
               </div>
-              <button type="button" className="tj-shot tj-shot-single" onClick={() => onShotPick(0)} data-tour-id="scanner-screenshot">
-                {primaryScreenshot ? (
-                  <>
-                    <img src={primaryScreenshot} alt="Trade chart" />
-                    <span className="tj-shot-controls">
+
+              {/* Image carousel wrapper */}
+              <div className="tj-shot-viewer" data-tour-id="scanner-screenshot">
+                {/* Main image button */}
+                <button
+                  type="button"
+                  className="tj-shot tj-shot-single"
+                  onClick={() => clampedIndex === 0 ? onShotPick(0) : undefined}
+                >
+                  {currentImage ? (
+                    <>
+                      <img
+                        key={`${activeTradeId}-${clampedIndex}`}
+                        src={currentImage}
+                        alt="Trade chart"
+                        className={`tj-shot-slide-${slideDir}`}
+                      />
+                      <span className="tj-shot-controls">
+                        <button
+                          type="button"
+                          className="tj-shot-control-btn"
+                          onClick={event => {
+                            event.stopPropagation();
+                            setIsScreenshotFullscreen(true);
+                          }}
+                          aria-label="Open screenshot fullscreen"
+                        >
+                          <Maximize2 size={14} />
+                        </button>
+                        {clampedIndex > 0 && activeTrade && (
+                          <button
+                            type="button"
+                            className="tj-shot-control-btn"
+                            title="Remove this image"
+                            onClick={event => {
+                              event.stopPropagation();
+                              const newImgs = [...(activeTrade.supportingImages ?? [])];
+                              newImgs.splice(clampedIndex - 1, 1);
+                              mutateTradeFields(activeTrade.id, { supportingImages: newImgs });
+                              setViewingImageIndex(v => Math.max(0, v - 1));
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon size={18} />
+                      <span className="tj-shot-label">Add chart</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Right-side nav strip — only shown when supporting images exist */}
+                {allTradeImages.length > 1 && (
+                  <div className="tj-shot-side-nav">
+                    {clampedIndex > 0 && (
                       <button
                         type="button"
-                        className="tj-shot-control-btn"
-                        onClick={event => {
-                          event.stopPropagation();
-                          setIsScreenshotFullscreen(true);
-                        }}
-                        aria-label="Open screenshot fullscreen"
+                        className="tj-shot-side-btn"
+                        onClick={() => navImage('left')}
+                        aria-label="Previous image"
+                        title="Back to main chart"
                       >
-                        <Maximize2 size={14} />
+                        <ChevronLeft size={14} />
                       </button>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon size={18} />
-                    <span className="tj-shot-label">Add chart</span>
-                  </>
+                    )}
+                    <div className="tj-shot-side-dots">
+                      {allTradeImages.map((_, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          className={`tj-side-dot${i === clampedIndex ? ' active' : ''}`}
+                          onClick={() => { setSlideDir(i > clampedIndex ? 'right' : 'left'); setViewingImageIndex(i); }}
+                          aria-label={`Image ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                    {clampedIndex < allTradeImages.length - 1 && (
+                      <button
+                        type="button"
+                        className="tj-shot-side-btn"
+                        onClick={() => navImage('right')}
+                        aria-label="Next image"
+                        title="View supporting image"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
 
               <div className="tj-section-head">
                 <span className="tj-section-title">
@@ -2988,6 +3226,13 @@ export default function TradeJournal() {
                 ))}
               </div>
 
+              {selectedEntry.trades.length === 0 && (
+                <BlankDayAccountSelector
+                  entry={selectedEntry}
+                  onMutate={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                />
+              )}
+
               {activeTrade && (
                 <>
                   <div className="tj-section-head">
@@ -3126,7 +3371,7 @@ export default function TradeJournal() {
         )}
       </section>
 
-      {isScreenshotFullscreen && primaryScreenshot && (
+      {isScreenshotFullscreen && currentImage && (
         <div
           className="tj-shot-modal"
           role="dialog"
@@ -3143,7 +3388,7 @@ export default function TradeJournal() {
             <X size={16} />
           </button>
           <img
-            src={primaryScreenshot}
+            src={currentImage}
             alt="Trade chart fullscreen"
             className="tj-shot-modal-image"
             onClick={event => event.stopPropagation()}

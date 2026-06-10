@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { journalApi } from '../../services/api.js';
 import { JournalEntry, Trade } from '../../types/index.js';
 import { buildMonthlyHeatmapData } from '../../utils/tradeAnalytics.js';
-import { useAppSettings } from '../../contexts/AppSettingsContext.js';
+import { useAppSettings, ALL_ACCOUNTS_ID } from '../../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
 
 function getCellBg(pnl: number | undefined): string {
@@ -831,7 +831,8 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   // Live store entries — covers blank days created in the same session before the next API refetch
   const storeEntries = useFlyxaStore(state => state.entries);
-  const [journals, setJournals] = useState<Record<number, { id: string; date: string }>>({});
+  const [journals, setJournals] = useState<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[] }>>({});
+  const { selectedAccountId } = useAppSettings();
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [activeJournalDate, setActiveJournalDate] = useState<string | null>(null);
   const [selectedJournal, setSelectedJournal] = useState<JournalEntry | null>(null);
@@ -880,22 +881,38 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   );
 
   useEffect(() => {
-    const nextJournals = journalEntries.reduce<Record<number, { id: string; date: string }>>((acc, journal) => {
+    // API journal entries are text-only daily reflections — they have no trades array.
+    // Never treat them as blank trading days; isBlankDay stays false.
+    const nextJournals = journalEntries.reduce<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[] }>>((acc, journal) => {
       const parsed = new Date(`${journal.date}T00:00:00`);
       if (Number.isNaN(parsed.getTime())) return acc;
       if (parsed.getFullYear() !== year || parsed.getMonth() + 1 !== month) return acc;
-      acc[parsed.getDate()] = { id: journal.id, date: journal.date };
+      acc[parsed.getDate()] = { id: journal.id, date: journal.date, isBlankDay: false };
       return acc;
     }, {});
-    // Supplement with live store entries so blank days created this session
-    // appear immediately without waiting for the next API refetch.
-    (storeEntries as Array<{ id: string; date: string }>).forEach(entry => {
+
+    // Store entries are TradeJournal entries with a real trades array.
+    // isBlankDay = true only when the entry has zero trades (user intentionally
+    // created a blank trading day). If trades exist on other accounts, isBlankDay
+    // is false so the cell stays empty when account-filtered.
+    (storeEntries as Array<{ id: string; date: string; trades?: unknown[]; accountIds?: string[]; account?: string }>).forEach(entry => {
       if (typeof entry.date !== 'string') return;
       const parsed = new Date(`${entry.date}T00:00:00`);
       if (Number.isNaN(parsed.getTime())) return;
       if (parsed.getFullYear() !== year || parsed.getMonth() + 1 !== month) return;
       const day = parsed.getDate();
-      if (!nextJournals[day]) nextJournals[day] = { id: entry.id, date: entry.date };
+      const tradeCount = Array.isArray(entry.trades) ? entry.trades.length : 0;
+      const isBlankDay = tradeCount === 0;
+      const accountIds = Array.isArray(entry.accountIds) ? entry.accountIds as string[]
+        : entry.account ? [entry.account]
+        : undefined;
+      if (!nextJournals[day]) {
+        nextJournals[day] = { id: entry.id, date: entry.date, isBlankDay, accountIds };
+      } else {
+        // Store entry is authoritative for isBlankDay and accountIds.
+        nextJournals[day].isBlankDay = isBlankDay;
+        nextJournals[day].accountIds = accountIds;
+      }
     });
     setJournals(nextJournals);
   }, [journalEntries, storeEntries, month, year]);
@@ -1198,6 +1215,14 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                 const tradeCount = counts[day] ?? 0;
                 const journalEntry = journals[day];
                 const hasJournal = !!journalEntry;
+                // Only show the grey "$0 / 0 trades" indicator for genuinely blank days
+                // (zero trades in the entry) linked to the selected account.
+                // Days with trades on OTHER accounts appear empty when filtered.
+                const entryAccountIds = journalEntry?.accountIds;
+                const accountMatches = selectedAccountId === ALL_ACCOUNTS_ID
+                  || !entryAccountIds?.length   // no account linked → show for all
+                  || entryAccountIds.includes(selectedAccountId);
+                const isBlankDay = !!journalEntry?.isBlankDay && accountMatches;
                 const canOpenJournal = hasJournal || tradeCount > 0;
                 const isToday = day === today.getDate()
                   && month === today.getMonth() + 1
@@ -1226,7 +1251,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                       isMobile ? 'p-1' : 'p-2',
                       !isLastWeek ? 'border-b' : '',
                       canOpenJournal ? 'cursor-pointer hover:ring-1 hover:ring-amber-400/35 hover:ring-inset' : 'cursor-default',
-                      isToday ? 'bg-cyan-500/[0.04]' : (pnl !== undefined ? getCellBg(pnl) : (hasJournal ? 'bg-slate-600/20' : '')),
+                      isToday ? 'bg-cyan-500/[0.04]' : (pnl !== undefined ? getCellBg(pnl) : (isBlankDay ? 'bg-slate-600/20' : '')),
                     ].join(' ')}
                   >
                     {isToday && (
@@ -1254,7 +1279,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                           </span>
                         )}
                       </div>
-                    ) : hasJournal ? (
+                    ) : isBlankDay ? (
                       <div className="mt-auto flex flex-col" style={{ gap: isMobile ? 0 : 2 }}>
                         <span className="font-semibold text-slate-500" style={{ fontSize: isMobile ? 10 : 14, lineHeight: 1.2 }}>
                           $0
