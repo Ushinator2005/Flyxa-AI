@@ -333,8 +333,9 @@ export default function Dashboard() {
         {(() => {
           const todayW  = todayTrades.filter(t => t.pnl > 0).length;
           const todayL  = todayTrades.filter(t => t.pnl < 0).length;
-          const todayBE = todayTrades.filter(t => t.pnl === 0 && (t.exit_price ?? 0) > 0).length;
-          const todayWR = (todayW + todayL) > 0 ? (todayW / (todayW + todayL)) * 100 : null;
+          const monthStr    = format(new Date(), 'yyyy-MM');
+          const monthTrades = filteredTrades.filter(t => t.trade_date?.startsWith(monthStr));
+          const monthPnL    = monthTrades.reduce((s, t) => s + t.pnl, 0);
           const nextEv  = todayHighImpact.find(ev => {
             const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
             return t !== null && t > now && !Boolean(ev.actual);
@@ -374,9 +375,17 @@ export default function Dashboard() {
               {/* TODAY */}
               <div style={cs}>
                 <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>TODAY</p>
-                <p style={{ fontSize: isMobile ? 22 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: todayPnL > 0 ? GREEN : todayPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
-                  {todayTrades.length > 0 ? fmtUSD(todayPnL) : '—'}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                  <p style={{ fontSize: isMobile ? 22 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: todayPnL > 0 ? GREEN : todayPnL < 0 ? RED : T2, margin: 0, lineHeight: 1 }}>
+                    {todayTrades.length > 0 ? fmtUSD(todayPnL) : '—'}
+                  </p>
+                  {todayTrades.length > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, fontFamily: SANS, color: GREEN, letterSpacing: '0.02em' }}>{todayW}W</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, fontFamily: SANS, color: RED, letterSpacing: '0.02em' }}>{todayL}L</span>
+                    </span>
+                  )}
+                </div>
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}>
                   {todayTrades.length > 0 ? (
                     <>{todayTrades.length} trade{todayTrades.length !== 1 ? 's' : ''}{avgComparison ? <span style={{ color: (avgComparison.today.pnl - avgComparison.avg.pnl) >= 0 ? GREEN : RED, fontFamily: MONO }}>{' '}{fmtSignedCompactUSD(avgComparison.today.pnl - avgComparison.avg.pnl)} vs avg</span> : null}</>
@@ -384,16 +393,14 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* SESSION */}
+              {/* MONTHLY */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>SESSION</p>
-                <div style={{ display: 'flex', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.22)', fontSize: 13, fontWeight: 700, fontFamily: SANS, color: GREEN }}>{todayW}W</span>
-                  <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.22)', fontSize: 13, fontWeight: 700, fontFamily: SANS, color: RED }}>{todayL}L</span>
-                  {todayBE > 0 && <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.22)', fontSize: 13, fontWeight: 700, fontFamily: SANS, color: AMBER }}>{todayBE}BE</span>}
-                </div>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>MONTHLY</p>
+                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: monthPnL > 0 ? GREEN : monthPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
+                  {monthTrades.length > 0 ? fmtUSD(monthPnL) : '—'}
+                </p>
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}>
-                  {todayWR !== null ? `${todayWR.toFixed(0)}% win rate today` : 'No closed trades'}
+                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''} this month` : 'No trades this month'}
                 </p>
               </div>
 
