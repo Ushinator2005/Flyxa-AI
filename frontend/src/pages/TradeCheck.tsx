@@ -4,6 +4,7 @@ import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.
 import { useRisk } from '../contexts/RiskContext.js';
 import { useTrades } from '../hooks/useTrades.js';
 import {
+  clearStaleGuardSessionTrades,
   readGuardSessionTrades,
   saveGuardSessionTrades,
   type GuardSessionTrade,
@@ -108,7 +109,7 @@ export default function TradeCheck() {
   const [phase, setPhase]                 = useState<Phase>('idle');
   const [direction, setDirection]         = useState<TradeDir | null>(null);
   const [outcome, setOutcome]             = useState<Outcome | null>(null);
-  const [sessionTrades, setSessionTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades());
+  const [sessionTrades, setSessionTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(activePreSession?.startedAt));
   // pendingClose: Win or Loss was tapped — waiting for $ amount before confirming
   const [pendingClose, setPendingClose]   = useState<{ outcome: Exclude<Outcome, 'be'>; amount: string } | null>(null);
   // Inline risk-limit editor
@@ -117,14 +118,21 @@ export default function TradeCheck() {
   const [limitSaving, setLimitSaving]     = useState(false);
   const sessionStartedAtRef = useRef<string | null>(activePreSession?.startedAt ?? null);
 
+  useEffect(() => {
+    clearStaleGuardSessionTrades(activePreSession?.startedAt);
+    setSessionTrades(readGuardSessionTrades(activePreSession?.startedAt));
+  }, []);
+
   // Persist session trades whenever they change (date-keyed, auto-expires next day)
   useEffect(() => {
     if (sessionStartedAtRef.current === (activePreSession?.startedAt ?? null)) return;
     sessionStartedAtRef.current = activePreSession?.startedAt ?? null;
-    setSessionTrades(readGuardSessionTrades());
+    clearStaleGuardSessionTrades(activePreSession?.startedAt);
+    setSessionTrades(readGuardSessionTrades(activePreSession?.startedAt));
   }, [activePreSession?.startedAt]);
 
   useEffect(() => {
+    if (!sessionStartedAtRef.current) return;
     saveGuardSessionTrades(sessionTrades, sessionStartedAtRef.current);
   }, [sessionTrades]);
 
@@ -343,6 +351,17 @@ export default function TradeCheck() {
     // The stored trades auto-expire on the next calendar day.
   }
 
+  function handleNewSession() {
+    // Deliberately clear all session trades for a manual fresh start within the same day.
+    // Requires the user to explicitly tap "New session" — not triggered automatically.
+    saveGuardSessionTrades([], sessionStartedAtRef.current);
+    setSessionTrades([]);
+    setPhase('idle');
+    setDirection(null);
+    setOutcome(null);
+    setPendingClose(null);
+  }
+
   // ── Render ────────────────────────────────────────────────────────
   return (
     <main style={{ background: 'transparent', color: C.text, fontFamily: C.sans, padding: '7px 8px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -519,6 +538,22 @@ export default function TradeCheck() {
             <button type="button" onClick={() => handleEnterTrade('long')}  disabled={gate.status === 'blocked'} style={dirBtn(C.green, gate.status === 'blocked')}>↑ Long</button>
             <button type="button" onClick={() => handleEnterTrade('short')} disabled={gate.status === 'blocked'} style={dirBtn(C.red,   gate.status === 'blocked')}>↓ Short</button>
           </div>
+
+          {/* New session reset — only shown when blocked by session trades */}
+          {gate.status === 'blocked' && sessionTrades.length > 0 && (
+            <button
+              type="button"
+              onClick={handleNewSession}
+              style={{
+                background: 'none', border: `1px solid rgba(255,255,255,0.07)`,
+                borderRadius: 4, color: C.subtle, fontSize: 8, fontWeight: 600,
+                cursor: 'pointer', padding: '4px 0', letterSpacing: '0.06em',
+                textTransform: 'uppercase', width: '100%',
+              }}
+            >
+              New session — clear {sessionTrades.length} trade{sessionTrades.length !== 1 ? 's' : ''}
+            </button>
+          )}
         </>
       )}
 
