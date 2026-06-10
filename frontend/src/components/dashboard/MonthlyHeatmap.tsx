@@ -1213,7 +1213,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                       isMobile ? 'p-1' : 'p-2',
                       !isLastWeek ? 'border-b' : '',
                       canOpenJournal ? 'cursor-pointer hover:ring-1 hover:ring-amber-400/35 hover:ring-inset' : 'cursor-default',
-                      isToday ? 'bg-cyan-500/[0.04]' : (pnl !== undefined ? getCellBg(pnl) : ''),
+                      isToday ? 'bg-cyan-500/[0.04]' : (pnl !== undefined ? getCellBg(pnl) : (hasJournal ? 'bg-slate-600/20' : '')),
                     ].join(' ')}
                   >
                     {isToday && (
@@ -1227,7 +1227,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                     ) : (
                       <span className={`leading-none text-slate-400 ${isMobile ? 'text-xs' : 'text-sm'}`}>{day}</span>
                     )}
-                    {pnl !== undefined && (
+                    {pnl !== undefined ? (
                       <div className="mt-auto flex flex-col" style={{ gap: isMobile ? 0 : 2 }}>
                         <span className={`font-semibold ${pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ fontSize: isMobile ? 10 : 14, lineHeight: 1.2 }}>
                           {pnl >= 0 ? '+' : ''}
@@ -1241,7 +1241,18 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                           </span>
                         )}
                       </div>
-                    )}
+                    ) : hasJournal ? (
+                      <div className="mt-auto flex flex-col" style={{ gap: isMobile ? 0 : 2 }}>
+                        <span className="font-semibold text-slate-500" style={{ fontSize: isMobile ? 10 : 14, lineHeight: 1.2 }}>
+                          $0
+                        </span>
+                        {!isMobile && (
+                          <span className="text-xs leading-none text-slate-600 opacity-90">
+                            0 trades
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                     {hasJournal && (
                       <span
                         className={`absolute rounded-full bg-amber-400 shadow-[0_0_0_2px_rgba(15,23,42,0.9)] ${isMobile ? 'bottom-1 right-1 h-1.5 w-1.5' : 'bottom-2 right-2 h-2.5 w-2.5'}`}
