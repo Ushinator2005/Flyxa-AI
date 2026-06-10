@@ -2093,6 +2093,14 @@ export default function TradeJournal() {
     const currentSelected = entries.find(entry => entry.id === selectedEntryId) ?? null;
     if (!currentSelected || !currentSelected.trades.length) {
       setActiveTradeId(null);
+      // Day is now empty — jump to the most recent day that still has trades
+      const mostRecentWithTrades = [...entries]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .find(entry => entry.trades.length > 0);
+      if (mostRecentWithTrades) {
+        setSelectedEntryId(mostRecentWithTrades.id);
+        setActiveTradeId(mostRecentWithTrades.trades[0].id);
+      }
       return;
     }
     if (!activeTradeId || !currentSelected.trades.some(trade => trade.id === activeTradeId)) {
