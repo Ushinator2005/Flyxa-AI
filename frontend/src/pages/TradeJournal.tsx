@@ -2112,19 +2112,25 @@ export default function TradeJournal() {
 
   const visibleEntries = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return tradedEntriesInMonth
+    return entriesInMonth
       .filter(entry => {
         const stats = computeEntryStats(entry);
-        if (dayFilter === 'win' && stats.pnl <= 0) return false;
-        if (dayFilter === 'loss' && stats.pnl >= 0) return false;
-        if (dayFilter === 'untagged' && entry.emotions.some(emotion => emotion.state !== 'neutral')) return false;
+        // Win/loss/untagged filters only apply to days with trades
+        if (entry.trades.length > 0) {
+          if (dayFilter === 'win' && stats.pnl <= 0) return false;
+          if (dayFilter === 'loss' && stats.pnl >= 0) return false;
+          if (dayFilter === 'untagged' && entry.emotions.some(emotion => emotion.state !== 'neutral')) return false;
+        } else if (dayFilter !== 'all') {
+          // Blank days are hidden when a specific filter is active
+          return false;
+        }
         if (!needle) return true;
         const symbolMatch = entry.trades.some(trade => trade.symbol.toLowerCase().includes(needle));
         const noteMatch = `${entry.reflection.pre} ${entry.reflection.post} ${entry.reflection.lessons}`.toLowerCase().includes(needle);
         return symbolMatch || noteMatch;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [dayFilter, query, tradedEntriesInMonth]);
+  }, [dayFilter, entriesInMonth, query]);
 
   const selectedEntry = useMemo(
     () => entries.find(entry => entry.id === selectedEntryId) ?? null,
@@ -2159,7 +2165,8 @@ export default function TradeJournal() {
   }, [tradedEntriesInMonth]);
 
   const addBlankDay = useCallback(() => {
-    const date = selectedEntry?.date ?? getTodayIso(preferences.timezone);
+    // Always create for today — never inherit the currently-viewed entry's date
+    const date = getTodayIso(preferences.timezone);
     const existing = entries.find(entry => entry.date === date);
     if (existing) {
       setSelectedEntryId(existing.id);
@@ -2170,7 +2177,7 @@ export default function TradeJournal() {
     mutateEntries(prev => [blank, ...prev]);
     setSelectedEntryId(blank.id);
     setShowScanner(false);
-  }, [entries, mutateEntries, rulesTemplate, selectedEntry?.date]);
+  }, [entries, mutateEntries, preferences.timezone, rulesTemplate]);
 
   const saveTradeDate = useCallback(() => {
     if (!selectedEntry || !activeTrade) return;
@@ -2656,10 +2663,20 @@ export default function TradeJournal() {
                     <div className="tj-weekday">{formatWeekday(entry.date)}</div>
                   </div>
                   <div className="tj-day-body">
-                    <div className={`tj-day-pnl ${stats.pnl > 0 ? 'pos' : stats.pnl < 0 ? 'neg' : ''}`}>{formatSignedCurrency(stats.pnl)}</div>
-                    <div className="tj-day-meta">{`${stats.wins}W | ${stats.losses}L | ${stats.tradeCount} trades`}</div>
+                    {entry.trades.length > 0 ? (
+                      <>
+                        <div className={`tj-day-pnl ${stats.pnl > 0 ? 'pos' : stats.pnl < 0 ? 'neg' : ''}`}>{formatSignedCurrency(stats.pnl)}</div>
+                        <div className="tj-day-meta">{`${stats.wins}W | ${stats.losses}L | ${stats.tradeCount} trades`}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="tj-day-pnl" style={{ opacity: 0.35 }}>—</div>
+                        <div className="tj-day-meta" style={{ opacity: 0.45 }}>No trades</div>
+                      </>
+                    )}
                   </div>
                   {(() => {
+                    if (entry.trades.length === 0) return <div className="tj-day-grade g-none" style={{ opacity: 0.25 }}>—</div>;
                     const scored = entry.trades.map(t => computeProcessScore(t)).filter(s => s > 0);
                     const avgScore = scored.length > 0 ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : 0;
                     const letter = scoreToGradeLetter(avgScore);
