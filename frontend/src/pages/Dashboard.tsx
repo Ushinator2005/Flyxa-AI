@@ -375,7 +375,7 @@ export default function Dashboard() {
               {/* TODAY */}
               <div style={cs}>
                 <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>TODAY</p>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 5 }}>
                   <p style={{ fontSize: isMobile ? 22 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: todayPnL > 0 ? GREEN : todayPnL < 0 ? RED : T2, margin: 0, lineHeight: 1 }}>
                     {todayTrades.length > 0 ? fmtUSD(todayPnL) : '—'}
                   </p>
