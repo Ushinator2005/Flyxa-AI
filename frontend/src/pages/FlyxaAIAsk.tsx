@@ -634,7 +634,7 @@ export default function FlyxaAIAsk() {
                   </button>
                 </div>
 
-                <div style={{ padding: '12px 24px 16px' }}>
+                <div style={{ padding: '12px 24px 16px', maxHeight: 680, overflowY: 'auto' }}>
                   {/* ── Trade identity + tags ── */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7, flexWrap: 'wrap' }}>
@@ -710,7 +710,7 @@ export default function FlyxaAIAsk() {
                   {/* ── Review content ── */}
                   {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
                     <>
-                      <div style={{ maxHeight: 620, overflowY: 'auto', paddingRight: 2 }}>
+                      <div style={{ paddingRight: 2 }}>
                         {renderReviewSections(focusedTradeAnalysis)}
                       </div>
                       {/* Footer */}
@@ -847,21 +847,6 @@ export default function FlyxaAIAsk() {
                 ))}
               </div>
             ))}
-          </div>
-
-          <div style={{
-            padding: '10px 12px', borderRadius: 8,
-            background: `${C.acc}0a`, border: `1px solid ${C.acc}20`,
-          }}>
-            <div style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-              textTransform: 'uppercase', color: C.acc, marginBottom: 4,
-            }}>
-              Powered by Flyxa AI
-            </div>
-            <div style={{ fontSize: 11, color: C.t1, lineHeight: 1.6 }}>
-              Flyxa reads your full trading statistics and reasons over them to give you genuine, personalised insights — not keyword-matched templates.
-            </div>
           </div>
         </aside>
       </div>
