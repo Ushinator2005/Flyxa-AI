@@ -143,9 +143,13 @@ function getDataTags(trade: Trade): string[] {
 }
 
 const SECTION_META = [
-  { key: 'your pattern',    num: '01', label: 'Your Pattern'    },
-  { key: 'this trade',      num: '02', label: 'This Trade'      },
-  { key: 'edge adjustment', num: '03', label: 'Edge Adjustment' },
+  { key: 'your stats',      num: '01', label: 'Your Stats'    },
+  { key: 'what happened',   num: '02', label: 'What Happened' },
+  { key: 'the rule',        num: '03', label: 'The Rule'      },
+  // legacy keys so cached responses still render correctly
+  { key: 'your pattern',    num: '01', label: 'Your Stats'    },
+  { key: 'this trade',      num: '02', label: 'What Happened' },
+  { key: 'edge adjustment', num: '03', label: 'The Rule'      },
 ];
 
 function renderReviewSections(text: string): React.ReactNode {
