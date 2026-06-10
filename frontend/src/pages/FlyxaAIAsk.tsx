@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import React, { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Send, RotateCcw, Sparkles, X } from 'lucide-react';
 import { useTrades, toApiTrade } from '../hooks/useTrades.js';
@@ -37,6 +37,67 @@ const C = {
   red: 'var(--red, #f05252)',
   sans: 'var(--font-sans, Inter, sans-serif)',
 };
+
+// ─── Markdown renderer ─────────────────────────────────────────────────────────
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ color: C.t0, fontWeight: 600 }}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={i} style={{ color: C.t0, fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
+
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split('\n');
+  const out: React.ReactNode[] = [];
+  let k = 0;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('## ')) {
+      out.push(
+        <p key={k++} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: C.acc, margin: '16px 0 6px', padding: '6px 0 6px', borderBottom: `1px solid rgba(245,158,11,0.18)` }}>
+          {line.slice(3)}
+        </p>
+      );
+      i++;
+    } else if (line.startsWith('### ')) {
+      out.push(
+        <p key={k++} style={{ fontSize: 12, fontWeight: 600, color: C.t0, margin: '10px 0 4px' }}>
+          {renderInline(line.slice(4))}
+        </p>
+      );
+      i++;
+    } else if (line.trim() === '---') {
+      out.push(<hr key={k++} style={{ border: 'none', borderTop: `1px solid ${C.b0}`, margin: '12px 0' }} />);
+      i++;
+    } else if (/^[-*] /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*] /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
+      out.push(
+        <ul key={k++} style={{ margin: '4px 0 8px', paddingLeft: 18, listStyle: 'none' }}>
+          {items.map((item, j) => (
+            <li key={j} style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.65, marginBottom: 4, paddingLeft: 4, position: 'relative' }}>
+              <span style={{ position: 'absolute', left: -12, color: C.acc, fontWeight: 700 }}>·</span>
+              {renderInline(item)}
+            </li>
+          ))}
+        </ul>
+      );
+    } else if (line.trim() === '') {
+      i++;
+    } else {
+      out.push(
+        <p key={k++} style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.7, margin: '0 0 8px' }}>
+          {renderInline(line)}
+        </p>
+      );
+      i++;
+    }
+  }
+  return out;
+}
 
 // ─── Response item ─────────────────────────────────────────────────────────────
 interface AIReply {
@@ -468,10 +529,8 @@ export default function FlyxaAIAsk() {
                       )}
 
                       {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
-                        <div style={{ fontSize: 13, lineHeight: 1.7, color: C.t1, marginTop: 8 }}>
-                          {focusedTradeAnalysis.split(/\n{2,}/).map((para, i) => (
-                            <p key={i} style={{ margin: '0 0 10px', whiteSpace: 'pre-line' }}>{para.trim()}</p>
-                          ))}
+                        <div style={{ marginTop: 8, maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
+                          {renderMarkdown(focusedTradeAnalysis)}
                         </div>
                       )}
                     </div>

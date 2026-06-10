@@ -1,6 +1,6 @@
 ﻿import { MessageSquare } from 'lucide-react';
 import type { Rival } from '../../types/rivals.js';
-import { compareMetric, getMascotLabel } from '../../lib/mascotProgression.js';
+import { getMascotLabel } from '../../lib/mascotProgression.js';
 
 interface RivalsListProps {
   rivals: Rival[];
@@ -29,14 +29,7 @@ function getMetricVal(rival: Rival, key: 'dailyJournal' | 'tradingJournal' | 'ba
   }
 }
 
-function valueClass(mine: number, theirs: number): 'delta-win' | 'delta-lose' | 'delta-even' {
-  const result = compareMetric(mine, theirs);
-  if (result === 'winning') return 'delta-win';
-  if (result === 'losing') return 'delta-lose';
-  return 'delta-even';
-}
-
-export default function RivalsList({ rivals, currentUser, onOpenChat }: RivalsListProps) {
+export default function RivalsList({ rivals, onOpenChat }: Omit<RivalsListProps, 'currentUser'> & { currentUser?: Rival }) {
   const ordered = [...rivals].sort((a, b) => {
     if (a.isMe) return -1;
     if (b.isMe) return 1;
