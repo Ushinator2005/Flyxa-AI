@@ -38,105 +38,128 @@ const C = {
   sans: 'var(--font-sans, Inter, sans-serif)',
 };
 
-// ─── Markdown renderer ─────────────────────────────────────────────────────────
-// Auto-highlights $numbers, percentages, and X.Xx ratios in amber
-function renderInline(text: string): React.ReactNode {
-  // Split on bold/italic markers AND on numbers worth highlighting
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|-?\$[\d,]+(?:\.\d+)?|(?<!\w)\d+(?:\.\d+)?%|\b\d+\.\d+x\b)/);
+// ─── Trade review renderer ──────────────────────────────────────────────────────
+// Wraps numbers/percentages/ratios in styled chips
+function inlineChips(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|-?\$[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?%|\b\d+\.\d+x\b|\b\d+(?:\.\d+)?R\b)/);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i} style={{ color: C.t0, fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
     }
-    if (part.startsWith('*') && part.endsWith('*')) {
-      return <em key={i} style={{ color: C.t1, fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
-    }
-    // Highlight numbers: $amount, XX%, X.Xx
-    if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part)) {
-      return <span key={i} style={{ color: C.acc, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{part}</span>;
+    if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part) || /^\d+(?:\.\d+)?R$/.test(part)) {
+      return (
+        <span key={i} style={{
+          display: 'inline-block', padding: '0px 5px', margin: '0 1px',
+          background: 'rgba(245,158,11,0.11)', border: '1px solid rgba(245,158,11,0.22)',
+          borderRadius: 4, color: C.acc, fontWeight: 600,
+          fontSize: '0.92em', fontVariantNumeric: 'tabular-nums',
+          fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.5,
+        }}>{part}</span>
+      );
     }
     return part;
   });
 }
 
-const SECTION_LABELS: Record<string, string> = {
-  'your pattern': 'Your Pattern',
-  'this trade': 'This Trade',
-  'edge adjustment': 'Edge Adjustment',
-};
+interface ReviewSection { label: string; verdict: string | null; bullets: string[]; prose: string[]; }
 
-function renderMarkdown(text: string): React.ReactNode[] {
-  const lines = text.split('\n');
-  const out: React.ReactNode[] = [];
-  let k = 0;
-  let sectionIndex = 0;
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
+function parseReviewSections(text: string): ReviewSection[] {
+  const sections: ReviewSection[] = [];
+  let current: ReviewSection | null = null;
+  for (const raw of text.split('\n')) {
+    const line = raw.trimEnd();
     if (line.startsWith('## ')) {
-      const raw = line.slice(3).trim();
-      const label = SECTION_LABELS[raw.toLowerCase()] ?? raw;
-      const num = String(sectionIndex + 1).padStart(2, '0');
-      sectionIndex++;
-      out.push(
-        <div key={k++} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: `${sectionIndex === 1 ? 4 : 20}px 0 10px` }}>
-          <span style={{
-            flexShrink: 0, width: 26, height: 26, borderRadius: 6,
-            background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.28)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, fontWeight: 800, color: C.acc, letterSpacing: '0.04em',
-            fontFamily: 'var(--font-mono, monospace)',
-          }}>{num}</span>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.acc }}>{label}</span>
-        </div>
-      );
-      i++;
-
-    } else if (/^\*\*[^*]+\*\*$/.test(line.trim())) {
-      // Full-line bold = verdict headline
-      const verdict = line.trim().slice(2, -2);
-      out.push(
-        <p key={k++} style={{
-          fontSize: 14, fontWeight: 700, color: C.t0, lineHeight: 1.45,
-          margin: '0 0 10px', padding: '8px 12px',
-          background: 'rgba(255,255,255,0.03)', borderLeft: `2px solid ${C.acc}`,
-          borderRadius: '0 5px 5px 0',
-        }}>{verdict}</p>
-      );
-      i++;
-
-    } else if (/^[-*] /.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^[-*] /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
-      out.push(
-        <div key={k++} style={{ display: 'flex', flexDirection: 'column', gap: 1, margin: '0 0 4px' }}>
-          {items.map((item, j) => (
-            <div key={j} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', borderBottom: j < items.length - 1 ? `1px solid rgba(255,255,255,0.04)` : 'none' }}>
-              <span style={{ flexShrink: 0, width: 4, height: 4, borderRadius: '50%', background: C.acc, marginTop: 6, opacity: 0.7 }} />
-              <span style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.6 }}>{renderInline(item)}</span>
-            </div>
-          ))}
-        </div>
-      );
-
-    } else if (line.trim() === '---') {
-      out.push(<hr key={k++} style={{ border: 'none', borderTop: `1px solid ${C.b0}`, margin: '14px 0' }} />);
-      i++;
-
-    } else if (line.trim() === '') {
-      i++;
-
-    } else {
-      out.push(
-        <p key={k++} style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.7, margin: '0 0 8px' }}>
-          {renderInline(line)}
-        </p>
-      );
-      i++;
+      if (current) sections.push(current);
+      current = { label: line.slice(3).trim(), verdict: null, bullets: [], prose: [] };
+    } else if (current) {
+      const trimmed = line.trim();
+      if (/^\*\*.*\*\*$/.test(trimmed) && !current.verdict) {
+        current.verdict = trimmed.slice(2, -2);
+      } else if (/^[-*] /.test(line)) {
+        current.bullets.push(line.replace(/^[-*] /, ''));
+      } else if (trimmed) {
+        current.prose.push(trimmed);
+      }
     }
   }
-  return out;
+  if (current) sections.push(current);
+  return sections;
+}
+
+const SECTION_META: Record<string, { num: string; accent: string }> = {
+  'your pattern':    { num: '01', accent: 'rgba(245,158,11,1)' },
+  'this trade':      { num: '02', accent: 'rgba(245,158,11,1)' },
+  'edge adjustment': { num: '03', accent: 'rgba(245,158,11,1)' },
+};
+
+function renderReviewSections(text: string): React.ReactNode {
+  const sections = parseReviewSections(text);
+  if (sections.length === 0) {
+    // Fallback: plain text
+    return <p style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.7 }}>{text}</p>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {sections.map((section, si) => {
+        const key = section.label.toLowerCase();
+        const meta = SECTION_META[key] ?? { num: String(si + 1).padStart(2, '0'), accent: C.acc };
+        const isLast = si === sections.length - 1;
+        return (
+          <div key={si} style={{ paddingBottom: isLast ? 0 : 18, marginBottom: isLast ? 0 : 18, borderBottom: isLast ? 'none' : `1px solid rgba(255,255,255,0.05)` }}>
+            {/* Section header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{
+                fontFamily: 'var(--font-mono, monospace)', fontSize: 9.5, fontWeight: 800,
+                color: meta.accent, letterSpacing: '0.08em', opacity: 0.6,
+              }}>{meta.num}</span>
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em',
+                textTransform: 'uppercase', color: C.t0,
+              }}>{section.label}</span>
+              <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)', marginLeft: 4 }} />
+            </div>
+
+            {/* Verdict */}
+            {section.verdict && (
+              <p style={{
+                fontSize: 13.5, fontWeight: 600, color: C.t0, lineHeight: 1.5,
+                margin: '0 0 10px', letterSpacing: '-0.01em',
+              }}>{inlineChips(section.verdict)}</p>
+            )}
+
+            {/* Bullets */}
+            {section.bullets.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {section.bullets.map((b, bi) => (
+                  <div key={bi} style={{
+                    display: 'flex', gap: 10, alignItems: 'flex-start',
+                    padding: '6px 0',
+                    borderTop: bi === 0 ? `1px solid rgba(255,255,255,0.05)` : 'none',
+                    borderBottom: `1px solid rgba(255,255,255,0.05)`,
+                  }}>
+                    <span style={{
+                      flexShrink: 0, marginTop: 6, width: 3, height: 3,
+                      borderRadius: '50%', background: meta.accent, opacity: 0.55,
+                    }} />
+                    <span style={{ fontSize: 12, color: C.t1, lineHeight: 1.65 }}>
+                      {inlineChips(b)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Prose fallback (if AI ignored format) */}
+            {section.prose.map((p, pi) => (
+              <p key={pi} style={{ fontSize: 12, color: C.t1, lineHeight: 1.7, margin: '6px 0 0' }}>
+                {inlineChips(p)}
+              </p>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Response item ─────────────────────────────────────────────────────────────
@@ -517,63 +540,50 @@ export default function FlyxaAIAsk() {
                       )}
                     </div>
 
-                    <div style={{ borderRadius: 8, border: `1px solid rgba(245,158,11,0.18)`, background: 'rgba(10,10,10,0.42)', padding: '12px 14px', minHeight: 80 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <div>
-                          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.acc, margin: 0 }}>Flyxa trade review</p>
-                          <p style={{ fontSize: 11.5, color: C.t2, margin: '2px 0 0' }}>Trade quality, risk, execution, psychology, and one next adjustment.</p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {focusedTradeAnalysisLoading && (
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              {[0,1,2].map(i => (
-                                <span key={i} style={{ display: 'block', width: 6, height: 6, borderRadius: '50%', background: C.acc, animation: `analysing-pulse 1s ease-in-out ${i*0.16}s infinite` }} />
-                              ))}
-                            </div>
-                          )}
-                          {tradeAnalysisError && !focusedTradeAnalysisLoading && (
-                            <button type="button" onClick={() => {
-                              if (!focusedTradeId) return;
-                              setTradeAnalysisError(null);
-                              setTradeAnalysisLoadingId(null);
-                              setTradeAnalysisById(prev => { const n = {...prev}; delete n[focusedTradeId]; return n; });
-                            }} style={{ fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: `1px solid ${C.b1}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: C.sans }}>
-                              Retry
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {focusedTradeAnalysisLoading && (
-                        <div style={{ marginTop: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                            <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
-                              <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round"/>
-                              <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
-                              <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
-                              <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
-                            </svg>
-                            <div>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, margin: 0 }}>Analysing execution quality</p>
-                              <p style={{ fontSize: 12, color: C.t1, margin: '2px 0 0' }}>Reading entry, stop, target, exit, emotion, notes, and plan adherence...</p>
-                            </div>
+                    {/* Loading state */}
+                    {focusedTradeAnalysisLoading && (
+                      <div style={{ padding: '4px 0 8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                          <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
+                            <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round"/>
+                            <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
+                            <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
+                            <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
+                          </svg>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: C.t1, margin: 0, letterSpacing: '0.02em' }}>Analysing your trade history...</p>
+                          <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
+                            {[0,1,2].map(i => (
+                              <span key={i} style={{ display: 'block', width: 5, height: 5, borderRadius: '50%', background: C.acc, animation: `analysing-pulse 1s ease-in-out ${i*0.16}s infinite` }} />
+                            ))}
                           </div>
-                          {[82,96,68].map((w, i) => (
-                            <div key={w} style={{ height: 7, borderRadius: 99, marginBottom: 8, width: `${w}%`, background: 'linear-gradient(90deg, rgba(255,255,255,0.05), rgba(245,158,11,0.20), rgba(255,255,255,0.05))', backgroundSize: '220% 100%', animation: `analysing-shimmer 1.35s linear ${i*0.12}s infinite` }} />
-                          ))}
                         </div>
-                      )}
+                        {[88,72,94].map((w, i) => (
+                          <div key={w} style={{ height: 5, borderRadius: 99, marginBottom: 7, width: `${w}%`, background: 'linear-gradient(90deg, rgba(255,255,255,0.04), rgba(245,158,11,0.18), rgba(255,255,255,0.04))', backgroundSize: '220% 100%', animation: `analysing-shimmer 1.35s linear ${i*0.12}s infinite` }} />
+                        ))}
+                      </div>
+                    )}
 
-                      {tradeAnalysisError && !focusedTradeAnalysisLoading && (
-                        <p style={{ fontSize: 12, color: C.red, margin: '8px 0 0' }}>{tradeAnalysisError}</p>
-                      )}
+                    {/* Error */}
+                    {tradeAnalysisError && !focusedTradeAnalysisLoading && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                        <p style={{ fontSize: 12, color: C.red, margin: 0, flex: 1 }}>{tradeAnalysisError}</p>
+                        <button type="button" onClick={() => {
+                          if (!focusedTradeId) return;
+                          setTradeAnalysisError(null);
+                          setTradeAnalysisLoadingId(null);
+                          setTradeAnalysisById(prev => { const n = {...prev}; delete n[focusedTradeId]; return n; });
+                        }} style={{ fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: `1px solid ${C.b1}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: C.sans, flexShrink: 0 }}>
+                          Retry
+                        </button>
+                      </div>
+                    )}
 
-                      {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
-                        <div style={{ marginTop: 8, maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
-                          {renderMarkdown(focusedTradeAnalysis)}
-                        </div>
-                      )}
-                    </div>
+                    {/* Review content */}
+                    {focusedTradeAnalysis && !focusedTradeAnalysisLoading && (
+                      <div style={{ maxHeight: 420, overflowY: 'auto', paddingRight: 2 }}>
+                        {renderReviewSections(focusedTradeAnalysis)}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p style={{ fontSize: 12, color: C.t1, margin: 0 }}>

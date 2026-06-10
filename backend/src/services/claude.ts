@@ -2120,13 +2120,11 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
     model: MODEL,
     temperature: MODEL_TEMPERATURE,
     max_tokens: 900,
-    system: `You are Flyxa's trading coach. Your edge is that you have the trader's real statistics — win rates by emotion, session, confluence, and plan adherence. Use these numbers directly in your feedback. Every insight must be grounded in their data. Be direct, specific, honest. No filler. No generic advice.`,
+    system: `You are Flyxa's trading coach. Output ONLY structured data — no prose, no paragraphs, no filler sentences. Use the trader's actual statistics. Every line must contain a specific number or a specific action. If you write a paragraph you have failed.`,
     messages: [
       {
         role: 'user',
-        content: `Review this trade using the trader's own historical stats.
-
-## This Trade
+        content: `Trade data:
 Symbol: ${trade.symbol} ${trade.direction} | ${trade.trade_date} ${trade.trade_time || ''}
 Entry: ${trade.entry_price} | SL: ${trade.sl_price} | TP: ${trade.tp_price} | Exit: ${trade.exit_price}
 P&L: $${trade.pnl.toFixed(2)} | R:R: ${rr.toFixed(2)} | Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + 'min' : 'unknown'}
@@ -2134,25 +2132,25 @@ Emotion: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | F
 Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
 Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${contextBlock}
 
-Respond with exactly 3 sections in this exact format. Each section: one bold verdict line, then exactly 3 bullet points. No paragraphs. No padding. Every number must be from the trader's actual data where available.
+OUTPUT FORMAT — copy this structure exactly, replace bracketed text only:
 
 ## Your Pattern
-**[One sharp sentence: what the data says about trades like this one — cite their actual win rates or P&L by emotion/session/confluence]**
-- [Stat comparing this emotional state or session to their baseline]
-- [Stat about plan adherence or a confluence used in this trade]
-- [What pattern this trade fits — or breaks]
+**[Single sentence verdict using their actual win rate or P&L stat for this emotion/session]**
+- [Emotion stat: e.g. "Calm: 61% WR vs Anxious: 33% WR across 47 trades"]
+- [Plan adherence or confluence stat from their data]
+- [One sentence: does this trade align with or break their pattern]
 
 ## This Trade
-**[One sharp verdict on this specific trade — was it in their edge or not]**
-- [Entry/exit/stop specifics with numbers]
-- [Risk management — R:R, position sizing, or stop placement]
-- [The one thing that decided the outcome of this trade]
+**[Single sentence verdict on execution quality]**
+- [Entry and stop placement with actual prices]
+- [R:R and whether the exit captured value]
+- [The single deciding factor in this trade's outcome]
 
 ## Edge Adjustment
-**[One specific, actionable change — make it sound like a rule, not a suggestion]**
-- [Stat from their data that proves this change matters]
-- [What this looks like in practice on the next trade]
-- [What they should expect if they apply it — based on their numbers]`,
+**[One rule, stated as a rule — not a suggestion]**
+- [The stat from their data that makes this rule non-negotiable]
+- [Exactly what to do differently on the next similar setup]
+- [Expected outcome if applied, based on their numbers]`,
       },
     ],
   });
