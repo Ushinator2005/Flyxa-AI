@@ -159,7 +159,7 @@ export default function SessionActive() {
   const { dailyStatus, riskLevel } = useRisk();
 
   const [elapsed, setElapsed] = useState('00:00');
-  const [guardTrades, setGuardTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades());
+  const [guardTrades, setGuardTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(preSession?.startedAt));
   const guardSummary = summarizeGuardSessionTrades(guardTrades);
 
   // Redirect to pre-session if no active session
@@ -183,7 +183,7 @@ export default function SessionActive() {
   }, [preSession?.startedAt]);
 
   useEffect(() => {
-    const refresh = () => setGuardTrades(readGuardSessionTrades());
+    const refresh = () => setGuardTrades(readGuardSessionTrades(preSession?.startedAt));
     const storageHandler = (event: StorageEvent) => {
       if (event.key === SESSION_TRADES_STORAGE) refresh();
     };
@@ -201,7 +201,7 @@ export default function SessionActive() {
       window.removeEventListener('flyxa:session-trades-updated', refresh);
       window.clearInterval(poll);
     };
-  }, []);
+  }, [preSession?.startedAt]);
 
   if (!preSession?.startedAt) return null;
 

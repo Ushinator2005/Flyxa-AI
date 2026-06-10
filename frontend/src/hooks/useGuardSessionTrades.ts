@@ -47,13 +47,15 @@ function normalizeGuardTrade(value: unknown): GuardSessionTrade | null {
   };
 }
 
-export function readGuardSessionTrades(): GuardSessionTrade[] {
+export function readGuardSessionTrades(sessionStartedAt?: string | null): GuardSessionTrade[] {
   if (typeof window === 'undefined') return [];
+  if (!sessionStartedAt) return [];
   try {
     const raw = window.localStorage.getItem(SESSION_TRADES_STORAGE);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { date?: string; sessionStartedAt?: string | null; trades?: unknown[] };
     if (parsed.date !== todayKey() || !Array.isArray(parsed.trades)) return [];
+    if (sessionStartedAt && parsed.sessionStartedAt !== sessionStartedAt) return [];
     return parsed.trades
       .map(normalizeGuardTrade)
       .filter((trade): trade is GuardSessionTrade => trade !== null);
@@ -68,7 +70,7 @@ export function clearStaleGuardSessionTrades(sessionStartedAt?: string | null) {
     const raw = window.localStorage.getItem(SESSION_TRADES_STORAGE);
     if (!raw) return;
     const parsed = JSON.parse(raw) as { date?: string; sessionStartedAt?: string | null };
-    if (parsed.date !== todayKey() || (parsed.sessionStartedAt && parsed.sessionStartedAt !== sessionStartedAt)) {
+    if (parsed.date !== todayKey() || parsed.sessionStartedAt !== sessionStartedAt) {
       window.localStorage.removeItem(SESSION_TRADES_STORAGE);
       window.dispatchEvent(new CustomEvent('flyxa:session-trades-updated'));
     }
@@ -113,10 +115,10 @@ export function saveGuardSessionTrades(trades: GuardSessionTrade[], sessionStart
 }
 
 export function useGuardSessionTrades(sessionStartedAt?: string | null): GuardSessionTrade[] {
-  const [trades, setTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades());
+  const [trades, setTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(sessionStartedAt));
 
   useEffect(() => {
-    const refresh = () => setTrades(readGuardSessionTrades());
+    const refresh = () => setTrades(readGuardSessionTrades(sessionStartedAt));
     const storageHandler = (event: StorageEvent) => {
       if (event.key === SESSION_TRADES_STORAGE) refresh();
     };

@@ -10,6 +10,7 @@ import { PatternItem } from './FlyxaAIPatterns.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
+import { saveGuardSessionTrades } from '../hooks/useGuardSessionTrades.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -676,6 +677,7 @@ export default function FlyxaAIPreSession() {
     };
     setPreSessionAction(sessionData);
     setPreSessionForDate(todayIso, sessionData);
+    saveGuardSessionTrades([], committedAt);
     navigate('/session');
   };
 
