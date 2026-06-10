@@ -379,12 +379,10 @@ export default function Dashboard() {
                   <p style={{ fontSize: isMobile ? 22 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: todayPnL > 0 ? GREEN : todayPnL < 0 ? RED : T2, margin: 0, lineHeight: 1 }}>
                     {todayTrades.length > 0 ? fmtUSD(todayPnL) : '—'}
                   </p>
-                  {todayTrades.length > 0 && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                      <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.22)', fontSize: 12, fontWeight: 700, fontFamily: SANS, color: GREEN }}>{todayW}W</span>
-                      <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.22)', fontSize: 12, fontWeight: 700, fontFamily: SANS, color: RED }}>{todayL}L</span>
-                    </span>
-                  )}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                    <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.22)', fontSize: 12, fontWeight: 700, fontFamily: SANS, color: GREEN }}>{todayW}W</span>
+                    <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.22)', fontSize: 12, fontWeight: 700, fontFamily: SANS, color: RED }}>{todayL}L</span>
+                  </span>
                 </div>
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}>
                   {todayTrades.length > 0 ? (
