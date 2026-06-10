@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const GRAYSCALE = [
   '#FFFFFF', '#D1D4DC', '#A3A7B5', '#787B8E',
@@ -251,7 +252,9 @@ interface ColorPickerFieldProps {
 export default function ColorPickerField({ label, hint, value, onChange }: ColorPickerFieldProps) {
   const [open, setOpen] = useState(false);
   const [opacity, setOpacity] = useState(100);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -264,15 +267,30 @@ export default function ColorPickerField({ label, hint, value, onChange }: Color
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [open]);
 
+  function handleToggle() {
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      // Prefer opening below; if too close to bottom, open above
+      const panelH = 260; // approximate height
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top = spaceBelow >= panelH + 8
+        ? rect.bottom + 6
+        : rect.top - panelH - 6;
+      setPopoverPos({ top, left: rect.left });
+    }
+    setOpen(o => !o);
+  }
+
   const hex = value.startsWith('#') ? value : `#${value}`;
 
   return (
     <div ref={rootRef} style={{ position: 'relative', userSelect: 'none' }}>
       {/* Trigger row */}
       <button
+        ref={triggerRef}
         type="button"
         title={hint}
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggle}
         style={{
           width: '100%',
           display: 'flex',
@@ -309,14 +327,14 @@ export default function ColorPickerField({ label, hint, value, onChange }: Color
         </div>
       </button>
 
-      {/* Popover */}
-      {open && (
+      {/* Popover — rendered as a portal so it's never clipped by overflow:hidden ancestors */}
+      {open && popoverPos && createPortal(
         <div
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            zIndex: 200,
+            position: 'fixed',
+            top: popoverPos.top,
+            left: popoverPos.left,
+            zIndex: 9999,
           }}
         >
           <ColorPickerPanel
@@ -325,7 +343,8 @@ export default function ColorPickerField({ label, hint, value, onChange }: Color
             onColorChange={color => { onChange(color); }}
             onOpacityChange={setOpacity}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
