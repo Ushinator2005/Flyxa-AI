@@ -2452,7 +2452,9 @@ export default function TradeJournal() {
     screenshotSlotRef.current = null;
   }, [activeTradeId, mutateEntries, selectedEntry, user]);
 
-  const primaryScreenshot = selectedEntry
+  // Only show a screenshot when the entry has trades — don't surface the scanner
+  // image on blank days where the AI found no trades.
+  const primaryScreenshot = selectedEntry && selectedEntry.trades.length > 0
     ? (activeTrade?.screenshotUrl || selectedEntry.screenshots[0] || selectedEntry.scannedImageUrl || '')
     : '';
 
