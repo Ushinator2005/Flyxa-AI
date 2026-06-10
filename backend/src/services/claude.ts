@@ -2107,37 +2107,43 @@ async function cropImageToBoxBoundary(
 }
 
 
-export async function analyzeIndividualTrade(trade: Trade): Promise<string> {
+export async function analyzeIndividualTrade(trade: Trade, statsContext: string | null = null): Promise<string> {
   const rr = trade.sl_price && trade.entry_price && trade.tp_price
     ? Math.abs(trade.tp_price - trade.entry_price) / Math.abs(trade.sl_price - trade.entry_price)
     : 0;
 
+  const contextBlock = statsContext
+    ? `\n\n## Trader's Historical Data\n${statsContext}`
+    : '';
+
   const response = await anthropic.messages.create({
     model: MODEL,
     temperature: MODEL_TEMPERATURE,
-    max_tokens: 600,
-    system: `You are a sharp futures trading coach. Give concise, direct trade feedback — no padding, no filler. Use specific numbers. Every sentence must add value.`,
+    max_tokens: 900,
+    system: `You are Flyxa's trading coach. Your edge is that you have the trader's real statistics — win rates by emotion, session, confluence, and plan adherence. Use these numbers directly in your feedback. Every insight must be grounded in their data. Be direct, specific, honest. No filler. No generic advice.`,
     messages: [
       {
         role: 'user',
-        content: `Review this trade briefly:
+        content: `Review this trade using the trader's own historical stats.
 
-Symbol: ${trade.symbol} ${trade.direction} | Date: ${trade.trade_date}
+## This Trade
+Symbol: ${trade.symbol} ${trade.direction} | ${trade.trade_date} ${trade.trade_time || ''}
 Entry: ${trade.entry_price} | SL: ${trade.sl_price} | TP: ${trade.tp_price} | Exit: ${trade.exit_price}
 P&L: $${trade.pnl.toFixed(2)} | R:R: ${rr.toFixed(2)} | Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + 'min' : 'unknown'}
 Emotion: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | Followed plan: ${trade.followed_plan ? 'Yes' : 'No'}
-Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None'}
-Notes: ${trade.pre_trade_notes || ''} ${trade.post_trade_notes || ''}
+Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
+Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${contextBlock}
 
-Respond with exactly 3 sections using these headers:
-## Execution
-1-2 sentences on entry, exit, and timing quality.
+Respond with exactly 3 sections. Cite the trader's actual win rates, P&L, and patterns to make the feedback specific and undeniable.
 
-## Risk & Edge
-1-2 sentences on risk management and whether the setup had edge.
+## Your Pattern
+How does this trade fit their historical data? Reference their emotion stats, session performance, confluence win rates, or plan adherence numbers to show what the data says about trades like this one.
 
-## Fix This
-One specific, actionable thing to do differently next time.`,
+## This Trade
+What actually happened — was the execution and risk in line with their edge? Use specific prices and P&L.
+
+## Edge Adjustment
+One specific change, backed by their own stats, that would improve future trades like this.`,
       },
     ],
   });

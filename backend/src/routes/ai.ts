@@ -110,29 +110,96 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
     const { tradeId } = req.params;
     const requestTrade = req.body?.trade;
 
+    // Resolve the trade being reviewed
+    let focusTrade: Trade;
     if (requestTrade && typeof requestTrade === 'object' && requestTrade.symbol) {
-      const analysis = await analyzeIndividualTrade({
-        ...requestTrade,
-        id: typeof requestTrade.id === 'string' ? requestTrade.id : tradeId,
-        user_id: req.userId!,
-      } as Trade);
-      res.json({ analysis });
-      return;
+      focusTrade = { ...requestTrade, id: typeof requestTrade.id === 'string' ? requestTrade.id : tradeId, user_id: req.userId! } as Trade;
+    } else {
+      const { data: trade, error } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('id', tradeId)
+        .eq('user_id', req.userId!)
+        .single();
+      if (error || !trade) { res.status(404).json({ error: 'Trade not found' }); return; }
+      focusTrade = trade as Trade;
     }
 
-    const { data: trade, error } = await supabase
+    // Fetch user's full trade history for stats context (lightweight fields only)
+    const { data: rawHistory } = await supabase
       .from('trades')
-      .select('*')
-      .eq('id', tradeId)
+      .select('id, pnl, emotional_state, confluences, followed_plan, session, trade_date, created_at')
       .eq('user_id', req.userId!)
-      .single();
+      .order('created_at', { ascending: true });
 
-    if (error || !trade) {
-      res.status(404).json({ error: 'Trade not found' });
-      return;
-    }
+    type HistTrade = { id: string; pnl: number; emotional_state: string; confluences: string[] | null; followed_plan: boolean; session: string; trade_date: string; created_at: string };
+    const history: HistTrade[] = (rawHistory ?? []) as HistTrade[];
 
-    const analysis = await analyzeIndividualTrade(trade as Trade);
+    // ── Stat helpers ──────────────────────────────────────────────────────────
+    const winRate = (ts: HistTrade[]) => ts.length ? Math.round((ts.filter(t => t.pnl > 0).length / ts.length) * 100) : 0;
+    const netPnl  = (ts: HistTrade[]) => Math.round(ts.reduce((s, t) => s + (t.pnl ?? 0), 0));
+    const profitFactor = (ts: HistTrade[]) => {
+      const g = ts.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
+      const l = Math.abs(ts.filter(t => t.pnl < 0).reduce((s, t) => s + t.pnl, 0));
+      return l > 0 ? (Math.round((g / l) * 100) / 100).toFixed(2) : g > 0 ? '∞' : '0';
+    };
+
+    // ── Overall ───────────────────────────────────────────────────────────────
+    const overall = history.length >= 3 ? `${history.length} trades | ${winRate(history)}% WR | $${netPnl(history)} net | ${profitFactor(history)}x PF` : null;
+
+    // ── By emotion ────────────────────────────────────────────────────────────
+    const emotionStats = (() => {
+      const groups: Record<string, HistTrade[]> = {};
+      for (const t of history) { const e = t.emotional_state || 'Unknown'; (groups[e] ??= []).push(t); }
+      return Object.entries(groups)
+        .filter(([, ts]) => ts.length >= 2)
+        .map(([e, ts]) => `${e}: ${ts.length} trades, ${winRate(ts)}% WR, $${netPnl(ts)} net`)
+        .join(' | ');
+    })();
+
+    // ── Confluences in this trade ─────────────────────────────────────────────
+    const tradeConfs: string[] = Array.isArray(focusTrade.confluences) ? focusTrade.confluences : [];
+    const confStats = tradeConfs.length ? tradeConfs.map(c => {
+      const ts = history.filter(t => Array.isArray(t.confluences) && t.confluences.includes(c));
+      return ts.length >= 2 ? `${c}: ${ts.length} uses, ${winRate(ts)}% WR, $${netPnl(ts)} net` : null;
+    }).filter(Boolean).join(' | ') : null;
+
+    // ── Plan adherence ────────────────────────────────────────────────────────
+    const followed = history.filter(t => t.followed_plan === true);
+    const broke    = history.filter(t => t.followed_plan === false);
+    const planStats = followed.length >= 2 && broke.length >= 2
+      ? `Followed plan: ${winRate(followed)}% WR ($${netPnl(followed)} net) | Broke plan: ${winRate(broke)}% WR ($${netPnl(broke)} net)`
+      : null;
+
+    // ── Same session ──────────────────────────────────────────────────────────
+    const sessionTrades = history.filter(t => t.session === focusTrade.session);
+    const sessionStats = sessionTrades.length >= 3
+      ? `${focusTrade.session} session: ${sessionTrades.length} trades, ${winRate(sessionTrades)}% WR, $${netPnl(sessionTrades)} net`
+      : null;
+
+    // ── Recent form (last 10) ─────────────────────────────────────────────────
+    const last10 = history.slice(-10);
+    const recentStats = last10.length >= 5
+      ? `Last ${last10.length} trades: ${winRate(last10)}% WR, $${netPnl(last10)} net`
+      : null;
+
+    // ── Post-loss context (was the trade before this a loss?) ─────────────────
+    const tradeIndex = history.findIndex(t => t.id === focusTrade.id);
+    const prevTrade = tradeIndex > 0 ? history[tradeIndex - 1] : null;
+    const postLossNote = prevTrade && prevTrade.pnl < 0 ? `Previous trade was a loss ($${Math.round(prevTrade.pnl)})` : null;
+
+    // ── Build context block ───────────────────────────────────────────────────
+    const contextLines: string[] = [];
+    if (overall)     contextLines.push(`Overall: ${overall}`);
+    if (emotionStats) contextLines.push(`By emotion: ${emotionStats}`);
+    if (confStats)   contextLines.push(`Tagged confluences: ${confStats}`);
+    if (planStats)   contextLines.push(`Plan adherence: ${planStats}`);
+    if (sessionStats) contextLines.push(`Session: ${sessionStats}`);
+    if (recentStats) contextLines.push(`Recent form: ${recentStats}`);
+    if (postLossNote) contextLines.push(`Context: ${postLossNote}`);
+    const statsContext = contextLines.length ? contextLines.join('\n') : null;
+
+    const analysis = await analyzeIndividualTrade(focusTrade, statsContext);
     res.json({ analysis });
   } catch (err) {
     next(err);
