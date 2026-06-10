@@ -49,10 +49,8 @@ function inlineChips(text: string): React.ReactNode {
     if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part) || /^\d+(?:\.\d+)?R$/.test(part)) {
       return (
         <span key={i} style={{
-          display: 'inline', padding: '1px 5px', margin: '0 1px',
-          background: 'rgba(245,158,11,0.11)', border: '1px solid rgba(245,158,11,0.22)',
-          borderRadius: 4, color: C.acc, fontWeight: 700,
-          fontSize: 12, fontVariantNumeric: 'tabular-nums',
+          color: C.acc, fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
           fontFamily: 'var(--font-mono, monospace)',
         }}>{part}</span>
       );
@@ -622,46 +620,56 @@ export default function FlyxaAIAsk() {
             };
             const confidence = Number((ft?.confidence_level as number | undefined) ?? 5);
 
+            const direction = String(ft?.direction ?? '');
+            const isLong = direction === 'Long';
+            const dirColor = isLong ? C.grn : C.red;
+            const symbol = String(ft?.symbol ?? 'N/A');
+            const tradeDate = String(ft?.trade_date ?? '');
+            const tradeTime = String(ft?.trade_time ?? '').slice(0, 5);
+            const session = String(ft?.session ?? '');
+
             return (
               <div style={{ borderBottom: `1px solid ${C.b0}` }}>
-                {/* ── Top bar ── */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 24px', background: 'rgba(245,158,11,0.05)', borderBottom: `1px solid rgba(245,158,11,0.15)` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.acc, fontFamily: 'var(--font-mono, monospace)' }}>+ Flyxa AI Review</span>
+                {/* ── Header ── */}
+                <div style={{ padding: '14px 20px 12px', borderBottom: `1px solid rgba(255,255,255,0.06)` }}>
+                  {/* Top row: direction badge + symbol + P&L + close */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    {/* Direction badge */}
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 5, background: isLong ? 'rgba(34,214,138,0.1)' : 'rgba(240,82,82,0.1)', border: `1px solid ${isLong ? 'rgba(34,214,138,0.25)' : 'rgba(240,82,82,0.25)'}` }}>
+                      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', color: dirColor, fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase' }}>{direction}</span>
+                      <span style={{ fontSize: 10, color: dirColor, lineHeight: 1 }}>{isLong ? '↑' : '↓'}</span>
+                    </div>
+                    {/* Symbol */}
+                    <span style={{ fontSize: 17, fontWeight: 800, color: C.t0, letterSpacing: '-0.03em', lineHeight: 1 }}>{symbol}</span>
+                    {/* Date + session */}
+                    <span style={{ fontSize: 11, color: C.t2, fontFamily: 'var(--font-mono, monospace)' }}>{tradeDate}{tradeTime ? ` · ${tradeTime}` : ''}{session ? ` · ${session}` : ''}</span>
+                    {/* P&L */}
+                    {focusedTradePnl !== null && (
+                      <span style={{ marginLeft: 'auto', fontSize: 18, fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', color: focusedTradePnl >= 0 ? C.grn : C.red, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {formatSignedCurrency(focusedTradePnl)}
+                      </span>
+                    )}
+                    <button type="button" onClick={clearFocus} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t2, padding: '2px 0 2px 6px', display: 'flex', flexShrink: 0 }}>
+                      <X size={13} />
+                    </button>
                   </div>
-                  <button type="button" onClick={clearFocus} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.t2, padding: 2, display: 'flex' }}>
-                    <X size={13} />
-                  </button>
+                  {/* Tag pills row */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {followedLogged && (
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: followed ? 'rgba(34,214,138,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${followed ? 'rgba(34,214,138,0.22)' : 'rgba(245,158,11,0.25)'}`, color: followed ? C.grn : C.acc }}>
+                        {followed ? 'Plan Followed' : 'Plan Drifted'}
+                      </span>
+                    )}
+                    {focusedTradeConfluences.map((c, i) => (
+                      <span key={i} style={{ fontSize: 10, fontWeight: 500, padding: '2px 7px', borderRadius: 4, background: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.08)`, color: C.t2 }}>{c}</span>
+                    ))}
+                    {dataTags.filter(t => t !== 'Plan drifted').map((tag, i) => (
+                      <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: 'rgba(240,82,82,0.08)', border: '1px solid rgba(240,82,82,0.18)', color: C.red }}>{tag}</span>
+                    ))}
+                  </div>
                 </div>
 
-                <div style={{ padding: '12px 24px 16px', maxHeight: 680, overflowY: 'auto' }}>
-                  {/* ── Trade identity + tags ── */}
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}>
-                        {ft ? `${String(ft.symbol ?? 'N/A')} ${String(ft.direction ?? '')} · ${String(ft.trade_date ?? '')}` : 'Loading...'}
-                      </span>
-                      {focusedTradePnl !== null && (
-                        <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono, monospace)', color: focusedTradePnl >= 0 ? C.grn : C.red }}>
-                          {formatSignedCurrency(focusedTradePnl)}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                      {followedLogged && (
-                        <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: followed ? 'rgba(34,214,138,0.1)' : 'rgba(245,158,11,0.12)', border: `1px solid ${followed ? 'rgba(34,214,138,0.25)' : 'rgba(245,158,11,0.28)'}`, color: followed ? C.grn : C.acc }}>
-                          {followed ? 'Plan Followed' : 'Plan Drifted'}
-                        </span>
-                      )}
-                      {focusedTradeConfluences.map((c, i) => (
-                        <span key={i} style={{ fontSize: 10, fontWeight: 500, padding: '2px 7px', borderRadius: 4, background: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.09)`, color: C.t1 }}>{c}</span>
-                      ))}
-                      {dataTags.filter(t => t !== 'Plan drifted').map((tag, i) => (
-                        <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: 'rgba(240,82,82,0.09)', border: '1px solid rgba(240,82,82,0.2)', color: C.red }}>{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-
+                <div style={{ padding: '12px 20px 16px', maxHeight: 680, overflowY: 'auto' }}>
                   {/* ── Score cards ── */}
                   {scores && (
                     <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
@@ -804,48 +812,52 @@ export default function FlyxaAIAsk() {
               fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
               textTransform: 'uppercase', color: C.t2, marginBottom: 10,
             }}>
-              What you can ask
+              Frequently asked questions
             </div>
             {[
-              { topic: 'Sessions', examples: ['When do I trade best?', 'How do I do in London?'] },
-              { topic: 'Days', examples: ['What\'s my best day of week?', 'How do I do on Fridays?'] },
-              { topic: 'Plan adherence', examples: ['Do I follow my plan?', 'What happens when I break rules?'] },
-              { topic: 'Emotions', examples: ['How does mood affect me?', 'When am I most disciplined?'] },
-              { topic: 'Overtrading', examples: ['Am I overtrading?', 'Do more trades hurt me?'] },
-              { topic: 'Post-loss', examples: ['How do I trade after a loss?', 'Do I revenge trade?'] },
-              { topic: 'Progress', examples: ['Am I improving?', 'How have I done lately?'] },
-              { topic: 'Signals', examples: ['Which confluences work?', 'What conditions work best?'] },
-              { topic: 'Instruments', examples: ['What\'s my best instrument?', 'How do I do on NQ?'] },
-              { topic: 'Duration', examples: ['How long do I hold trades?', 'Do I let losers run?'] },
-              { topic: 'Streaks', examples: ['What\'s my longest win streak?', 'Consecutive losses?'] },
-            ].map(cat => (
-              <div key={cat.topic} style={{ marginBottom: 12 }}>
-                <div style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-                  textTransform: 'uppercase', color: C.acc, marginBottom: 4,
-                }}>
-                  {cat.topic}
-                </div>
-                {cat.examples.map(ex => (
-                  <button
-                    key={ex}
-                    type="button"
-                    onClick={() => { void submitQuestion(ex); inputRef.current?.focus(); }}
-                    disabled={loading}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '4px 0', background: 'none', border: 'none',
-                      fontSize: 11.5, color: C.t2, cursor: loading ? 'not-allowed' : 'pointer',
-                      fontFamily: C.sans, lineHeight: 1.5,
-                      transition: 'color 0.1s',
-                    }}
-                    onMouseEnter={e => { if (!loading) e.currentTarget.style.color = C.t0; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = C.t2; }}
-                  >
-                    "{ex}"
-                  </button>
-                ))}
-              </div>
+              'When do I trade best?',
+              'Do I follow my plan?',
+              'Am I overtrading?',
+              'How do I trade after a loss?',
+              'Which confluences work?',
+              'Am I improving?',
+            ].map(question => (
+              <button
+                key={question}
+                type="button"
+                onClick={() => { void submitQuestion(question); inputRef.current?.focus(); }}
+                disabled={loading}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '9px 10px',
+                  marginBottom: 7,
+                  borderRadius: 7,
+                  border: `1px solid ${C.b0}`,
+                  background: C.d2,
+                  fontSize: 11.5,
+                  color: C.t1,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: C.sans,
+                  lineHeight: 1.45,
+                  transition: 'border-color 0.12s ease, color 0.12s ease, background 0.12s ease',
+                }}
+                onMouseEnter={e => {
+                  if (!loading) {
+                    e.currentTarget.style.borderColor = `${C.acc}45`;
+                    e.currentTarget.style.color = C.t0;
+                    e.currentTarget.style.background = C.d0;
+                  }
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = C.b0;
+                  e.currentTarget.style.color = C.t1;
+                  e.currentTarget.style.background = C.d2;
+                }}
+              >
+                {question}
+              </button>
             ))}
           </div>
         </aside>
