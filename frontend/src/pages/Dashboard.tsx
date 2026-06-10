@@ -381,8 +381,8 @@ export default function Dashboard() {
                   </p>
                   {todayTrades.length > 0 && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, fontFamily: SANS, color: GREEN, letterSpacing: '0.02em' }}>{todayW}W</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, fontFamily: SANS, color: RED, letterSpacing: '0.02em' }}>{todayL}L</span>
+                      <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.22)', fontSize: 12, fontWeight: 700, fontFamily: SANS, color: GREEN }}>{todayW}W</span>
+                      <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.22)', fontSize: 12, fontWeight: 700, fontFamily: SANS, color: RED }}>{todayL}L</span>
                     </span>
                   )}
                 </div>
