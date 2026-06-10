@@ -2093,14 +2093,6 @@ export default function TradeJournal() {
     const currentSelected = entries.find(entry => entry.id === selectedEntryId) ?? null;
     if (!currentSelected || !currentSelected.trades.length) {
       setActiveTradeId(null);
-      // Day is now empty — jump to the most recent day that still has trades
-      const mostRecentWithTrades = [...entries]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .find(entry => entry.trades.length > 0);
-      if (mostRecentWithTrades) {
-        setSelectedEntryId(mostRecentWithTrades.id);
-        setActiveTradeId(mostRecentWithTrades.trades[0].id);
-      }
       return;
     }
     if (!activeTradeId || !currentSelected.trades.some(trade => trade.id === activeTradeId)) {
@@ -2871,12 +2863,20 @@ export default function TradeJournal() {
                       className="tj-mini-btn red"
                       onClick={async () => {
                         const ids = Array.from(selectedTradeIds);
+                        const willBeEmpty = selectedEntry.trades.length === ids.length;
                         for (const id of ids) {
                           await deleteTradeEverywhere(id);
                         }
                         setSelectedTradeIds(new Set());
                         setBulkDeleteConfirm(false);
                         setDeleteTradeId(null);
+                        if (willBeEmpty) {
+                          const next = entries
+                            .filter(e => e.id !== selectedEntry.id)
+                            .sort((a, b) => b.date.localeCompare(a.date))
+                            .find(e => e.trades.length > 0);
+                          if (next) { setSelectedEntryId(next.id); setActiveTradeId(next.trades[0].id); }
+                        }
                       }}
                     >
                       Confirm
@@ -2895,8 +2895,16 @@ export default function TradeJournal() {
                           type="button"
                           className="tj-mini-btn red"
                           onClick={() => {
+                            const willBeEmpty = selectedEntry.trades.length === 1;
                             void deleteTradeEverywhere(trade.id);
                             setDeleteTradeId(null);
+                            if (willBeEmpty) {
+                              const next = entries
+                                .filter(e => e.id !== selectedEntry.id)
+                                .sort((a, b) => b.date.localeCompare(a.date))
+                                .find(e => e.trades.length > 0);
+                              if (next) { setSelectedEntryId(next.id); setActiveTradeId(next.trades[0].id); }
+                            }
                           }}
                         >
                           Delete
