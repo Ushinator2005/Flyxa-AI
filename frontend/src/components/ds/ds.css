@@ -88,12 +88,15 @@
   height: 18px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 700;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .ds-badge-neutral {

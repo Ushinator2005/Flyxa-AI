@@ -1530,19 +1530,37 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
   const confluences = normalizeConfluences(trade.confluences);
   const [local, setLocal] = useState(th);
   const [confluenceDraft, setConfluenceDraft] = useState('');
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
   const navigate = useNavigate();
+  const { confluenceOptions } = useAppSettings();
   useEffect(() => { setLocal(trade.thesis ?? { setup:'', invalidation:'', asymmetry:'', setupType:'' }); }, [trade.id]);
-  useEffect(() => { setConfluenceDraft(''); }, [trade.id]);
+  useEffect(() => { setConfluenceDraft(''); setSuggestionIndex(-1); }, [trade.id]);
 
   const update = (patch: Partial<typeof th>) => onMutate({ thesis: { ...th, ...patch } });
   const commit = (field: keyof typeof th, value: string) => update({ [field]: value });
   const setConfluences = (next: string[]) => onMutate({ confluences: normalizeConfluences(next) });
 
+  const suggestions = confluenceDraft.trim().length > 0
+    ? confluenceOptions.filter(opt =>
+        opt.toLowerCase().includes(confluenceDraft.toLowerCase()) &&
+        !confluences.includes(opt)
+      )
+    : [];
+
   const addConfluence = () => {
-    const next = confluenceDraft.trim();
+    const next = (suggestionIndex >= 0 && suggestions[suggestionIndex])
+      ? suggestions[suggestionIndex]
+      : confluenceDraft.trim();
     if (!next) return;
     setConfluences([...confluences, next]);
     setConfluenceDraft('');
+    setSuggestionIndex(-1);
+  };
+
+  const selectSuggestion = (opt: string) => {
+    setConfluences([...confluences, opt]);
+    setConfluenceDraft('');
+    setSuggestionIndex(-1);
   };
 
   const removeConfluence = (indexToRemove: number) => {
@@ -1568,8 +1586,8 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
   ];
 
   return (
-    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, overflow:'hidden', marginBottom:8 }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', borderBottom:'1px solid var(--app-border)' }}>
+    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, marginBottom:8 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', borderBottom:'1px solid var(--app-border)', overflow:'hidden', borderRadius:'5px 5px 0 0' }}>
         {COLS.map((col, i) => (
           <div key={col.key} style={{ borderRight: i < 2 ? '1px solid var(--app-border)' : undefined }}>
             <div style={{ padding:'8px 12px 6px', borderBottom:'1px solid var(--app-border)' }}>
@@ -1587,18 +1605,56 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
           <button type="button" onClick={() => navigate('/settings#journal')} style={{ background:'none', border:'none', padding:0, cursor:'pointer', fontSize:10, color:'var(--cobalt)', fontFamily:'var(--font-sans)' }}>Manage tags →</button>
         </div>
         <div style={{ display:'flex', gap:6, marginBottom:8 }}>
-          <input
-            value={confluenceDraft}
-            onChange={(event) => setConfluenceDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                addConfluence();
-              }
-            }}
-            placeholder="Type a confluence and press Enter (e.g., FVG, HTF bias, liquidity sweep)"
-            style={{ flex:1, padding:'7px 9px', fontSize:11, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--app-text)', outline:'none' }}
-          />
+          <div style={{ flex:1, position:'relative' }}>
+            <input
+              value={confluenceDraft}
+              onChange={(event) => { setConfluenceDraft(event.target.value); setSuggestionIndex(-1); }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  addConfluence();
+                } else if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  setSuggestionIndex(i => Math.min(i + 1, suggestions.length - 1));
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  setSuggestionIndex(i => Math.max(i - 1, -1));
+                } else if (event.key === 'Escape') {
+                  setSuggestionIndex(-1);
+                  setConfluenceDraft('');
+                }
+              }}
+              placeholder="Type a confluence and press Enter (e.g., FVG, HTF bias, liquidity sweep)"
+              style={{ width:'100%', boxSizing:'border-box', padding:'7px 9px', fontSize:11, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--app-text)', outline:'none' }}
+            />
+            {suggestions.length > 0 && (
+              <div style={{
+                position:'absolute', top:'calc(100% + 2px)', left:0, right:0, zIndex:300,
+                background:'var(--app-panel-strong)', border:'1px solid var(--app-border)',
+                borderRadius:4, boxShadow:'0 4px 14px rgba(0,0,0,0.35)',
+                maxHeight:160, overflowY:'auto',
+              }}>
+                {suggestions.map((opt, i) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectSuggestion(opt); }}
+                    onMouseEnter={() => setSuggestionIndex(i)}
+                    style={{
+                      display:'block', width:'100%', textAlign:'left',
+                      padding:'6px 10px', fontSize:11, fontFamily:'var(--font-sans)',
+                      background: i === suggestionIndex ? 'var(--cobalt-dim)' : 'transparent',
+                      color: i === suggestionIndex ? '#8ab6ff' : 'var(--app-text-muted)',
+                      border:'none', borderBottom: i < suggestions.length - 1 ? '1px solid var(--app-border)' : 'none',
+                      cursor:'pointer',
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={addConfluence}
