@@ -255,13 +255,15 @@ export default function ColorPickerField({ label, hint, value, onChange }: Color
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(e: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      const insideTrigger = rootRef.current?.contains(target) ?? false;
+      const insidePanel   = panelRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insidePanel) setOpen(false);
     }
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
@@ -330,6 +332,7 @@ export default function ColorPickerField({ label, hint, value, onChange }: Color
       {/* Popover — rendered as a portal so it's never clipped by overflow:hidden ancestors */}
       {open && popoverPos && createPortal(
         <div
+          ref={panelRef}
           style={{
             position: 'fixed',
             top: popoverPos.top,
