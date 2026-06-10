@@ -116,7 +116,7 @@ export interface FlyxaStore extends FlyxaStateData {
   updateBillingAccount: (id: string, updates: Partial<BillingAccount>) => void;
   addBillingAccount: (account: BillingAccount) => void;
   deleteBillingAccount: (id: string) => void;
-  setEntries: (entries: JournalEntry[]) => void;
+  setEntries: (entries: JournalEntry[], options?: { notifyAchievements?: boolean }) => void;
   hydrateSharedData: (payload: Partial<FlyxaStateData>) => void;
   setJournalMood: (entryId: string, mood: string) => void;
   setJournalTitle: (entryId: string, title: string) => void;
@@ -494,11 +494,11 @@ export function getInitialState(): FlyxaStateData {
   };
 }
 
-function syncAchievements(data: FlyxaStateData): FlyxaStateData {
+function syncAchievements(data: FlyxaStateData, options: { notify?: boolean } = {}): FlyxaStateData {
   const trades = data.entries.flatMap((entry) => entry.trades);
   const refreshed = refreshAchievements(data.achievements, trades, data.entries, data.billingAccounts);
 
-  if (refreshed.newlyUnlocked.length > 0) {
+  if (options.notify !== false && refreshed.newlyUnlocked.length > 0) {
     refreshed.newlyUnlocked.forEach((achievement) => {
       pushToast({
         tone: 'amber',
@@ -745,7 +745,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         aiReflections: [reflection, ...state.aiReflections].slice(0, 50),
       })),
 
-      setEntries: (entries) => {
+      setEntries: (entries, options = {}) => {
         set((state) => {
           const accountId = state.activeAccountId || DEFAULT_ACCOUNT_ID;
           // Build a fast lookup of existing entries so we can preserve their account
@@ -800,7 +800,10 @@ const useFlyxaStore = create<FlyxaStore>()(
                   : [],
               };
             }) as JournalEntry[];
-          return syncAchievements({ ...state, entries: withDerivedEntries(safeEntries) });
+          return syncAchievements(
+            { ...state, entries: withDerivedEntries(safeEntries) },
+            { notify: options.notifyAchievements !== false }
+          );
         });
       },
 
@@ -855,7 +858,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             aiReflections: payload.aiReflections ?? state.aiReflections,
             oathItems: payload.oathItems ?? state.oathItems,
           };
-          return syncAchievements(merged);
+          return syncAchievements(merged, { notify: false });
         });
       },
     }),

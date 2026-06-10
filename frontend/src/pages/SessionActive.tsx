@@ -7,6 +7,13 @@ import {
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { useRisk } from '../contexts/RiskContext.js';
+import {
+  clearStaleGuardSessionTrades,
+  readGuardSessionTrades,
+  SESSION_TRADES_STORAGE,
+  summarizeGuardSessionTrades,
+  type GuardSessionTrade,
+} from '../hooks/useGuardSessionTrades.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<string, BiasValue>;
@@ -152,6 +159,8 @@ export default function SessionActive() {
   const { dailyStatus, riskLevel } = useRisk();
 
   const [elapsed, setElapsed] = useState('00:00');
+  const [guardTrades, setGuardTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades());
+  const guardSummary = summarizeGuardSessionTrades(guardTrades);
 
   // Redirect to pre-session if no active session
   useEffect(() => {
@@ -169,6 +178,31 @@ export default function SessionActive() {
     return () => clearInterval(id);
   }, [preSession?.startedAt]);
 
+  useEffect(() => {
+    clearStaleGuardSessionTrades(preSession?.startedAt);
+  }, [preSession?.startedAt]);
+
+  useEffect(() => {
+    const refresh = () => setGuardTrades(readGuardSessionTrades());
+    const storageHandler = (event: StorageEvent) => {
+      if (event.key === SESSION_TRADES_STORAGE) refresh();
+    };
+    const messageHandler = (event: MessageEvent) => {
+      if ((event.data as { type?: string })?.type === 'flyxa:session-trades-updated') refresh();
+    };
+    window.addEventListener('storage', storageHandler);
+    window.addEventListener('message', messageHandler);
+    window.addEventListener('flyxa:session-trades-updated', refresh);
+    const poll = window.setInterval(refresh, 500);
+    refresh();
+    return () => {
+      window.removeEventListener('storage', storageHandler);
+      window.removeEventListener('message', messageHandler);
+      window.removeEventListener('flyxa:session-trades-updated', refresh);
+      window.clearInterval(poll);
+    };
+  }, []);
+
   if (!preSession?.startedAt) return null;
 
   // ── Derived values ──────────────────────────────────────
@@ -177,14 +211,19 @@ export default function SessionActive() {
   const plan       = preSession.sessionPlan ?? [];
   const emotion    = preSession.emotion;
 
-  const pnl           = dailyStatus?.todayPnL ?? 0;
-  const tradesCount   = dailyStatus?.tradesCount ?? 0;
+  const dbPnl         = dailyStatus?.todayPnL ?? 0;
+  const dbTradesCount = dailyStatus?.tradesCount ?? 0;
+  const hasGuardLog   = guardSummary.count > 0;
+  const pnl           = hasGuardLog ? guardSummary.pnl : dbPnl;
+  const tradesCount   = Math.max(dbTradesCount, guardSummary.count);
   const maxTrades     = dailyStatus?.maxTradesPerDay ?? 0;
-  const lossUsedPct   = Math.min(100, dailyStatus?.lossUsedPercent ?? 0);
   const lossLimit     = (preSession as { sessionMaxLoss?: number | null }).sessionMaxLoss
     ?? dailyStatus?.dailyLossLimit
     ?? 0;
-  const lossRemaining = lossLimit > 0 ? Math.max(0, lossLimit - Math.abs(Math.min(0, pnl))) : null;
+  const dbLossUsed    = Math.abs(Math.min(0, dbPnl));
+  const lossUsed      = Math.max(dbLossUsed, guardSummary.loss);
+  const lossUsedPct   = lossLimit > 0 ? Math.min(100, (lossUsed / lossLimit) * 100) : Math.min(100, dailyStatus?.lossUsedPercent ?? 0);
+  const lossRemaining = lossLimit > 0 ? Math.max(0, lossLimit - lossUsed) : null;
 
   const pnlPositive = pnl > 0;
   const pnlNegative = pnl < 0;
@@ -315,6 +354,9 @@ export default function SessionActive() {
             {maxTrades > 0 && (
               <> &middot; {Math.max(0, maxTrades - tradesCount)} remaining</>
             )}
+            {hasGuardLog && (
+              <> &middot; synced from Trade Guard</>
+            )}
           </span>
         </div>
 
@@ -407,6 +449,43 @@ export default function SessionActive() {
         </div>
 
         {/* ── Session rules ──────────────────────────── */}
+        {hasGuardLog && (
+          <div style={{
+            border: `1px solid ${BORDER}`,
+            borderRadius: 12,
+            background: S1,
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}>
+            <div>
+              <SectionLabel>Trade Guard log</SectionLabel>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: T2 }}>
+                  {guardSummary.wins}W {guardSummary.losses}L{guardSummary.breakevens > 0 ? ` ${guardSummary.breakevens}BE` : ''}
+                </span>
+                <span style={{
+                  fontSize: 13,
+                  color: guardSummary.pnl > 0 ? GREEN : guardSummary.pnl < 0 ? RED : T2,
+                  fontFamily: MONO,
+                  fontWeight: 700,
+                }}>
+                  {formatMoney(guardSummary.pnl, true)}
+                </span>
+              </div>
+            </div>
+            <QuickBtn
+              icon={<Shield size={14} />}
+              label="Open Guard"
+              onClick={() => window.dispatchEvent(new CustomEvent('flyxa:open-trade-check'))}
+              variant="primary"
+            />
+          </div>
+        )}
+
         {plan.length > 0 && (
           <div style={{
             border: `1px solid ${BORDER}`,

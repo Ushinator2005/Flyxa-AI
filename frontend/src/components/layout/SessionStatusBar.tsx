@@ -1,22 +1,8 @@
-import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { clearStaleGuardSessionTrades, summarizeGuardSessionTrades, useGuardSessionTrades } from '../../hooks/useGuardSessionTrades.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
 import { useRisk } from '../../contexts/RiskContext.js';
-
-const SESSION_TRADES_STORAGE = 'flyxa.session-trades-v1';
-
-type GuardTrade = { direction: string; outcome: string; amount: number };
-
-function readGuardTrades(): GuardTrade[] | null {
-  try {
-    const raw = localStorage.getItem(SESSION_TRADES_STORAGE);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { date: string; trades: GuardTrade[] };
-    const today = new Date().toISOString().slice(0, 10);
-    if (parsed.date === today) return parsed.trades ?? [];
-  } catch { /* ignore */ }
-  return null;
-}
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<string, BiasValue>;
@@ -44,21 +30,11 @@ export default function SessionStatusBar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Read Guard's session trades from localStorage; update via storage event (cross-tab)
-  // and a polling interval (same-tab iframe writes don't always fire storage events)
-  const [guardTrades, setGuardTrades] = useState<GuardTrade[] | null>(() => readGuardTrades());
+  const guardSummary = summarizeGuardSessionTrades(useGuardSessionTrades(preSession?.startedAt));
+
   useEffect(() => {
-    const refresh = () => setGuardTrades(readGuardTrades());
-    const storageHandler = (e: StorageEvent) => {
-      if (e.key === SESSION_TRADES_STORAGE) refresh();
-    };
-    window.addEventListener('storage', storageHandler);
-    const poll = setInterval(refresh, 3000);
-    return () => {
-      window.removeEventListener('storage', storageHandler);
-      clearInterval(poll);
-    };
-  }, []);
+    clearStaleGuardSessionTrades(preSession?.startedAt);
+  }, [preSession?.startedAt]);
 
   if (!preSession?.startedAt) return null;
 
@@ -67,8 +43,8 @@ export default function SessionStatusBar() {
   const emotion = preSession.emotion;
 
   // Guard-side counts (trades entered through the Trade Guard today)
-  const guardTradeCount = guardTrades?.length ?? 0;
-  const guardLoss = guardTrades?.filter(t => t.outcome === 'loss').reduce((s, t) => s + t.amount, 0) ?? 0;
+  const guardTradeCount = guardSummary.count;
+  const guardLoss = guardSummary.loss;
 
   // Use the more conservative (worse) value between DB and Guard
   const dbTradesUsed = dailyStatus?.tradesCount ?? 0;

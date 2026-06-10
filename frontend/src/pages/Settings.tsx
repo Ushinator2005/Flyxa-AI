@@ -494,6 +494,7 @@ export default function Settings() {
   const addPayout = useFlyxaStore(state => state.addPayout);
   const deletePayout = useFlyxaStore(state => state.deletePayout);
   const storeAccounts = useFlyxaStore(state => state.accounts);
+  const resetAllData = useFlyxaStore(state => state.resetAllData);
   const getPayouts = (accountId: string) => storeAccounts.find(a => a.id === accountId)?.payouts ?? [];
   const {
     accounts,
@@ -625,7 +626,7 @@ export default function Settings() {
           setTimeout(() => setImportFeedback(null), 4000);
           return;
         }
-        setEntries(payload.entries);
+        setEntries(payload.entries, { notifyAchievements: false });
         setImportFeedback({ ok: true, msg: `Restored ${payload.entries.length} day${payload.entries.length !== 1 ? 's' : ''}.` });
         setTimeout(() => setImportFeedback(null), 4000);
       } catch {
@@ -764,21 +765,52 @@ export default function Settings() {
       `tw_selected_account_${user.id}`,
       `tw_trade_accounts_${user.id}`,
       `tw_confluence_options_${user.id}`,
+      `tw_journal_backup_${user.id}`,
+      `tw_journal_moods_${user.id}`,
       'flyxa_entries',
       'flyxa_billing_accounts',
       'flyxa_trading_plan_state_v1',
       'flyxa_checklist',
       'tw_goals_local',
+      'tw_scanner_draft',
+      'tw_scanner_draft_image',
+      'tw_backtest_trade_prefill',
       'flyxa-store',
       'flyxa-store-uid',
       'flyxa-entries-safe',
       'flyxa-entries-safe-uid',
       'flyxa-store-saved-at',
       'flyxa_store_migrated_v1',
+      'flyxa.session-trades-v1',
+      'flyxa.session-done-prompt',
+      'flyxa.trade-check-dock.position',
+      'flyxa_presession_done_date',
+      'flyxa_payout_gallery_photos_v1',
+      'flyxa_breaking_cache_v1',
+      'flyxa_news_cache_v2',
+      'flyxa_calendar_cache_v4',
+      'flyxa_breaking_news_last_seen',
+      'flyxa_news_sources',
+      'flyxa-journal-sections',
     ];
     keys.forEach(key => {
       try { window.localStorage.removeItem(key); } catch { /* ignore */ }
     });
+    const prefixes = [
+      'flyxa.weekly-reflection.',
+      'flyxa_store_v2_',
+      'flyxa_store_saved_at_',
+      'flyxa_entries_safe_',
+    ];
+    try {
+      for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+        const key = window.localStorage.key(index);
+        if (key && prefixes.some(prefix => key.startsWith(prefix))) {
+          window.localStorage.removeItem(key);
+        }
+      }
+    } catch { /* ignore */ }
+    try { window.sessionStorage.removeItem('tw_backtest_config_v1'); } catch { /* ignore */ }
   }
 
   async function handleConfirmResetAllData() {
@@ -794,6 +826,7 @@ export default function Settings() {
 
       // Clear all local caches so there is nothing to restore from on reload.
       await clearCurrentUserStoreCache();
+      resetAllData();
       clearResetLocalKeys();
 
       setShowResetPanel(false);

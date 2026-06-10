@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, CircleSlash } from 'lucide-react';
 import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRisk } from '../contexts/RiskContext.js';
 import { useTrades } from '../hooks/useTrades.js';
+import {
+  readGuardSessionTrades,
+  saveGuardSessionTrades,
+  type GuardSessionTrade,
+} from '../hooks/useGuardSessionTrades.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { riskApi } from '../services/api.js';
 import type { Trade } from '../types/index.js';
@@ -12,12 +17,6 @@ type GateStatus = 'clear' | 'caution' | 'blocked';
 type Phase      = 'idle' | 'active' | 'post';
 type TradeDir   = 'long' | 'short';
 type Outcome    = 'win' | 'loss' | 'be';
-
-interface SessionTrade {
-  direction: TradeDir;
-  outcome: Outcome;
-  amount: number; // always positive — outcome determines sign
-}
 
 const C = {
   text:   'rgba(232,227,220,0.65)',
@@ -43,23 +42,6 @@ const EMOTIONS: Array<{ full: string; short: string }> = [
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
-const SESSION_TRADES_STORAGE = 'flyxa.session-trades-v1';
-
-function loadSessionTrades(): SessionTrade[] {
-  try {
-    const raw = localStorage.getItem(SESSION_TRADES_STORAGE);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { date: string; trades: SessionTrade[] };
-    if (parsed.date === todayKey()) return parsed.trades ?? [];
-  } catch { /* ignore */ }
-  return [];
-}
-
-function saveSessionTrades(trades: SessionTrade[]) {
-  try {
-    localStorage.setItem(SESSION_TRADES_STORAGE, JSON.stringify({ date: todayKey(), trades }));
-  } catch { /* ignore */ }
-}
 
 function fmtMoney(v: number) {
   return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -70,7 +52,7 @@ function isTilt(v: string) {
 }
 
 // A win OR a break-even resets the consecutive loss streak.
-function sessionConsecLosses(trades: SessionTrade[]): number {
+function sessionConsecLosses(trades: GuardSessionTrade[]): number {
   let n = 0;
   for (let i = trades.length - 1; i >= 0; i--) {
     if (trades[i].outcome === 'loss') n++;
@@ -119,22 +101,32 @@ export default function TradeCheck() {
   const { trades }                                           = useTrades();
   const { selectedAccountId, filterTradesBySelectedAccount } = useAppSettings();
   const { dailyStatus, riskLevel, settings: riskSettings, refreshSettings } = useRisk();
+  const activePreSession                                      = useFlyxaStore(state => state.preSession);
   const preSessionHistory                                    = useFlyxaStore(state => state.preSessionHistory);
 
   const [emotion, setEmotion]             = useState('Calm');
   const [phase, setPhase]                 = useState<Phase>('idle');
   const [direction, setDirection]         = useState<TradeDir | null>(null);
   const [outcome, setOutcome]             = useState<Outcome | null>(null);
-  const [sessionTrades, setSessionTrades] = useState<SessionTrade[]>(() => loadSessionTrades());
+  const [sessionTrades, setSessionTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades());
   // pendingClose: Win or Loss was tapped — waiting for $ amount before confirming
   const [pendingClose, setPendingClose]   = useState<{ outcome: Exclude<Outcome, 'be'>; amount: string } | null>(null);
   // Inline risk-limit editor
   const [showLimits, setShowLimits]       = useState(false);
   const [limitDraft, setLimitDraft]       = useState({ loss: '', trades: '', riskPct: '', contracts: '' });
   const [limitSaving, setLimitSaving]     = useState(false);
+  const sessionStartedAtRef = useRef<string | null>(activePreSession?.startedAt ?? null);
 
   // Persist session trades whenever they change (date-keyed, auto-expires next day)
-  useEffect(() => { saveSessionTrades(sessionTrades); }, [sessionTrades]);
+  useEffect(() => {
+    if (sessionStartedAtRef.current === (activePreSession?.startedAt ?? null)) return;
+    sessionStartedAtRef.current = activePreSession?.startedAt ?? null;
+    setSessionTrades(readGuardSessionTrades());
+  }, [activePreSession?.startedAt]);
+
+  useEffect(() => {
+    saveGuardSessionTrades(sessionTrades, sessionStartedAtRef.current);
+  }, [sessionTrades]);
 
   // scopedTrades used only for priorFlow (yesterday's rules) — not for gate checks
   const scopedTrades = useMemo<Trade[]>(() => {
@@ -731,3 +723,4 @@ function actionBtn(variant: 'primary' | 'ghost'): React.CSSProperties {
     cursor: 'pointer',
   };
 }
+

@@ -319,7 +319,7 @@ export function useTrades() {
 
         const restoredEntries = Array.from(grouped.values()).filter(entry => entry.trades.length > 0);
         if (restoredEntries.length > 0) {
-          setEntries(restoredEntries);
+          setEntries(restoredEntries, { notifyAchievements: false });
           await flushSupabaseStoreNow();
         }
       } catch {
