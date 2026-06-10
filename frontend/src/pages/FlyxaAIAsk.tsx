@@ -49,11 +49,11 @@ function inlineChips(text: string): React.ReactNode {
     if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part) || /^\d+(?:\.\d+)?R$/.test(part)) {
       return (
         <span key={i} style={{
-          display: 'inline-block', padding: '0px 5px', margin: '0 1px',
+          display: 'inline', padding: '1px 5px', margin: '0 1px',
           background: 'rgba(245,158,11,0.11)', border: '1px solid rgba(245,158,11,0.22)',
-          borderRadius: 4, color: C.acc, fontWeight: 600,
-          fontSize: '0.92em', fontVariantNumeric: 'tabular-nums',
-          fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.5,
+          borderRadius: 4, color: C.acc, fontWeight: 700,
+          fontSize: 12, fontVariantNumeric: 'tabular-nums',
+          fontFamily: 'var(--font-mono, monospace)',
         }}>{part}</span>
       );
     }
@@ -248,7 +248,7 @@ interface AIReply {
 }
 
 function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string) => void }) {
-  // Format Claude's reply: split on double newlines for paragraphs
+  // Format the reply: split on double newlines for paragraphs
   const paragraphs = r.reply.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
 
   return (
@@ -280,7 +280,7 @@ function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string
           "{r.question}"
         </div>
 
-        {/* Claude's answer */}
+        {/* Flyxa's answer */}
         <div style={{ marginBottom: 14 }}>
           {paragraphs.map((para, i) => (
             <p key={i} style={{
@@ -305,7 +305,7 @@ function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string
           }}>
             <Sparkles size={9} style={{ color: C.acc }} />
             <span style={{ fontSize: 10, fontWeight: 600, color: C.acc, letterSpacing: '0.04em' }}>
-              Claude AI · {r.sampleSize} trade{r.sampleSize !== 1 ? 's' : ''} analysed
+              Flyxa AI · {r.sampleSize} trade{r.sampleSize !== 1 ? 's' : ''} analysed
             </span>
           </div>
 
@@ -496,7 +496,7 @@ export default function FlyxaAIAsk() {
                   Query your trade data
                 </h1>
                 <p style={{ fontSize: 12.5, color: C.t1, marginTop: 4 }}>
-                  Ask anything in plain English — Claude AI analyses your actual trade history and thinks for itself.
+                  Ask anything in plain English — Flyxa AI analyses your actual trade history and thinks through the numbers.
                 </p>
               </div>
               {history.length > 0 && (
@@ -745,7 +745,7 @@ export default function FlyxaAIAsk() {
                       }} />
                     ))}
                   </div>
-                  <span style={{ fontSize: 12.5, color: C.t1 }}>Claude is thinking through your trade data…</span>
+                  <span style={{ fontSize: 12.5, color: C.t1 }}>Flyxa is thinking through your trade data…</span>
                 </div>
               </div>
             )}
@@ -765,7 +765,7 @@ export default function FlyxaAIAsk() {
                   Ask anything about your trading
                 </div>
                 <div style={{ fontSize: 12.5, color: C.t2, maxWidth: 380, margin: '0 auto', lineHeight: 1.6 }}>
-                  Claude AI reads your actual trade data and reasons over it to give you genuine, personalised insights — not generic advice.
+                  Flyxa AI reads your actual trade data and reasons over it to give you genuine, personalised insights — not generic advice.
                 </div>
                 <div style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
                   {QUICK_QUESTIONS.slice(8).map(q => (
@@ -857,10 +857,10 @@ export default function FlyxaAIAsk() {
               fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
               textTransform: 'uppercase', color: C.acc, marginBottom: 4,
             }}>
-              Powered by Claude AI
+              Powered by Flyxa AI
             </div>
             <div style={{ fontSize: 11, color: C.t1, lineHeight: 1.6 }}>
-              Claude reads your full trading statistics and reasons over them to give you genuine, personalised insights — not keyword-matched templates.
+              Flyxa reads your full trading statistics and reasons over them to give you genuine, personalised insights — not keyword-matched templates.
             </div>
           </div>
         </aside>
