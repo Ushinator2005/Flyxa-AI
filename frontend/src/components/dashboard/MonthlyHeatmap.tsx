@@ -7,6 +7,7 @@ import { journalApi } from '../../services/api.js';
 import { JournalEntry, Trade } from '../../types/index.js';
 import { buildMonthlyHeatmapData } from '../../utils/tradeAnalytics.js';
 import { useAppSettings } from '../../contexts/AppSettingsContext.js';
+import useFlyxaStore from '../../store/flyxaStore.js';
 
 function getCellBg(pnl: number | undefined): string {
   if (pnl === undefined) return '';
@@ -828,6 +829,8 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  // Live store entries — covers blank days created in the same session before the next API refetch
+  const storeEntries = useFlyxaStore(state => state.entries);
   const [journals, setJournals] = useState<Record<number, { id: string; date: string }>>({});
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [activeJournalDate, setActiveJournalDate] = useState<string | null>(null);
@@ -884,8 +887,18 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
       acc[parsed.getDate()] = { id: journal.id, date: journal.date };
       return acc;
     }, {});
+    // Supplement with live store entries so blank days created this session
+    // appear immediately without waiting for the next API refetch.
+    (storeEntries as Array<{ id: string; date: string }>).forEach(entry => {
+      if (typeof entry.date !== 'string') return;
+      const parsed = new Date(`${entry.date}T00:00:00`);
+      if (Number.isNaN(parsed.getTime())) return;
+      if (parsed.getFullYear() !== year || parsed.getMonth() + 1 !== month) return;
+      const day = parsed.getDate();
+      if (!nextJournals[day]) nextJournals[day] = { id: entry.id, date: entry.date };
+    });
     setJournals(nextJournals);
-  }, [journalEntries, month, year]);
+  }, [journalEntries, storeEntries, month, year]);
 
   useEffect(() => {
     if (!activeJournalId) {
