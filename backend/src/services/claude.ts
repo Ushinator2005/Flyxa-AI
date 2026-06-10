@@ -2119,47 +2119,42 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
   const response = await anthropic.messages.create({
     model: MODEL,
     temperature: MODEL_TEMPERATURE,
-    max_tokens: 1000,
-    system: `You are Flyxa's trade analyst. You have access to this trader's real historical statistics. Your only job is to surface patterns they cannot see themselves, using their own numbers as proof.
+    max_tokens: 1200,
+    system: `You are a professional trading performance analyst reviewing a trader's logged trade. You have their full historical statistics. Your job is to produce a genuine analysis — not a summary of what happened, but an examination of why it happened, what pattern it represents across their history, and what it reveals about their edge and its breakdown points.
 
-HARD RULES — break any of these and the output is worthless:
-1. Every bullet MUST contain a specific number from the trader's data (win rate, P&L, trade count, or price). No exceptions.
-2. NEVER write generic advice like "don't trade when frustrated" — write "Trading frustrated: 2/8 wins (25% WR), -$1,240 net across 8 trades — the data says stop."
-3. Compare this trade's context (emotion, session, plan adherence, confluences) directly against the trader's historical stats for those same conditions.
-4. If data is unavailable for a comparison, use the trade's own numbers (prices, duration, R:R) instead of writing generic text.
-5. No paragraphs. No filler. No sentences that could apply to any trader.`,
+An analysis reasons across the data. It finds the causal chain: what led to this decision, how it connects to prior behaviour, what the stats prove about where the edge exists and where it doesn't. Use the trader's own numbers as evidence throughout — but the goal is insight, not just citation.
+
+Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis.`,
     messages: [
       {
         role: 'user',
-        content: `This trade:
+        content: `Trade to analyse:
 ${trade.symbol} ${trade.direction} | ${trade.trade_date} ${trade.trade_time || ''}
 Entry ${trade.entry_price} → Exit ${trade.exit_price} | SL ${trade.sl_price} | TP ${trade.tp_price}
 P&L: $${trade.pnl.toFixed(2)} | Planned R:R: ${rr.toFixed(2)} | Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + 'min' : 'unknown'}
-State: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | Plan followed: ${trade.followed_plan ? 'Yes' : 'No'}
-Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None'}
+Emotional state: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | Followed plan: ${trade.followed_plan ? 'Yes' : 'No'}
+Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
 Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${contextBlock}
 
-Write exactly this structure. Every bracketed placeholder must be replaced with real numbers from the data above:
+Write a structured analysis using exactly these three sections:
 
 ## Your Stats
-**[One sentence using a specific win rate or P&L figure — e.g. "Trading ${trade.emotional_state} puts you at X% WR vs Y% baseline across N trades."]**
-- [REQUIRED: "${trade.emotional_state}" emotional state stat vs their overall WR — format: "Emotion X: N trades, Y% WR, $Z net"]
-- [REQUIRED: plan adherence — "Followed plan: X% WR ($Y net) | Broke plan: X% WR ($Y net) across N trades"]
-- [REQUIRED: most relevant confluence or session stat that applies to this trade, with win rate and net P&L]
-TAGS: [2-4 tags from: Emotional override, Post-loss reaction, Plan drifted, Revenge pattern, FOMO entry, Confidence mismatch, Strong setup, Clean execution, Discipline win]
+Anchor the analysis in their data. Three bullet points — each must contain a specific number (win rate, P&L, trade count). These are the facts that the analysis sections below will reason from.
+- [Emotional state context: how does trading ${trade.emotional_state} compare to their overall performance across all logged trades]
+- [Plan adherence split: their win rate and net P&L when they follow the plan vs when they don't — exact figures]
+- [The most relevant pattern stat for this trade: a confluence they used, this session, or a behavioural pattern with actual numbers]
+TAGS: [2-4 tags, comma separated, chosen from: Emotional override, Post-loss reaction, Plan drifted, Revenge pattern, FOMO entry, Confidence mismatch, Strong setup, Clean execution, Discipline win]
 
 ## What Happened
-**[One sentence verdict: did the execution match the setup quality? Reference a specific price or stat.]**
-- [The setup context for this trade: "X confluences + Y session — historically Z% WR across N trades like this"]
-- [Execution breakdown: entry at X, stop at Y (N pts risk), exit at Z — did price move toward TP before reversal?]
-- [Single deciding factor: what specifically caused this outcome — must be specific to this trade's numbers]
+**[One sharp verdict sentence — what does this trade actually represent, beyond the surface result]**
+Write 3–4 sentences of genuine analysis. Reason across the trade data and their history: Why did this specific decision get made? What does the setup quality combined with the emotional state and plan adherence tell you about the failure or success mode? What is the causal chain? What does this trade reveal about where their edge actually lives vs where they think it does? Cite their stats to support the reasoning.
 
 ## The Rule
-**[A rule stated as law, derived from their data — e.g. "No ${trade.emotional_state} trades. Ever."]**
-RULE: [One sentence for their trading plan — specific to their pattern, not generic — e.g. "After a loss, sit out one setup before re-entering."]
-- [The stat that makes this non-negotiable: exact trade count, WR, and net P&L for the pattern being addressed]
-- [What to do on the next setup exactly like this one — one concrete action]
-- [The expected P&L improvement if this rule is applied — estimate from their data]`,
+**[State the single most important rule this trade proves they need — make it specific to their pattern, not generic advice]**
+RULE: [One sentence, suitable to add to a trading plan. Must address the root cause identified in the analysis above, not the surface symptom.]
+- [The exact stat from their history that makes this rule non-negotiable]
+- [What following this rule looks like concretely on the next identical setup]
+- [The estimated P&L or win rate improvement based on their data if this rule had been applied to their historical trades]`,
       },
     ],
   });

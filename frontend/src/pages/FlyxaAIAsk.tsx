@@ -209,10 +209,14 @@ function renderReviewSections(text: string): React.ReactNode {
               </div>
             )}
 
-            {/* Prose fallback */}
-            {section.prose.map((p, pi) => (
-              <p key={pi} style={{ fontSize: 12, color: C.t1, lineHeight: 1.7, margin: '6px 0 0' }}>{inlineChips(p)}</p>
-            ))}
+            {/* Prose — analysis body text */}
+            {section.prose.length > 0 && (
+              <p style={{ fontSize: 12.5, color: C.t1, lineHeight: 1.75, margin: section.bullets.length > 0 ? '10px 0 0' : '0', letterSpacing: '0.01em' }}>
+                {section.prose.map((p, pi) => (
+                  <React.Fragment key={pi}>{pi > 0 && ' '}{inlineChips(p)}</React.Fragment>
+                ))}
+              </p>
+            )}
           </div>
         );
       })}
