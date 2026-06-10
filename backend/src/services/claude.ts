@@ -2115,45 +2115,29 @@ export async function analyzeIndividualTrade(trade: Trade): Promise<string> {
   const response = await anthropic.messages.create({
     model: MODEL,
     temperature: MODEL_TEMPERATURE,
-    max_tokens: 2048,
-    system: `You are a brutally honest professional futures trading coach with 20+ years of experience.
-Your job is to give traders raw, unfiltered feedback on their trades. Do not sugarcoat.
-Be direct, insightful, and constructive. Focus on what they did right, what they did wrong,
-and exactly what they need to improve. Use specific numbers from the trade.`,
+    max_tokens: 600,
+    system: `You are a sharp futures trading coach. Give concise, direct trade feedback — no padding, no filler. Use specific numbers. Every sentence must add value.`,
     messages: [
       {
         role: 'user',
-        content: `Analyse this trade in detail:
+        content: `Review this trade briefly:
 
-Symbol: ${trade.symbol}
-Direction: ${trade.direction}
-Date: ${trade.trade_date} at ${trade.trade_time}
-Session: ${trade.session}
-Entry: ${trade.entry_price}
-Stop Loss: ${trade.sl_price}
-Take Profit: ${trade.tp_price}
-Exit Price: ${trade.exit_price}
-Exit Reason: ${trade.exit_reason}
-Contracts: ${trade.contract_size}
-Point Value: $${trade.point_value}
-P&L: $${trade.pnl.toFixed(2)}
-R:R Ratio: ${rr.toFixed(2)}
-Trade Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + ' minutes' : 'unknown'}
-Emotional State: ${trade.emotional_state}
-Confidence Level: ${trade.confidence_level}/10
-Followed Plan: ${trade.followed_plan ? 'Yes' : 'No'}
-Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
-Pre-trade Notes: ${trade.pre_trade_notes || 'None'}
-Post-trade Notes: ${trade.post_trade_notes || 'None'}
+Symbol: ${trade.symbol} ${trade.direction} | Date: ${trade.trade_date}
+Entry: ${trade.entry_price} | SL: ${trade.sl_price} | TP: ${trade.tp_price} | Exit: ${trade.exit_price}
+P&L: $${trade.pnl.toFixed(2)} | R:R: ${rr.toFixed(2)} | Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + 'min' : 'unknown'}
+Emotion: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | Followed plan: ${trade.followed_plan ? 'Yes' : 'No'}
+Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None'}
+Notes: ${trade.pre_trade_notes || ''} ${trade.post_trade_notes || ''}
 
-Provide a brutally honest breakdown covering:
-1. Trade quality assessment
-2. Risk management evaluation
-3. Execution analysis
-4. Psychology and emotional factors
-5. What was done well (if anything)
-6. Key mistakes and how to fix them
-7. Specific actionable improvements for next time`,
+Respond with exactly 3 sections using these headers:
+## Execution
+1-2 sentences on entry, exit, and timing quality.
+
+## Risk & Edge
+1-2 sentences on risk management and whether the setup had edge.
+
+## Fix This
+One specific, actionable thing to do differently next time.`,
       },
     ],
   });
