@@ -125,12 +125,15 @@ export default function Dashboard() {
 
   // Pre-session brief prompt — shows daily until dismissed or started.
   const todayKey = format(new Date(), 'yyyy-MM-dd');
-  const [preSessionDone, setPreSessionDone] = useState(
+  const preSession = useFlyxaStore(state => state.preSession);
+  const sessionStartedToday = Boolean(preSession?.startedAt?.startsWith(todayKey));
+  const [preSessionDismissed, setPreSessionDismissed] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('flyxa_presession_done_date') === todayKey
   );
+  const preSessionDone = preSessionDismissed || sessionStartedToday;
   const dismissPreSession = useCallback(() => {
     localStorage.setItem('flyxa_presession_done_date', todayKey);
-    setPreSessionDone(true);
+    setPreSessionDismissed(true);
   }, [todayKey]);
 
   // Breaking news bubble — persists until user dismisses it.

@@ -203,6 +203,42 @@ function isRedOverlay(r: number, g: number, b: number): boolean {
   return r > g + 12 && r > b + 6 && r > 150;
 }
 
+function hexToRgbParts(hex: string): { r: number; g: number; b: number } | null {
+  const cleaned = hex.replace('#', '');
+  if (cleaned.length !== 6) return null;
+  return {
+    r: parseInt(cleaned.slice(0, 2), 16),
+    g: parseInt(cleaned.slice(2, 4), 16),
+    b: parseInt(cleaned.slice(4, 6), 16),
+  };
+}
+
+function makeZoneMatcher(
+  hex: string,
+  fallback: (r: number, g: number, b: number) => boolean,
+): (r: number, g: number, b: number) => boolean {
+  const ref = hexToRgbParts(hex);
+  if (!ref) return fallback;
+  const { r: cr, g: cg, b: cb } = ref;
+  const maxCh = Math.max(cr, cg, cb);
+  if (maxCh === cr && cr > cg + 20 && cr > cb + 20) {
+    return (pr, pg, pb) => pr > pg + 8 && pr > pb + 5 && pr > 60;
+  }
+  if (cr > cg + 20 && cg > cb + 20) {
+    return (pr, pg, pb) => pr > pb + 30 && pr > pg - 20 && pr > 80;
+  }
+  if (maxCh === cg && cg > cr + 10) {
+    return (pr, pg, _pb) => pg > pr + 6 && pg > 70;
+  }
+  if (maxCh === cb && cb > cr + 10) {
+    return (pr, pg, pb) => pb > pr + 6 && pb > pg - 20 && pb > 70;
+  }
+  if (cg > cr - 20 && cb > cr - 20 && cg > 60 && cb > 60 && cr < 80) {
+    return (pr, pg, pb) => pg > pr + 15 && pb > pr + 10 && pg > 50;
+  }
+  return fallback;
+}
+
 function findLargestComponent(mask: Uint8Array, width: number, height: number): ComponentBounds | null {
   const visited = new Uint8Array(mask.length);
   let best: ComponentBounds | null = null;
@@ -286,7 +322,7 @@ function inferChartPaneBounds(boxLeftRatio: number, boxRightRatio: number): { le
   return { left: 0, right: 1 };
 }
 
-function detectTradeBoxContext(image: HTMLImageElement): ScannerContext | null {
+function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?: string): ScannerContext | null {
   const targetWidth = Math.min(640, image.naturalWidth || image.width);
   const scale = targetWidth / (image.naturalWidth || image.width);
   const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
@@ -306,6 +342,9 @@ function detectTradeBoxContext(image: HTMLImageElement): ScannerContext | null {
   const redMask = new Uint8Array(width * height);
   const greenMask = new Uint8Array(width * height);
 
+  const matchStop = stopHex ? makeZoneMatcher(stopHex, isRedOverlay) : isRedOverlay;
+  const matchTp = tpHex ? makeZoneMatcher(tpHex, isGreenOverlay) : isGreenOverlay;
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (x > width * 0.88) {
@@ -318,11 +357,11 @@ function detectTradeBoxContext(image: HTMLImageElement): ScannerContext | null {
       const b = data[index + 2];
       const pixelIndex = y * width + x;
 
-      if (isRedOverlay(r, g, b)) {
+      if (matchStop(r, g, b)) {
         redMask[pixelIndex] = 1;
       }
 
-      if (isGreenOverlay(r, g, b)) {
+      if (matchTp(r, g, b)) {
         greenMask[pixelIndex] = 1;
       }
     }
@@ -453,14 +492,17 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
   ];
 }
 
-export async function buildScannerAssets(file: File): Promise<{
+export async function buildScannerAssets(
+  file: File,
+  colors?: { stopLoss?: string; takeProfit?: string },
+): Promise<{
   focusImages: File[];
   scannerContext: Record<string, unknown> | null;
   uploadImage: File;
 }> {
   const image = await loadImage(file);
   const sourceType = file.type || 'image/png';
-  const scannerContext = detectTradeBoxContext(image);
+  const scannerContext = detectTradeBoxContext(image, colors?.stopLoss, colors?.takeProfit);
   const focusCrops = buildDynamicFocusCrops(scannerContext);
   const focusImages = await Promise.all(focusCrops.map(async crop => {
     const sx = Math.max(0, Math.floor(image.width * crop.x));
@@ -739,8 +781,11 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       if (fileTradeDate) {
         setCurrentDate(fileTradeDate);
       }
-      const { focusImages, scannerContext: rawContext, uploadImage } = await buildScannerAssets(file);
       const colors = preferences.scannerColors;
+      const { focusImages, scannerContext: rawContext, uploadImage } = await buildScannerAssets(file, {
+        stopLoss: colors?.stopLoss,
+        takeProfit: colors?.takeProfit,
+      });
       const enrichedContext: Record<string, unknown> = {
         ...(rawContext ?? {}),
         scanner_colors: {
