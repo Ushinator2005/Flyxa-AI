@@ -2114,7 +2114,7 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
 
   const contextBlock = statsContext
     ? `\n\n## Trader's Historical Data (use ONLY these numbers — do not invent or estimate any figures not present here)\n${statsContext}`
-    : '\n\n## Trader's Historical Data\nNo historical stats available — write N/A for all statistics in the Your Stats section.';
+    : `\n\n## Trader's Historical Data\nNo historical stats available — write N/A for all statistics in the Your Stats section.`;
 
   const response = await anthropic.messages.create({
     model: MODEL,
