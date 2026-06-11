@@ -149,7 +149,7 @@ export default function Auth() {
             {/* Greeting */}
             <div className="auth-card-greeting">
               <p className="auth-card-title">
-                {tab === 'login' ? 'Welcome back.' : 'Create your account.'}
+                {tab === 'login' ? 'Welcome back' : 'Create your account'}
               </p>
               <p className="auth-card-subtitle">
                 {tab === 'login' ? 'Sign in to continue to Flyxa.' : 'Start building your trading edge.'}
