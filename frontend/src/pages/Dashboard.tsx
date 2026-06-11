@@ -391,15 +391,13 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* MONTHLY P&L */}
+              {/* REFERENCE — account balance or all-time net P&L */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>MONTHLY P&amp;L</p>
-                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: monthPnL > 0 ? GREEN : monthPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
-                  {monthTrades.length > 0 ? fmtUSD(monthPnL) : '—'}
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{refLabel}</p>
+                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: '0 0 5px', lineHeight: 1 }}>
+                  {refValue}
                 </p>
-                <p style={{ fontSize: 11, color: T3, margin: 0 }}>
-                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''} this month` : 'No trades this month'}
-                </p>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>{refSub}</p>
               </div>
 
               {/* EXECUTION */}
@@ -411,13 +409,15 @@ export default function Dashboard() {
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}><span style={{ fontFamily: MONO }}>{fmtRR(summary.avgRR)}</span> avg R:R</p>
               </div>
 
-              {/* REFERENCE — account balance or all-time net P&L */}
+              {/* MONTHLY P&L */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{refLabel}</p>
-                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: '0 0 5px', lineHeight: 1 }}>
-                  {refValue}
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>MONTHLY P&amp;L</p>
+                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: monthPnL > 0 ? GREEN : monthPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
+                  {monthTrades.length > 0 ? fmtUSD(monthPnL) : '—'}
                 </p>
-                <p style={{ fontSize: 11, color: T3, margin: 0 }}>{refSub}</p>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>
+                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''} this month` : 'No trades this month'}
+                </p>
               </div>
 
               {/* UP NEXT */}
