@@ -610,6 +610,7 @@ export default function Sidebar() {
           height: '100vh',
           position: 'sticky',
           top: 0,
+          zIndex: 50,
           overflow: 'visible',
           background: S1,
           borderRight: `1px solid ${BORDER}`,
