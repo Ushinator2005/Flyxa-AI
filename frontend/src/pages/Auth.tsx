@@ -100,10 +100,10 @@ export default function Auth() {
         <section className="auth-left">
           <div className="auth-left-inner">
             <FlyxaLogo
-              size={80}
+              size={96}
               showWordmark
               className="auth-logo"
-              wordmarkClassName="text-[3.2rem] font-bold tracking-[-0.05em]"
+              wordmarkClassName="text-[4rem] font-bold tracking-[-0.05em]"
               subtitleClassName="text-[12px] tracking-[0.5em]"
             />
 

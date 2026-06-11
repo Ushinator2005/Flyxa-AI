@@ -50,7 +50,7 @@ export default function FlyxaLogo({
             {mark}
           </div>
           <div className={`auth-display text-xl font-light leading-none tracking-[-0.04em] ${wordmarkClassName}`.trim()} style={{ color: palette.word }}>
-            flyxa
+            Flyxa
           </div>
         </div>
         <div className={`mt-2 w-full text-center text-[10px] uppercase tracking-[0.5em] ${subtitleClassName}`.trim()} style={{ color: palette.subtitle }}>
@@ -75,7 +75,7 @@ export default function FlyxaLogo({
       <div className="relative flex items-center justify-center px-6 py-5">
         <div className="min-w-0 text-center">
           <div className={`auth-display text-xl font-light leading-none tracking-[-0.04em] ${wordmarkClassName}`.trim()} style={{ color: palette.word }}>
-            flyxa
+            Flyxa
           </div>
           <div className={`mt-2 text-[10px] uppercase tracking-[0.5em] ${subtitleClassName}`.trim()} style={{ color: palette.subtitle }}>
             {subtitle || 'Trading Intelligence'}
