@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { rivalsApi } from '../../services/api.js';
+import useFlyxaStore from '../../store/flyxaStore.js';
 
 const AMBER      = '#f59e0b';
 const AMBER_DIM  = 'rgba(245,158,11,0.10)';
@@ -97,6 +98,8 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { accounts, selectedAccountId, setSelectedAccountId } = useAppSettings();
+  const preSession = useFlyxaStore(state => state.preSession);
+  const sessionActive = Boolean(preSession?.startedAt);
   const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived);
   const selectedAcct = accounts.find(a => a.id === selectedAccountId);
   const displayName = (user?.user_metadata?.name as string | undefined)
@@ -206,18 +209,25 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
         {/* Primary nav */}
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {primaryNavItems.map(item => (
-              <NavItem
-                key={item.path}
-                path={item.path}
-                icon={item.icon}
-                label={item.label}
-                exact={item.path === '/'}
-                onClick={onNavClick}
-                collapsed={collapsed}
-                extraActivePaths={item.extraActivePaths}
-              />
-            ))}
+            {primaryNavItems.map(item => {
+              const isSessionItem = item.path === '/pre-session';
+              const path = isSessionItem && sessionActive ? '/session' : item.path;
+              const extraActivePaths = isSessionItem
+                ? ['/post-session', '/session']
+                : item.extraActivePaths;
+              return (
+                <NavItem
+                  key={item.path}
+                  path={path}
+                  icon={item.icon}
+                  label={item.label}
+                  exact={item.path === '/'}
+                  onClick={onNavClick}
+                  collapsed={collapsed}
+                  extraActivePaths={extraActivePaths}
+                />
+              );
+            })}
           </div>
         </div>
 

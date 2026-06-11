@@ -295,10 +295,24 @@ export default function FlyxaAIPostSession() {
         <main className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: C.d0 }}>
           {/* Header */}
           <section className="border-b px-6 py-5" style={{ borderColor: C.b0 }}>
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex items-center justify-between gap-4">
               <div>
+                <h1
+                  className="text-[22px] font-bold tracking-[-0.02em]"
+                  style={{ color: C.t0 }}
+                >
+                  {displayDate}
+                </h1>
+                <p className="mt-1 text-[12px]" style={{ color: C.t2 }}>
+                  {dayTrades.length > 0
+                    ? `${dayTrades.length} trade${dayTrades.length !== 1 ? 's' : ''} · ${fmtSigned(netPnl)}`
+                    : 'No trades logged'}
+                  {ps ? ' · Pre-session recorded' : ' · No pre-session data'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
                 {/* Session tab toggle */}
-                <div style={{ display: 'inline-flex', gap: 2, padding: 2, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 7, border: `1px solid ${C.b0}`, marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 2, padding: 2, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 7, border: `1px solid ${C.b0}` }}>
                   {([
                     { label: 'Pre-session',  to: '/pre-session'  },
                     { label: 'Post-session', to: '/post-session' },
@@ -319,29 +333,17 @@ export default function FlyxaAIPostSession() {
                     </button>
                   ))}
                 </div>
-                <h1
-                  className="text-[22px] font-bold tracking-[-0.02em]"
-                  style={{ color: C.t0 }}
-                >
-                  {displayDate}
-                </h1>
-                <p className="mt-1 text-[12px]" style={{ color: C.t2 }}>
-                  {dayTrades.length > 0
-                    ? `${dayTrades.length} trade${dayTrades.length !== 1 ? 's' : ''} · ${fmtSigned(netPnl)}`
-                    : 'No trades logged'}
-                  {ps ? ' · Pre-session recorded' : ' · No pre-session data'}
-                </p>
+                <DatePicker
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  className="rounded-[6px] px-3 py-2 text-[12px]"
+                  style={{
+                    backgroundColor: C.d3, color: C.t0,
+                    border: CARD_BORDER, outline: 'none',
+                    fontFamily: C.mono,
+                  }}
+                />
               </div>
-              <DatePicker
-                value={selectedDate}
-                onChange={setSelectedDate}
-                className="rounded-[6px] px-3 py-2 text-[12px]"
-                style={{
-                  backgroundColor: C.d3, color: C.t0,
-                  border: CARD_BORDER, outline: 'none',
-                  fontFamily: C.mono,
-                }}
-              />
             </div>
           </section>
 

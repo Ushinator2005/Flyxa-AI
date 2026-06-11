@@ -344,6 +344,8 @@ export default function SessionActive() {
               color: pnlColor,
               fontFamily: MONO,
               lineHeight: 1,
+              WebkitFontSmoothing: 'antialiased',
+              MozOsxFontSmoothing: 'grayscale',
             }}>
               {formatMoney(pnl, true)}
             </span>
@@ -472,6 +474,8 @@ export default function SessionActive() {
                   color: guardSummary.pnl > 0 ? GREEN : guardSummary.pnl < 0 ? RED : T2,
                   fontFamily: MONO,
                   fontWeight: 700,
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
                 }}>
                   {formatMoney(guardSummary.pnl, true)}
                 </span>
