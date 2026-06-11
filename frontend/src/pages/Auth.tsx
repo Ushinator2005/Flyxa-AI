@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, BookOpen, BarChart2, Clock } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import ThemeToggle from '../components/common/ThemeToggle.js';
 import FlyxaLogo from '../components/common/FlyxaLogo.js';
 
 const features = [
   {
-    icon: BookOpen,
     title: 'Journal with context',
     description: 'Chart, execution notes, and trade rationale — all in one place.',
   },
   {
-    icon: BarChart2,
     title: 'Review without noise',
     description: 'Spot patterns in discipline, risk, and follow-through more clearly.',
   },
   {
-    icon: Clock,
     title: 'Built for real routines',
     description: 'A calm workspace for the work you do after the close.',
   },
@@ -121,13 +118,8 @@ export default function Auth() {
             <div className="auth-features">
               {features.map((f) => (
                 <div key={f.title} className="auth-feature-item">
-                  <span className="auth-feature-icon">
-                    <f.icon size={14} />
-                  </span>
-                  <div>
-                    <p className="auth-feature-title">{f.title}</p>
-                    <p className="auth-feature-desc">{f.description}</p>
-                  </div>
+                  <p className="auth-feature-title">{f.title}</p>
+                  <p className="auth-feature-desc">{f.description}</p>
                 </div>
               ))}
             </div>
