@@ -2113,8 +2113,8 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
     : 0;
 
   const contextBlock = statsContext
-    ? `\n\n## Trader's Historical Data\n${statsContext}`
-    : '';
+    ? `\n\n## Trader's Historical Data (use ONLY these numbers — do not invent or estimate any figures not present here)\n${statsContext}`
+    : '\n\n## Trader's Historical Data\nNo historical stats available — write N/A for all statistics in the Your Stats section.';
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -2122,7 +2122,9 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
     max_tokens: 1200,
     system: `You are a professional trading performance analyst reviewing a trader's logged trade. You have their full historical statistics. Your job is to produce a genuine analysis — not a summary of what happened, but an examination of why it happened, what pattern it represents across their history, and what it reveals about their edge and its breakdown points.
 
-An analysis reasons across the data. It finds the causal chain: what led to this decision, how it connects to prior behaviour, what the stats prove about where the edge exists and where it doesn't. Use the trader's own numbers as evidence throughout — but the goal is insight, not just citation.
+An analysis reasons across the data. It finds the causal chain: what led to this decision, how it connects to prior behaviour, what the stats prove about where the edge exists and where it doesn't.
+
+CRITICAL: Every dollar amount, win rate, P&L figure, and trade count you cite MUST come verbatim from the "Trader's Historical Data" section provided. Never invent, estimate, or extrapolate any numerical figure. If the data does not contain a specific number, write "N/A" — never guess.
 
 Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis.`,
     messages: [
@@ -2139,10 +2141,10 @@ Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' 
 Write a structured analysis using exactly these three sections:
 
 ## Your Stats
-Anchor the analysis in their data. Three bullet points — each must contain a specific number (win rate, P&L, trade count). These are the facts that the analysis sections below will reason from.
-- [Emotional state context: how does trading ${trade.emotional_state} compare to their overall performance across all logged trades]
-- [Plan adherence split: their win rate and net P&L when they follow the plan vs when they don't — exact figures]
-- [The most relevant pattern stat for this trade: a confluence they used, this session, or a behavioural pattern with actual numbers]
+Anchor the analysis in their data. Three bullet points. Use ONLY numbers explicitly stated in the "Trader's Historical Data" section above — never invent, estimate, or extrapolate figures. If a specific number is not available, write "N/A".
+- [Emotional state context: how does trading ${trade.emotional_state} compare to their overall performance — cite exact win rate/P&L from the provided data, or N/A]
+- [Plan adherence split: their win rate and net P&L when they follow the plan vs when they don't — exact figures from the provided data, or N/A]
+- [The most relevant pattern stat for this trade: a confluence they used, this session, or a behavioural pattern — exact figures from the provided data, or N/A]
 TAGS: [2-4 tags, comma separated, chosen from: Emotional override, Post-loss reaction, Plan drifted, Revenge pattern, FOMO entry, Confidence mismatch, Strong setup, Clean execution, Discipline win]
 
 ## What Happened
@@ -2155,9 +2157,9 @@ TAGS: [2-4 tags, comma separated, chosen from: Emotional override, Post-loss rea
 ## The Rule
 **[State the single most important rule this trade proves they need — make it specific to their pattern, not generic advice]**
 RULE: [One sentence, suitable to add to a trading plan. Must address the root cause identified in the analysis above, not the surface symptom.]
-- [The exact stat from their history that makes this rule non-negotiable]
+- [The exact stat from the provided historical data that makes this rule non-negotiable — exact figure or N/A]
 - [What following this rule looks like concretely on the next identical setup]
-- [The estimated P&L or win rate improvement based on their data if this rule had been applied to their historical trades]`,
+- [The direct impact on their edge based only on numbers in the provided historical data — do not estimate or extrapolate]`,
       },
     ],
   });

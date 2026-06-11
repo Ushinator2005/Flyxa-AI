@@ -203,8 +203,12 @@ function minutesBetweenTimes(start: string, end: string): number | null {
 }
 
 function formatDurationLabel(minutes?: number | null): string {
-  if (!Number.isFinite(minutes ?? NaN) || (minutes ?? 0) <= 0) return '--m';
-  return `${Math.round(minutes ?? 0)}m`;
+  if (!Number.isFinite(minutes ?? NaN) || (minutes ?? 0) <= 0) return '—';
+  const m = Math.round(minutes ?? 0);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
 }
 
 function resolveTradeDurationMinutes(trade?: Partial<JournalTrade> | null): number | null {
@@ -2664,7 +2668,7 @@ export default function TradeJournal() {
       {isMobile && dayPanelOpen && (
         <div
           onClick={() => setDayPanelOpen(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 199, background: 'rgba(0,0,0,0.45)' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9988, background: 'rgba(0,0,0,0.45)' }}
         />
       )}
 
@@ -2679,7 +2683,7 @@ export default function TradeJournal() {
             left: dayPanelOpen ? 260 : 0,
             top: '50%',
             transform: 'translateY(-50%)',
-            zIndex: 201,
+            zIndex: 9990,
             width: 20,
             height: 44,
             background: 'var(--surface-2)',
@@ -2707,7 +2711,7 @@ export default function TradeJournal() {
           top: 0,
           bottom: 0,
           width: 260,
-          zIndex: 200,
+          zIndex: 9989,
           overflowY: 'auto',
           transform: dayPanelOpen ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 0.22s ease',
@@ -2981,6 +2985,7 @@ export default function TradeJournal() {
                 <div className="tj-stat">
                   <div className="tj-stat-label">Trade Length</div>
                   {activeTrade ? (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                     <input
                       type="number"
                       className="tj-stat-value tj-stat-editable"
@@ -2995,6 +3000,8 @@ export default function TradeJournal() {
                         mutateTradeFields(activeTrade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
                       }}
                     />
+                    <span style={{ fontSize: 10, color: 'var(--app-text-subtle)' }}>min</span>
+                    </div>
                   ) : (
                     <div className="tj-stat-value">{formatDurationLabel(resolveTradeDurationMinutes(activeTrade))}</div>
                   )}

@@ -831,7 +831,7 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   // Live store entries — covers blank days created in the same session before the next API refetch
   const storeEntries = useFlyxaStore(state => state.entries);
-  const [journals, setJournals] = useState<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[] }>>({});
+  const [journals, setJournals] = useState<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[]; hasApiEntry?: boolean }>>({});
   const { selectedAccountId } = useAppSettings();
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [activeJournalDate, setActiveJournalDate] = useState<string | null>(null);
@@ -883,11 +883,12 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   useEffect(() => {
     // API journal entries are text-only daily reflections — they have no trades array.
     // Never treat them as blank trading days; isBlankDay stays false.
-    const nextJournals = journalEntries.reduce<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[] }>>((acc, journal) => {
+    // hasApiEntry = true marks that the user actively wrote a journal via the Journal page.
+    const nextJournals = journalEntries.reduce<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[]; hasApiEntry?: boolean }>>((acc, journal) => {
       const parsed = new Date(`${journal.date}T00:00:00`);
       if (Number.isNaN(parsed.getTime())) return acc;
       if (parsed.getFullYear() !== year || parsed.getMonth() + 1 !== month) return acc;
-      acc[parsed.getDate()] = { id: journal.id, date: journal.date, isBlankDay: false };
+      acc[parsed.getDate()] = { id: journal.id, date: journal.date, isBlankDay: false, hasApiEntry: true };
       return acc;
     }, {});
 
@@ -1214,7 +1215,10 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
                 const pnl = days[day];
                 const tradeCount = counts[day] ?? 0;
                 const journalEntry = journals[day];
-                const hasJournal = !!journalEntry;
+                // Only show the journal indicator dot when the user has written a text journal
+                // entry via the Journal page (hasApiEntry). Auto-created store entries from
+                // trade imports do not count as "Daily journal completed".
+                const hasJournal = !!journalEntry?.hasApiEntry;
                 // Only show the grey "$0 / 0 trades" indicator for genuinely blank days
                 // (zero trades in the entry) linked to the selected account.
                 // Days with trades on OTHER accounts appear empty when filtered.

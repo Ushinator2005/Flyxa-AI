@@ -7,6 +7,7 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import type { PreSessionData } from '../store/types.js';
 import { buildDailyFlowInsight } from '../utils/dailyFlow.js';
 import DatePicker from '../components/common/DatePicker.js';
+import { getTimeZoneParts } from '../utils/calendarTime.js';
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -20,10 +21,6 @@ const CARD_BORDER = `1px solid ${C.b0}`;
 const SECTION_LABEL: CSSProperties = {
   fontSize: 11, fontWeight: 500, color: C.t2,
 };
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function fmtCurrency(v: number) {
   return v.toLocaleString('en-US', {
@@ -85,11 +82,15 @@ function insightDot(type: InsightType) {
 
 export default function FlyxaAIPostSession() {
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState(todayIso());
   const { trades, loading } = useTrades();
-  const { filterTradesBySelectedAccount } = useAppSettings();
+  const { filterTradesBySelectedAccount, preferences } = useAppSettings();
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
+  const activePreSession = useFlyxaStore(state => state.preSession);
+  // Use timezone-aware date so it matches how pre-session saves its history key
+  const [selectedDate, setSelectedDate] = useState(() =>
+    getTimeZoneParts(new Date(), preferences.timezone).date
+  );
 
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
@@ -109,7 +110,16 @@ export default function FlyxaAIPostSession() {
     [safeTrades, selectedDate]
   );
 
-  const ps: PreSessionData | null = preSessionHistory[selectedDate] ?? null;
+  const ps: PreSessionData | null = useMemo(() => {
+    const fromHistory = preSessionHistory[selectedDate];
+    if (fromHistory) return fromHistory;
+    // Fallback: use the active pre-session if its tz-aware date matches selectedDate
+    if (activePreSession?.startedAt) {
+      const psDate = getTimeZoneParts(new Date(activePreSession.startedAt), preferences.timezone).date;
+      if (psDate === selectedDate) return activePreSession;
+    }
+    return null;
+  }, [preSessionHistory, selectedDate, activePreSession, preferences.timezone]);
 
   const bias = useMemo((): Record<string, string> => {
     if (!ps?.bias || typeof ps.bias !== 'object') return {};
