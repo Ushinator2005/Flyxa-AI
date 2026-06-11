@@ -906,6 +906,11 @@ const useFlyxaStore = create<FlyxaStore>()(
           journalTitles: (persisted.journalTitles && Object.keys(persisted.journalTitles).length > 0)
             ? persisted.journalTitles
             : base.journalTitles,
+          // Same protection for preSessionHistory — an empty {} from Supabase should never
+          // erase existing local history (older saves may not have this field yet).
+          preSessionHistory: (persisted.preSessionHistory && Object.keys(persisted.preSessionHistory).length > 0)
+            ? persisted.preSessionHistory
+            : base.preSessionHistory,
         };
       },
       migrate: (persistedState) => {

@@ -380,9 +380,34 @@ export const supabaseZustandStorage: StateStorage = {
 
       if (!error && data?.flyxa_data) {
         // Supabase is the source of truth across all devices.
-        const remoteEntries = (data.flyxa_data as { state?: { entries?: unknown[] } })?.state?.entries;
+        // Also recover preSessionHistory from the pre_sessions table if the main blob is missing it.
+        let flyxaData = data.flyxa_data as Record<string, unknown>;
+        const blobState = flyxaData.state as Record<string, unknown> | undefined;
+        const blobPreSessionHistory = blobState?.preSessionHistory as Record<string, unknown> | undefined;
+        if (!blobPreSessionHistory || Object.keys(blobPreSessionHistory).length === 0) {
+          try {
+            const { data: psRows } = await supabase
+              .from('pre_sessions')
+              .select('id, data')
+              .eq('user_id', userId);
+            if (psRows && psRows.length > 0) {
+              const recovered: Record<string, unknown> = {};
+              for (const row of psRows as Array<{ id: string; data: unknown }>) {
+                if (typeof row.id === 'string' && row.data) recovered[row.id] = row.data;
+              }
+              if (Object.keys(recovered).length > 0) {
+                flyxaData = {
+                  ...flyxaData,
+                  state: { ...(blobState ?? {}), preSessionHistory: recovered },
+                };
+              }
+            }
+          } catch { /* non-fatal — continue with existing blob */ }
+        }
+
+        const remoteEntries = (flyxaData as { state?: { entries?: unknown[] } })?.state?.entries;
         if (Array.isArray(remoteEntries) && remoteEntries.length > 0) {
-          return sanitizeStoreValue(JSON.stringify(data.flyxa_data));
+          return sanitizeStoreValue(JSON.stringify(flyxaData));
         }
 
         // user_store exists but 0 entries — try store_entries_backup table
