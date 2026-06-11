@@ -106,9 +106,9 @@ export default function Auth() {
 
             <div className="auth-hero">
               <h1 className="auth-headline">
-                Most traders repeat<br />
-                their mistakes.<br />
-                <span className="auth-headline-em">You won't.</span>
+                Your edge is already<br />
+                in your history.<br />
+                <span className="auth-headline-em">Stop guessing.</span>
               </h1>
               <p className="auth-subhead">
                 Do the work after the close. Build an edge that compounds.
