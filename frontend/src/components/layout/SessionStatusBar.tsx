@@ -42,7 +42,7 @@ export default function SessionStatusBar() {
   const readiness = preSession.readiness;
   const emotion = preSession.emotion;
 
-  // Guard-side counts (trades entered through the Trade Guard today)
+  // Lens-side counts (trades entered through the Trade Lens today)
   const guardTradeCount = guardSummary.count;
   const guardLoss = guardSummary.loss;
 

@@ -355,7 +355,7 @@ export default function SessionActive() {
               <> &middot; {Math.max(0, maxTrades - tradesCount)} remaining</>
             )}
             {hasGuardLog && (
-              <> &middot; synced from Trade Guard</>
+              <> &middot; synced from Trade Lens</>
             )}
           </span>
         </div>
@@ -462,7 +462,7 @@ export default function SessionActive() {
             flexWrap: 'wrap',
           }}>
             <div>
-              <SectionLabel>Trade Guard log</SectionLabel>
+              <SectionLabel>Trade Lens log</SectionLabel>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: T2 }}>
                   {guardSummary.wins}W {guardSummary.losses}L{guardSummary.breakevens > 0 ? ` ${guardSummary.breakevens}BE` : ''}

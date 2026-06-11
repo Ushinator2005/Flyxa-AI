@@ -33,7 +33,7 @@ const pageNames: Record<string, string> = {
   '/session': 'Session',
   '/billing': 'Billing',
   '/settings': 'Settings',
-  '/trade-check': 'Trade Guard',
+  '/trade-check': 'Trade Lens',
 };
 
 export default function Header() {
@@ -215,8 +215,8 @@ export default function Header() {
           }}
           onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
           onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-          aria-label="Open Trade Guard"
-          title="Open Trade Guard"
+          aria-label="Open Trade Lens"
+          title="Open Trade Lens"
         >
           <span style={{ width: 3, background: 'rgba(0,0,0,0.22)', display: 'block', flexShrink: 0 }} />
           <span style={{
@@ -230,7 +230,7 @@ export default function Header() {
             fontFamily: 'var(--font-mono)',
             color: '#000',
           }}>
-            Trade Guard
+            Trade Lens
           </span>
         </button>
         <ThemeToggle compact />
@@ -299,8 +299,8 @@ export default function Header() {
             cursor: 'pointer',
             flexShrink: 0,
           }}
-          aria-label="Open Trade Guard"
-          title="Open Trade Guard"
+          aria-label="Open Trade Lens"
+          title="Open Trade Lens"
         >
           <span style={{ fontSize: 14 }}>⚡</span>
         </button>

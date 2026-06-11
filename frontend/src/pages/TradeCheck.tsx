@@ -571,7 +571,7 @@ export default function TradeCheck() {
             </div>
             <button
               type="button"
-              title="Abort — back to guard"
+              title="Abort — back to Lens"
               onClick={() => { setPhase('idle'); setPendingClose(null); }}
               style={{ background: 'none', border: 'none', color: C.subtle, fontSize: 10, cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
             >✕</button>
