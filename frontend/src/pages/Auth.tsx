@@ -111,7 +111,7 @@ export default function Auth() {
                 <span className="auth-headline-em">You won't.</span>
               </h1>
               <p className="auth-subhead">
-                Flyxa is built for traders who do the work after the session ends.
+                Do the work after the close. Build an edge that compounds.
               </p>
             </div>
 
@@ -129,9 +129,32 @@ export default function Auth() {
           </div>
         </section>
 
+        {/* ── Vertical divider ── */}
+        <div className="auth-vdivider" aria-hidden="true" />
+
         {/* ── Right panel ── */}
         <section className="auth-right">
           <div className="auth-card">
+
+            {/* Mobile-only logo */}
+            <div className="auth-card-mobile-logo">
+              <FlyxaLogo
+                size={32}
+                showWordmark
+                wordmarkClassName="text-[1.3rem] font-bold tracking-[-0.04em]"
+                subtitleClassName="text-[10px] tracking-[0.5em]"
+              />
+            </div>
+
+            {/* Greeting */}
+            <div className="auth-card-greeting">
+              <p className="auth-card-title">
+                {tab === 'login' ? 'Welcome back.' : 'Create your account.'}
+              </p>
+              <p className="auth-card-subtitle">
+                {tab === 'login' ? 'Sign in to continue to Flyxa.' : 'Start building your trading edge.'}
+              </p>
+            </div>
 
             {/* Tab switcher */}
             <div className="auth-tabs">
