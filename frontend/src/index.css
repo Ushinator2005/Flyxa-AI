@@ -305,11 +305,11 @@
 
   /* ── Left typography ── */
   .auth-headline {
-    font-family: var(--font-display);
-    font-size: clamp(2.2rem, 3.6vw, 3.1rem);
+    font-family: var(--font-sans);
+    font-size: clamp(1.8rem, 2.8vw, 2.5rem);
     font-weight: 700;
-    line-height: 1.08;
-    letter-spacing: -0.04em;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
     color: var(--app-text);
     margin: 0 0 18px;
   }
@@ -343,14 +343,18 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
 
-  .auth-feature-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--accent);
+  .auth-feature-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.18);
+    color: var(--accent);
     flex-shrink: 0;
-    margin-top: 6px;
-    opacity: 0.7;
+    margin-top: 1px;
   }
 
   .auth-feature-title {
