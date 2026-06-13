@@ -381,6 +381,12 @@ export default function Dashboard() {
             ? accounts.find(a => a.id === selectedAccountId)
             : undefined;
           const targetBal = selectedTradingAcct?.targetBalance ?? null;
+          const progressPct = targetBal !== null && selectedStoreAcct && targetBal > sb
+            ? Math.min(100, Math.max(0, ((liveBal - sb) / (targetBal - sb)) * 100))
+            : null;
+          const fmtCompact = (v: number) => new Intl.NumberFormat('en-US', {
+            style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 0,
+          }).format(v).replace('K', 'k');
           const refLabel = selectedStoreAcct ? 'BALANCE' : 'NET P&L';
           const refValue = selectedStoreAcct ? fmtUSD(liveBal) : fmtUSD(summary.netPnL);
           const refTone  = selectedStoreAcct
@@ -423,31 +429,61 @@ export default function Dashboard() {
 
               {/* REFERENCE — account balance or all-time net P&L */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{refLabel}</p>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, flexWrap: 'wrap', marginBottom: 5 }}>
-                  <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: 0, lineHeight: 1 }}>
-                    {refValue}
-                  </p>
+                {/* Label row — target hint on the right when set */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: 0, fontFamily: MONO }}>{refLabel}</p>
                   {targetBal !== null && selectedStoreAcct && (
-                    <span style={{ fontSize: 11, color: T3, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-                      / {fmtUSD(targetBal)}
+                    <span style={{ fontSize: 10, color: T3, fontFamily: MONO, letterSpacing: '0.02em' }}>
+                      target {fmtCompact(targetBal)}
                     </span>
                   )}
                 </div>
-                {targetBal !== null && selectedStoreAcct && (
-                  <div style={{ marginBottom: 4 }}>
-                    <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+
+                {/* Main value + progress % badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: progressPct !== null ? 7 : 5 }}>
+                  <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: 0, lineHeight: 1 }}>
+                    {refValue}
+                  </p>
+                  {progressPct !== null && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, fontFamily: MONO,
+                      color: progressPct >= 100 ? GREEN : T2,
+                      background: progressPct >= 100 ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.07)',
+                      border: `1px solid ${progressPct >= 100 ? 'rgba(52,211,153,0.28)' : 'rgba(255,255,255,0.12)'}`,
+                      borderRadius: 5,
+                      padding: '2px 6px',
+                      lineHeight: 1,
+                      flexShrink: 0,
+                    }}>
+                      {progressPct.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                {progressPct !== null && (
+                  <div style={{ marginBottom: 7 }}>
+                    <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
                       <div style={{
                         height: '100%',
-                        borderRadius: 2,
-                        background: liveBal >= targetBal ? GREEN : refTone,
-                        width: `${Math.min(100, Math.max(0, targetBal > sb ? ((liveBal - sb) / (targetBal - sb)) * 100 : 100)).toFixed(1)}%`,
+                        borderRadius: 3,
+                        background: progressPct >= 100 ? GREEN : refTone,
+                        width: `${progressPct.toFixed(1)}%`,
                         transition: 'width 0.4s ease',
                       }} />
                     </div>
                   </div>
                 )}
-                <p style={{ fontSize: 11, color: T3, margin: 0 }}>{refSub}</p>
+
+                {/* Sub-text */}
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>
+                  {refSub}
+                  {progressPct !== null && targetBal !== null && (
+                    progressPct >= 100
+                      ? <span style={{ color: GREEN }}> · Target reached!</span>
+                      : <span> · {fmtUSD(targetBal - liveBal)} to go</span>
+                  )}
+                </p>
               </div>
 
               {/* EXECUTION */}
