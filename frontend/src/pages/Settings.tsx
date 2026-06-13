@@ -1919,12 +1919,9 @@ export default function Settings() {
                     onChange={e => setDraftTargetBalances(prev => ({ ...prev, [account.id]: e.target.value }))}
                     onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
                     onBlur={e => {
-                      const draft = draftTargetBalances[account.id];
-                      if (draft !== undefined) {
-                        const v = parseFloat(draft);
-                        updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined });
-                        setDraftTargetBalances(prev => { const next = { ...prev }; delete next[account.id]; return next; });
-                      }
+                      const v = parseFloat(e.target.value);
+                      updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined });
+                      setDraftTargetBalances(prev => { const next = { ...prev }; delete next[account.id]; return next; });
                       e.target.style.borderBottom = 'none';
                     }}
                     placeholder="e.g. 110000"
