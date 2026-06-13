@@ -523,6 +523,7 @@ export default function Settings() {
     startingBalance: '' as string,
     targetBalance: '' as string,
   });
+  const [draftTargetBalances, setDraftTargetBalances] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<string>('profile');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showResetPanel, setShowResetPanel] = useState(false);
@@ -1914,13 +1915,18 @@ export default function Settings() {
                     min="0"
                     step="1000"
                     style={tableInputStyle}
-                    value={account.targetBalance ?? ''}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value);
-                      updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined });
-                    }}
+                    value={account.id in draftTargetBalances ? draftTargetBalances[account.id] : String(account.targetBalance ?? '')}
+                    onChange={e => setDraftTargetBalances(prev => ({ ...prev, [account.id]: e.target.value }))}
                     onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
-                    onBlur={e => { e.target.style.borderBottom = 'none'; }}
+                    onBlur={e => {
+                      const draft = draftTargetBalances[account.id];
+                      if (draft !== undefined) {
+                        const v = parseFloat(draft);
+                        updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined });
+                        setDraftTargetBalances(prev => { const next = { ...prev }; delete next[account.id]; return next; });
+                      }
+                      e.target.style.borderBottom = 'none';
+                    }}
                     placeholder="e.g. 110000"
                   />
 
