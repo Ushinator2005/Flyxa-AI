@@ -18,7 +18,7 @@ const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
 const DEFAULT_TIMEZONE = 'America/New_York';
 const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Passed', 'Blown'];
-const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 120px 170px 150px 90px';
+const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 120px 120px 170px 150px 90px';
 const ACCOUNT_TABLE_COLUMN_GAP = '16px';
 const PROFILE_IMAGE_BUCKET = 'trade-screenshots';
 const TIMEZONE_REGION_PRIORITY = ['America', 'Europe', 'Asia', 'Pacific'];
@@ -521,6 +521,7 @@ export default function Settings() {
     type: 'Futures' as TradingAccountType,
     status: 'Eval' as TradingAccountStatus,
     startingBalance: '' as string,
+    targetBalance: '' as string,
   });
   const [activeSection, setActiveSection] = useState<string>('profile');
   const [showSavedToast, setShowSavedToast] = useState(false);
@@ -845,6 +846,7 @@ export default function Settings() {
       type: 'Futures',
       status: 'Eval',
       startingBalance: '',
+      targetBalance: '',
     });
   }
 
@@ -856,6 +858,7 @@ export default function Settings() {
   function handleAddAccount() {
     if (!newAccount.name.trim()) return;
     const parsedBalance = parseFloat(newAccount.startingBalance);
+    const parsedTarget = parseFloat(newAccount.targetBalance);
     addAccount({
       name: newAccount.name.trim(),
       broker: newAccount.broker.trim(),
@@ -863,6 +866,7 @@ export default function Settings() {
       status: newAccount.status,
       color: DEFAULT_ACCOUNT_COLOR,
       startingBalance: Number.isFinite(parsedBalance) && parsedBalance > 0 ? parsedBalance : undefined,
+      targetBalance: Number.isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : undefined,
     });
     closeAddAccountModal();
   }
@@ -1816,7 +1820,7 @@ export default function Settings() {
               marginBottom: '4px',
             }}
           >
-            {['Account name', 'Broker', 'Starting balance', 'Account type', 'Status', 'Actions'].map(col => (
+            {['Account name', 'Broker', 'Starting balance', 'Target balance', 'Account type', 'Status', 'Actions'].map(col => (
               <span
                 key={col}
                 style={{
@@ -1902,6 +1906,22 @@ export default function Settings() {
                     onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
                     onBlur={e => { e.target.style.borderBottom = 'none'; }}
                     placeholder="e.g. 100000"
+                  />
+
+                  {/* Target balance */}
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    style={tableInputStyle}
+                    value={account.targetBalance ?? ''}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value);
+                      updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined });
+                    }}
+                    onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
+                    onBlur={e => { e.target.style.borderBottom = 'none'; }}
+                    placeholder="e.g. 110000"
                   />
 
                   {/* Account type */}
@@ -2656,7 +2676,7 @@ export default function Settings() {
                 />
               </label>
 
-              <label style={{ gridColumn: '1 / -1' }}>
+              <label>
                 <FieldLabel>Starting balance ($)</FieldLabel>
                 <input
                   type="number"
@@ -2672,6 +2692,25 @@ export default function Settings() {
                   placeholder="e.g. 100000"
                   value={newAccount.startingBalance}
                   onChange={e => setNewAccount(current => ({ ...current, startingBalance: e.target.value }))}
+                />
+              </label>
+
+              <label>
+                <FieldLabel>Target balance ($)</FieldLabel>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  style={{
+                    ...tableInputStyle,
+                    background: S2,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                  }}
+                  placeholder="e.g. 110000"
+                  value={newAccount.targetBalance}
+                  onChange={e => setNewAccount(current => ({ ...current, targetBalance: e.target.value }))}
                 />
               </label>
             </div>

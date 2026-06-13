@@ -111,7 +111,7 @@ export default function Dashboard() {
   const { trades, loading, deleteTrade } = useTrades();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, preferences } = useAppSettings();
+  const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, preferences, updateAccount } = useAppSettings();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -269,6 +269,29 @@ export default function Dashboard() {
     : undefined;
   const acctName    = selectedAcct?.name ?? 'All Accounts';
 
+  // Compute live balance and target at component level for auto-pass detection
+  const liveBalForEffect = useMemo(() => {
+    if (!selectedStoreAcct) return null;
+    const sb = selectedStoreAcct.startingBalance ?? 0;
+    const payouts = (selectedStoreAcct.payouts ?? []).reduce((s: number, p: { amount: number }) => s + p.amount, 0);
+    return sb + summary.netPnL - payouts;
+  }, [selectedStoreAcct, summary.netPnL]);
+
+  const targetBalForEffect = selectedAcct?.targetBalance ?? null;
+
+  // Auto-switch Eval account to Passed when live balance meets/exceeds target
+  useEffect(() => {
+    if (
+      selectedAcct &&
+      selectedAcct.status === 'Eval' &&
+      targetBalForEffect !== null &&
+      liveBalForEffect !== null &&
+      liveBalForEffect >= targetBalForEffect
+    ) {
+      updateAccount(selectedAcct.id, { status: 'Passed' });
+    }
+  }, [selectedAcct, liveBalForEffect, targetBalForEffect, updateAccount]);
+
   const displayTrades = recentTrades;
 
   function goToTradeInJournal(trade: Trade) {
@@ -354,6 +377,10 @@ export default function Dashboard() {
           const sb      = sbRaw ?? 0;
           const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s, p) => s + p.amount, 0);
           const liveBal = sb + summary.netPnL - payouts;
+          const selectedTradingAcct = selectedAccountId !== ALL_ACCOUNTS_ID
+            ? accounts.find(a => a.id === selectedAccountId)
+            : undefined;
+          const targetBal = selectedTradingAcct?.targetBalance ?? null;
           const refLabel = selectedStoreAcct ? 'BALANCE' : 'NET P&L';
           const refValue = selectedStoreAcct ? fmtUSD(liveBal) : fmtUSD(summary.netPnL);
           const refTone  = selectedStoreAcct
@@ -397,9 +424,29 @@ export default function Dashboard() {
               {/* REFERENCE — account balance or all-time net P&L */}
               <div style={cs}>
                 <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{refLabel}</p>
-                <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: '0 0 5px', lineHeight: 1 }}>
-                  {refValue}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, flexWrap: 'wrap', marginBottom: 5 }}>
+                  <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: 0, lineHeight: 1 }}>
+                    {refValue}
+                  </p>
+                  {targetBal !== null && selectedStoreAcct && (
+                    <span style={{ fontSize: 11, color: T3, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                      / {fmtUSD(targetBal)}
+                    </span>
+                  )}
+                </div>
+                {targetBal !== null && selectedStoreAcct && (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        borderRadius: 2,
+                        background: liveBal >= targetBal ? GREEN : refTone,
+                        width: `${Math.min(100, Math.max(0, (liveBal / targetBal) * 100)).toFixed(1)}%`,
+                        transition: 'width 0.4s ease',
+                      }} />
+                    </div>
+                  </div>
+                )}
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}>{refSub}</p>
               </div>
 

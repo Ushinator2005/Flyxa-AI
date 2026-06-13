@@ -181,6 +181,7 @@ export interface TradingAccount {
   color: string;
   createdAt: string;
   startingBalance?: number;
+  targetBalance?: number;
   archived?: boolean;
 }
 

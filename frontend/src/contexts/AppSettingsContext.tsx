@@ -186,7 +186,7 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
   try {
     const [settingsResult, accountsResult] = await Promise.all([
       supabase.from('user_store').select('app_settings').eq('user_id', userId).maybeSingle(),
-      supabase.from('trading_accounts').select('id, name, broker, type, status, color, starting_balance, archived, created_at').eq('user_id', userId),
+      supabase.from('trading_accounts').select('id, name, broker, type, status, color, starting_balance, target_balance, archived, created_at').eq('user_id', userId),
     ]);
 
     if (settingsResult.error) return null;
@@ -212,6 +212,7 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
           color: (a.color as string | null) ?? '#6366f1',
           createdAt: a.created_at as string,
           ...(a.starting_balance != null ? { startingBalance: Number(a.starting_balance) } : {}),
+          ...(a.target_balance != null ? { targetBalance: Number(a.target_balance) } : {}),
           ...(a.archived === true ? { archived: true } : {}),
         }));
 
@@ -219,10 +220,11 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
         row.accounts = [...(row.accounts ?? []), ...missingAccounts];
       }
 
-      // Merge starting_balance and archived for existing accounts using trading_accounts as fallback
-      const dbFieldMap = new Map<string, { balance: number | null; archived: boolean }>(
+      // Merge starting_balance, target_balance and archived for existing accounts using trading_accounts as fallback
+      const dbFieldMap = new Map<string, { balance: number | null; target: number | null; archived: boolean }>(
         accountsResult.data.map(a => [a.id as string, {
           balance: a.starting_balance != null ? Number(a.starting_balance) : null,
+          target: a.target_balance != null ? Number(a.target_balance) : null,
           archived: a.archived === true,
         }])
       );
@@ -232,6 +234,8 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
           ...account,
           startingBalance: account.startingBalance
             ?? (dbFields?.balance != null ? dbFields.balance : undefined),
+          targetBalance: account.targetBalance
+            ?? (dbFields?.target != null ? dbFields.target : undefined),
           // Recover archived flag from trading_accounts if app_settings lost it
           ...(account.archived === true || dbFields?.archived === true ? { archived: true } : {}),
         };
@@ -479,6 +483,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         broker: nextAccount.broker || null,
         type: nextAccount.type, status: nextAccount.status, color: nextAccount.color,
         starting_balance: nextAccount.startingBalance ?? null,
+        target_balance: nextAccount.targetBalance ?? null,
       }).then(({ error }) => {
         if (error) console.error('[Accounts] Failed to save new account:', error.message);
       });
@@ -501,7 +506,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
 
     // Account lifecycle fields should survive refreshes immediately instead of waiting
     // for the debounce, especially archive/unarchive actions that change navigation.
-    const shouldSaveSettingsImmediately = 'startingBalance' in updates || 'archived' in updates;
+    const shouldSaveSettingsImmediately = 'startingBalance' in updates || 'targetBalance' in updates || 'archived' in updates;
     if (shouldSaveSettingsImmediately && user && initialLoadDone.current) {
       void saveAppSettingsToSupabase(user.id, {
         accounts: nextAccounts,
@@ -520,6 +525,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         ...('status' in updates ? { status: updates.status } : {}),
         ...('color' in updates ? { color: updates.color } : {}),
         ...('startingBalance' in updates ? { starting_balance: updates.startingBalance ?? null } : {}),
+        ...('targetBalance' in updates ? { target_balance: updates.targetBalance ?? null } : {}),
         ...('archived' in updates ? { archived: !!updates.archived } : {}),
         updated_at: new Date().toISOString(),
       }).eq('id', accountId).eq('user_id', user.id).then(({ error }) => {
