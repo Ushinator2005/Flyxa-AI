@@ -441,7 +441,7 @@ export default function Dashboard() {
                         height: '100%',
                         borderRadius: 2,
                         background: liveBal >= targetBal ? GREEN : refTone,
-                        width: `${Math.min(100, Math.max(0, (liveBal / targetBal) * 100)).toFixed(1)}%`,
+                        width: `${Math.min(100, Math.max(0, targetBal > sb ? ((liveBal - sb) / (targetBal - sb)) * 100 : 100)).toFixed(1)}%`,
                         transition: 'width 0.4s ease',
                       }} />
                     </div>
