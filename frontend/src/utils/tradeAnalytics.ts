@@ -27,8 +27,10 @@ export function buildAnalyticsSummary(trades: Trade[]): AnalyticsSummary {
   }
 
   const sortedTrades = [...trades].sort((a, b) => `${a.trade_date} ${a.trade_time}`.localeCompare(`${b.trade_date} ${b.trade_time}`));
-  const wins = sortedTrades.filter(trade => trade.pnl > 0);
-  const losses = sortedTrades.filter(trade => trade.pnl < 0);
+  // Effective P&L accounts for commissions/fees paid
+  const ep = (trade: Trade) => trade.pnl - (trade.commission ?? 0);
+  const wins = sortedTrades.filter(trade => ep(trade) > 0);
+  const losses = sortedTrades.filter(trade => ep(trade) < 0);
   const rrValues = sortedTrades.map(getTradeRiskReward).filter((value): value is number => value !== null);
 
   let currentWins = 0;
@@ -37,30 +39,30 @@ export function buildAnalyticsSummary(trades: Trade[]): AnalyticsSummary {
   let consecutiveLosses = 0;
 
   sortedTrades.forEach(trade => {
-    if (trade.pnl > 0) {
+    if (ep(trade) > 0) {
       currentWins += 1;
       currentLosses = 0;
       consecutiveWins = Math.max(consecutiveWins, currentWins);
-    } else if (trade.pnl < 0) {
+    } else if (ep(trade) < 0) {
       currentLosses += 1;
       currentWins = 0;
       consecutiveLosses = Math.max(consecutiveLosses, currentLosses);
     }
   });
 
-  const grossProfit = wins.reduce((sum, trade) => sum + trade.pnl, 0);
-  const grossLoss = Math.abs(losses.reduce((sum, trade) => sum + trade.pnl, 0));
+  const grossProfit = wins.reduce((sum, trade) => sum + ep(trade), 0);
+  const grossLoss = Math.abs(losses.reduce((sum, trade) => sum + ep(trade), 0));
 
   return {
-    netPnL: sortedTrades.reduce((sum, trade) => sum + trade.pnl, 0),
+    netPnL: sortedTrades.reduce((sum, trade) => sum + ep(trade), 0),
     winRate: (wins.length / sortedTrades.length) * 100,
     profitFactor: grossLoss === 0 ? (grossProfit > 0 ? 999 : 0) : grossProfit / grossLoss,
     avgRR: rrValues.length > 0 ? rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length : 0,
     totalTrades: sortedTrades.length,
     avgWin: wins.length > 0 ? grossProfit / wins.length : 0,
-    avgLoss: losses.length > 0 ? losses.reduce((sum, trade) => sum + trade.pnl, 0) / losses.length : 0,
-    largestWin: wins.length > 0 ? Math.max(...wins.map(trade => trade.pnl)) : 0,
-    largestLoss: losses.length > 0 ? Math.min(...losses.map(trade => trade.pnl)) : 0,
+    avgLoss: losses.length > 0 ? losses.reduce((sum, trade) => sum + ep(trade), 0) / losses.length : 0,
+    largestWin: wins.length > 0 ? Math.max(...wins.map(trade => ep(trade))) : 0,
+    largestLoss: losses.length > 0 ? Math.min(...losses.map(trade => ep(trade))) : 0,
     consecutiveWins,
     consecutiveLosses,
   };
@@ -72,7 +74,7 @@ export function buildEquityCurve(trades: Trade[]): EquityCurvePoint[] {
   [...trades]
     .sort((a, b) => `${a.trade_date} ${a.trade_time}`.localeCompare(`${b.trade_date} ${b.trade_time}`))
     .forEach(trade => {
-      grouped.set(trade.trade_date, (grouped.get(trade.trade_date) ?? 0) + trade.pnl);
+      grouped.set(trade.trade_date, (grouped.get(trade.trade_date) ?? 0) + (trade.pnl - (trade.commission ?? 0)));
     });
 
   let cumulative = 0;
@@ -93,7 +95,7 @@ export function buildMonthlyHeatmapData(trades: Trade[], year: number, month: nu
     if (date.getFullYear() !== year || date.getMonth() + 1 !== month) return;
 
     const day = date.getDate();
-    days[day] = (days[day] ?? 0) + trade.pnl;
+    days[day] = (days[day] ?? 0) + (trade.pnl - (trade.commission ?? 0));
     counts[day] = (counts[day] ?? 0) + 1;
   });
 

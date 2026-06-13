@@ -149,7 +149,8 @@ export const aiApi = {
     formData.append('entryTime', entryTime);
     return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData);
   },
-  analyzeTradeById: (tradeId: string, trade?: Partial<Trade>) => api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, { trade }),
+  analyzeTradeById: (tradeId: string, trade?: Partial<Trade>, history?: Partial<Trade>[]) =>
+    api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, { trade, history }),
   analyzePatterns: () => api.post('/api/ai/patterns', {}),
   weeklyReport: (weekStart: string, weekEnd: string) =>
     api.post('/api/ai/weekly-report', { weekStart, weekEnd }),
@@ -217,6 +218,55 @@ export const marketDataApi = {
     }>>(
       `/api/market-data/chart?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`
     ),
+  getCandles: (symbol: string, timeframe: string, from?: number, to?: number) => {
+    const params = new URLSearchParams({
+      symbol,
+      timeframe,
+    });
+    if (from != null) params.set('from', String(from));
+    if (to != null) params.set('to', String(to));
+    return api.get<Array<{
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }>>(`/api/market-data/candles?${params.toString()}`);
+  },
+  importCandles: (payload: {
+    symbol: string;
+    timeframe: string;
+    candles: Array<{
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }>;
+  }) => api.post<{
+    symbol: string;
+    timeframe: string;
+    imported: number;
+    start: string | null;
+    end: string | null;
+  }>('/api/market-data/import-csv', payload),
+  importDatabentoCandles: (payload: {
+    symbol: string;
+    timeframe: string;
+    range: string;
+    start?: string | number;
+    end?: string | number;
+  }) => api.post<{
+    symbol: string;
+    timeframe: string;
+    imported: number;
+    start: string | null;
+    end: string | null;
+  }>('/api/market-data/databento/import', payload),
+  getSavedSymbols: () =>
+    api.get<Array<{ symbol: string; timeframe: string }>>('/api/market-data/symbols'),
   getFfCalendar: () => api.get<Array<Record<string, unknown>>>('/api/market-data/ff-calendar'),
   getXNews: (accounts?: string) => {
     const query = accounts?.trim() ? `?accounts=${encodeURIComponent(accounts)}` : '';

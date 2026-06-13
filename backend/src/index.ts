@@ -106,8 +106,8 @@ app.use(limiter);
 
 // Body parser — 2mb for JSON. Image uploads use multipart/form-data (handled by
 // multer in the AI route) so they are not affected by this limit.
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check
 app.get('/health', (_req, res) => {

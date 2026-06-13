@@ -1821,7 +1821,7 @@ export default function Settings() {
               marginBottom: '4px',
             }}
           >
-            {['Account name', 'Broker', 'Starting balance', 'Target balance', 'Account type', 'Status', 'Actions'].map(col => (
+            {['Account name', 'Firm', 'Starting balance', 'Target balance', 'Account type', 'Status', 'Actions'].map(col => (
               <span
                 key={col}
                 style={{
@@ -1883,14 +1883,14 @@ export default function Settings() {
                     )}
                   </div>
 
-                  {/* Broker */}
+                  {/* Firm */}
                   <input
                     style={tableInputStyle}
                     value={account.broker ?? ''}
                     onChange={e => updateAccount(account.id, { broker: e.target.value })}
                     onFocus={e => Object.assign(e.target.style, tableInputFocusedStyle)}
                     onBlur={e => { e.target.style.borderBottom = 'none'; }}
-                    placeholder="Broker"
+                    placeholder="Firm"
                   />
 
                   {/* Starting balance */}
@@ -2646,7 +2646,7 @@ export default function Settings() {
               </label>
 
               <label>
-                <FieldLabel>Broker</FieldLabel>
+                <FieldLabel>Firm</FieldLabel>
                 <input
                   style={{
                     ...tableInputStyle,
@@ -2655,7 +2655,7 @@ export default function Settings() {
                     borderRadius: '6px',
                     padding: '10px 12px',
                   }}
-                  placeholder="Broker"
+                  placeholder="e.g. Apex Trader Funding"
                   value={newAccount.broker}
                   onChange={e => setNewAccount(current => ({ ...current, broker: e.target.value }))}
                 />

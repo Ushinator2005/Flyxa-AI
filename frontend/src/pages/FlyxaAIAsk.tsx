@@ -47,12 +47,30 @@ function inlineChips(text: string): React.ReactNode {
       return <strong key={i} style={{ color: C.t0, fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
     }
     if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part) || /^\d+(?:\.\d+)?R$/.test(part)) {
+      let display = part;
+      // Reformat dollar amounts with proper comma separators (e.g. $4016 → $4,016)
+      if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part)) {
+        const isNeg = part.startsWith('-');
+        const raw = parseFloat(part.replace(/[$,]/g, ''));
+        if (!isNaN(raw)) {
+          const absVal = Math.abs(raw);
+          const hasDecimals = part.includes('.');
+          const formatted = absVal.toLocaleString('en-US', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+          });
+          display = (isNeg ? '-$' : '$') + formatted;
+        }
+      }
       return (
         <span key={i} style={{
-          color: C.acc, fontWeight: 700,
+          color: C.acc,
+          fontWeight: 600,
           fontVariantNumeric: 'tabular-nums',
           fontFamily: 'var(--font-mono, monospace)',
-        }}>{part}</span>
+          WebkitFontSmoothing: 'antialiased',
+          letterSpacing: '0.01em',
+        }}>{display}</span>
       );
     }
     return part;
@@ -77,8 +95,8 @@ function parseReviewSections(text: string): ReviewSection[] {
         current.insights.push(line.replace(/^> /, '').trim());
       } else if (/^TAGS:/i.test(trimmed)) {
         current.tags = trimmed.replace(/^TAGS:\s*/i, '').split(',').map(t => t.trim()).filter(Boolean);
-      } else if (/^RULE:/i.test(trimmed)) {
-        current.rule = trimmed.replace(/^RULE:\s*/i, '');
+      } else if (/^(RULE|ADJUSTMENT):/i.test(trimmed)) {
+        current.rule = trimmed.replace(/^(RULE|ADJUSTMENT):\s*/i, '');
       } else if (/^[-*] /.test(line)) {
         current.bullets.push(line.replace(/^[-*] /, ''));
       } else if (trimmed) {
@@ -145,11 +163,12 @@ function getDataTags(trade: Trade): string[] {
 const SECTION_META = [
   { key: 'your stats',      num: '01', label: 'Your Stats'    },
   { key: 'what happened',   num: '02', label: 'What Happened' },
-  { key: 'the rule',        num: '03', label: 'The Rule'      },
+  { key: 'adjustment',      num: '03', label: 'Adjustment'    },
+  { key: 'the rule',        num: '03', label: 'Adjustment'    },
   // legacy keys so cached responses still render correctly
   { key: 'your pattern',    num: '01', label: 'Your Stats'    },
   { key: 'this trade',      num: '02', label: 'What Happened' },
-  { key: 'edge adjustment', num: '03', label: 'The Rule'      },
+  { key: 'edge adjustment', num: '03', label: 'Adjustment'    },
 ];
 
 function renderReviewSections(text: string): React.ReactNode {
@@ -183,7 +202,9 @@ function renderReviewSections(text: string): React.ReactNode {
             {/* Rule callout (Edge Adjustment) */}
             {section.rule && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '0 0 10px', padding: '8px 10px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 6 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, color: C.acc, letterSpacing: '0.1em', textTransform: 'uppercase', paddingTop: 1, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)' }}>RULE</span>
+                <span style={{ fontSize: 9, fontWeight: 800, color: C.acc, letterSpacing: '0.1em', textTransform: 'uppercase', paddingTop: 1, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)' }}>
+                  {section.label.toLowerCase() === 'adjustment' ? 'ADJUSTMENT' : 'RULE'}
+                </span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: C.t0, lineHeight: 1.55 }}>{section.rule}</span>
               </div>
             )}
@@ -288,7 +309,7 @@ function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string
               margin: '0 0 10px',
               fontWeight: i === 0 ? 540 : 400,
             }}>
-              {para}
+              {r.error ? para : inlineChips(para)}
             </p>
           ))}
         </div>
@@ -383,12 +404,12 @@ export default function FlyxaAIAsk() {
     if (!focusedTradeId || !focusedTrade || tradeAnalysisById[focusedTradeId]) return;
     setTradeAnalysisLoadingId(focusedTradeId);
     setTradeAnalysisError(null);
-    aiApi.analyzeTradeById(focusedTradeId, focusedTrade)
+    aiApi.analyzeTradeById(focusedTradeId, focusedTrade, trades)
       .then(({ analysis }) => { if (!cancelled) setTradeAnalysisById(prev => ({ ...prev, [focusedTradeId]: analysis })); })
       .catch(err => { if (!cancelled) setTradeAnalysisError(err instanceof Error ? err.message : 'Unable to analyse this trade.'); })
       .finally(() => { if (!cancelled) setTradeAnalysisLoadingId(cur => cur === focusedTradeId ? null : cur); });
     return () => { cancelled = true; };
-  }, [focusedTradeId, focusedTrade, tradeAnalysisById]);
+  }, [focusedTradeId, focusedTrade, tradeAnalysisById, trades]);
 
   const clearFocus = () => {
     const next = new URLSearchParams(searchParams);

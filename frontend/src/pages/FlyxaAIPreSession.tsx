@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -203,11 +203,6 @@ function buildPatternInstruction(pattern: PatternItem, mode: 'watch' | 'protect'
   return `Lean into ${pattern.title.toLowerCase()} during ${pattern.session} on ${pattern.instrument}, and keep execution exactly to your confirmed model.`;
 }
 
-function sourceBadgeStyle(source: SessionPlanRow['source']): CSSProperties {
-  if (source === 'Primary focus') return { color: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' };
-  if (source === 'Avoid today') return { color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' };
-  return { color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' };
-}
 
 function customCheckbox(checked: boolean) {
   return (
@@ -698,82 +693,93 @@ export default function FlyxaAIPreSession() {
   const visiblePatterns = [...activeRiskPatterns.slice(0, 2), ...confirmedEdgePatterns.slice(0, 2)];
 
   return (
-    <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <header data-tour-id="pre-session-header" style={{ padding: '13px 20px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
+    <div style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Header ── */}
+      <header data-tour-id="pre-session-header" style={{ padding: '10px 16px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 11, color: C.t2, fontWeight: 500 }}>Session</p>
-          <h1 style={{ fontSize: 18, fontWeight: 800, color: C.t0, letterSpacing: '-0.02em', marginTop: 2 }}>Session Command Center</h1>
+          <p style={{ fontSize: 10, color: C.t2, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 1 }}>Session</p>
+          <h1 style={{ fontSize: 14, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}>Command Center</h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          {/* Session tab toggle */}
-          <div style={{ display: 'flex', gap: 2, padding: 2, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 7, border: `1px solid ${C.b0}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {/* Tab group — borderless segment control */}
+          <div style={{ display: 'flex', borderRadius: 4, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
             {([
               { label: 'Pre-session', to: '/pre-session' },
               { label: 'Post-session', to: '/post-session' },
-            ] as const).map(tab => (
-              <button
-                key={tab.to}
-                type="button"
-                onClick={() => navigate(tab.to)}
-                style={{
-                  fontSize: 11,
-                  fontWeight: tab.to === '/pre-session' ? 600 : 500,
-                  color: tab.to === '/pre-session' ? C.acc : C.t2,
-                  backgroundColor: tab.to === '/pre-session' ? 'rgba(245,158,11,0.10)' : 'transparent',
-                  border: 'none', borderRadius: 5, padding: '4px 10px', cursor: 'pointer',
-                }}
-              >
-                {tab.label}
-              </button>
+            ] as const).map((tab, i) => (
+              <button key={tab.to} type="button" onClick={() => navigate(tab.to)} style={{
+                fontSize: 11, fontWeight: tab.to === '/pre-session' ? 600 : 400,
+                color: tab.to === '/pre-session' ? C.t0 : C.t2,
+                backgroundColor: tab.to === '/pre-session' ? C.d3 : 'transparent',
+                border: 'none', borderRight: i === 0 ? `1px solid ${C.b0}` : 'none',
+                padding: '5px 12px', cursor: 'pointer',
+              }}>{tab.label}</button>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: C.t1 }}>
+          {/* Market clock */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.t2 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: rthTiming.marketOpenToday ? C.grn : C.t2, flexShrink: 0 }} />
-            <span>{rthTiming.marketOpenToday ? 'RTH open' : `RTH in ${formatDuration(rthTiming.minutesUntilOpen)}`}</span>
-            <span style={{ color: C.t2 }}>·</span>
+            <span style={{ color: C.t1 }}>{rthTiming.marketOpenToday ? 'RTH open' : `RTH in ${formatDuration(rthTiming.minutesUntilOpen)}`}</span>
+            <span>·</span>
             <span>{etDateLabel(now)}</span>
           </div>
         </div>
       </header>
 
-      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 18 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)', gap: 14, alignItems: 'start' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <section style={{ border: '1px solid rgba(255,255,255,0.065)', backgroundColor: `${readinessColor}07`, borderRadius: 14, padding: '18px 20px', display: 'grid', gridTemplateColumns: '210px minmax(0,1fr)', gap: 24, alignItems: 'center', boxShadow: '0 2px 18px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.04) inset' }}>
-              {/* Score side */}
-              <div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: `${readinessColor}18`, border: `1px solid ${readinessColor}40`, color: readinessColor, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  {readiness.status}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 10 }}>
-                  <span style={{ fontSize: 48, fontWeight: 800, color: C.t0, lineHeight: 1, letterSpacing: '-0.04em' }}>{readiness.score}</span>
-                  <span style={{ fontSize: 13, color: C.t2, letterSpacing: '-0.01em' }}>/100</span>
-                </div>
-                <div style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999, overflow: 'hidden', margin: '10px 0 9px' }}>
-                  <div style={{ height: '100%', width: `${readiness.score}%`, backgroundColor: readinessColor, borderRadius: 999, transition: 'width 0.55s cubic-bezier(0.4,0,0.2,1)' }} />
-                </div>
-                <p style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.55, letterSpacing: '-0.01em' }}>{readiness.summary}</p>
-              </div>
-              {/* Metric cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
-                {[
-                  { label: 'Checks', value: `${checklistTotals.completed}/${checklistTotals.total}`, color: checklistTotals.completed === checklistTotals.total ? C.grn : C.acc },
-                  { label: 'Oath', value: `${oathCompleted}/${activeOathItems.length}`, color: oathCompleted === activeOathItems.length ? C.grn : C.acc },
-                  { label: 'Plan', value: String(sessionPlan.length), color: C.t0 },
-                  { label: 'Last', value: lastSession ? formatSignedCurrency(lastSession.netPnl) : '--', color: lastSession && lastSession.netPnl < 0 ? C.red : C.grn },
-                ].map(item => (
-                  <article key={item.label} style={{ borderRadius: 10, backgroundColor: C.d1, padding: '13px 14px', border: '1px solid rgba(255,255,255,0.055)', boxShadow: '0 1px 8px rgba(0,0,0,0.22)' }}>
-                    <p style={{ fontSize: 11, color: C.t2, fontWeight: 500, marginBottom: 9 }}>{item.label}</p>
-                    <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 20, color: item.color, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{item.value}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
+      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(280px, 0.7fr)', gap: 10, alignItems: 'start' }}>
 
-            <section data-tour-id="pre-session-begin" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 14, alignItems: 'center' }}>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 800, color: C.t0 }}>Today&apos;s operating mode</p>
-                <p style={{ marginTop: 4, fontSize: 12, color: C.t1, lineHeight: 1.6 }}>
+          {/* ── Left column ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+            {/* 1. Alert banner — only for Caution / Stand Down */}
+            {readiness.status !== 'Ready' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                padding: '8px 12px',
+                borderRadius: 4,
+                border: `1px solid ${readiness.status === 'Stand Down' ? `${C.red}30` : `${C.acc}28`}`,
+                borderLeft: `3px solid ${readinessColor}`,
+                backgroundColor: readiness.status === 'Stand Down' ? `${C.red}0a` : `${C.acc}08`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: readinessColor, letterSpacing: '0.09em', textTransform: 'uppercase', flexShrink: 0 }}>
+                    {readiness.status}
+                  </span>
+                  <span style={{ color: C.b1, fontSize: 10 }}>·</span>
+                  <span style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.4 }}>{readiness.summary}</span>
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12, fontWeight: 600, color: readinessColor, flexShrink: 0 }}>
+                  {readiness.score}/100
+                </span>
+              </div>
+            )}
+
+            {/* 2. Unified stat bar */}
+            <div style={{ display: 'flex', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
+              {([
+                { label: 'CHECKS', value: `${checklistTotals.completed}/${checklistTotals.total}`, color: checklistTotals.completed === checklistTotals.total ? C.grn : C.acc },
+                { label: 'OATH', value: `${oathCompleted}/${activeOathItems.length}`, color: oathCompleted === activeOathItems.length ? C.grn : C.acc },
+                { label: 'PLAN', value: `${sessionPlan.length} rules`, color: C.t0 },
+                { label: 'LAST SESSION', value: lastSession ? formatSignedCurrency(lastSession.netPnl) : '--', color: lastSession && lastSession.netPnl < 0 ? C.red : C.grn },
+                ...(readiness.status === 'Ready' ? [{ label: 'READINESS', value: `${readiness.score}/100`, color: C.grn }] : []),
+              ] as { label: string; value: string; color: string }[]).map((stat, i) => (
+                <div key={stat.label} style={{ flex: 1, padding: '9px 12px', borderLeft: i === 0 ? 'none' : `1px solid ${C.b0}` }}>
+                  <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', marginBottom: 4 }}>{stat.label}</p>
+                  <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 13, fontWeight: 600, color: stat.color, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* 3. Accept oath strip */}
+            <div data-tour-id="pre-session-begin" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+              padding: '10px 12px', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d1,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 11.5, fontWeight: 600, color: C.t0, marginBottom: 2 }}>Today&apos;s operating mode</p>
+                <p style={{ fontSize: 11, color: C.t1, lineHeight: 1.5 }}>
                   {readiness.status === 'Ready'
                     ? 'Green light only for planned trades. Keep execution narrow and measurable.'
                     : readiness.status === 'Caution'
@@ -781,131 +787,146 @@ export default function FlyxaAIPreSession() {
                       : 'Stand down until the blockers are cleared. Capital protection is the win condition.'}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 {sessionAlreadyStarted ? (
-                  <button type="button" onClick={() => navigate('/session')} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.grn}55`, backgroundColor: `${C.grn}12`, color: C.grn, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                    Session open — continue →
-                  </button>
+                  <button type="button" onClick={() => navigate('/session')} style={{
+                    height: 30, padding: '0 13px', borderRadius: 4,
+                    border: `1px solid ${C.grn}50`, backgroundColor: `${C.grn}10`,
+                    color: C.grn, fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}>Continue session →</button>
                 ) : (
-                  <button type="button" onClick={startSession} style={{ height: 36, padding: '0 18px', borderRadius: 6, border: `1px solid ${C.acc}`, backgroundColor: C.acc, color: '#0e0d0d', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                    Accept oath — begin
-                  </button>
+                  <button type="button" onClick={startSession} style={{
+                    height: 30, padding: '0 14px', borderRadius: 4,
+                    border: `1px solid ${C.acc}`, backgroundColor: C.acc,
+                    color: C.d0, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}>Accept oath — begin</button>
                 )}
-                <button type="button" onClick={() => navigate('/')} style={{ height: 36, padding: '0 14px', borderRadius: 6, border: `1px solid ${C.b1}`, backgroundColor: 'transparent', color: C.t1, fontSize: 12, cursor: 'pointer' }}>
-                  Dashboard
-                </button>
+                <button type="button" onClick={() => navigate('/')} style={{
+                  height: 30, padding: '0 11px', borderRadius: 4,
+                  border: `1px solid ${C.b0}`, backgroundColor: 'transparent',
+                  color: C.t2, fontSize: 11, cursor: 'pointer',
+                }}>Dashboard</button>
               </div>
-            </section>
+            </div>
 
+            {/* 4. Carry-forward rule — left border accent only */}
             {priorFlow && (
-              <section style={{ border: `1px solid ${priorFlow.biggestLeak ? `${C.red}55` : `${C.grn}44`}`, borderRadius: 10, backgroundColor: priorFlow.biggestLeak ? 'rgba(239,68,68,0.075)' : 'rgba(34,197,94,0.065)', padding: 14 }}>
-                <p style={{ fontSize: 11, color: priorFlow.biggestLeak ? C.red : C.grn, fontWeight: 700 }}>Tomorrow&apos;s Rule</p>
-                <p style={{ marginTop: 7, fontSize: 15, fontWeight: 800, color: C.t0, lineHeight: 1.45 }}>{priorFlow.tomorrowRule}</p>
-                <p style={{ marginTop: 6, fontSize: 12, color: C.t1, lineHeight: 1.55 }}>
+              <div style={{
+                padding: '10px 12px', borderRadius: 6,
+                border: `1px solid ${C.b0}`,
+                borderLeft: `3px solid ${priorFlow.biggestLeak ? C.red : C.grn}`,
+                backgroundColor: C.d1,
+              }}>
+                <p style={{ fontSize: 9, fontWeight: 700, color: priorFlow.biggestLeak ? C.red : C.grn, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>
+                  Carry-forward rule
+                </p>
+                <p style={{ fontSize: 12.5, fontWeight: 600, color: C.t0, lineHeight: 1.45, marginBottom: 3 }}>{priorFlow.tomorrowRule}</p>
+                <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.45 }}>
                   From {priorFlow.date}: {priorFlow.summary}
                   {priorFlow.worstState && priorFlow.bestState && priorFlow.worstState.label !== priorFlow.bestState.label
-                    ? ` Best state was ${priorFlow.bestState.label}; weakest was ${priorFlow.worstState.label}.`
+                    ? ` Best: ${priorFlow.bestState.label} · Worst: ${priorFlow.worstState.label}.`
                     : ''}
                 </p>
-              </section>
+              </div>
             )}
 
-            <section data-tour-id="pre-session-oath" style={{ border: '1px solid rgba(255,255,255,0.065)', borderRadius: 14, backgroundColor: C.d1, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
-              {/* Header */}
-              <div style={{ padding: '14px 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <p style={{ fontSize: 11, color: C.t2, fontWeight: 500, marginBottom: 3 }}>Pre-session commitment</p>
-                  <h2 style={{ fontSize: 15, fontWeight: 700, color: C.t0, letterSpacing: '-0.02em' }}>Trader Oath</h2>
+            {/* 5. Trader Oath — single card, borderless clickable rows */}
+            <div data-tour-id="pre-session-oath" style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${C.b0}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h2 style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Trader Oath</h2>
+                  {oathCooldownActive && (
+                    <span style={{ fontSize: 9, color: C.t2, fontFamily: 'monospace', letterSpacing: '0.03em' }}>wait {oathCooldownRemaining}s</span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {oathCooldownActive && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: C.t2, fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.02em' }}>
-                      read next · {oathCooldownRemaining}s
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 700, color: oathCompleted === activeOathItems.length ? C.grn : C.acc }}>
+                      {oathCompleted}/{activeOathItems.length}
                     </span>
-                  )}
-                  <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 6, backgroundColor: oathCompleted === activeOathItems.length ? 'rgba(34,214,138,0.12)' : 'rgba(245,158,11,0.1)', border: `1px solid ${oathCompleted === activeOathItems.length ? 'rgba(34,214,138,0.3)' : 'rgba(245,158,11,0.25)'}`, color: oathCompleted === activeOathItems.length ? C.grn : C.acc, fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>
-                    {oathCompleted}/{activeOathItems.length}
-                  </span>
+                    <div style={{ width: 52, height: 2, backgroundColor: C.b0, borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${activeOathItems.length > 0 ? (oathCompleted / activeOathItems.length) * 100 : 0}%`, backgroundColor: oathCompleted === activeOathItems.length ? C.grn : C.acc, transition: 'width 0.4s ease' }} />
+                    </div>
+                  </div>
                   <button type="button" onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
-                    style={{ fontSize: 10, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', padding: 0, letterSpacing: '0.02em' }}
-                  >{oathEditOpen ? 'cancel' : 'edit'}</button>
+                    style={{ fontSize: 10, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    {oathEditOpen ? 'cancel' : 'edit'}
+                  </button>
                 </div>
               </div>
-              {/* Progress track */}
-              <div style={{ margin: '12px 18px 0', height: 2, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${activeOathItems.length > 0 ? (oathCompleted / activeOathItems.length) * 100 : 0}%`, backgroundColor: oathCompleted === activeOathItems.length ? C.grn : C.acc, borderRadius: 999, transition: 'width 0.45s cubic-bezier(0.4,0,0.2,1)' }} />
-              </div>
               {oathEditOpen ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '12px 18px 16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 14px 12px' }}>
                   {oathDraft.map((item, idx) => (
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input type="text" value={item.label}
                         onChange={e => { const next = [...oathDraft]; next[idx] = { ...item, label: e.target.value }; setOathDraft(next); }}
-                        style={{ flex: 1, borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', backgroundColor: C.d2, color: C.t0, fontSize: 12, padding: '8px 10px', outline: 'none', fontFamily: 'inherit' }}
+                        style={{ flex: 1, borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t0, fontSize: 11.5, padding: '6px 9px', outline: 'none', fontFamily: 'inherit' }}
                       />
                       <button type="button" onClick={() => setOathDraft(oathDraft.filter((_, i) => i !== idx))}
-                        style={{ width: 28, height: 28, borderRadius: 5, border: '1px solid rgba(255,255,255,0.08)', backgroundColor: C.d2, color: C.t2, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+                        style={{ width: 26, height: 26, borderRadius: 3, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t2, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
                         aria-label="Remove">✕</button>
                     </div>
                   ))}
                   <button type="button" onClick={() => setOathDraft([...oathDraft, { id: `oath-custom-${Date.now()}`, label: '' }])}
-                    style={{ padding: '7px 0', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent', color: C.t2, fontSize: 12, cursor: 'pointer' }}
-                  >+ Add</button>
+                    style={{ padding: '6px 0', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: 'transparent', color: C.t2, fontSize: 11, cursor: 'pointer' }}>+ Add</button>
                   <button type="button" onClick={saveOathItems}
-                    style={{ padding: '8px 0', borderRadius: 6, border: '1px solid rgba(245,158,11,0.35)', backgroundColor: 'rgba(245,158,11,0.1)', color: C.acc, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                  >Save</button>
+                    style={{ padding: '7px 0', borderRadius: 4, border: `1px solid ${C.acc}44`, backgroundColor: `${C.acc}10`, color: C.acc, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Save</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '10px 14px 14px' }}>
-                  {activeOathItems.map(item => {
+                <div>
+                  {activeOathItems.map((item, i) => {
                     const checked = Boolean(checklistState[item.id]);
                     const locked = oathCooldownActive;
                     return (
                       <button key={item.id} type="button" disabled={locked} onClick={() => toggleOathChecklist(item)} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 14px',
-                        borderRadius: 9,
-                        border: `1px solid ${checked ? 'rgba(245,158,11,0.18)' : 'transparent'}`,
-                        borderLeft: `2px solid ${checked ? C.acc : 'transparent'}`,
-                        backgroundColor: checked ? 'rgba(245,158,11,0.05)' : 'transparent',
-                        cursor: locked ? 'not-allowed' : 'pointer', textAlign: 'left', width: '100%',
-                        opacity: locked && !checked ? 0.58 : 1,
-                        transition: 'background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease',
+                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px',
+                        width: '100%', textAlign: 'left',
+                        border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                        backgroundColor: checked ? `${C.acc}07` : 'transparent',
+                        cursor: locked ? 'not-allowed' : 'pointer',
+                        opacity: locked && !checked ? 0.5 : 1,
+                        transition: 'background 0.12s ease, opacity 0.12s ease',
                       }}>
                         {customCheckbox(checked)}
-                        <p style={{ fontSize: 12.5, lineHeight: 1.6, color: checked ? C.t1 : C.t0, flex: 1, letterSpacing: '-0.01em', transition: 'color 0.15s ease' }}>{item.label}</p>
+                        <p style={{ fontSize: 12, lineHeight: 1.55, color: checked ? C.t1 : C.t0, flex: 1 }}>{item.label}</p>
                       </button>
                     );
                   })}
                 </div>
               )}
-            </section>
+            </div>
 
-            <section data-tour-id="pre-session-checklist" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 14 }}>
-              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                  <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0 }}>Readiness Checks</h2>
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: C.t2 }}>{mentalCompleted + technicalCompleted}/{mentalChecklistWithAdaptiveItems.length + technicalChecklistItems.length}</span>
+            {/* 6. Two-column split: Checks | Plan */}
+            <div data-tour-id="pre-session-checklist" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+
+              {/* Readiness Checks */}
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${C.b0}` }}>
+                  <h2 style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Readiness Checks</h2>
+                  <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.t2 }}>{mentalCompleted + technicalCompleted}/{mentalChecklistWithAdaptiveItems.length + technicalChecklistItems.length}</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[
                     { label: 'Mental', items: mentalChecklistWithAdaptiveItems },
                     { label: 'Technical', items: technicalChecklistItems },
                   ].map(group => (
                     <div key={group.label}>
-                      <p style={{ fontSize: 11, color: C.t2, marginBottom: 7, fontWeight: 600 }}>{group.label}</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {group.items.map(item => {
+                      <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>{group.label}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {group.items.map((item, i) => {
                           const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
                           return (
                             <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
-                              display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px',
-                              borderRadius: 6, border: `1px solid ${checked ? 'rgba(34,214,138,0.22)' : C.b0}`, backgroundColor: checked ? 'rgba(34,214,138,0.05)' : C.d2,
-                              cursor: 'pointer', textAlign: 'left', width: '100%',
+                              display: 'flex', alignItems: 'flex-start', gap: 7, padding: '7px 0',
+                              border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                              background: 'transparent', cursor: 'pointer', textAlign: 'left', width: '100%',
                             }}>
                               {customCheckbox(checked)}
                               <div style={{ minWidth: 0 }}>
-                                <p style={{ fontSize: 11.5, color: checked ? C.t0 : C.t1, lineHeight: 1.4 }}>{item.label}</p>
-                                {(item.autoFromEmotion || item.source) && <p style={{ fontSize: 9.5, color: C.t2, marginTop: 1 }}>{item.autoFromEmotion ? 'auto-linked to emotion' : item.source}</p>}
+                                <p style={{ fontSize: 11, color: checked ? C.t2 : C.t1, lineHeight: 1.4 }}>{item.label}</p>
+                                {(item.autoFromEmotion || item.source) && (
+                                  <p style={{ fontSize: 9, color: C.t2, marginTop: 1 }}>{item.autoFromEmotion ? 'auto · emotion' : item.source}</p>
+                                )}
                               </div>
                             </button>
                           );
@@ -916,149 +937,220 @@ export default function FlyxaAIPreSession() {
                 </div>
               </div>
 
-              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Session Plan</h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {primaryPlanRows.map(row => (
-                    <article key={row.id} style={{ border: '1px solid rgba(34,214,138,0.22)', backgroundColor: 'rgba(34,214,138,0.06)', borderRadius: 8, padding: 11 }}>
-                      <span style={{ ...sourceBadgeStyle(row.source), borderRadius: 4, padding: '3px 7px', fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{row.source}</span>
-                      <p style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.t0 }}>{row.rule}</p>
-                    </article>
-                  ))}
-                  {protectionPlanRows.map(row => (
-                    <article key={row.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 9, alignItems: 'start', border: `1px solid ${C.b0}`, backgroundColor: C.d2, borderRadius: 8, padding: 10 }}>
-                      <span style={{ ...sourceBadgeStyle(row.source), borderRadius: 4, padding: '3px 6px', fontSize: 8.5, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{row.source}</span>
-                      <p style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>{row.rule}</p>
-                    </article>
-                  ))}
+              {/* Session Plan */}
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+                <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}` }}>
+                  <h2 style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Session Plan</h2>
                 </div>
-              </div>
-            </section>
-
-            {visiblePatterns.length > 0 && (
-              <section style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-                <h2 style={{ fontSize: 13, fontWeight: 800, color: C.t0, marginBottom: 10 }}>Pattern Watch</h2>
-                <div style={{ display: 'grid', gap: 7 }}>
-                  {visiblePatterns.map(p => {
-                    const risk = activeRiskPatterns.some(item => item.id === p.id);
+                <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {/* Primary focus — green accent block */}
+                  {primaryPlanRows.map(row => (
+                    <div key={row.id} style={{
+                      padding: '9px 11px', borderRadius: 4,
+                      border: `1px solid rgba(34,214,138,0.18)`,
+                      borderLeft: `3px solid ${C.grn}`,
+                      backgroundColor: 'rgba(34,214,138,0.05)',
+                    }}>
+                      <p style={{ fontSize: 9, fontWeight: 700, color: C.grn, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>
+                        {row.source}
+                      </p>
+                      <p style={{ fontSize: 11.5, lineHeight: 1.5, color: C.t0 }}>{row.rule}</p>
+                    </div>
+                  ))}
+                  {/* Avoid / Hard stop — labeled rows, no thick borders */}
+                  {protectionPlanRows.map((row, i) => {
+                    const bc = row.source === 'Avoid today' ? C.red : C.acc;
                     return (
-                      <article key={p.id} style={{ display: 'grid', gridTemplateColumns: '3px 1fr', borderRadius: 7, overflow: 'hidden', border: `1px solid ${risk ? 'rgba(240,82,82,0.22)' : 'rgba(34,214,138,0.22)'}` }}>
-                        <div style={{ backgroundColor: risk ? C.red : C.grn }} />
-                        <div style={{ padding: '9px 10px', backgroundColor: C.d2 }}>
-                          <p style={{ fontSize: 12, fontWeight: 800, color: risk ? C.red : C.grn }}>{risk ? 'Watch' : 'Lean in'}: {p.title}</p>
-                          <p style={{ fontSize: 11, color: C.t1, marginTop: 2, lineHeight: 1.45 }}>{buildPatternInstruction(p, risk ? 'watch' : 'protect')}</p>
-                        </div>
-                      </article>
+                      <div key={row.id} style={{
+                        display: 'flex', gap: 9, alignItems: 'flex-start',
+                        paddingTop: primaryPlanRows.length > 0 && i === 0 ? 4 : 0,
+                        borderTop: primaryPlanRows.length > 0 && i === 0 ? `1px solid ${C.b0}` : 'none',
+                      }}>
+                        <span style={{
+                          flexShrink: 0, marginTop: 1,
+                          fontSize: 8, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                          color: bc, border: `1px solid ${bc}38`, borderRadius: 3, padding: '2px 5px', lineHeight: 1.4,
+                        }}>{row.source}</span>
+                        <p style={{ fontSize: 11, lineHeight: 1.5, color: C.t1, flex: 1 }}>{row.rule}</p>
+                      </div>
                     );
                   })}
                 </div>
-              </section>
+              </div>
+            </div>
+
+            {/* Pattern Watch */}
+            {visiblePatterns.length > 0 && (
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+                <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}` }}>
+                  <h2 style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Pattern Watch</h2>
+                </div>
+                <div>
+                  {visiblePatterns.map((p, i) => {
+                    const risk = activeRiskPatterns.some(item => item.id === p.id);
+                    return (
+                      <div key={p.id} style={{
+                        display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 14px',
+                        borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                      }}>
+                        <span style={{
+                          flexShrink: 0, marginTop: 1,
+                          fontSize: 8, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                          color: risk ? C.red : C.grn, border: `1px solid ${risk ? C.red : C.grn}38`, borderRadius: 3, padding: '2px 5px',
+                        }}>{risk ? 'Watch' : 'Edge'}</span>
+                        <div>
+                          <p style={{ fontSize: 11.5, fontWeight: 600, color: C.t0, marginBottom: 2 }}>{p.title}</p>
+                          <p style={{ fontSize: 11, color: C.t1, lineHeight: 1.45 }}>{buildPatternInstruction(p, risk ? 'watch' : 'protect')}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
 
-          <aside data-tour-id="pre-session-inputs" style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 0 }}>
-            <section data-tour-id="pre-session-mindset" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <p style={{ fontSize: 11, color: C.t2, fontWeight: 700, marginBottom: 8 }}>State of mind</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 4 }}>
-                {emotions.map(em => {
-                  const sel = emotion === em;
-                  const ec = em === 'Frustrated' ? C.red : em === 'Anxious' ? '#f97316' : em === 'Confident' ? C.grn : C.acc;
-                  return (
-                    <button key={em} type="button" onClick={() => setEmotionAndPersist(em)} style={{
-                      minHeight: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 3px', borderRadius: 6,
-                      border: `1px solid ${sel ? ec + '50' : C.b0}`, backgroundColor: sel ? ec + '12' : 'transparent',
-                      color: sel ? ec : C.t1, fontSize: 10.5, fontWeight: sel ? 800 : 500, cursor: 'pointer', textAlign: 'center', width: '100%',
-                    }}>
-                      {em}
-                    </button>
-                  );
-                })}
-              </div>
-              <textarea
-                id="presession-note" value={note}
-                onChange={e => setNoteAndPersist(e.target.value)}
-                style={{ marginTop: 8, width: '100%', height: 58, resize: 'none', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2, color: C.t0, fontSize: 12, padding: '7px 10px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
-                placeholder="One thing to watch before entry..."
-              />
-            </section>
+          {/* ── Right sidebar ── */}
+          <aside data-tour-id="pre-session-inputs" style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'sticky', top: 0 }}>
 
-            <section data-tour-id="pre-session-risk" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <p style={{ fontSize: 11, color: C.t2, fontWeight: 700, marginBottom: 10 }}>Market bias</p>
-              {(['ES', 'NQ'] as const).map(instrument => (
-                <div key={instrument} style={{ marginBottom: 10 }}>
-                  <p style={{ fontSize: 10, fontFamily: 'monospace', color: C.t2, marginBottom: 5, letterSpacing: '0.06em' }}>{instrument}</p>
-                  <div style={{ display: 'flex', gap: 3 }}>
-                    {biasOptions.map(opt => {
-                      const sel = bias[instrument] === opt;
-                      const oc = opt === 'Bull' ? C.grn : opt === 'Bear' ? C.red : C.acc;
-                      return (
-                        <button key={opt} type="button" onClick={() => setBiasAndPersist(instrument, opt)} style={{ flex: 1, padding: '5px 0', borderRadius: 4, border: `1px solid ${sel ? oc + '55' : C.b0}`, backgroundColor: sel ? oc + '18' : 'transparent', fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? oc : C.t2, cursor: 'pointer' }}>{opt}</button>
-                      );
-                    })}
-                  </div>
+            {/* State of mind */}
+            <div data-tour-id="pre-session-mindset" style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+              <div style={{ padding: '9px 12px', borderBottom: `1px solid ${C.b0}` }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>State of mind</p>
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                {/* Emotion tag row — segment control */}
+                <div style={{ display: 'flex', borderRadius: 4, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
+                  {emotions.map((em, i) => {
+                    const sel = emotion === em;
+                    const ec = em === 'Frustrated' ? C.red : em === 'Anxious' ? '#f97316' : em === 'Neutral' ? '#94a3b8' : em === 'Focused' ? '#60a5fa' : C.grn;
+                    return (
+                      <button key={em} type="button" onClick={() => setEmotionAndPersist(em)} style={{
+                        flex: 1, padding: '6px 2px',
+                        border: 'none', borderRight: i < emotions.length - 1 ? `1px solid ${C.b0}` : 'none',
+                        backgroundColor: sel ? `${ec}14` : 'transparent',
+                        color: sel ? ec : C.t2,
+                        fontSize: 10, fontWeight: sel ? 700 : 400, cursor: 'pointer',
+                      }}>{em}</button>
+                    );
+                  })}
                 </div>
-              ))}
-            </section>
-
-            <section style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <p style={{ fontSize: 11, color: C.t2, fontWeight: 700 }}>Risk limits</p>
-                <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor} style={{ fontSize: 10, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{riskEditOpen ? 'cancel' : 'edit'}</button>
+                {/* Watch note */}
+                <textarea value={note} onChange={e => setNoteAndPersist(e.target.value)}
+                  style={{
+                    marginTop: 8, width: '100%', height: 52, resize: 'none',
+                    borderRadius: 4, border: `1px solid ${C.b0}`,
+                    backgroundColor: C.d2, color: C.t0,
+                    fontSize: 11.5, padding: '7px 9px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+                  }}
+                  placeholder="One thing to watch before entry..."
+                />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                {[
-                  { label: 'max loss', value: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
-                  { label: 'max trades', value: String(riskLimits.maxTrades), color: C.t0 },
-                  { label: 'contracts', value: String(riskLimits.maxContracts), color: C.t0 },
-                  { label: 'target', value: formatCurrency(riskLimits.target), color: C.grn },
-                ].map(stat => (
-                  <div key={stat.label} style={{ padding: '8px 10px', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
-                    <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: stat.color }}>{stat.value}</p>
-                    <p style={{ fontSize: 10, color: C.t2, marginTop: 2 }}>{stat.label}</p>
+            </div>
+
+            {/* Market bias */}
+            <div data-tour-id="pre-session-risk" style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+              <div style={{ padding: '9px 12px', borderBottom: `1px solid ${C.b0}` }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Market bias</p>
+              </div>
+              <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {(['ES', 'NQ'] as const).map(instrument => (
+                  <div key={instrument}>
+                    <p style={{ fontSize: 9, fontFamily: 'monospace', color: C.t2, marginBottom: 5, letterSpacing: '0.07em', fontWeight: 600 }}>{instrument}</p>
+                    <div style={{ display: 'flex', borderRadius: 4, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
+                      {biasOptions.map((opt, i) => {
+                        const sel = bias[instrument] === opt;
+                        const oc = opt === 'Bull' ? C.grn : opt === 'Bear' ? C.red : C.acc;
+                        return (
+                          <button key={opt} type="button" onClick={() => setBiasAndPersist(instrument, opt)} style={{
+                            flex: 1, padding: '5px 0',
+                            border: 'none', borderRight: i < biasOptions.length - 1 ? `1px solid ${C.b0}` : 'none',
+                            backgroundColor: sel ? `${oc}18` : 'transparent',
+                            fontSize: 11, fontWeight: sel ? 700 : 400,
+                            color: sel ? oc : C.t2, cursor: 'pointer',
+                          }}>{opt}</button>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
-              {riskEditOpen && (
-                <div style={{ marginTop: 8, padding: 12, borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    {([
-                      ['daily_loss_limit',       'Max loss',     '$', true ],
-                      ['max_trades_per_day',      'Max trades',   '',  true ],
-                      ['max_contracts_per_trade', 'Contracts',    '',  false],
-                      ['account_size',            'Account size', '$', false],
-                      ['risk_percentage',         'Risk %',       '%', false],
-                    ] as const).map(([field, label, suffix, required]) => (
-                      <label key={field} style={{ fontSize: 10, color: C.t2 }}>
-                        {label}{!required && <span style={{ opacity: 0.5 }}> (opt)</span>}
-                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 7px' }}>
-                          {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
-                          <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} placeholder={required ? '' : 'skip'} value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }} />
-                          {suffix === '%' && <span style={{ color: C.t2, fontSize: 11 }}>%</span>}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginTop: 5 }}>{riskSaveError}</p>}
-                  <button type="button" onClick={saveRiskLimits} disabled={riskSaving} style={{ marginTop: 8, width: '100%', padding: '6px 0', borderRadius: 4, border: `1px solid rgba(245,158,11,0.3)`, backgroundColor: 'rgba(245,158,11,0.09)', color: C.acc, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{riskSaving ? 'Saving...' : 'Save limits'}</button>
-                </div>
-              )}
-            </section>
+            </div>
 
-            <section data-tour-id="pre-session-behavior" style={{ border: `1px solid ${C.b0}`, borderRadius: 10, backgroundColor: C.d1, padding: 14 }}>
-              <p style={{ fontSize: 11, color: C.t2, fontWeight: 700, marginBottom: 10 }}>Behavior scan</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {/* Risk limits — 2×2 grid */}
+            <div style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderBottom: `1px solid ${C.b0}` }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Risk limits</p>
+                <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor}
+                  style={{ fontSize: 10, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  {riskEditOpen ? 'cancel' : 'edit'}
+                </button>
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                  {[
+                    { label: 'max loss', value: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
+                    { label: 'max trades', value: String(riskLimits.maxTrades), color: C.t0 },
+                    { label: 'contracts', value: String(riskLimits.maxContracts), color: C.t0 },
+                    { label: 'target', value: formatCurrency(riskLimits.target), color: C.grn },
+                  ].map(stat => (
+                    <div key={stat.label} style={{ padding: '7px 9px', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                      <p style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: stat.color, lineHeight: 1, marginBottom: 3 }}>{stat.value}</p>
+                      <p style={{ fontSize: 9, color: C.t2, letterSpacing: '0.03em' }}>{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {riskEditOpen && (
+                  <div style={{ marginTop: 8, padding: '9px 10px', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+                      {([
+                        ['daily_loss_limit',       'Max loss',     '$', true ],
+                        ['max_trades_per_day',      'Max trades',   '',  true ],
+                        ['max_contracts_per_trade', 'Contracts',    '',  false],
+                        ['account_size',            'Account size', '$', false],
+                        ['risk_percentage',         'Risk %',       '%', false],
+                      ] as const).map(([field, label, suffix, required]) => (
+                        <label key={field} style={{ fontSize: 10, color: C.t2 }}>
+                          {label}{!required && <span style={{ opacity: 0.5 }}> (opt)</span>}
+                          <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', borderRadius: 3, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 6px' }}>
+                            {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
+                            <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} placeholder={required ? '' : 'skip'} value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 11, color: C.t0, padding: '5px 0', minWidth: 0 }} />
+                            {suffix === '%' && <span style={{ color: C.t2, fontSize: 11 }}>%</span>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginTop: 5 }}>{riskSaveError}</p>}
+                    <button type="button" onClick={saveRiskLimits} disabled={riskSaving}
+                      style={{ marginTop: 8, width: '100%', padding: '6px 0', borderRadius: 3, border: `1px solid ${C.acc}44`, backgroundColor: `${C.acc}0f`, color: C.acc, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                      {riskSaving ? 'Saving...' : 'Save limits'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Behavior scan — row table */}
+            <div data-tour-id="pre-session-behavior" style={{ border: `1px solid ${C.b0}`, borderRadius: 6, backgroundColor: C.d1, overflow: 'hidden' }}>
+              <div style={{ padding: '9px 12px', borderBottom: `1px solid ${C.b0}` }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Behavior scan</p>
+              </div>
+              <div>
                 {[
-                  { label: 'Plan adherence', value: recentBehavior.planAdherence === null ? '-' : `${recentBehavior.planAdherence}%`, color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 },
+                  { label: 'Plan adherence', value: recentBehavior.planAdherence === null ? '--' : `${recentBehavior.planAdherence}%`, color: recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80 ? C.acc : C.t0 },
                   { label: 'Revenge tags', value: String(recentBehavior.revengeTagged), color: recentBehavior.revengeTagged > 0 ? C.red : C.t0 },
                   { label: 'Checks done', value: `${checklistTotals.completed}/${checklistTotals.total}`, color: C.t0 },
-                ].map(row => (
-                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                ].map((row, i) => (
+                  <div key={row.label} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 12px', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                  }}>
                     <span style={{ fontSize: 11, color: C.t2 }}>{row.label}</span>
                     <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: row.color }}>{row.value}</span>
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
           </aside>
         </div>
       </main>

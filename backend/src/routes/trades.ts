@@ -30,10 +30,15 @@ function getNormalizedExitPrice(exitReason: 'TP' | 'SL' | 'BE', stop: number, ta
 }
 
 function getSession(time: string): string {
-  const [h] = time.split(':').map(Number);
-  if (h >= 0 && h < 8) return 'Asia';
-  if (h >= 8 && h < 13) return 'London';
-  if (h >= 13 && h < 21) return 'New York';
+  const [hStr, mStr] = time.split(':');
+  const h = Number(hStr);
+  const m = Number(mStr) || 0;
+  const mins = h * 60 + m;
+  // Priority order mirrors the frontend: NY beats London in the 09:30-11:30 overlap.
+  if (mins >= 9 * 60 + 30 && mins < 16 * 60) return 'New York';
+  if (mins >= 7 * 60 && mins < 9 * 60 + 30) return 'Pre Market';
+  if (mins >= 3 * 60 && mins < 11 * 60 + 30) return 'London';
+  if (mins >= 19 * 60 || mins < 4 * 60) return 'Asia';
   return 'Other';
 }
 
@@ -148,6 +153,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       confluences,
       followed_plan,
       behavioral_flags,
+      commission,
     } = req.body;
 
     const isBreakeven = exit_reason === 'BE';
@@ -227,6 +233,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       followed_plan: followed_plan !== undefined ? followed_plan : true,
       behavioral_flags: normalizedBehavioralFlags,
       session,
+      ...(isFiniteNumber(commission) && commission >= 0 ? { commission } : { commission: 0 }),
     };
 
     let { data, error } = await supabase
@@ -235,7 +242,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       .select()
       .single();
 
-    // Allow trade saves to continue until the live database has the new screenshot column.
+    // Allow trade saves to continue until the live database has the new column.
     if (
       error &&
       (
@@ -243,7 +250,8 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
         isMissingColumnError(error, 'account_id') ||
         isMissingColumnError(error, 'account_ids') ||
         isMissingColumnError(error, 'confluences') ||
-        isMissingColumnError(error, 'behavioral_flags')
+        isMissingColumnError(error, 'behavioral_flags') ||
+        isMissingColumnError(error, 'commission')
       )
     ) {
       const {
@@ -252,6 +260,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
         account_ids: _ignoredAccountIds,
         confluences: _ignoredConfluences,
         behavioral_flags: _ignoredBehavioralFlags,
+        commission: _ignoredCommission,
         ...fallbackInsertPayload
       } = insertPayload;
       ({ data, error } = await supabase
@@ -377,7 +386,8 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
         (isMissingColumnError(error, 'account_id') && ('account_id' in nextUpdateData || 'accountId' in nextUpdateData)) ||
         (isMissingColumnError(error, 'account_ids') && 'account_ids' in nextUpdateData) ||
         (isMissingColumnError(error, 'confluences') && 'confluences' in nextUpdateData) ||
-        (isMissingColumnError(error, 'behavioral_flags') && 'behavioral_flags' in nextUpdateData)
+        (isMissingColumnError(error, 'behavioral_flags') && 'behavioral_flags' in nextUpdateData) ||
+        (isMissingColumnError(error, 'commission') && 'commission' in nextUpdateData)
       )
     ) {
       const {
@@ -387,6 +397,7 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
         accountId: _ignoredAccountIdAlias,
         confluences: _ignoredConfluences,
         behavioral_flags: _ignoredBehavioralFlags,
+        commission: _ignoredCommission,
         ...fallbackUpdateData
       } = nextUpdateData;
       ({ data, error } = await supabase

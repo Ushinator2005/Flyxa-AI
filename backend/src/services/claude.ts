@@ -2126,7 +2126,7 @@ An analysis reasons across the data. It finds the causal chain: what led to this
 
 CRITICAL: Every dollar amount, win rate, P&L figure, and trade count you cite MUST come verbatim from the "Trader's Historical Data" section provided. Never invent, estimate, or extrapolate any numerical figure. If the data does not contain a specific number, write "N/A" — never guess.
 
-Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis.`,
+Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis. Do not create a new permanent trading rule after every reviewed trade; only recommend a hard rule when repeated historical evidence supports it.`,
     messages: [
       {
         role: 'user',
@@ -2154,9 +2154,10 @@ TAGS: [2-4 tags, comma separated, chosen from: Emotional override, Post-loss rea
 > [Third insight — the causal chain or the pattern this fits. What does it prove about where their edge lives or breaks. One sentence with a stat.]
 > [Fourth insight — the one thing the trader needs to hear that they can't see from the data alone. Sharp and direct.]
 
-## The Rule
+## Adjustment
 **[State the single most important rule this trade proves they need — make it specific to their pattern, not generic advice]**
-RULE: [One sentence, suitable to add to a trading plan. Must address the root cause identified in the analysis above, not the surface symptom.]
+ADJUSTMENT: [One sentence. Frame this as a watch item, filter, or experiment unless the historical data clearly proves a repeated leak.]
+IMPORTANT: Do not recommend a new hard rule unless the historical data shows the same leak repeatedly. Most trade reviews should produce a small observation or test, not a restriction.
 - [The exact stat from the provided historical data that makes this rule non-negotiable — exact figure or N/A]
 - [What following this rule looks like concretely on the next identical setup]
 - [The direct impact on their edge based only on numbers in the provided historical data — do not estimate or extrapolate]`,

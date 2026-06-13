@@ -237,7 +237,7 @@ export default function Dashboard() {
   }, [filteredTrades]);
 
   const todayPnL = useMemo(
-    () => todayTrades.reduce((s, t) => s + t.pnl, 0),
+    () => todayTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0),
     [todayTrades],
   );
 
@@ -246,7 +246,7 @@ export default function Dashboard() {
     const historicalTrades = filteredTrades.filter(t => t.trade_date !== todayStr);
     const historicalDays = new Set(historicalTrades.map(t => t.trade_date)).size;
     if (historicalDays === 0) return null;
-    const histPnL       = historicalTrades.reduce((s, t) => s + t.pnl, 0);
+    const histPnL       = historicalTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
     const avgDailyPnL   = histPnL / historicalDays;
     const histWins      = historicalTrades.filter(t => t.pnl > 0).length;
     const histScored    = historicalTrades.filter(t => t.pnl !== 0).length;
@@ -267,15 +267,16 @@ export default function Dashboard() {
   const selectedAcct = selectedAccountId !== ALL_ACCOUNTS_ID
     ? accounts.find(a => a.id === selectedAccountId)
     : undefined;
+  const hasSelectedAccount = selectedAccountId !== ALL_ACCOUNTS_ID && Boolean(selectedAcct);
   const acctName    = selectedAcct?.name ?? 'All Accounts';
 
   // Compute live balance and target at component level for auto-pass detection
   const liveBalForEffect = useMemo(() => {
-    if (!selectedStoreAcct) return null;
-    const sb = selectedStoreAcct.startingBalance ?? 0;
-    const payouts = (selectedStoreAcct.payouts ?? []).reduce((s: number, p: { amount: number }) => s + p.amount, 0);
+    if (!selectedAcct) return null;
+    const sb = selectedAcct.startingBalance ?? selectedStoreAcct?.startingBalance ?? 0;
+    const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s: number, p: { amount: number }) => s + p.amount, 0);
     return sb + summary.netPnL - payouts;
-  }, [selectedStoreAcct, summary.netPnL]);
+  }, [selectedAcct, selectedStoreAcct, summary.netPnL]);
 
   const targetBalForEffect = selectedAcct?.targetBalance ?? null;
 
@@ -359,9 +360,10 @@ export default function Dashboard() {
         {(() => {
           const todayW  = todayTrades.filter(t => t.pnl > 0).length;
           const todayL  = todayTrades.filter(t => t.pnl < 0).length;
-          const monthStr    = format(new Date(), 'yyyy-MM');
+          const monthStr    = format(weekDays[0], 'yyyy-MM');
           const monthTrades = filteredTrades.filter(t => t.trade_date?.startsWith(monthStr));
           const monthPnL    = monthTrades.reduce((s, t) => s + t.pnl, 0);
+          const monthLabel  = format(weekDays[0], 'MMM yyyy');
           const nextEv  = todayHighImpact.find(ev => {
             const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
             return t !== null && t > now && !Boolean(ev.actual);
@@ -373,26 +375,23 @@ export default function Dashboard() {
             : secsLeft >= 60   ? `${Math.floor(secsLeft / 60)}m ${secsLeft % 60}s`
             : `${secsLeft}s`
             : null;
-          const sbRaw   = selectedStoreAcct?.startingBalance;
+          const sbRaw   = selectedAcct?.startingBalance ?? selectedStoreAcct?.startingBalance;
           const sb      = sbRaw ?? 0;
           const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s, p) => s + p.amount, 0);
           const liveBal = sb + summary.netPnL - payouts;
-          const selectedTradingAcct = selectedAccountId !== ALL_ACCOUNTS_ID
-            ? accounts.find(a => a.id === selectedAccountId)
-            : undefined;
-          const targetBal = selectedTradingAcct?.targetBalance ?? null;
-          const progressPct = targetBal !== null && selectedStoreAcct && targetBal > sb
+          const targetBal = selectedAcct?.targetBalance ?? null;
+          const progressPct = targetBal !== null && hasSelectedAccount && targetBal > sb
             ? Math.min(100, Math.max(0, ((liveBal - sb) / (targetBal - sb)) * 100))
             : null;
           const fmtCompact = (v: number) => new Intl.NumberFormat('en-US', {
             style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 0,
           }).format(v).replace('K', 'k');
-          const refLabel = selectedStoreAcct ? 'BALANCE' : 'NET P&L';
-          const refValue = selectedStoreAcct ? fmtUSD(liveBal) : fmtUSD(summary.netPnL);
-          const refTone  = selectedStoreAcct
+          const refLabel = hasSelectedAccount ? 'BALANCE' : 'NET P&L';
+          const refValue = hasSelectedAccount ? fmtUSD(liveBal) : fmtUSD(summary.netPnL);
+          const refTone  = hasSelectedAccount
             ? (liveBal >= sb ? GREEN : RED)
             : summary.netPnL > 0 ? GREEN : summary.netPnL < 0 ? RED : T2;
-          const refSub   = selectedStoreAcct
+          const refSub   = hasSelectedAccount
             ? `Net P&L ${fmtSignedCompactUSD(summary.netPnL)}`
             : `${summary.totalTrades} total trades`;
           const D  = 'rgba(255,255,255,0.05)';
@@ -432,32 +431,18 @@ export default function Dashboard() {
                 {/* Label row — target hint on the right when set */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: 0, fontFamily: MONO }}>{refLabel}</p>
-                  {targetBal !== null && selectedStoreAcct && (
+                  {targetBal !== null && hasSelectedAccount && (
                     <span style={{ fontSize: 10, color: T3, fontFamily: MONO, letterSpacing: '0.02em' }}>
                       target {fmtCompact(targetBal)}
                     </span>
                   )}
                 </div>
 
-                {/* Main value + progress % badge */}
+                {/* Main value */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: progressPct !== null ? 7 : 5 }}>
                   <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: refTone, margin: 0, lineHeight: 1 }}>
                     {refValue}
                   </p>
-                  {progressPct !== null && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, fontFamily: MONO,
-                      color: progressPct >= 100 ? GREEN : T2,
-                      background: progressPct >= 100 ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.07)',
-                      border: `1px solid ${progressPct >= 100 ? 'rgba(52,211,153,0.28)' : 'rgba(255,255,255,0.12)'}`,
-                      borderRadius: 5,
-                      padding: '2px 6px',
-                      lineHeight: 1,
-                      flexShrink: 0,
-                    }}>
-                      {progressPct.toFixed(0)}%
-                    </span>
-                  )}
                 </div>
 
                 {/* Progress bar */}
@@ -497,12 +482,12 @@ export default function Dashboard() {
 
               {/* MONTHLY P&L */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>MONTHLY P&amp;L</p>
+                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{monthLabel.toUpperCase()} P&amp;L</p>
                 <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: monthPnL > 0 ? GREEN : monthPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
                   {monthTrades.length > 0 ? fmtUSD(monthPnL) : '—'}
                 </p>
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}>
-                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''} this month` : 'No trades this month'}
+                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''}` : `No trades in ${format(weekDays[0], 'MMM')}`}
                 </p>
               </div>
 

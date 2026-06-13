@@ -62,6 +62,7 @@ interface JournalTrade {
   rr: number;
   pnl: number;
   pnlOverride?: number;
+  commission?: number;
   result: TradeResult;
   screenshotUrl?: string;
   supportingImages?: string[];
@@ -623,6 +624,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           confluences: normalizeConfluences(trade.confluences),
           timeframe: typeof trade.timeframe === 'string' && trade.timeframe ? trade.timeframe : undefined,
           pnlOverride: typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride) ? trade.pnlOverride : undefined,
+          commission: typeof trade.commission === 'number' && Number.isFinite(trade.commission) && trade.commission >= 0 ? trade.commission : undefined,
         };
         return withTradeDerivedValues(normalizedTrade);
       });
@@ -941,6 +943,9 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
   });
   const [pnlEditMode, setPnlEditMode] = useState(false);
   const [pnlEditValue, setPnlEditValue] = useState('');
+  const [commissionLocal, setCommissionLocal] = useState(
+    typeof trade.commission === 'number' && trade.commission > 0 ? String(trade.commission) : ''
+  );
 
   useEffect(() => {
     setLocal({
@@ -950,7 +955,8 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
       tp: trade.tp != null ? String(trade.tp) : '',
     });
     setPnlEditMode(false);
-  }, [trade.id, trade.entry, trade.entryPrice, trade.exit, trade.exitPrice, trade.sl, trade.tp]);
+    setCommissionLocal(typeof trade.commission === 'number' && trade.commission > 0 ? String(trade.commission) : '');
+  }, [trade.id, trade.entry, trade.entryPrice, trade.exit, trade.exitPrice, trade.sl, trade.tp, trade.commission]);
 
   const parseLocal = (value: string): number | undefined => {
     const parsed = Number.parseFloat(value);
@@ -1108,7 +1114,32 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
           <div className="tj-pl-diff">{renderPointsDiff(tpDelta, 'pos')}</div>
         </div>
         <div className="tj-pl-cell">
-          <div className="tj-pl-label">EXIT</div>
+          <div className="tj-pl-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+            <span>EXIT</span>
+            {entryValue !== undefined && (
+              <button
+                type="button"
+                onClick={handleBreakevenToggle}
+                style={{
+                  fontSize: 9,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  border: '1px solid var(--amber)',
+                  background: isBreakevenActive ? 'var(--amber)' : 'transparent',
+                  color: isBreakevenActive ? '#111' : 'var(--amber)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 700,
+                  lineHeight: 1.3,
+                  letterSpacing: '0.03em',
+                  flexShrink: 0,
+                }}
+                title={isBreakevenActive && trade.breakevenRestore ? 'Restore previous exit' : 'Set exit to entry price (Breakeven)'}
+              >
+                {isBreakevenActive && trade.breakevenRestore ? '↺ BE' : 'BE'}
+              </button>
+            )}
+          </div>
           <input
             className="tj-pl-input exit"
             type="number"
@@ -1118,38 +1149,13 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
             onBlur={event => commit('exit', event.target.value)}
             placeholder="-"
           />
-          <div className="tj-pl-diff" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {renderPointsDiff(exitDelta, 'auto')}
-            {entryValue !== undefined && (
-              <button
-                type="button"
-                onClick={handleBreakevenToggle}
-                style={{
-                  fontSize: 11,
-                  padding: '4px 0',
-                  borderRadius: 4,
-                  border: '1px solid var(--amber)',
-                  background: isBreakevenActive ? 'var(--amber)' : 'var(--amber-dim)',
-                  color: isBreakevenActive ? '#111' : 'var(--amber)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-sans)',
-                  fontWeight: 700,
-                  lineHeight: 1.4,
-                  width: '100%',
-                  textAlign: 'center',
-                }}
-                title={isBreakevenActive && trade.breakevenRestore ? 'Restore previous exit' : 'Set exit to entry price (Breakeven)'}
-              >
-                {isBreakevenActive && trade.breakevenRestore ? 'Undo BE' : 'Break Even'}
-              </button>
-            )}
-          </div>
+          <div className="tj-pl-diff">{renderPointsDiff(exitDelta, 'auto')}</div>
         </div>
       </div>
       <div className="tj-pl-summary">
         <div className="tj-pl-summary-block">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-            <div className="tj-pl-summary-label" style={{ marginBottom: 0 }}>NET P&amp;L</div>
+            <div className="tj-pl-summary-label" style={{ marginBottom: 0 }}>GROSS P&amp;L</div>
             {trade.pnlOverride !== undefined && (
               <button
                 type="button"
@@ -1200,7 +1206,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
             <div
               className={`tj-pl-summary-value ${effectivePnl !== null && effectivePnl > 0 ? 'pos' : effectivePnl !== null && effectivePnl < 0 ? 'neg' : ''}`}
               onClick={() => { setPnlEditValue(String(effectivePnl ?? 0)); setPnlEditMode(true); }}
-              title="Click to override Net P&L"
+              title="Click to override Gross P&L"
               style={{ cursor: 'pointer' }}
             >
               {effectivePnl === null ? '-' : formatCurrencyFixed(effectivePnl)}
@@ -1212,6 +1218,59 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
           <div className={`tj-pl-summary-rr ${rr !== null && rr >= 2 ? 'pos' : rr !== null && rr >= 1 ? 'amber' : rr !== null ? 'neg' : ''}`}>
             {rr === null ? '-' : `${rr.toFixed(2)}R`}
           </div>
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', borderLeft: '3px solid var(--amber)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '10px 12px 10px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="tj-pl-summary-label" style={{ marginBottom: 0, whiteSpace: 'nowrap', color: 'var(--amber)' }}>FEES</div>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={commissionLocal}
+            onChange={e => setCommissionLocal(e.target.value)}
+            onBlur={() => {
+              const parsed = parseFloat(commissionLocal);
+              const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+              setCommissionLocal(value > 0 ? String(value) : '');
+              onMutate({ commission: value > 0 ? value : undefined });
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const parsed = parseFloat(commissionLocal);
+                const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+                setCommissionLocal(value > 0 ? String(value) : '');
+                onMutate({ commission: value > 0 ? value : undefined });
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="0.00"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              fontWeight: 500,
+              width: 80,
+              background: 'var(--amber-dim, rgba(245,158,11,0.08))',
+              border: '1px solid var(--amber)',
+              borderRadius: 4,
+              color: 'var(--txt)',
+              padding: '3px 7px',
+              outline: 'none',
+            }}
+          />
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="tj-pl-summary-label" style={{ marginBottom: 2 }}>NET P&amp;L</div>
+          {effectivePnl !== null ? (() => {
+            const net = effectivePnl - (trade.commission ?? 0);
+            return (
+              <div className={`tj-pl-summary-value ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`} style={{ fontSize: 18, fontWeight: 700 }}>
+                {formatCurrencyFixed(net)}
+              </div>
+            );
+          })() : (
+            <div className="tj-pl-summary-value">-</div>
+          )}
         </div>
       </div>
     </div>

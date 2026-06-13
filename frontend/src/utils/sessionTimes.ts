@@ -48,11 +48,13 @@ export function getSessionKeyForTime(
   const minutes = timeToMinutes(time);
   if (minutes === null) return 'other';
 
+  // Priority order: most specific sessions first so they win overlaps.
+  // New York beats London at 09:30-11:30; Pre Market beats London at 07:00-09:30.
   const windows: Array<{ key: Exclude<SessionBucketKey, 'other'>; start: number | null; end: number | null }> = [
-    { key: 'asia', start: timeToMinutes(sessionTimes.asia.start), end: timeToMinutes(sessionTimes.asia.end) },
-    { key: 'london', start: timeToMinutes(sessionTimes.london.start), end: timeToMinutes(sessionTimes.london.end) },
-    { key: 'preMarket', start: timeToMinutes(sessionTimes.preMarket.start), end: timeToMinutes(sessionTimes.preMarket.end) },
     { key: 'newYork', start: timeToMinutes(sessionTimes.newYork.start), end: timeToMinutes(sessionTimes.newYork.end) },
+    { key: 'preMarket', start: timeToMinutes(sessionTimes.preMarket.start), end: timeToMinutes(sessionTimes.preMarket.end) },
+    { key: 'london', start: timeToMinutes(sessionTimes.london.start), end: timeToMinutes(sessionTimes.london.end) },
+    { key: 'asia', start: timeToMinutes(sessionTimes.asia.start), end: timeToMinutes(sessionTimes.asia.end) },
   ];
 
   const match = windows.find(window => (

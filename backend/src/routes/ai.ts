@@ -132,8 +132,50 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
       .eq('user_id', req.userId!)
       .order('created_at', { ascending: true });
 
-    type HistTrade = { id: string; pnl: number; emotional_state: string; confluences: string[] | null; followed_plan: boolean; session: string; trade_date: string; created_at: string };
-    const history: HistTrade[] = (rawHistory ?? []) as HistTrade[];
+    type HistTrade = { id: string; pnl: number; emotional_state: string; confluences: string[]; followed_plan: boolean | null; session: string; trade_date: string; created_at: string };
+    const normalizeConfluenceList = (value: unknown): string[] => {
+      const raw = Array.isArray(value)
+        ? value
+        : typeof value === 'string'
+          ? value.split(',')
+          : [];
+      return Array.from(new Set(raw
+        .map(item => typeof item === 'string' ? item.trim().replace(/\s+/g, ' ') : '')
+        .filter(Boolean)
+      ));
+    };
+    const normalizeHistTrade = (value: unknown): HistTrade | null => {
+      if (!value || typeof value !== 'object') return null;
+      const trade = value as Partial<Trade> & Record<string, unknown>;
+      const pnl = Number(trade.pnl);
+      if (!Number.isFinite(pnl)) return null;
+      const id = typeof trade.id === 'string' && trade.id.trim()
+        ? trade.id
+        : `${trade.trade_date ?? trade.created_at ?? 'trade'}-${trade.symbol ?? ''}-${trade.trade_time ?? ''}-${pnl}`;
+      const emotion = typeof trade.emotional_state === 'string' && trade.emotional_state.trim()
+        ? trade.emotional_state.trim()
+        : 'Not logged';
+      return {
+        id,
+        pnl,
+        emotional_state: emotion,
+        confluences: normalizeConfluenceList(trade.confluences),
+        followed_plan: typeof trade.followed_plan === 'boolean' ? trade.followed_plan : null,
+        session: typeof trade.session === 'string' && trade.session.trim() ? trade.session.trim() : 'Other',
+        trade_date: typeof trade.trade_date === 'string' ? trade.trade_date : '',
+        created_at: typeof trade.created_at === 'string' ? trade.created_at : '',
+      };
+    };
+
+    const requestHistory = Array.isArray(req.body?.history) ? req.body.history : [];
+    const mergedHistory = new Map<string, HistTrade>();
+    for (const raw of [...(rawHistory ?? []), ...requestHistory]) {
+      const normalized = normalizeHistTrade(raw);
+      if (!normalized) continue;
+      mergedHistory.set(normalized.id, normalized);
+    }
+    const history = Array.from(mergedHistory.values())
+      .sort((a, b) => String(a.created_at || a.trade_date).localeCompare(String(b.created_at || b.trade_date)));
 
     // ── Stat helpers ──────────────────────────────────────────────────────────
     const winRate = (ts: HistTrade[]) => ts.length ? Math.round((ts.filter(t => t.pnl > 0).length / ts.length) * 100) : 0;
@@ -150,7 +192,11 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
     // ── By emotion ────────────────────────────────────────────────────────────
     const emotionStats = (() => {
       const groups: Record<string, HistTrade[]> = {};
-      for (const t of history) { const e = t.emotional_state || 'Unknown'; (groups[e] ??= []).push(t); }
+      for (const t of history) {
+        if (!t.emotional_state || t.emotional_state === 'Not logged') continue;
+        const e = t.emotional_state;
+        (groups[e] ??= []).push(t);
+      }
       return Object.entries(groups)
         .filter(([, ts]) => ts.length >= 2)
         .map(([e, ts]) => `${e}: ${ts.length} trades, ${winRate(ts)}% WR, $${netPnl(ts)} net`)
@@ -158,17 +204,21 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
     })();
 
     // ── Confluences in this trade ─────────────────────────────────────────────
-    const tradeConfs: string[] = Array.isArray(focusTrade.confluences) ? focusTrade.confluences : [];
+    const tradeConfs = normalizeConfluenceList(focusTrade.confluences);
     const confStats = tradeConfs.length ? tradeConfs.map(c => {
       const ts = history.filter(t => Array.isArray(t.confluences) && t.confluences.includes(c));
       return ts.length >= 2 ? `${c}: ${ts.length} uses, ${winRate(ts)}% WR, $${netPnl(ts)} net` : null;
     }).filter(Boolean).join(' | ') : null;
 
     // ── Plan adherence ────────────────────────────────────────────────────────
-    const followed = history.filter(t => t.followed_plan === true);
-    const broke    = history.filter(t => t.followed_plan === false);
-    const planStats = followed.length >= 2 && broke.length >= 2
-      ? `Followed plan: ${winRate(followed)}% WR ($${netPnl(followed)} net) | Broke plan: ${winRate(broke)}% WR ($${netPnl(broke)} net)`
+    const planLogged = history.filter(t => typeof t.followed_plan === 'boolean');
+    const followed = planLogged.filter(t => t.followed_plan === true);
+    const broke    = planLogged.filter(t => t.followed_plan === false);
+    const planStats = planLogged.length >= 2
+      ? [
+          followed.length ? `Followed plan: ${followed.length} trades, ${winRate(followed)}% WR ($${netPnl(followed)} net)` : null,
+          broke.length ? `Broke plan: ${broke.length} trades, ${winRate(broke)}% WR ($${netPnl(broke)} net)` : null,
+        ].filter(Boolean).join(' | ')
       : null;
 
     // ── Same session ──────────────────────────────────────────────────────────
@@ -190,6 +240,7 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
 
     // ── Build context block ───────────────────────────────────────────────────
     const contextLines: string[] = [];
+    if (history.length) contextLines.push(`Analysis sample: ${history.length} trades across all accounts`);
     if (overall)     contextLines.push(`Overall: ${overall}`);
     if (emotionStats) contextLines.push(`By emotion: ${emotionStats}`);
     if (confStats)   contextLines.push(`Tagged confluences: ${confStats}`);

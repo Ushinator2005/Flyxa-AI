@@ -15,6 +15,7 @@ export interface Trade {
   exit_reason: 'TP' | 'SL' | 'BE';
   pnl: number;
   pnlOverride?: number;
+  commission?: number;
   contract_size: number;
   point_value: number;
   trade_date: string;

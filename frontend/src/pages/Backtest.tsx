@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   Filter,
+  FileUp,
   Layers3,
   Minus,
   MousePointer2,
@@ -220,8 +221,10 @@ const RANGE_OPTIONS: Array<{ label: ReplayRange; range: string }> = [
   { label: '1Y', range: '1y' },
 ];
 
-const QUICK_SYMBOLS = ['NQ=F', 'ES=F', 'EURUSD=X', 'AAPL'];
+const QUICK_SYMBOLS = ['NQM6', 'ESM6', 'NQ=F', 'ES=F'];
 const REPLAY_SYMBOL_SUGGESTIONS: ReplaySymbolSuggestion[] = [
+  { symbol: 'NQM6', label: 'NQM6', description: 'Nasdaq futures Jun 2026 contract' },
+  { symbol: 'ESM6', label: 'ESM6', description: 'S&P futures Jun 2026 contract' },
   { symbol: 'NQ=F', label: 'NQ=F', description: 'Nasdaq futures continuous contract' },
   { symbol: 'ES=F', label: 'ES=F', description: 'S&P futures continuous contract' },
   { symbol: 'YM=F', label: 'YM=F', description: 'Dow futures continuous contract' },
@@ -295,6 +298,118 @@ function normalizeJournalSymbol(symbol: string) {
   if (symbol.endsWith('=F')) return symbol.replace('=F', '');
   if (symbol.endsWith('=X')) return symbol.replace('=X', '');
   return symbol;
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i++;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseCsvTimestamp(raw: string): number | null {
+  const value = raw.trim();
+  if (!value) return null;
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return numeric > 10_000_000_000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+  }
+
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return Math.floor(parsed.getTime() / 1000);
+}
+
+function parseCandleCsv(csv: string): ReplayCandle[] {
+  const lines = csv
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    throw new Error('CSV needs a header row and at least one candle row.');
+  }
+
+  const headers = parseCsvLine(lines[0]).map(header => header.trim().toLowerCase());
+  const indexFor = (...names: string[]) => names.map(name => headers.indexOf(name)).find(index => index >= 0) ?? -1;
+  const timeIndex = indexFor('time', 'timestamp', 'date', 'datetime');
+  const openIndex = indexFor('open', 'o');
+  const highIndex = indexFor('high', 'h');
+  const lowIndex = indexFor('low', 'l');
+  const closeIndex = indexFor('close', 'c');
+  const volumeIndex = indexFor('volume', 'vol', 'v');
+
+  if ([timeIndex, openIndex, highIndex, lowIndex, closeIndex].some(index => index < 0)) {
+    throw new Error('CSV must include time, open, high, low, and close columns.');
+  }
+
+  const candles: ReplayCandle[] = [];
+  for (const line of lines.slice(1)) {
+    const cells = parseCsvLine(line);
+    const time = parseCsvTimestamp(cells[timeIndex] ?? '');
+    const open = Number(cells[openIndex]);
+    const high = Number(cells[highIndex]);
+    const low = Number(cells[lowIndex]);
+    const close = Number(cells[closeIndex]);
+    const volume = volumeIndex >= 0 ? Number(cells[volumeIndex]) : 0;
+
+    if (
+      time === null ||
+      !Number.isFinite(open) ||
+      !Number.isFinite(high) ||
+      !Number.isFinite(low) ||
+      !Number.isFinite(close)
+    ) {
+      continue;
+    }
+
+    candles.push({
+      time,
+      open,
+      high,
+      low,
+      close,
+      volume: Number.isFinite(volume) ? volume : 0,
+    });
+  }
+
+  const unique = new Map<number, ReplayCandle>();
+  candles.forEach(candle => unique.set(candle.time, candle));
+  const sorted = Array.from(unique.values()).sort((a, b) => a.time - b.time);
+
+  if (sorted.length < 2) {
+    throw new Error('CSV did not contain enough valid candle rows.');
+  }
+
+  return sorted;
 }
 
 function createInitialDraft(price: number, tickSize: number, quantity = '1'): TradeDraft {
@@ -429,7 +544,7 @@ export default function Backtest() {
   const seriesRef = useRef<ReturnType<ReturnType<NonNullable<typeof window.LightweightCharts>['createChart']>['addCandlestickSeries']> | null>(null);
   const priceLinesRef = useRef<{ entry: unknown | null; stop: unknown | null; target: unknown | null }>({ entry: null, stop: null, target: null });
 
-  const [symbol, setSymbol] = useState('NQ=F');
+  const [symbol, setSymbol] = useState('NQM6');
   const [timeframe, setTimeframe] = useState<ReplayTimeframe>('5m');
   const [range, setRange] = useState<ReplayRange>('5D');
   const [session, setSession] = useState<ReplaySession | null>(null);
@@ -458,6 +573,8 @@ export default function Backtest() {
   const [showNewSessionForm, setShowNewSessionForm] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
   const [startingBalance, setStartingBalance] = useState('25000');
+  const [csvCandles, setCsvCandles] = useState<ReplayCandle[] | null>(null);
+  const [csvFileName, setCsvFileName] = useState('');
 
   const displayedCandles = useMemo(() => session?.candles.slice(0, revealedCount) ?? [], [session, revealedCount]);
   const currentCandle = displayedCandles[displayedCandles.length - 1] ?? null;
@@ -680,7 +797,22 @@ export default function Backtest() {
     try {
       const tfMeta = TIMEFRAME_OPTIONS.find(o => o.label === sess.timeframe)!;
       const rMeta = RANGE_OPTIONS.find(o => o.label === sess.range)!;
-      const candles = await marketDataApi.getChart(sess.symbol, tfMeta.interval, rMeta.range);
+      let candles = await marketDataApi
+        .getCandles(sess.symbol, tfMeta.interval)
+        .catch(() => []);
+      if (candles.length < 2) {
+        await marketDataApi.importDatabentoCandles({
+          symbol: sess.symbol,
+          timeframe: tfMeta.interval,
+          range: rMeta.range,
+        }).catch(() => null);
+        candles = await marketDataApi
+          .getCandles(sess.symbol, tfMeta.interval)
+          .catch(() => []);
+      }
+      if (candles.length < 2) {
+        candles = await marketDataApi.getChart(sess.symbol, tfMeta.interval, rMeta.range);
+      }
       const instrumentMeta = inferInstrumentMeta(sess.symbol, candles[0]?.close ?? 0);
       const initialCount = Math.min(50, candles.length);
       setSession({ symbol: sess.symbol, timeframe: sess.timeframe, range: sess.range, timeframeMinutes: tfMeta.minutes, candles, pointValue: instrumentMeta.pointValue, tickSize: instrumentMeta.tickSize });
@@ -702,10 +834,37 @@ export default function Backtest() {
     setIsPlaying(false);
     setResultTrade(null);
     try {
-      const candles = await marketDataApi.getChart(symbol, timeframeMeta.interval, rangeMeta.range);
-      const instrumentMeta = inferInstrumentMeta(symbol, candles[0]?.close ?? 0);
+      const normalizedSymbol = symbol.trim().toUpperCase();
+      let candles = csvCandles;
+      if (candles) {
+        await marketDataApi.importCandles({
+          symbol: normalizedSymbol,
+          timeframe: timeframeMeta.interval,
+          candles,
+        });
+      } else {
+        const savedCandles = await marketDataApi
+          .getCandles(normalizedSymbol, timeframeMeta.interval)
+          .catch(() => []);
+        if (savedCandles.length >= 2) {
+          candles = savedCandles;
+        } else {
+          await marketDataApi.importDatabentoCandles({
+            symbol: normalizedSymbol,
+            timeframe: timeframeMeta.interval,
+            range: rangeMeta.range,
+          }).catch(() => null);
+          const databentoCandles = await marketDataApi
+            .getCandles(normalizedSymbol, timeframeMeta.interval)
+            .catch(() => []);
+          candles = databentoCandles.length >= 2
+            ? databentoCandles
+            : await marketDataApi.getChart(normalizedSymbol, timeframeMeta.interval, rangeMeta.range);
+        }
+      }
+      const instrumentMeta = inferInstrumentMeta(normalizedSymbol, candles[0]?.close ?? 0);
       const initialCount = Math.min(50, candles.length);
-      setSession({ symbol, timeframe, range, timeframeMinutes: timeframeMeta.minutes, candles, pointValue: instrumentMeta.pointValue, tickSize: instrumentMeta.tickSize });
+      setSession({ symbol: normalizedSymbol, timeframe, range, timeframeMinutes: timeframeMeta.minutes, candles, pointValue: instrumentMeta.pointValue, tickSize: instrumentMeta.tickSize });
       setRevealedCount(initialCount);
       setTradeDraft(createInitialDraft(candles[initialCount - 1].close, instrumentMeta.tickSize));
       setSyncEntryToCurrentClose(true);
@@ -721,7 +880,7 @@ export default function Backtest() {
       const toDate = (ts: number) => new Date(ts * 1000).toISOString().split('T')[0];
       const newSaved: SavedSession = {
         id: makeId('sess'),
-        symbol,
+        symbol: normalizedSymbol,
         timeframe,
         range,
         startDate: candles[0] ? toDate(candles[0].time) : '',
@@ -733,7 +892,7 @@ export default function Backtest() {
       setBacktestSessionsAction([
         newSaved,
         ...savedSessions
-          .filter(s => !(s.symbol === symbol && s.timeframe === timeframe && s.range === range))
+          .filter(s => !(s.symbol === normalizedSymbol && s.timeframe === timeframe && s.range === range))
           .map(s => ({ ...s, isActive: false }))
           .slice(0, 49),
       ]);
@@ -819,6 +978,25 @@ export default function Backtest() {
     setShowSymbolSuggestions(false);
   };
 
+  const handleCsvFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setLoadError('');
+    try {
+      const text = await file.text();
+      const candles = parseCandleCsv(text);
+      setCsvCandles(candles);
+      setCsvFileName(file.name);
+      setRange('1D');
+    } catch (error) {
+      setCsvCandles(null);
+      setCsvFileName('');
+      setLoadError(error instanceof Error ? error.message : 'Could not read this CSV file.');
+    }
+  };
+
   const handlePlaceTrade = () => {
     if (!session || !currentCandle || simulation.activeTrade) return;
     const direction = tradeDraft.direction;
@@ -901,35 +1079,54 @@ export default function Backtest() {
     // New session config form
     if (showNewSessionForm) {
       return (
-        <div style={{ padding: 28, maxWidth: 760 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+        <div
+          style={{
+            ...BACKTEST_LIBRARY_THEME,
+            minHeight: 'calc(100vh - 56px)',
+            background: 'var(--bg)',
+            padding: '32px clamp(20px, 4vw, 56px)',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ marginBottom: 28 }}>
             <button
               type="button"
               onClick={() => setShowNewSessionForm(false)}
-              style={{ background: 'none', border: 'none', color: 'var(--txt-3)', cursor: 'pointer', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ background: 'none', border: 'none', color: 'var(--txt-3)', cursor: 'pointer', fontSize: 12, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 26 }}
             >
-              ← Back
+              <ChevronLeft size={14} />
+              Back to library
             </button>
-            <h1 style={{ fontSize: 18, fontWeight: 600, color: 'var(--txt)', margin: 0 }}>New Session</h1>
+            <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--amber)', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+              Replay setup
+            </p>
+            <h1 style={{ margin: 0, color: 'var(--txt)', fontSize: 30, fontWeight: 700, lineHeight: 1.1 }}>
+              Start a backtest session
+            </h1>
+            <p style={{ margin: '10px 0 0', color: 'var(--txt-2)', fontSize: 13, maxWidth: 620, lineHeight: 1.6 }}>
+              Choose the market, timeframe, range, and account size. Flyxa will load the replay chart and open your trading workspace.
+            </p>
           </div>
 
-          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 140px', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 18, alignItems: 'start' }}>
+          <section style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, padding: 22 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1.4fr) repeat(3, minmax(120px, 0.7fr))', gap: 14, marginBottom: 18 }}>
               {/* Symbol */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Symbol</p>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-3)', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Market</p>
                 <div ref={symbolSearchRef} style={{ position: 'relative' }}>
-                  <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', pointerEvents: 'none' }} />
+                  <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', pointerEvents: 'none' }} />
                   <input
                     type="text"
                     value={symbol}
                     onChange={e => { setSymbol(e.target.value.toUpperCase()); setShowSymbolSuggestions(true); }}
                     onFocus={() => setShowSymbolSuggestions(true)}
-                    style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, paddingLeft: 32, paddingRight: 10, fontSize: 13, color: 'var(--txt)', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', height: 44, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, paddingLeft: 40, paddingRight: 12, fontSize: 14, color: 'var(--txt)', outline: 'none', boxSizing: 'border-box', fontWeight: 600 }}
                     placeholder="NQ=F"
                   />
                   {showSymbolSuggestions && filteredSymbolSuggestions.length > 0 && (
-                    <div style={{ position: 'absolute', left: 0, right: 0, top: 'calc(100% + 6px)', zIndex: 30, background: '#0a0909', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                    <div style={{ position: 'absolute', left: 0, right: 0, top: 'calc(100% + 6px)', zIndex: 30, background: '#0a0909', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', boxShadow: '0 16px 36px rgba(0,0,0,0.46)' }}>
                       {filteredSymbolSuggestions.map(item => (
                         <button key={item.symbol} type="button" onClick={() => handleSymbolSuggestionSelect(item.symbol)}
                           style={{ width: '100%', display: 'flex', justifyContent: 'space-between', gap: 16, padding: '10px 14px', background: 'none', border: 'none', borderBottom: '1px solid var(--border-sub)', cursor: 'pointer', textAlign: 'left', color: 'var(--txt)' }}
@@ -944,53 +1141,135 @@ export default function Backtest() {
                     </div>
                   )}
                 </div>
+                <p style={{ fontSize: 11, color: 'var(--txt-3)', margin: '8px 0 0', lineHeight: 1.4 }}>
+                  Databento works best with exact futures contracts like NQM6 or ESM6.
+                </p>
               </div>
               {/* Timeframe */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Timeframe</p>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-3)', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeframe</p>
                 <select value={timeframe} onChange={e => setTimeframe(e.target.value as ReplayTimeframe)}
-                  style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, color: 'var(--txt)', padding: '0 8px', cursor: 'pointer' }}>
+                  style={{ width: '100%', height: 44, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, color: 'var(--txt)', padding: '0 12px', cursor: 'pointer', fontWeight: 600 }}>
                   {TIMEFRAME_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
                 </select>
               </div>
               {/* Range */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Range</p>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-3)', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Range</p>
                 <select value={range} onChange={e => setRange(e.target.value as ReplayRange)}
-                  style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, color: 'var(--txt)', padding: '0 8px', cursor: 'pointer' }}>
+                  style={{ width: '100%', height: 44, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, color: 'var(--txt)', padding: '0 12px', cursor: 'pointer', fontWeight: 600 }}>
                   {RANGE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
                 </select>
               </div>
               {/* Starting Balance */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-3)', marginBottom: 6 }}>Starting Balance</p>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-3)', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Balance</p>
                 <input type="number" value={startingBalance} onChange={e => setStartingBalance(e.target.value)}
-                  style={{ width: '100%', height: 36, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, color: 'var(--txt)', padding: '0 10px', boxSizing: 'border-box' }}
+                  style={{ width: '100%', height: 44, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, color: 'var(--txt)', padding: '0 12px', boxSizing: 'border-box', fontWeight: 600 }}
                   placeholder="25000" />
               </div>
             </div>
 
             {/* Quick symbols */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, borderTop: '1px solid var(--border)', paddingTop: 18 }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--txt-3)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Quick markets</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {QUICK_SYMBOLS.map(qs => (
                 <button key={qs} type="button" onClick={() => setSymbol(qs)}
-                  style={{ background: symbol === qs ? 'var(--amber-dim)' : 'var(--surface-2)', border: `1px solid ${symbol === qs ? 'var(--amber-border)' : 'var(--border)'}`, borderRadius: 5, padding: '5px 12px', fontSize: 12, color: symbol === qs ? 'var(--amber-500)' : 'var(--txt-3)', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
+                  style={{ background: symbol === qs ? 'var(--amber-dim)' : 'var(--surface-2)', border: `1px solid ${symbol === qs ? 'var(--amber-border)' : 'var(--border)'}`, borderRadius: 6, padding: '7px 13px', fontSize: 12, color: symbol === qs ? 'var(--amber)' : 'var(--txt-3)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
                   {qs}
                 </button>
               ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, padding: 14, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px dashed var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ margin: 0, color: 'var(--txt)', fontSize: 13, fontWeight: 700 }}>Candle CSV</p>
+                  <p style={{ margin: '5px 0 0', color: 'var(--txt-3)', fontSize: 12 }}>
+                    Upload columns: time, open, high, low, close, volume
+                  </p>
+                </div>
+                <label
+                  style={{
+                    height: 36,
+                    padding: '0 13px',
+                    borderRadius: 6,
+                    border: '1px solid var(--amber-border)',
+                    background: 'var(--amber-dim)',
+                    color: 'var(--amber)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  <FileUp size={14} />
+                  Upload CSV
+                  <input type="file" accept=".csv,text/csv" onChange={handleCsvFileSelected} style={{ display: 'none' }} />
+                </label>
+              </div>
+              {csvCandles && (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, color: 'var(--txt-2)', fontSize: 12 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)' }}>{csvFileName}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                    {csvCandles.length.toLocaleString()} candles ready
+                    <button
+                      type="button"
+                      onClick={() => { setCsvCandles(null); setCsvFileName(''); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--txt-3)', cursor: 'pointer', fontSize: 11, padding: 0 }}
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </div>
+              )}
             </div>
 
             {loadError && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 5, padding: '10px 12px', fontSize: 12, color: '#f87171', marginBottom: 14 }}>
-                <AlertCircle size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 7, padding: '11px 12px', fontSize: 12, color: '#f87171', margin: '16px 0 0' }}>
+                <AlertCircle size={14} style={{ marginTop: 1, flexShrink: 0 }} />
                 <span>{loadError}</span>
               </div>
             )}
 
             <button type="button" onClick={handleLoadReplay} disabled={loading || !symbol.trim()}
-              style={{ width: '100%', height: 40, background: 'var(--amber-500)', border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, color: '#000', cursor: 'pointer', opacity: loading || !symbol.trim() ? 0.5 : 1 }}>
-              {loading ? 'Loading…' : 'Load Replay'}
+              style={{ width: '100%', height: 48, background: 'var(--amber)', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 800, color: '#050505', cursor: 'pointer', opacity: loading || !symbol.trim() ? 0.5 : 1, marginTop: 18 }}>
+              {loading ? 'Loading...' : 'Load replay'}
             </button>
+          </section>
+
+          <aside style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, padding: 20 }}>
+            <p style={{ margin: '0 0 14px', fontSize: 11, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 800 }}>
+              Session preview
+            </p>
+            {[
+              ['Market', symbol || 'Not selected'],
+              ['Timeframe', timeframe],
+              ['Range', range],
+              ['Data source', csvCandles ? 'Uploaded CSV' : 'Backend feed'],
+              ['Starting balance', Number(startingBalance || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 0', borderTop: '1px solid var(--border-sub)' }}>
+                <span style={{ color: 'var(--txt-3)', fontSize: 12 }}>{label}</span>
+                <span style={{ color: 'var(--txt)', fontSize: 13, fontWeight: 700, fontFamily: label === 'Market' ? 'var(--font-mono)' : undefined }}>{value}</span>
+              </div>
+            ))}
+            <div style={{ marginTop: 18, padding: 14, borderRadius: 8, background: 'rgba(251,166,0,0.08)', border: '1px solid rgba(251,166,0,0.18)' }}>
+              <p style={{ margin: 0, color: 'var(--amber)', fontSize: 12, fontWeight: 800 }}>Replay mode</p>
+              <p style={{ margin: '6px 0 0', color: 'var(--txt-2)', fontSize: 12, lineHeight: 1.5 }}>
+                {csvCandles
+                  ? `${csvCandles.length.toLocaleString()} uploaded candles will be used for this replay.`
+                  : 'No CSV selected. Flyxa will request candles from the current backend feed.'}
+              </p>
+            </div>
+          </aside>
+          </div>
           </div>
         </div>
       );
@@ -1509,12 +1788,19 @@ export default function Backtest() {
     );
   }
   const progressPct = session.candles.length ? (revealedCount / session.candles.length) * 100 : 0;
+  const activeSavedSession = savedSessions.find(item => item.isActive && item.symbol === session.symbol && item.timeframe === session.timeframe) ?? null;
+  const activeStartingBalance = (activeSavedSession?.balance ?? Number(startingBalance)) || 25000;
+  const activePositionPnL = simulation.activeTrade?.pnlDollars ?? 0;
+  const sessionEquity = activeStartingBalance + sessionStats.totalPnL + activePositionPnL;
+  const closedTradeCount = simulation.closedTrades.length;
+  const replayClock = currentCandle ? format(new Date(currentCandle.time * 1000), 'MMM d, HH:mm') : 'Waiting';
+  const positionTone = activePositionPnL > 0 ? 'text-emerald-300' : activePositionPnL < 0 ? 'text-red-300' : 'text-slate-200';
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-[calc(100vh-72px)] flex-col gap-3 bg-[#050505] p-3 text-slate-100">
 
       {/* Top control bar */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-900 px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-[#11100e] px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
 
         {/* Symbol + back */}
         <div className="flex items-center gap-2.5">
@@ -1522,7 +1808,7 @@ export default function Backtest() {
             type="button"
             onClick={resetToStart}
             title="New symbol"
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-700/60 bg-slate-800/50 px-2.5 py-1.5 text-[12px] text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-slate-400 transition-colors hover:border-white/20 hover:text-slate-100"
           >
             <ChevronLeft size={13} />
             New
@@ -1538,7 +1824,7 @@ export default function Backtest() {
 
         {/* OHLC info */}
         {currentCandle && (
-          <div className="hidden items-center gap-1.5 text-[11px] text-slate-500 xl:flex">
+          <div className="hidden items-center gap-2 rounded-md border border-white/10 bg-black/25 px-3 py-1.5 text-[11px] text-slate-500 xl:flex">
             <span>{format(new Date(currentCandle.time * 1000), 'MMM d HH:mm')}</span>
             <span className="text-slate-700">·</span>
             <span>O <span className="text-slate-300">{formatPrice(currentCandle.open, session.tickSize)}</span></span>
@@ -1590,14 +1876,36 @@ export default function Backtest() {
         </div>
       </div>
 
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        {([
+          ['Equity', formatCurrency(sessionEquity), sessionEquity >= activeStartingBalance ? 'text-emerald-300' : 'text-red-300'],
+          ['Closed P&L', formatCurrency(sessionStats.totalPnL), sessionStats.totalPnL >= 0 ? 'text-emerald-300' : 'text-red-300'],
+          ['Open P&L', formatCurrency(activePositionPnL), positionTone],
+          ['Win rate', `${sessionStats.winRate.toFixed(1)}%`, sessionStats.winRate >= 50 ? 'text-emerald-300' : 'text-slate-200'],
+          ['Replay time', replayClock, 'text-slate-100'],
+        ] as [string, string, string][]).map(([label, value, tone]) => (
+          <div key={label} className="rounded-lg border border-white/10 bg-[#11100e] px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">{label}</p>
+            <p className={`mt-1 text-[18px] font-semibold tabular-nums ${tone}`}>{value}</p>
+            <p className="mt-1 text-[11px] text-slate-600">
+              {label === 'Equity' ? `${closedTradeCount} closed · ${simulation.activeTrade ? '1 active' : 'flat'}` :
+               label === 'Closed P&L' ? `${sessionStats.tradesTaken} placed trades` :
+               label === 'Open P&L' ? (simulation.activeTrade ? 'mark-to-market' : 'no live position') :
+               label === 'Win rate' ? `${closedTradeCount} resolved trades` :
+               `${revealedCount}/${session.candles.length} candles`}
+            </p>
+          </div>
+        ))}
+      </div>
+
       {/* Main grid: chart + right panel */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
 
         {/* Chart column */}
         <div className="flex flex-col gap-2">
 
           {/* Drawing toolbar */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-700/50 bg-slate-900 px-3 py-2">
+          <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#11100e] px-3 py-2">
             {([
               { id: 'cursor', label: 'Cursor', icon: MousePointer2 },
               { id: 'horizontal', label: 'Horizontal', icon: Minus },
@@ -1610,8 +1918,8 @@ export default function Backtest() {
                 onClick={() => setToolMode(tool.id as ToolMode)}
                 className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
                   toolMode === tool.id
-                    ? 'border-blue-500/40 bg-blue-500/10 text-blue-300'
-                    : 'border-slate-700/60 bg-slate-800/40 text-slate-500 hover:border-slate-600 hover:text-slate-300'
+                    ? 'border-emerald-400/35 bg-emerald-400/10 text-emerald-200'
+                    : 'border-white/10 bg-white/[0.04] text-slate-500 hover:border-white/20 hover:text-slate-300'
                 }`}
               >
                 <tool.icon size={12} />
@@ -1630,8 +1938,8 @@ export default function Backtest() {
 
           {/* Chart */}
           <div
-            className="relative overflow-hidden rounded-xl border border-slate-800 bg-[#020817]"
-            style={{ height: 'calc(100vh - 260px)', minHeight: '480px' }}
+            className="relative overflow-hidden rounded-lg border border-white/10 bg-[#030303] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+            style={{ height: 'calc(100vh - 330px)', minHeight: '520px' }}
           >
             <div ref={chartContainerRef} className="h-full w-full" />
 
@@ -1695,12 +2003,12 @@ export default function Backtest() {
         </div>
 
         {/* Right panel */}
-        <div className="flex flex-col gap-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+        <div className="flex flex-col gap-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 178px)' }}>
 
           {/* Trade ticket */}
-          <div className="rounded-xl border border-slate-700/50 bg-slate-900 p-4">
+          <div className="rounded-lg border border-white/10 bg-[#11100e] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
             <div className="mb-3.5 flex items-center justify-between">
-              <p className="text-[12px] font-medium text-slate-300">Trade Ticket</p>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-slate-300">Trade Ticket</p>
               <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${simulation.activeTrade ? 'bg-amber-400/10 text-amber-300' : 'bg-slate-800 text-slate-500'}`}>
                 {simulation.activeTrade ? 'Active' : 'Ready'}
               </span>
@@ -1718,9 +2026,9 @@ export default function Backtest() {
                     className={`cursor-pointer rounded-lg border py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                       tradeDraft.direction === dir
                         ? dir === 'Long'
-                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                          : 'border-red-500/40 bg-red-500/10 text-red-300'
-                        : 'border-slate-700/60 bg-slate-800/40 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                          ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+                          : 'border-red-400/40 bg-red-400/10 text-red-300'
+                        : 'border-white/10 bg-white/[0.04] text-slate-400 hover:border-white/20 hover:text-slate-200'
                     }`}
                   >
                     {dir}
@@ -1781,7 +2089,7 @@ export default function Backtest() {
                 type="button"
                 disabled={!canPlaceTrade}
                 onClick={handlePlaceTrade}
-                className="h-9 w-full cursor-pointer rounded-lg bg-blue-600 text-[13px] font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-10 w-full cursor-pointer rounded-md bg-emerald-400 text-[13px] font-semibold text-black transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Place Trade
               </button>
@@ -1790,7 +2098,7 @@ export default function Backtest() {
 
           {/* Live position */}
           {simulation.activeTrade ? (
-            <div className="rounded-xl border border-slate-700/50 bg-slate-900 p-4">
+            <div className="rounded-lg border border-white/10 bg-[#11100e] p-4">
               <p className="mb-3 text-[12px] font-medium text-slate-300">Live Position</p>
               <div className={`mb-3 rounded-lg border px-3 py-2.5 ${simulation.activeTrade.pnlDollars >= 0 ? 'border-emerald-500/25 bg-emerald-500/[0.07]' : 'border-red-500/25 bg-red-500/[0.07]'}`}>
                 <div className="flex items-center justify-between">
@@ -1820,14 +2128,14 @@ export default function Backtest() {
               </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-slate-700/50 bg-slate-900 p-4">
+            <div className="rounded-lg border border-white/10 bg-[#11100e] p-4">
               <p className="mb-2 text-[12px] font-medium text-slate-300">Live Position</p>
               <p className="text-[12px] text-slate-600">No active trade. Place a trade to track it here.</p>
             </div>
           )}
 
           {/* Session stats */}
-          <div className="rounded-xl border border-slate-700/50 bg-slate-900 p-4">
+          <div className="rounded-lg border border-white/10 bg-[#11100e] p-4">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[12px] font-medium text-slate-300">Session Stats</p>
               <button

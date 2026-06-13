@@ -24,7 +24,7 @@ const FlyxaAIPostSession = lazy(() => import('./pages/FlyxaAIPostSession.js'));
 const FlyxaAIWeeklyReport = lazy(() => import('./pages/FlyxaAIWeeklyReport.js'));
 const Analytics = lazy(() => import('./pages/Analytics.js'));
 const Achievements = lazy(() => import('./pages/Achievements.js'));
-const Backtest = lazy(() => import('./pages/BacktestUnavailable.js'));
+const Backtest = lazy(() => import('./pages/Backtest.js'));
 const TradingPlan = lazy(() => import('./pages/TradingPlan.js'));
 const Billing = lazy(() => import('./pages/Billing.js'));
 const PsychologyTracker = lazy(() => import('./pages/PsychologyTracker.js'));

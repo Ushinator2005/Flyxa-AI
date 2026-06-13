@@ -189,6 +189,9 @@ export default function TradeForm({
   const [pnlOverride, setPnlOverride] = useState<number | null>(
     () => typeof initialData?.pnlOverride === 'number' && Number.isFinite(initialData.pnlOverride) ? initialData.pnlOverride : null
   );
+  const [commission, setCommission] = useState<number>(
+    () => typeof initialData?.commission === 'number' && initialData.commission >= 0 ? initialData.commission : 0
+  );
 
   useEffect(() => {
     const nextForm = buildFormState(initialData);
@@ -217,6 +220,7 @@ export default function TradeForm({
     setSelectedConfluence('');
     setPnlOverride(typeof initialData?.pnlOverride === 'number' && Number.isFinite(initialData.pnlOverride) ? initialData.pnlOverride : null);
     setPnlEditMode(false);
+    setCommission(typeof initialData?.commission === 'number' && initialData.commission >= 0 ? initialData.commission : 0);
   }, [initialData]);
 
   const calcPnL = (): number => {
@@ -400,6 +404,7 @@ export default function TradeForm({
       exit_price: normalizedExitPrice,
       pre_trade_notes: preTradeNotes,
       post_trade_notes: postTradeNotes,
+      commission,
       ...(pnlOverride !== null ? { pnlOverride } : {}),
     });
   };
@@ -735,7 +740,7 @@ export default function TradeForm({
           <div style={{ ...sub, marginTop: 8, display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                <p style={{ fontSize: 11, color: T3 }}>Net P&amp;L</p>
+                <p style={{ fontSize: 11, color: T3 }}>Gross P&amp;L</p>
                 {pnlOverride !== null && (
                   <button
                     type="button"
@@ -776,7 +781,7 @@ export default function TradeForm({
                 <p
                   style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: pnl === 0 ? AMBER : pnl > 0 ? '#34d399' : '#f87171', cursor: 'pointer' }}
                   onClick={() => { setPnlOverride(v => v !== null ? v : calcPnL()); setPnlEditMode(true); }}
-                  title="Click to override Net P&L"
+                  title="Click to override Gross P&L"
                 >
                   {formatCurrency(pnl)}
                 </p>
@@ -786,6 +791,41 @@ export default function TradeForm({
               <p style={{ fontSize: 11, color: T3, marginBottom: 3 }}>R:R</p>
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: T1 }}>
                 {rr === 'N/A' ? 'N/A' : formatRiskRewardRatio(Number(rr))}
+              </p>
+            </div>
+          </div>
+          {/* Commission row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BD}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+              <p style={{ fontSize: 11, color: T3, whiteSpace: 'nowrap' }}>Fees / Commission</p>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={commission === 0 ? '' : commission}
+                onChange={e => {
+                  const v = parseFloat(e.target.value);
+                  setCommission(Number.isFinite(v) && v >= 0 ? v : 0);
+                }}
+                placeholder="0.00"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  width: 90,
+                  background: 'transparent',
+                  border: `1px solid ${BD}`,
+                  borderRadius: 4,
+                  color: T2,
+                  padding: '2px 6px',
+                  outline: 'none',
+                }}
+              />
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: 11, color: T3, marginBottom: 2 }}>Net P&amp;L</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: (pnl - commission) === 0 ? AMBER : (pnl - commission) > 0 ? '#34d399' : '#f87171' }}>
+                {formatCurrency(pnl - commission)}
               </p>
             </div>
           </div>
