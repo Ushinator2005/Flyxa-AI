@@ -41,6 +41,7 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
     color: account.color,
     createdAt: account.createdAt,
     ...(account.startingBalance !== undefined ? { startingBalance: account.startingBalance } : {}),
+    ...(account.targetBalance !== undefined ? { targetBalance: account.targetBalance } : {}),
     ...(account.archived === true ? { archived: true } : {}),
   }));
 
