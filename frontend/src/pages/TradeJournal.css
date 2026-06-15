@@ -524,33 +524,6 @@
   transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.tj-stat::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 2px;
-  background: var(--amber-bdr);
-  opacity: 0.45;
-}
-
-.tj-stat:nth-child(2)::before {
-  background: var(--cobalt-border);
-}
-
-.tj-stat:nth-child(3)::before {
-  background: var(--green-border);
-}
-
-.tj-stat:nth-child(4)::before {
-  background: var(--amber-bdr);
-}
-
-.tj-stat:nth-child(5)::before,
-.tj-stat:nth-child(6)::before {
-  background: rgba(255, 255, 255, 0.2);
-}
 
 .tj-stat:hover {
   border-color: var(--amber-bdr);
@@ -567,10 +540,11 @@
 
 .tj-stat-value {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 400;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--txt);
+  -webkit-font-smoothing: antialiased;
 }
 
 .tj-stat-value.pos {
@@ -2078,10 +2052,11 @@
   outline: none;
   padding: 0;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 400;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--txt);
+  -webkit-font-smoothing: antialiased;
   cursor: text;
   /* hide number spinners */
   appearance: textfield;
