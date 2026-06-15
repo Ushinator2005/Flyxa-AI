@@ -26,6 +26,57 @@ export interface Trade {
   timeframe_minutes: number;
   emotional_state?: string | null;
   confidence_level?: number | null;
+  preEntry?: {
+    confidenceAtEntry?: number;
+    emotionalState?: string;
+    hesitated?: boolean | null;
+    hesitationReason?: string;
+  };
+  thesis?: {
+    setup?: string;
+    invalidation?: string;
+    asymmetry?: string;
+    setupType?: string;
+  };
+  executionReview?: {
+    enteredAtLevel?: boolean | null;
+    waitedForConfirmation?: boolean | null;
+    correctSize?: boolean | null;
+    exitedAtPlan?: boolean | null;
+    movedStopCorrectly?: boolean | null;
+    resistedEarlyExit?: boolean | null;
+    note?: string;
+  };
+  psychologyRatings?: {
+    setupQuality?: number;
+    discipline?: number;
+    execution?: number;
+    patience?: number;
+    riskManagement?: number;
+    emotionalControl?: number;
+    notes?: Record<string, string>;
+  };
+  stateOfMind?: Array<{ label: string; valence: 'positive' | 'caution' | 'negative' }>;
+  processScore?: number;
+  sessionContext?: {
+    emotion?: string;
+    note?: string;
+    bias?: Record<string, string>;
+    readiness?: {
+      status?: string;
+      score?: number;
+      summary?: string;
+      reasons?: string[];
+    };
+    sessionPlan?: Array<{ id?: string; source?: string; rule?: string }>;
+    dailyReflection?: {
+      pre?: string;
+      bias?: string | null;
+      newsRisk?: string | null;
+      sessionTarget?: number | null;
+      marketRespectedBias?: boolean | null;
+    };
+  };
   pre_trade_notes: string;
   post_trade_notes: string;
   confluences?: string[];

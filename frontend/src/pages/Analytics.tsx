@@ -3,17 +3,18 @@ import { Btn, MetricCard, PageHeader, SectionPanel, EmptyState } from '../compon
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   Pie,
   PieChart,
   ReferenceLine,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
+  ZAxis,
 } from 'recharts';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useTrades } from '../hooks/useTrades.js';
@@ -417,27 +418,66 @@ export default function Analytics() {
     return dd;
   }, [equityCurveData]);
 
+  const curveStats = useMemo(() => {
+    if (equityCurveData.length < 2) return null;
+    const values = equityCurveData.map(d => d.cumulative);
+    const peak = Math.max(...values);
+    const trough = Math.min(...values);
+    if (peak === trough) return null;
+    return {
+      peak,
+      trough,
+      peakIdx: values.lastIndexOf(peak),
+      troughIdx: values.lastIndexOf(trough),
+    };
+  }, [equityCurveData]);
+
   const pnlDistribution = useMemo(() => {
-    if (filteredTrades.length < 3) return [];
+    if (filteredTrades.length < 2) return null;
     const pnls = filteredTrades.map(t => t.pnl);
     const minVal = Math.min(...pnls);
     const maxVal = Math.max(...pnls);
-    const range = maxVal - minVal;
-    if (range < 0.01) return [];
-    const BUCKETS = 10;
-    const bucketSize = range / BUCKETS;
-    return Array.from({ length: BUCKETS }, (_, i) => {
-      const low = minVal + i * bucketSize;
-      const high = low + bucketSize;
-      const midpoint = (low + high) / 2;
-      const count = pnls.filter(p =>
-        i === BUCKETS - 1 ? p >= low && p <= high : p >= low && p < high,
-      ).length;
-      const label = midpoint >= 0
-        ? `+${Math.round(midpoint)}`
-        : `${Math.round(midpoint)}`;
-      return { label, count, isPositive: midpoint >= 0 };
+    if (maxVal - minVal < 0.01) return null;
+
+    const totalRange = maxVal - minVal;
+    const binWidth = Math.max(totalRange / 20, 0.01);
+
+    // Group trades into x-bins, sorted by pnl for deterministic order
+    const bins = new Map<number, { pnl: number; isPositive: boolean }[]>();
+    [...filteredTrades]
+      .sort((a, b) => a.pnl - b.pnl)
+      .forEach(trade => {
+        const key = Math.floor((trade.pnl - minVal) / binWidth);
+        const bin = bins.get(key) ?? [];
+        bin.push({ pnl: trade.pnl, isPositive: trade.pnl >= 0 });
+        bins.set(key, bin);
+      });
+
+    // Center-stack: all isolated dots at y=0.5; stacks grow symmetrically with fixed step
+    const dotStep = 0.10;
+    // size encodes |P&L| — Recharts ZAxis maps this to dot area
+    const dots: { pnl: number; y: number; isPositive: boolean; size: number }[] = [];
+    bins.forEach(binDots => {
+      const n = binDots.length;
+      const startY = 0.5 - ((n - 1) * dotStep) / 2;
+      binDots.forEach((dot, i) => {
+        dots.push({ ...dot, y: startY + i * dotStep, size: Math.abs(dot.pnl) });
+      });
     });
+
+    // Symmetric domain: both sides equal so zero line is always centred
+    const absExtreme = Math.max(Math.abs(minVal), Math.abs(maxVal));
+    const step = absExtreme * 2 < 200 ? 10 : absExtreme * 2 < 1000 ? 100 : absExtreme * 2 < 5000 ? 500 : 1000;
+    const domainExtent = Math.ceil((absExtreme * 1.15) / step) * step;
+    const meanPnL = filteredTrades.reduce((sum, t) => sum + t.pnl, 0) / filteredTrades.length;
+
+    return {
+      wins: dots.filter(d => d.isPositive),
+      losses: dots.filter(d => !d.isPositive),
+      domainMin: -domainExtent,
+      domainMax: domainExtent,
+      meanPnL,
+    };
   }, [filteredTrades]);
 
   const winLossData = useMemo(() => {
@@ -789,7 +829,7 @@ export default function Analytics() {
         </SectionPanel>
       ) : null}
 
-      <div data-tour-id="analytics-metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <div data-tour-id="analytics-metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="Net P&L"
           value={formatSignedCurrency(metrics.netPnL)}
@@ -851,6 +891,18 @@ export default function Analytics() {
                 <span className="h-3 w-3 rounded-full bg-[var(--accent)]" />
                 Breakeven
               </span>
+              {curveStats && (
+                <>
+                  <span className="inline-flex items-center gap-2">
+                    <span style={{ display: 'inline-block', width: 16, height: 0, border: `1.5px dashed ${DASHBOARD_GREEN}`, opacity: 0.75 }} />
+                    Peak
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span style={{ display: 'inline-block', width: 16, height: 0, border: `1.5px dashed ${DASHBOARD_RED}`, opacity: 0.75 }} />
+                    Trough
+                  </span>
+                </>
+              )}
               {accountPayouts.length > 0 && (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full" style={{ background: '#f59e0b' }} />
@@ -893,17 +945,62 @@ export default function Analytics() {
                   }}
                 />
                 <ReferenceLine y={0} stroke="var(--accent)" strokeDasharray="4 4" />
+                {curveStats && curveStats.peak !== 0 && (
+                  <ReferenceLine
+                    y={curveStats.peak}
+                    stroke={DASHBOARD_GREEN}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    label={(props: any) => {
+                      const vb = props?.viewBox;
+                      if (!vb) return null;
+                      // Near bottom (little room below) → label above; otherwise below
+                      const yOff = (vb.height ?? 100) < 50 ? -14 : 13;
+                      return (
+                        <text x={(vb.x ?? 0) + 6} y={(vb.y ?? 0) + yOff}
+                          fill={DASHBOARD_GREEN} fontSize={10} fontWeight={600}>
+                          {formatSignedCurrency(curveStats.peak)}
+                        </text>
+                      );
+                    }}
+                  />
+                )}
+                {curveStats && curveStats.trough !== 0 && (
+                  <ReferenceLine
+                    y={curveStats.trough}
+                    stroke={DASHBOARD_RED}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    label={(props: any) => {
+                      const vb = props?.viewBox;
+                      if (!vb) return null;
+                      // Near bottom (little room below) → label above; otherwise below
+                      const yOff = (vb.height ?? 100) < 50 ? -14 : 13;
+                      return (
+                        <text x={(vb.x ?? 0) + 6} y={(vb.y ?? 0) + yOff}
+                          fill={DASHBOARD_RED} fontSize={10} fontWeight={600}>
+                          {formatSignedCurrency(curveStats.trough)}
+                        </text>
+                      );
+                    }}
+                  />
+                )}
                 <Area
                   type="monotone"
                   dataKey="cumulative"
                   stroke={DASHBOARD_GREEN}
                   strokeWidth={3}
                   fill="url(#pnl-fill)"
-                  dot={(props: { cx?: number; cy?: number; payload?: { payoutAmount?: number } }) => {
-                    if (!props.payload?.payoutAmount) return <g key={`${props.cx}-${props.cy}`} />;
+                  dot={(props: { cx?: number; cy?: number; index?: number; payload?: { payoutAmount?: number } }) => {
+                    const hasPayout = !!props.payload?.payoutAmount;
+                    const isPeak = curveStats != null && props.index === curveStats.peakIdx;
+                    const isTrough = curveStats != null && props.index === curveStats.troughIdx;
+                    if (!hasPayout && !isPeak && !isTrough) return <g key={`${props.cx}-${props.cy}`} />;
                     return (
-                      <g key={`payout-${props.cx}-${props.cy}`}>
-                        <circle cx={props.cx} cy={props.cy} r={5} fill="#f59e0b" stroke="#0e0d0d" strokeWidth={1.5} />
+                      <g key={`dot-${props.index}-${props.cx}-${props.cy}`}>
+                        {hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill="#f59e0b" stroke="#0e0d0d" strokeWidth={1.5} />}
+                        {isPeak && !hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill={DASHBOARD_GREEN} stroke="#0e0d0d" strokeWidth={1.5} />}
+                        {isTrough && !hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill={DASHBOARD_RED} stroke="#0e0d0d" strokeWidth={1.5} />}
                       </g>
                     );
                   }}
@@ -923,7 +1020,7 @@ export default function Analytics() {
           </div>
           <div className="mb-3 flex items-baseline gap-2">
             <span style={{
-              fontSize: 32,
+              fontSize: 24,
               fontWeight: 700,
               lineHeight: 1,
               color: metrics.winRate >= 50 ? 'var(--green, #34d399)' : 'var(--red, #f87171)',
@@ -1081,65 +1178,141 @@ export default function Analytics() {
         </section>
       </div>
 
-      {/* P&L Distribution histogram */}
-      {pnlDistribution.length > 0 && (
+      {/* P&L Distribution — dot plot */}
+      {pnlDistribution && (
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L Distribution</h3>
-              <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">How your individual trade results are sized</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                <span style={{ color: metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 700, fontSize: 13 }}>
+                  {metrics.winRate.toFixed(0)}%
+                </span>
+                <span style={{ color: 'var(--app-text-muted)' }}>win rate</span>
+                <span style={{ color: 'var(--app-text-subtle)' }}>·</span>
+                <span style={{ color: 'var(--app-text)', fontWeight: 600 }}>
+                  {pnlDistribution.wins.length}W / {pnlDistribution.losses.length}L
+                </span>
+                <span style={{ color: 'var(--app-text-subtle)' }}>·</span>
+                <span style={{ color: metrics.avgPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 600 }}>
+                  {formatSignedCurrency(metrics.avgPnL)}
+                </span>
+                <span style={{ color: 'var(--app-text-muted)' }}>avg / trade</span>
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-[11px] text-[var(--app-text-muted)]">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: DASHBOARD_GREEN }} />
-                Wins
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: DASHBOARD_RED }} />
-                Losses
-              </span>
-            </div>
+            {/* Size legend hint */}
+            <span className="mt-0.5 shrink-0 flex items-center gap-1 text-[10px]" style={{ color: 'var(--app-text-subtle)' }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', opacity: 0.5 }} />
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: 'currentColor', display: 'inline-block', opacity: 0.5 }} />
+              <span style={{ marginLeft: 3 }}>size = |P&amp;L|</span>
+            </span>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={pnlDistribution} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-              <CartesianGrid stroke="var(--app-panel-strong)" vertical={false} />
+          <ResponsiveContainer width="100%" height={180}>
+            <ScatterChart margin={{ top: 28, right: 16, left: 16, bottom: 16 }}>
+              <CartesianGrid stroke="var(--app-panel-strong)" horizontal={false} />
               <XAxis
-                dataKey="label"
+                dataKey="pnl"
+                type="number"
+                domain={[pnlDistribution.domainMin, pnlDistribution.domainMax]}
                 tick={{ fill: 'var(--app-text-subtle)', fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
+                tickCount={6}
+                tickFormatter={(v: number) => `$${Math.round(v).toLocaleString()}`}
               />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fill: 'var(--app-text-subtle)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                width={28}
+              <YAxis dataKey="y" type="number" hide domain={[0, 1]} />
+              {/* dot area scales with |P&L|: ~2.5px to ~12px radius */}
+              <ZAxis dataKey="size" range={[20, 450]} />
+              {/* Mean / expectancy line — gray, thinner, doesn't compete with $0 */}
+              {Math.abs(pnlDistribution.meanPnL) > pnlDistribution.domainMax * 0.01 && (
+                <ReferenceLine
+                  x={pnlDistribution.meanPnL}
+                  stroke="rgba(148,163,184,0.5)"
+                  strokeDasharray="3 3"
+                  strokeWidth={1.5}
+                  label={(props: any) => {
+                    const vb = props?.viewBox;
+                    if (!vb) return null;
+                    return (
+                      <text x={vb.x} y={14}
+                        fill="rgba(148,163,184,0.8)" fontSize={9} fontWeight={600}
+                        textAnchor="middle">
+                        avg
+                      </text>
+                    );
+                  }}
+                />
+              )}
+              <ReferenceLine
+                x={0}
+                stroke="var(--accent)"
+                strokeDasharray="4 4"
+                label={(props: any) => {
+                  const vb = props?.viewBox;
+                  if (!vb) return null;
+                  return (
+                    <text x={vb.x} y={14}
+                      fill="var(--app-text-subtle)" fontSize={10} fontWeight={700}
+                      textAnchor="middle">
+                      $0
+                    </text>
+                  );
+                }}
+              />
+              {/* Zone count labels at the top of each side */}
+              <ReferenceLine
+                x={pnlDistribution.domainMin / 2}
+                stroke="transparent"
+                label={(props: any) => {
+                  const vb = props?.viewBox;
+                  if (!vb) return null;
+                  return (
+                    <text x={vb.x} y={14}
+                      fill={DASHBOARD_RED} fontSize={10} fontWeight={700}
+                      textAnchor="middle" opacity={0.85}>
+                      {pnlDistribution.losses.length} loss{pnlDistribution.losses.length !== 1 ? 'es' : ''}
+                    </text>
+                  );
+                }}
+              />
+              <ReferenceLine
+                x={pnlDistribution.domainMax / 2}
+                stroke="transparent"
+                label={(props: any) => {
+                  const vb = props?.viewBox;
+                  if (!vb) return null;
+                  return (
+                    <text x={vb.x} y={14}
+                      fill={DASHBOARD_GREEN} fontSize={10} fontWeight={700}
+                      textAnchor="middle" opacity={0.85}>
+                      {pnlDistribution.wins.length} win{pnlDistribution.wins.length !== 1 ? 's' : ''}
+                    </text>
+                  );
+                }}
               />
               <Tooltip
-                cursor={{ fill: 'rgba(255,255,255,0.05)', stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1, radius: 4 }}
-                contentStyle={{
-                  background: 'rgba(12,12,14,0.95)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 8,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                  padding: '8px 12px',
+                cursor={false}
+                content={({ payload }) => {
+                  const item = payload?.[0]?.payload as { pnl?: number; isPositive?: boolean } | undefined;
+                  if (item == null || item.pnl == null) return null;
+                  return (
+                    <div style={{
+                      background: 'var(--app-panel)', border: '1px solid var(--app-border)',
+                      borderRadius: 10, padding: '8px 12px',
+                    }}>
+                      <p style={{ color: item.isPositive ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 600, fontSize: 13 }}>
+                        {formatSignedCurrency(item.pnl)}
+                      </p>
+                      <p style={{ color: 'var(--app-text-muted)', fontSize: 11, marginTop: 2 }}>
+                        {item.isPositive ? 'Win' : 'Loss'}
+                      </p>
+                    </div>
+                  );
                 }}
-                labelStyle={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, marginBottom: 4 }}
-                itemStyle={{ color: '#fff', fontSize: 12, fontWeight: 500 }}
-                formatter={(value: number) => [value, 'Trades']}
-                labelFormatter={(label: string) => `P&L ≈ $${label}`}
               />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {pnlDistribution.map((bucket) => (
-                  <Cell
-                    key={bucket.label}
-                    fill={bucket.isPositive ? DASHBOARD_GREEN : DASHBOARD_RED}
-                    fillOpacity={0.85}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
+              <Scatter data={pnlDistribution.losses} fill={DASHBOARD_RED} fillOpacity={0.75} />
+              <Scatter data={pnlDistribution.wins} fill={DASHBOARD_GREEN} fillOpacity={0.75} />
+            </ScatterChart>
           </ResponsiveContainer>
         </section>
       )}

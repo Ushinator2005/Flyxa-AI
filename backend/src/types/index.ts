@@ -29,6 +29,25 @@ export interface Trade {
   confluences?: string[];
   followed_plan: boolean;
   behavioral_flags?: string[];
+  sessionContext?: {
+    emotion?: string;
+    note?: string;
+    bias?: Record<string, string>;
+    readiness?: {
+      status?: string;
+      score?: number;
+      summary?: string;
+      reasons?: string[];
+    };
+    sessionPlan?: Array<{ id?: string; source?: string; rule?: string }>;
+    dailyReflection?: {
+      pre?: string;
+      bias?: string | null;
+      newsRisk?: string | null;
+      sessionTarget?: number | null;
+      marketRespectedBias?: boolean | null;
+    };
+  };
   session: 'Asia' | 'London' | 'New York' | 'Other';
   created_at: string;
 }

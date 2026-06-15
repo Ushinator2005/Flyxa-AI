@@ -1,14 +1,25 @@
 import { CSSProperties, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
+import useFlyxaStore from '../store/flyxaStore.js';
 
 export type PatternType = 'Risk' | 'Edge' | 'Psychology' | 'Behaviour';
 export type PatternStatus = 'Active' | 'Improving' | 'Confirmed' | 'Resolved';
 export type SessionBucket = 'RTH open' | 'Overlap' | 'Midday';
 export type TagSentiment = 'positive' | 'negative' | 'neutral';
-type SortOption = 'impact' | 'recent' | 'frequency';
+type SortOption = 'impact' | 'confidence' | 'recent' | 'frequency';
+type PatternTrade = Trade & {
+  sessionContext?: Trade['sessionContext'] & {
+    postSessionNote?: string;
+    dailyReflection?: NonNullable<Trade['sessionContext']>['dailyReflection'] & {
+      post?: string;
+      lessons?: string;
+    };
+  };
+};
 
 export type PatternSession = {
   date: string;
@@ -233,7 +244,7 @@ function getSuggestion(pattern: PatternItem): string {
   return `${sessionCount} occurrences at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote} Document the exact conditions that produce this outcome so you can distinguish when it's valid from when it's noise.`;
 }
 
-function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): PatternItem[] {
+function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame): PatternItem[] {
   if (!trades.length) return [];
   const cutoff = getDetectedPeriodStart(tf);
   const filtered = trades.filter(t => {
@@ -245,13 +256,13 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
   const patterns: PatternItem[] = [];
   const now = new Date().toISOString().slice(0, 10);
 
-  const groupBy = <K extends string>(arr: Trade[], key: (t: Trade) => K) => {
-    const map = new Map<K, Trade[]>();
+  const groupBy = <K extends string>(arr: PatternTrade[], key: (t: PatternTrade) => K) => {
+    const map = new Map<K, PatternTrade[]>();
     arr.forEach(t => { const k = key(t); map.set(k, [...(map.get(k) ?? []), t]); });
     return map;
   };
 
-  const summariseGroup = (group: Trade[]) => {
+  const summariseGroup = (group: PatternTrade[]) => {
     const winners = group.filter(t => Number(t.pnl) > 0);
     const netPnl = group.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
     return {
@@ -264,6 +275,36 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
         .slice(0, 8),
       firstSeen: group.map(t => t.trade_date ?? now).sort()[0] ?? now,
     };
+  };
+  const plannedRr = (trade: PatternTrade) => {
+    const entry = Number(trade.entry_price);
+    const stop = Number(trade.sl_price);
+    const target = Number(trade.tp_price);
+    const risk = Math.abs(entry - stop);
+    const reward = Math.abs(target - entry);
+    return risk > 0 && reward > 0 ? reward / risk : 0;
+  };
+  const targetPoints = (trade: PatternTrade) => {
+    const entry = Number(trade.entry_price);
+    const target = Number(trade.tp_price);
+    return Number.isFinite(entry) && Number.isFinite(target) ? Math.abs(target - entry) : 0;
+  };
+  const tradeDirection = (trade: PatternTrade) => String(trade.direction).toLowerCase();
+  const biasForTrade = (trade: PatternTrade) => {
+    const bias = trade.sessionContext?.bias;
+    if (!bias || typeof bias !== 'object') return null;
+    const symbol = String(trade.symbol ?? '').toUpperCase();
+    const direct = Object.entries(bias).find(([key]) => symbol.includes(key.toUpperCase()) || key.toUpperCase().includes(symbol.replace(/[^A-Z]/g, '')));
+    const value = direct?.[1];
+    return typeof value === 'string' && value !== 'Neutral' ? value : null;
+  };
+  const isBiasAligned = (trade: PatternTrade) => {
+    const bias = biasForTrade(trade);
+    if (!bias) return null;
+    const dir = tradeDirection(trade);
+    if (bias === 'Bull') return dir === 'long';
+    if (bias === 'Bear') return dir === 'short';
+    return null;
   };
 
   // ── Symbol patterns ──────────────────────────────────────────────
@@ -448,6 +489,229 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
   });
 
   // ── Day-of-week patterns ─────────────────────────────────────────
+  const withPreSession = filtered.filter(t => {
+    const ctx = t.sessionContext;
+    return Boolean(ctx?.readiness || ctx?.emotion || ctx?.note || (ctx?.bias && Object.keys(ctx.bias).length));
+  });
+  const withoutPreSession = filtered.filter(t => !withPreSession.includes(t));
+  if (withPreSession.length >= 4 && withoutPreSession.length >= 4) {
+    const withStats = summariseGroup(withPreSession);
+    const withoutStats = summariseGroup(withoutPreSession);
+    const wrGap = withStats.winRate - withoutStats.winRate;
+    const pnlGap = withStats.netPnl - withoutStats.netPnl;
+    if (Math.abs(wrGap) >= 15 || Math.abs(pnlGap) >= 1000) {
+      const preSessionHelps = wrGap > 0 || pnlGap > 0;
+      patterns.push({
+        id: 'auto-pre-session-impact',
+        type: 'Behaviour',
+        status: preSessionHelps ? 'Confirmed' : 'Active',
+        title: preSessionHelps ? 'Pre-session prep is improving trade quality' : 'Pre-session prep is not translating into execution yet',
+        description: `${withPreSession.length} trades with pre-session context returned ${formatSignedCurrency(withStats.netPnl)} at ${Math.round(withStats.winRate)}% win rate, versus ${withoutPreSession.length} trades without it at ${formatSignedCurrency(withoutStats.netPnl)} and ${Math.round(withoutStats.winRate)}% win rate. ${preSessionHelps ? 'Your best trading is happening when the day has a plan before the entry.' : 'The brief is being recorded, but the entries are not yet obeying it consistently.'}`,
+        firstSeen: withStats.firstSeen,
+        sessionCount: withPreSession.length,
+        totalPnl: withStats.netPnl,
+        tags: [
+          { label: `Prep: ${Math.round(withStats.winRate)}% WR`, sentiment: preSessionHelps ? 'positive' : 'negative' },
+          { label: `No prep: ${Math.round(withoutStats.winRate)}% WR`, sentiment: preSessionHelps ? 'negative' : 'neutral' },
+        ],
+        confidence: Math.min(90, Math.round(25 + Math.min(withPreSession.length, withoutPreSession.length) * 5 + Math.abs(wrGap))),
+        instrument: 'All',
+        session: 'RTH open',
+        sessions: withStats.sessions,
+      });
+    }
+  }
+
+  const postReviewed = filtered.filter(t => {
+    const daily = t.sessionContext?.dailyReflection;
+    return Boolean(daily?.post?.trim() || daily?.lessons?.trim() || t.sessionContext?.postSessionNote?.trim());
+  });
+  const postNotReviewed = filtered.filter(t => !postReviewed.includes(t));
+  if (postReviewed.length >= 4 && postNotReviewed.length >= 4) {
+    const reviewedStats = summariseGroup(postReviewed);
+    const missingStats = summariseGroup(postNotReviewed);
+    const reviewedHelps = reviewedStats.winRate >= missingStats.winRate + 12 || reviewedStats.netPnl > missingStats.netPnl + 1000;
+    if (reviewedHelps || missingStats.netPnl < 0) {
+      patterns.push({
+        id: 'auto-post-session-review',
+        type: 'Behaviour',
+        status: reviewedHelps ? 'Confirmed' : 'Active',
+        title: reviewedHelps ? 'Post-session review is linked to better follow-through' : 'Missing post-session review is leaving leaks unresolved',
+        description: `${postReviewed.length} trades from reviewed sessions returned ${formatSignedCurrency(reviewedStats.netPnl)} at ${Math.round(reviewedStats.winRate)}% win rate. ${postNotReviewed.length} trades from unreviewed sessions returned ${formatSignedCurrency(missingStats.netPnl)} at ${Math.round(missingStats.winRate)}% win rate. The review loop is part of the edge because it determines whether the same mistake gets corrected or repeated.`,
+        firstSeen: reviewedStats.firstSeen,
+        sessionCount: postReviewed.length,
+        totalPnl: reviewedStats.netPnl,
+        tags: [
+          { label: `Reviewed: ${Math.round(reviewedStats.winRate)}% WR`, sentiment: reviewedHelps ? 'positive' : 'neutral' },
+          { label: `Unreviewed: ${Math.round(missingStats.winRate)}% WR`, sentiment: missingStats.netPnl < 0 ? 'negative' : 'neutral' },
+        ],
+        confidence: Math.min(86, Math.round(20 + Math.min(postReviewed.length, postNotReviewed.length) * 5 + Math.abs(reviewedStats.winRate - missingStats.winRate))),
+        instrument: 'All',
+        session: 'RTH open',
+        sessions: reviewedStats.sessions,
+      });
+    }
+  }
+
+  const alignedBiasTrades = filtered.filter(t => isBiasAligned(t) === true);
+  const counterBiasTrades = filtered.filter(t => isBiasAligned(t) === false);
+  if (alignedBiasTrades.length >= 3 && counterBiasTrades.length >= 3) {
+    const aligned = summariseGroup(alignedBiasTrades);
+    const counter = summariseGroup(counterBiasTrades);
+    if (aligned.winRate >= counter.winRate + 15 || counter.netPnl < 0) {
+      patterns.push({
+        id: 'auto-bias-alignment',
+        type: 'Edge',
+        status: aligned.netPnl > 0 ? 'Confirmed' : 'Improving',
+        title: 'Pre-session bias alignment is affecting win rate',
+        description: `${alignedBiasTrades.length} trades aligned with pre-session market bias returned ${formatSignedCurrency(aligned.netPnl)} at ${Math.round(aligned.winRate)}% win rate. ${counterBiasTrades.length} counter-bias trades returned ${formatSignedCurrency(counter.netPnl)} at ${Math.round(counter.winRate)}% win rate. Bias does not need to be a hard rule, but counter-bias entries need stronger evidence.`,
+        firstSeen: aligned.firstSeen,
+        sessionCount: alignedBiasTrades.length,
+        totalPnl: aligned.netPnl,
+        tags: [
+          { label: `Aligned: ${Math.round(aligned.winRate)}% WR`, sentiment: 'positive' },
+          { label: `Counter-bias: ${Math.round(counter.winRate)}% WR`, sentiment: counter.netPnl < 0 ? 'negative' : 'neutral' },
+        ],
+        confidence: Math.min(90, Math.round(25 + Math.min(alignedBiasTrades.length, counterBiasTrades.length) * 6 + Math.abs(aligned.winRate - counter.winRate))),
+        instrument: 'All',
+        session: 'RTH open',
+        sessions: aligned.sessions,
+      });
+    }
+  }
+
+  const respectedBiasDays = filtered.filter(t => t.sessionContext?.dailyReflection?.marketRespectedBias === true);
+  const ignoredBiasDays = filtered.filter(t => t.sessionContext?.dailyReflection?.marketRespectedBias === false);
+  if (respectedBiasDays.length >= 3 && ignoredBiasDays.length >= 3) {
+    const respected = summariseGroup(respectedBiasDays);
+    const ignored = summariseGroup(ignoredBiasDays);
+    if (respected.winRate >= ignored.winRate + 15 || ignored.netPnl < 0) {
+      patterns.push({
+        id: 'auto-market-respected-bias',
+        type: 'Behaviour',
+        status: 'Active',
+        title: 'Market bias accuracy is impacting results',
+        description: `When the market respected your daily bias, ${respectedBiasDays.length} trades returned ${formatSignedCurrency(respected.netPnl)} at ${Math.round(respected.winRate)}% win rate. When it did not, ${ignoredBiasDays.length} trades returned ${formatSignedCurrency(ignored.netPnl)} at ${Math.round(ignored.winRate)}% win rate. If the market invalidates the morning thesis, trade selection needs to tighten immediately.`,
+        firstSeen: respected.firstSeen,
+        sessionCount: ignoredBiasDays.length,
+        totalPnl: ignored.netPnl,
+        tags: [
+          { label: `Bias respected: ${Math.round(respected.winRate)}% WR`, sentiment: 'positive' },
+          { label: `Bias failed: ${Math.round(ignored.winRate)}% WR`, sentiment: ignored.netPnl < 0 ? 'negative' : 'neutral' },
+        ],
+        confidence: Math.min(86, Math.round(20 + Math.min(respectedBiasDays.length, ignoredBiasDays.length) * 6 + Math.abs(respected.winRate - ignored.winRate))),
+        instrument: 'All',
+        session: 'RTH open',
+        sessions: ignored.sessions,
+      });
+    }
+  }
+
+  const rrLogged = filtered.filter(t => plannedRr(t) > 0);
+  if (rrLogged.length >= 6) {
+    const rrBucketGroups = groupBy(rrLogged, t => {
+      const rr = plannedRr(t);
+      if (rr < 1.25) return '<1.25R target';
+      if (rr < 2) return '1.25-2R target';
+      if (rr < 3) return '2-3R target';
+      return '3R+ target';
+    });
+    rrBucketGroups.forEach((group, bucket) => {
+      if (group.length < 3) return;
+      const s = summariseGroup(group);
+      const others = rrLogged.filter(t => !group.includes(t));
+      if (others.length < 3) return;
+      const otherStats = summariseGroup(others);
+      const wr = Math.round(s.winRate);
+      const confidence = Math.min(86, Math.round(18 + group.length * 5 + Math.abs(s.winRate - otherStats.winRate)));
+      if (s.netPnl > 0 && s.winRate >= otherStats.winRate + 12) {
+        patterns.push({
+          id: `auto-rr-edge-${bucket}`,
+          type: 'Edge',
+          status: 'Confirmed',
+          title: `${bucket} trades are outperforming your baseline`,
+          description: `${group.length} trades with a planned ${bucket} returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate, outperforming your other R:R profiles at ${Math.round(otherStats.winRate)}% win rate. This suggests the target profile fits your current execution style.`,
+          firstSeen: s.firstSeen,
+          sessionCount: group.length,
+          totalPnl: s.netPnl,
+          tags: [{ label: bucket, sentiment: 'positive' }, { label: `${wr}% win rate`, sentiment: 'positive' }],
+          confidence,
+          instrument: 'All',
+          session: 'RTH open',
+          sessions: s.sessions,
+        });
+      } else if (s.netPnl < 0 && s.winRate <= otherStats.winRate - 12) {
+        patterns.push({
+          id: `auto-rr-risk-${bucket}`,
+          type: 'Risk',
+          status: 'Active',
+          title: `${bucket} trades are underperforming`,
+          description: `${group.length} trades with a planned ${bucket} returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate, below your other R:R profiles at ${Math.round(otherStats.winRate)}% win rate. The issue may be target distance, stop placement, or entering setups that need too much follow-through.`,
+          firstSeen: s.firstSeen,
+          sessionCount: group.length,
+          totalPnl: s.netPnl,
+          tags: [{ label: bucket, sentiment: 'negative' }, { label: `${wr}% win rate`, sentiment: 'negative' }],
+          confidence,
+          instrument: 'All',
+          session: 'RTH open',
+          sessions: s.sessions,
+        });
+      }
+    });
+  }
+
+  const targetLogged = filtered.filter(t => targetPoints(t) > 0);
+  if (targetLogged.length >= 8) {
+    const targetGroups = groupBy(targetLogged, t => {
+      const points = targetPoints(t);
+      if (points < 25) return '<25 point target';
+      if (points < 60) return '25-60 point target';
+      if (points < 100) return '60-100 point target';
+      return '100+ point target';
+    });
+    targetGroups.forEach((group, bucket) => {
+      if (group.length < 3) return;
+      const s = summariseGroup(group);
+      const others = targetLogged.filter(t => !group.includes(t));
+      if (others.length < 3) return;
+      const otherStats = summariseGroup(others);
+      const confidence = Math.min(84, Math.round(15 + group.length * 5 + Math.abs(s.winRate - otherStats.winRate)));
+      if (s.netPnl < 0 && s.winRate <= otherStats.winRate - 12) {
+        patterns.push({
+          id: `auto-target-risk-${bucket}`,
+          type: 'Risk',
+          status: 'Active',
+          title: `${bucket} setups are not paying enough`,
+          description: `${group.length} trades with ${bucket}s returned ${formatSignedCurrency(s.netPnl)} at ${Math.round(s.winRate)}% win rate, versus ${Math.round(otherStats.winRate)}% on other target distances. The planned move may be too ambitious for the conditions you are taking, or the entry is arriving too late in the move.`,
+          firstSeen: s.firstSeen,
+          sessionCount: group.length,
+          totalPnl: s.netPnl,
+          tags: [{ label: bucket, sentiment: 'negative' }, { label: `${Math.round(s.winRate)}% win rate`, sentiment: 'negative' }],
+          confidence,
+          instrument: 'All',
+          session: 'RTH open',
+          sessions: s.sessions,
+        });
+      } else if (s.netPnl > 0 && s.winRate >= otherStats.winRate + 12) {
+        patterns.push({
+          id: `auto-target-edge-${bucket}`,
+          type: 'Edge',
+          status: 'Confirmed',
+          title: `${bucket} setups fit your current execution`,
+          description: `${group.length} trades with ${bucket}s returned ${formatSignedCurrency(s.netPnl)} at ${Math.round(s.winRate)}% win rate, outperforming other target distances. This target range appears to match the moves you are selecting best.`,
+          firstSeen: s.firstSeen,
+          sessionCount: group.length,
+          totalPnl: s.netPnl,
+          tags: [{ label: bucket, sentiment: 'positive' }, { label: `${Math.round(s.winRate)}% win rate`, sentiment: 'positive' }],
+          confidence,
+          instrument: 'All',
+          session: 'RTH open',
+          sessions: s.sessions,
+        });
+      }
+    });
+  }
+
   const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dowGroups = groupBy(filtered, t => {
     const d = t.trade_date ? new Date(`${t.trade_date}T00:00:00`) : null;
@@ -633,36 +897,106 @@ function detectPatternsFromTrades(trades: Trade[], tf: DetectedTimeFrame): Patte
 }
 
 export default function FlyxaAIPatterns() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { trades } = useTrades();
   const { filterTradesBySelectedAccount } = useAppSettings();
+  const storeEntries = useFlyxaStore(state => state.entries);
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const accountTrades = useMemo(
     () => (filterTradesBySelectedAccount(trades) as Trade[]).filter(Boolean),
     [filterTradesBySelectedAccount, trades]
   );
+  const enrichedTrades = useMemo<PatternTrade[]>(() => {
+    const entryByTradeId = new Map<string, typeof storeEntries[number]>();
+    storeEntries.forEach(entry => {
+      entry.trades.forEach(trade => {
+        entryByTradeId.set(trade.id, entry);
+      });
+    });
+
+    return accountTrades.map(trade => {
+      const entry = entryByTradeId.get(trade.id);
+      const date = trade.trade_date;
+      const preSession = date ? preSessionHistory[date] : null;
+      const commitment = preSession?.commitment && typeof preSession.commitment === 'object' ? preSession.commitment : null;
+      const existing = trade.sessionContext ?? {};
+      return {
+        ...trade,
+        sessionContext: {
+          ...existing,
+          emotion: existing.emotion ?? String(commitment?.emotion ?? preSession?.emotion ?? ''),
+          note: existing.note ?? String(commitment?.note ?? preSession?.note ?? ''),
+          bias: existing.bias ?? (commitment?.bias ?? preSession?.bias ?? {}) as Record<string, string>,
+          readiness: existing.readiness ?? commitment?.readiness ?? preSession?.readiness,
+          sessionPlan: existing.sessionPlan ?? commitment?.sessionPlan ?? preSession?.sessionPlan ?? [],
+          postSessionNote: String(preSession?.postSessionNote ?? ''),
+          dailyReflection: entry?.dailyReflection
+            ? {
+              pre: entry.dailyReflection.pre,
+              post: entry.dailyReflection.post,
+              lessons: entry.dailyReflection.lessons,
+              bias: entry.dailyReflection.bias,
+              newsRisk: entry.dailyReflection.newsRisk,
+              sessionTarget: entry.dailyReflection.sessionTarget,
+              marketRespectedBias: entry.dailyReflection.marketRespectedBias,
+            }
+            : existing.dailyReflection,
+        },
+      };
+    });
+  }, [accountTrades, preSessionHistory, storeEntries]);
 
   const [patterns, setPatterns] = useState<PatternItem[]>([]);
   const [expandedPatternId, setExpandedPatternId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [selectedType, setSelectedType] = useState<'All' | PatternType>('All');
-  const [selectedSession, setSelectedSession] = useState<'All' | SessionBucket>('All');
   const [sortBy, setSortBy] = useState<SortOption>('impact');
   const [detectedTf, setDetectedTf] = useState<DetectedTimeFrame>('3M');
+  const sourceSymbol = (searchParams.get('symbol') ?? '').trim().toUpperCase();
+  const sourceTags = (searchParams.get('tags') ?? '')
+    .split(',')
+    .map(tag => tag.trim().toLowerCase())
+    .filter(Boolean);
+  const hasSourceContext = Boolean(sourceSymbol || sourceTags.length);
 
   const detectedPatterns = useMemo(
-    () => detectPatternsFromTrades(accountTrades, detectedTf),
-    [accountTrades, detectedTf]
+    () => detectPatternsFromTrades(enrichedTrades, detectedTf),
+    [enrichedTrades, detectedTf]
   );
+  const sortedDetectedPatterns = useMemo(() => {
+    const byType = selectedType === 'All' ? detectedPatterns : detectedPatterns.filter(pattern => pattern.type === selectedType);
+    const scorePattern = (pattern: PatternItem) => {
+      let score = 0;
+      if (sourceSymbol && pattern.instrument.toUpperCase() === sourceSymbol) score += 4;
+      const text = `${pattern.title} ${pattern.description} ${pattern.tags.map(tag => tag.label).join(' ')}`.toLowerCase();
+      sourceTags.forEach(tag => {
+        if (tag && text.includes(tag)) score += 1;
+      });
+      return score;
+    };
+    return [...byType].sort((a, b) => {
+      const sourceScoreDiff = hasSourceContext && sortBy === 'impact' ? scorePattern(b) - scorePattern(a) : 0;
+      if (sourceScoreDiff !== 0) return sourceScoreDiff;
+      if (sortBy === 'confidence') return b.confidence - a.confidence;
+      if (sortBy === 'frequency') return b.sessionCount - a.sessionCount;
+      if (sortBy === 'recent') return new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime();
+      const scoreDiff = hasSourceContext ? scorePattern(b) - scorePattern(a) : 0;
+      if (scoreDiff !== 0) return scoreDiff;
+      return Math.abs(b.totalPnl) - Math.abs(a.totalPnl);
+    });
+  }, [detectedPatterns, hasSourceContext, selectedType, sortBy, sourceSymbol, sourceTags]);
 
   const filteredPatterns = useMemo(() => {
     const base = patterns.filter(pattern => pattern.status !== 'Resolved');
     const byType = selectedType === 'All' ? base : base.filter(pattern => pattern.type === selectedType);
-    const bySession = selectedSession === 'All' ? byType : byType.filter(pattern => pattern.session === selectedSession);
-    return [...bySession].sort((a, b) => {
+    return [...byType].sort((a, b) => {
       if (sortBy === 'impact') return Math.abs(b.totalPnl) - Math.abs(a.totalPnl);
+      if (sortBy === 'confidence') return b.confidence - a.confidence;
       if (sortBy === 'frequency') return b.sessionCount - a.sessionCount;
       return new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime();
     });
-  }, [patterns, selectedType, selectedSession, sortBy]);
+  }, [patterns, selectedType, sortBy]);
 
   const costingPatterns = filteredPatterns.filter(pattern => pattern.totalPnl < 0);
   const earningPatterns = filteredPatterns.filter(pattern => pattern.totalPnl >= 0);
@@ -773,10 +1107,15 @@ export default function FlyxaAIPatterns() {
               <p style={tinyMetaLabelStyle}>Sessions</p>
               <div className="mt-2 space-y-1.5">
                 {pattern.sessions.map(session => (
-                  <div key={`${pattern.id}-${session.date}-${session.pnl}`} className="flex items-center justify-between text-[12px]">
+                  <button
+                    key={`${pattern.id}-${session.date}-${session.pnl}`}
+                    type="button"
+                    onClick={() => navigate(`/post-session?date=${encodeURIComponent(session.date)}`)}
+                    className="flex w-full items-center justify-between rounded-[5px] px-2 py-1 text-left text-[12px] transition-colors hover:bg-white/[0.04]"
+                  >
                     <span style={{ color: colors.t1 }}>{new Date(session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     <span style={{ color: session.pnl >= 0 ? colors.grn : colors.red }}>{formatSignedCurrency(session.pnl)}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
               <button
@@ -797,6 +1136,33 @@ export default function FlyxaAIPatterns() {
       </article>
     );
   };
+
+  const renderPatternControls = () => (
+    <section className="rounded-[8px] p-3" style={{ border: cardBorder, backgroundColor: colors.d2 }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span style={tinyMetaLabelStyle}>Type</span>
+        {(['All', 'Risk', 'Edge', 'Psychology', 'Behaviour'] as const).map(type => (
+          <button key={type} type="button" onClick={() => setSelectedType(type)} className={`rounded-[4px] border px-3 py-1 text-[12px] ${filterPillClass(selectedType === type)}`}>
+            {type}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-2">
+          <span style={tinyMetaLabelStyle}>Sort</span>
+          <select
+            value={sortBy}
+            onChange={event => setSortBy(event.target.value as SortOption)}
+            className="rounded-[4px] border px-2.5 py-1.5 text-[12px]"
+            style={{ borderColor: colors.b0, backgroundColor: colors.d3, color: colors.t0 }}
+          >
+            <option value="impact">Most impactful</option>
+            <option value="confidence">Highest confidence</option>
+            <option value="recent">Most recent</option>
+            <option value="frequency">Most frequent</option>
+          </select>
+        </div>
+      </div>
+    </section>
+  );
 
   return (
     <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ backgroundColor: colors.d0, color: colors.t0 }}>
@@ -828,22 +1194,37 @@ export default function FlyxaAIPatterns() {
                 </div>
               </div>
               <p className="mt-1 text-[12px]" style={{ color: colors.t2 }}>Patterns auto-detected from your trade history &middot; {detectedPatterns.length} found over {detectedTf === 'All' ? 'all time' : detectedTf === '1M' ? 'the last month' : detectedTf === '3M' ? 'the last 3 months' : 'the last 6 months'}</p>
+              {hasSourceContext && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[6px] border px-3 py-2 text-[11px]" style={{ borderColor: `${colors.acc}30`, backgroundColor: 'rgba(245,158,11,0.07)', color: colors.t1 }}>
+                  <span className="font-semibold uppercase tracking-[0.1em]" style={{ color: colors.acc }}>From trade analysis</span>
+                  {sourceSymbol && <span style={{ color: colors.t0 }}>{sourceSymbol}</span>}
+                  {sourceTags.slice(0, 5).map(tag => (
+                    <span key={tag} className="rounded-[4px] px-2 py-[2px]" style={{ backgroundColor: colors.d3, border: `1px solid ${colors.b0}`, color: colors.t1 }}>{tag}</span>
+                  ))}
+                </div>
+              )}
             </section>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
               <div className="space-y-4">
+                {renderPatternControls()}
 
                 {/* ── Auto-detected patterns ── */}
-                {detectedPatterns.length > 0 && (
+                {sortedDetectedPatterns.length > 0 && (
                   <section>
                     <div className="mb-2 flex items-center gap-2">
                       <p className="text-[9.5px] font-medium uppercase tracking-[0.12em]" style={{ color: colors.acc }}>Auto-detected from trade history</p>
-                      <span className="rounded-[3px] px-1.5 py-0.5 text-[9px] font-semibold" style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: colors.acc }}>{detectedPatterns.length}</span>
+                      <span className="rounded-[3px] px-1.5 py-0.5 text-[9px] font-semibold" style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: colors.acc }}>{sortedDetectedPatterns.length}</span>
                     </div>
                     <div className="space-y-3">
-                      {detectedPatterns.map(renderPatternCard)}
+                      {sortedDetectedPatterns.map(renderPatternCard)}
                     </div>
                   </section>
+                )}
+                {detectedPatterns.length > 0 && sortedDetectedPatterns.length === 0 && (
+                  <div className="rounded-[8px] border px-4 py-3 text-[12px]" style={{ borderColor: colors.b0, backgroundColor: colors.d2, color: colors.t2 }}>
+                    No patterns match those filters yet.
+                  </div>
                 )}
                 {detectedPatterns.length === 0 && accountTrades.length > 0 && (
                   <div className="rounded-[8px] border px-4 py-3 text-[12px]" style={{ borderColor: colors.b0, backgroundColor: colors.d2, color: colors.t2 }}>
@@ -855,38 +1236,6 @@ export default function FlyxaAIPatterns() {
                     No trade data found. Log trades in the journal to activate auto-detection.
                   </div>
                 )}
-
-                <section className="space-y-2 rounded-[8px] p-3" style={{ border: cardBorder, backgroundColor: colors.d2 }}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span style={tinyMetaLabelStyle}>Type</span>
-                    {(['All', 'Risk', 'Edge', 'Psychology', 'Behaviour'] as const).map(type => (
-                      <button key={type} type="button" onClick={() => setSelectedType(type)} className={`rounded-[4px] border px-3 py-1 text-[12px] ${filterPillClass(selectedType === type)}`}>
-                        {type}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span style={tinyMetaLabelStyle}>Session</span>
-                    {(['All', 'RTH open', 'Overlap', 'Midday'] as const).map(session => (
-                      <button key={session} type="button" onClick={() => setSelectedSession(session)} className={`rounded-[4px] border px-3 py-1 text-[12px] ${filterPillClass(selectedSession === session)}`}>
-                        {session}
-                      </button>
-                    ))}
-                    <div className="ml-auto flex items-center gap-2">
-                      <span style={tinyMetaLabelStyle}>Sort</span>
-                      <select
-                        value={sortBy}
-                        onChange={event => setSortBy(event.target.value as SortOption)}
-                        className="rounded-[4px] border px-2.5 py-1.5 text-[12px]"
-                        style={{ borderColor: colors.b0, backgroundColor: colors.d3, color: colors.t0 }}
-                      >
-                        <option value="impact">Most impactful</option>
-                        <option value="recent">Most recent</option>
-                        <option value="frequency">Most frequent</option>
-                      </select>
-                    </div>
-                  </div>
-                </section>
 
                 <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div className="rounded-[8px] p-3" style={{ border: cardBorder, backgroundColor: colors.d2 }}>

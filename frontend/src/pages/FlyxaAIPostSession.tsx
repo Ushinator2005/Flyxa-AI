@@ -1,5 +1,5 @@
 import { CSSProperties, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
@@ -82,15 +82,28 @@ function insightDot(type: InsightType) {
 
 export default function FlyxaAIPostSession() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount, preferences } = useAppSettings();
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const activePreSession = useFlyxaStore(state => state.preSession);
+  const requestedDate = searchParams.get('date');
   // Use timezone-aware date so it matches how pre-session saves its history key
   const [selectedDate, setSelectedDate] = useState(() =>
-    getTimeZoneParts(new Date(), preferences.timezone).date
+    requestedDate || getTimeZoneParts(new Date(), preferences.timezone).date
   );
+
+  useEffect(() => {
+    if (requestedDate && requestedDate !== selectedDate) {
+      setSelectedDate(requestedDate);
+    }
+  }, [requestedDate, selectedDate]);
+
+  const handleSelectedDateChange = (date: string) => {
+    setSelectedDate(date);
+    setSearchParams(date ? { date } : {});
+  };
 
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
@@ -285,6 +298,8 @@ export default function FlyxaAIPostSession() {
   const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
+  const reviewStatus = dayTrades.length === 0 ? 'No trades' : netPnl >= 0 ? 'Profitable' : 'Drawdown';
+  const reviewColor = dayTrades.length === 0 ? C.t2 : netPnl >= 0 ? C.grn : C.red;
 
   if (loading) {
     return (
@@ -299,30 +314,30 @@ export default function FlyxaAIPostSession() {
 
   return (
     <div
-      className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl"
-      style={{ backgroundColor: C.d0, color: C.t0 }}
+      className="animate-fade-in"
+      style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, color: C.t0, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
     >
-        <main className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: C.d0 }}>
-          {/* Header */}
-          <section className="border-b px-6 py-5" style={{ borderColor: C.b0 }}>
-            <div className="flex items-center justify-between gap-4">
+        <main className="flex h-full min-h-0 flex-col overflow-hidden" style={{ backgroundColor: C.d0 }}>
+          <header style={{ padding: '10px 16px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
               <div>
+                <p style={{ fontSize: 10, color: C.t2, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 1 }}>
+                  Session
+                </p>
                 <h1
-                  className="text-[22px] font-bold tracking-[-0.02em]"
-                  style={{ color: C.t0 }}
+                  style={{ fontSize: 14, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}
                 >
-                  {displayDate}
+                  Post-session review
                 </h1>
-                <p className="mt-1 text-[12px]" style={{ color: C.t2 }}>
+                <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>
                   {dayTrades.length > 0
                     ? `${dayTrades.length} trade${dayTrades.length !== 1 ? 's' : ''} · ${fmtSigned(netPnl)}`
                     : 'No trades logged'}
                   {ps ? ' · Pre-session recorded' : ' · No pre-session data'}
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                {/* Session tab toggle */}
-                <div style={{ display: 'flex', gap: 2, padding: 2, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 7, border: `1px solid ${C.b0}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <div style={{ display: 'flex', borderRadius: 4, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
                   {([
                     { label: 'Pre-session',  to: '/pre-session'  },
                     { label: 'Post-session', to: '/post-session' },
@@ -333,10 +348,11 @@ export default function FlyxaAIPostSession() {
                       onClick={() => navigate(tab.to)}
                       style={{
                         fontSize: 11,
-                        fontWeight: tab.to === '/post-session' ? 600 : 500,
-                        color: tab.to === '/post-session' ? C.acc : C.t2,
-                        backgroundColor: tab.to === '/post-session' ? 'rgba(245,158,11,0.10)' : 'transparent',
-                        border: 'none', borderRadius: 5, padding: '4px 10px', cursor: 'pointer',
+                        fontWeight: tab.to === '/post-session' ? 600 : 400,
+                        color: tab.to === '/post-session' ? C.t0 : C.t2,
+                        backgroundColor: tab.to === '/post-session' ? C.d3 : 'transparent',
+                        border: 'none', borderRight: tab.to === '/pre-session' ? `1px solid ${C.b0}` : 'none',
+                        padding: '5px 12px', cursor: 'pointer',
                       }}
                     >
                       {tab.label}
@@ -345,8 +361,8 @@ export default function FlyxaAIPostSession() {
                 </div>
                 <DatePicker
                   value={selectedDate}
-                  onChange={setSelectedDate}
-                  className="rounded-[6px] px-3 py-2 text-[12px]"
+                  onChange={handleSelectedDateChange}
+                  className="rounded-[4px] px-3 py-1.5 text-[11px]"
                   style={{
                     backgroundColor: C.d3, color: C.t0,
                     border: CARD_BORDER, outline: 'none',
@@ -355,11 +371,44 @@ export default function FlyxaAIPostSession() {
                 />
               </div>
             </div>
-          </section>
+          </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto"><div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+          <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(280px, 0.7fr)', gap: 10, alignItems: 'start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
+                  {([
+                    { label: 'DATE', value: displayDate, color: C.t0, wide: true },
+                    { label: 'RESULT', value: reviewStatus, color: reviewColor },
+                    { label: 'NET P&L', value: dayTrades.length ? fmtSigned(netPnl) : '--', color: reviewColor },
+                    { label: 'TRADES', value: String(dayTrades.length), color: C.t0 },
+                    { label: 'PLAN', value: planAdherence !== null ? `${planAdherence}%` : '--', color: planAdherence !== null ? adherenceColor(planAdherence) : C.t2 },
+                  ] as { label: string; value: string; color: string; wide?: boolean }[]).map((stat, i) => (
+                    <div key={stat.label} style={{ flex: stat.wide ? 1.6 : 1, padding: '9px 12px', borderLeft: i === 0 ? 'none' : `1px solid ${C.b0}`, minWidth: 0 }}>
+                      <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', marginBottom: 4 }}>{stat.label}</p>
+                      <p style={{ fontFamily: stat.wide ? 'inherit' : C.mono, fontSize: 13, fontWeight: 600, color: stat.color, fontVariantNumeric: 'tabular-nums', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {dayTrades.length > 0 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                    padding: '8px 12px', borderRadius: 4,
+                    border: `1px solid ${dailyFlow.biggestLeak ? `${C.red}30` : `${C.grn}28`}`,
+                    borderLeft: `3px solid ${dailyFlow.biggestLeak ? C.red : C.grn}`,
+                    backgroundColor: dailyFlow.biggestLeak ? `${C.red}0a` : `${C.grn}08`,
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 9, fontWeight: 700, color: dailyFlow.biggestLeak ? C.red : C.grn, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 3 }}>Carry-forward rule</p>
+                      <p style={{ fontSize: 12, color: C.t0, fontWeight: 600, lineHeight: 1.4 }}>{dailyFlow.tomorrowRule}</p>
+                    </div>
+                    <span style={{ fontSize: 11, color: C.t2, flexShrink: 0 }}>{ps ? 'Plan compared' : 'No pre-session'}</span>
+                  </div>
+                )}
+
             {/* PRE-SESSION PLAN */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               <p style={SECTION_LABEL}>Pre-session plan</p>
 
               {!ps ? (
@@ -496,7 +545,7 @@ export default function FlyxaAIPostSession() {
             </div>
 
             {/* ACTUAL EXECUTION */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               <p style={SECTION_LABEL}>Actual execution</p>
 
               {dayTrades.length === 0 ? (
@@ -510,19 +559,6 @@ export default function FlyxaAIPostSession() {
                 </div>
               ) : (
                 <>
-                  <div className="rounded-[8px] p-4" style={{ border: `1px solid ${dailyFlow.biggestLeak ? `${C.red}55` : `${C.grn}44`}`, backgroundColor: dailyFlow.biggestLeak ? 'rgba(239,68,68,0.075)' : 'rgba(34,197,94,0.065)' }}>
-                    <p style={{ ...SECTION_LABEL, color: dailyFlow.biggestLeak ? C.red : C.grn }}>Tomorrow&apos;s rule</p>
-                    <p className="mt-2 text-[15px] font-bold leading-snug" style={{ color: C.t0 }}>
-                      {dailyFlow.tomorrowRule}
-                    </p>
-                    <p className="mt-2 text-[12px] leading-relaxed" style={{ color: C.t1 }}>
-                      {dailyFlow.summary}
-                      {dailyFlow.worstState && dailyFlow.bestState && dailyFlow.worstState.label !== dailyFlow.bestState.label
-                        ? ` Best state: ${dailyFlow.bestState.label}. Weakest state: ${dailyFlow.worstState.label}.`
-                        : ''}
-                    </p>
-                  </div>
-
                   {/* P&L summary */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
@@ -621,8 +657,17 @@ export default function FlyxaAIPostSession() {
                       return (
                         <div
                           key={t.id}
-                          className="flex items-center justify-between px-4 py-3"
-                          style={{ borderTop: idx > 0 ? `1px solid ${C.b0}` : 'none' }}
+                          className="flex items-center justify-between px-4 py-3 transition-colors"
+                          style={{
+                            borderTop: idx > 0 ? `1px solid ${C.b0}` : 'none',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => {
+                            const date = t.trade_date || selectedDate;
+                            navigate(`/scanner?date=${encodeURIComponent(date)}&tradeId=${encodeURIComponent(t.id)}`);
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')}
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-[12px] font-medium" style={{ color: C.t0 }}>
@@ -667,8 +712,9 @@ export default function FlyxaAIPostSession() {
           </div>
 
           {/* AI Debrief — always shown if there are trades */}
+          <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'sticky', top: 0 }}>
           {dayTrades.length > 0 && (
-            <div className="px-6 pb-6">
+            <div className="flex flex-col gap-2">
               <p style={SECTION_LABEL}>AI debrief</p>
               <div className="mt-3 rounded-[8px] overflow-hidden" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
                 {aiInsights.length === 0 ? (
@@ -699,7 +745,7 @@ export default function FlyxaAIPostSession() {
           )}
 
           {/* User reflection */}
-          <div className="px-6 pb-8">
+          <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between mb-3">
               <p style={SECTION_LABEL}>Your reflection</p>
               {ps?.postSessionNote && !noteSaved && (
@@ -760,7 +806,7 @@ export default function FlyxaAIPostSession() {
 
           {/* Comparison summary — only shown when both sides have data */}
           {ps && dayTrades.length > 0 && (
-            <div className="px-6 pb-6">
+            <div className="flex flex-col gap-2">
               <p style={SECTION_LABEL}>Debrief summary</p>
               <div
                 className="mt-3 rounded-[8px] p-5"
@@ -875,6 +921,8 @@ export default function FlyxaAIPostSession() {
               </div>
             </div>
           )}
+          </aside>
+            </div>
           </div>{/* end scroll wrapper */}
         </main>
     </div>

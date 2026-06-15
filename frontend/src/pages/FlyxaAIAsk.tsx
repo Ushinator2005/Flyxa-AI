@@ -97,8 +97,8 @@ function parseReviewSections(text: string): ReviewSection[] {
         current.insights.push(line.replace(/^> /, '').trim());
       } else if (/^TAGS:/i.test(trimmed)) {
         current.tags = trimmed.replace(/^TAGS:\s*/i, '').split(',').map(t => t.trim()).filter(Boolean);
-      } else if (/^(RULE|ADJUSTMENT):/i.test(trimmed)) {
-        current.rule = trimmed.replace(/^(RULE|ADJUSTMENT):\s*/i, '');
+      } else if (/^(RULE|ADJUSTMENT|FOCUS):/i.test(trimmed)) {
+        current.rule = trimmed.replace(/^(RULE|ADJUSTMENT|FOCUS):\s*/i, '');
       } else if (/^[-*] /.test(line)) {
         current.bullets.push(line.replace(/^[-*] /, ''));
       } else if (trimmed) {
@@ -111,6 +111,47 @@ function parseReviewSections(text: string): ReviewSection[] {
 }
 
 // ── Score computation ──────────────────────────────────────────────────────────
+const JOURNAL_FLAG_PENALTIES: Record<string, number> = {
+  'sized-up': 20,
+  revenge: 20,
+  'added-losing': 20,
+  'off-playbook': 12,
+  'reentry-stop': 12,
+  'past-inval': 12,
+  'moved-stop': 12,
+  'boredom-trade': 12,
+  'chased-entry': 6,
+  'no-confirmation': 6,
+  overtraded: 6,
+  'exit-early': 6,
+  'moved-target': 6,
+  'be-too-early': 4,
+};
+
+function numberFrom(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function getNestedRecord(record: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  const value = record[key];
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function getTradeConfidence(record: Record<string, unknown>): number {
+  const direct = numberFrom(record.confidence_level);
+  if (direct !== null) return Math.max(0, Math.min(10, direct));
+
+  const preEntry = getNestedRecord(record, 'preEntry');
+  const preEntryConfidence = numberFrom(preEntry?.confidenceAtEntry);
+  if (preEntryConfidence !== null && preEntryConfidence > 0) {
+    return Math.max(0, Math.min(10, Math.round(preEntryConfidence * 2)));
+  }
+
+  return 5;
+}
+
 function computeTradeScores(trade: Trade) {
   const t = trade as unknown as Record<string, unknown>;
   const entryPrice = Number(t.entry_price ?? 0);
@@ -123,22 +164,54 @@ function computeTradeScores(trade: Trade) {
   const emotion = String(t.emotional_state ?? '');
   const followed = t.followed_plan === true;
   const confs = Array.isArray(t.confluences) ? (t.confluences as string[]).length : 0;
-  const confidence = Number(t.confidence_level ?? 5);
+  const confidence = getTradeConfidence(t);
   const exitReason = String(t.exit_reason ?? '');
   const hasPreNotes = Boolean(t.pre_trade_notes);
   const hasPostNotes = Boolean(t.post_trade_notes);
+  const psychologyRatings = getNestedRecord(t, 'psychologyRatings');
+  const executionReview = getNestedRecord(t, 'executionReview');
+  const storedProcessScore = numberFrom(t.processScore);
+  const setupRating = numberFrom(psychologyRatings?.setupQuality);
+  const executionRating = numberFrom(psychologyRatings?.execution);
+
+  const journalProcess = (() => {
+    if (storedProcessScore !== null && storedProcessScore > 0) return Math.max(0, Math.min(100, Math.round(storedProcessScore)));
+    if (!psychologyRatings) return null;
+
+    const ratingValues = ['setupQuality', 'discipline', 'execution', 'patience', 'riskManagement', 'emotionalControl']
+      .map(key => numberFrom(psychologyRatings[key]))
+      .filter((value): value is number => value !== null && value > 0);
+    if (!ratingValues.length) return null;
+
+    const avg = ratingValues.reduce((sum, value) => sum + value, 0) / ratingValues.length;
+    const flags = Array.isArray(t.behavioral_flags) ? t.behavioral_flags as string[] : [];
+    const flagPenalty = flags.reduce((sum, flag) => sum + (JOURNAL_FLAG_PENALTIES[flag] ?? 8), 0);
+    const perfectExecutionReview = executionReview
+      && executionReview.enteredAtLevel === true
+      && executionReview.waitedForConfirmation === true
+      && executionReview.correctSize === true
+      && executionReview.exitedAtPlan === true
+      && executionReview.movedStopCorrectly === true
+      && executionReview.resistedEarlyExit === true;
+    const confidenceBonus = confidence >= 8 ? 5 : 0;
+    return Math.max(0, Math.min(100, Math.round(avg * 20 - flagPenalty + (perfectExecutionReview ? 5 : 0) + confidenceBonus)));
+  })();
 
   const emotionBonus: Record<string, number> = { Calm: 28, Confident: 22, Tired: 10, Anxious: 6, 'Overconfident': 5, FOMO: 2, 'Revenge Trading': 0 };
-  const process = Math.min(100, Math.round(
+  const process = journalProcess ?? Math.min(100, Math.round(
     (followed ? 44 : 8) + (emotionBonus[emotion] ?? 12) + (hasPreNotes ? 14 : 0) + (hasPostNotes ? 8 : 0) + Math.min(6, confidence * 0.6)
   ));
 
-  const setupQuality = Math.min(100, Math.round(
-    Math.min(42, confs * 9) + (rr >= 3 ? 38 : rr >= 2 ? 30 : rr >= 1.5 ? 22 : rr >= 1 ? 14 : 5) + Math.min(20, confidence * 2)
-  ));
+  const setupQuality = setupRating !== null && setupRating > 0
+    ? Math.max(0, Math.min(100, Math.round(setupRating * 20)))
+    : Math.min(100, Math.round(
+      Math.min(42, confs * 9) + (rr >= 3 ? 38 : rr >= 2 ? 30 : rr >= 1.5 ? 22 : rr >= 1 ? 14 : 5) + Math.min(20, confidence * 2)
+    ));
 
   const execBase: Record<string, number> = { TP: 82, BE: 52, SL: 22 };
-  const execution = Math.min(100, Math.round((execBase[exitReason] ?? 22) + Math.min(18, confidence * 1.8)));
+  const execution = executionRating !== null && executionRating > 0
+    ? Math.max(0, Math.min(100, Math.round(executionRating * 20)))
+    : Math.min(100, Math.round((execBase[exitReason] ?? 22) + Math.min(18, confidence * 1.8)));
 
   const stopDist = Math.abs(slPrice - entryPrice);
   const riskAmt = stopDist * contracts * pointValue;
@@ -164,13 +237,15 @@ function getDataTags(trade: Trade): string[] {
 
 const SECTION_META = [
   { key: 'your stats',      num: '01', label: 'Your Stats'    },
-  { key: 'what happened',   num: '02', label: 'What Happened' },
-  { key: 'adjustment',      num: '03', label: 'Adjustment'    },
-  { key: 'the rule',        num: '03', label: 'Adjustment'    },
+  { key: 'the read',        num: '02', label: 'The Read'      },
+  { key: 'what happened',   num: '02', label: 'The Read'      },
+  { key: 'next focus',      num: '03', label: 'Next Focus'    },
+  { key: 'adjustment',      num: '03', label: 'Next Focus'    },
+  { key: 'the rule',        num: '03', label: 'Next Focus'    },
   // legacy keys so cached responses still render correctly
   { key: 'your pattern',    num: '01', label: 'Your Stats'    },
-  { key: 'this trade',      num: '02', label: 'What Happened' },
-  { key: 'edge adjustment', num: '03', label: 'Adjustment'    },
+  { key: 'this trade',      num: '02', label: 'The Read'      },
+  { key: 'edge adjustment', num: '03', label: 'Next Focus'    },
 ];
 
 function renderReviewSections(text: string): React.ReactNode {
@@ -201,11 +276,11 @@ function renderReviewSections(text: string): React.ReactNode {
               </p>
             )}
 
-            {/* Rule callout (Edge Adjustment) */}
+            {/* Focus callout */}
             {section.rule && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '0 0 10px', padding: '8px 10px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 6 }}>
                 <span style={{ fontSize: 9, fontWeight: 800, color: C.acc, letterSpacing: '0.1em', textTransform: 'uppercase', paddingTop: 1, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)' }}>
-                  {section.label.toLowerCase() === 'adjustment' ? 'ADJUSTMENT' : 'RULE'}
+                  {section.label.toLowerCase() === 'next focus' ? 'FOCUS' : 'NOTE'}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: C.t0, lineHeight: 1.55 }}>{section.rule}</span>
               </div>
@@ -230,15 +305,6 @@ function renderReviewSections(text: string): React.ReactNode {
                   <div key={ii} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 10px', background: ii % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', borderRadius: 5, borderLeft: `2px solid rgba(245,158,11,${0.15 + ii * 0.07})` }}>
                     <span style={{ fontSize: 12.5, color: C.t0, lineHeight: 1.6, fontWeight: 450 }}>{inlineChips(ins)}</span>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {/* Behavioral tags */}
-            {section.tags.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>
-                {section.tags.map((tag, ti) => (
-                  <span key={ti} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.22)', color: C.acc, letterSpacing: '0.02em' }}>{tag}</span>
                 ))}
               </div>
             )}
@@ -380,8 +446,13 @@ export default function FlyxaAIAsk() {
   const [tradeAnalysisError, setTradeAnalysisError] = useState<string | null>(null);
 
   const storeEntries = useFlyxaStore(state => state.entries);
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
 
   const focusedTradeId = searchParams.get('tradeId');
+  const focusedEntry = useMemo(() => {
+    if (!focusedTradeId) return null;
+    return storeEntries.find(entry => entry.trades.some(trade => trade.id === focusedTradeId)) ?? null;
+  }, [focusedTradeId, storeEntries]);
   const focusedTrade = useMemo<Trade | null>(() => {
     if (!focusedTradeId) return null;
     // Primary: search ApiTrade list (already converted)
@@ -397,6 +468,39 @@ export default function FlyxaAIAsk() {
     }
     return null;
   }, [focusedTradeId, trades, storeEntries]);
+  const focusedTradeWithSessionContext = useMemo<Trade | null>(() => {
+    if (!focusedTrade) return null;
+    const tradeDate = focusedTrade.trade_date;
+    const preSession = tradeDate ? preSessionHistory[tradeDate] : null;
+    const commitment = preSession?.commitment && typeof preSession.commitment === 'object' ? preSession.commitment : null;
+    const sessionContext = {
+      emotion: String(commitment?.emotion ?? preSession?.emotion ?? ''),
+      note: String(commitment?.note ?? preSession?.note ?? ''),
+      bias: (commitment?.bias ?? preSession?.bias ?? {}) as Record<string, string>,
+      readiness: commitment?.readiness ?? preSession?.readiness,
+      sessionPlan: commitment?.sessionPlan ?? preSession?.sessionPlan ?? [],
+      dailyReflection: focusedEntry?.dailyReflection
+        ? {
+          pre: focusedEntry.dailyReflection.pre,
+          bias: focusedEntry.dailyReflection.bias,
+          newsRisk: focusedEntry.dailyReflection.newsRisk,
+          sessionTarget: focusedEntry.dailyReflection.sessionTarget,
+          marketRespectedBias: focusedEntry.dailyReflection.marketRespectedBias,
+        }
+        : undefined,
+    };
+
+    const hasContext = Boolean(
+      sessionContext.emotion
+      || sessionContext.note
+      || Object.keys(sessionContext.bias ?? {}).length
+      || sessionContext.readiness
+      || sessionContext.sessionPlan.length
+      || sessionContext.dailyReflection
+    );
+
+    return hasContext ? { ...focusedTrade, sessionContext } : focusedTrade;
+  }, [focusedEntry, focusedTrade, preSessionHistory]);
   const focusedTradePnl = useMemo(() => (focusedTrade ? Number(focusedTrade.pnl ?? 0) : null), [focusedTrade]);
   const focusedTradeConfluences = useMemo(() => normalizeConfluences(focusedTrade?.confluences), [focusedTrade]);
   const focusedTradeAnalysis = focusedTradeId ? tradeAnalysisById[focusedTradeId] : null;
@@ -404,15 +508,15 @@ export default function FlyxaAIAsk() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!focusedTradeId || !focusedTrade || tradeAnalysisById[focusedTradeId]) return;
+    if (!focusedTradeId || !focusedTradeWithSessionContext || tradeAnalysisById[focusedTradeId]) return;
     setTradeAnalysisLoadingId(focusedTradeId);
     setTradeAnalysisError(null);
-    aiApi.analyzeTradeById(focusedTradeId, focusedTrade, trades)
+    aiApi.analyzeTradeById(focusedTradeId, focusedTradeWithSessionContext, trades)
       .then(({ analysis }) => { if (!cancelled) setTradeAnalysisById(prev => ({ ...prev, [focusedTradeId]: analysis })); })
       .catch(err => { if (!cancelled) setTradeAnalysisError(err instanceof Error ? err.message : 'Unable to analyse this trade.'); })
       .finally(() => { if (!cancelled) setTradeAnalysisLoadingId(cur => cur === focusedTradeId ? null : cur); });
     return () => { cancelled = true; };
-  }, [focusedTradeId, focusedTrade, tradeAnalysisById, trades]);
+  }, [focusedTradeId, focusedTradeWithSessionContext, tradeAnalysisById, trades]);
 
   const clearFocus = () => {
     const next = new URLSearchParams(searchParams);
@@ -502,7 +606,7 @@ export default function FlyxaAIAsk() {
         </aside>
 
         {/* ── Main content ── */}
-        <main className="min-h-0 overflow-hidden flex flex-col" style={{ backgroundColor: C.d0 }}>
+        <main className="min-h-0 overflow-y-auto flex flex-col" style={{ backgroundColor: C.d0 }}>
 
           {/* Header */}
           <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.b0}` }}>
@@ -642,7 +746,7 @@ export default function FlyxaAIAsk() {
                 </div>
               );
             };
-            const confidence = Number((ft?.confidence_level as number | undefined) ?? 5);
+            const confidence = ft ? getTradeConfidence(ft) : 5;
 
             const direction = String(ft?.direction ?? '');
             const isLong = direction === 'Long';
@@ -695,7 +799,7 @@ export default function FlyxaAIAsk() {
                   </div>
                 </div>
 
-                <div style={{ padding: '12px 20px 16px', maxHeight: 680, overflowY: 'auto' }}>
+                <div style={{ padding: '12px 20px 24px' }}>
                   {/* ── Score cards ── */}
                   {scores && (
                     <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
@@ -750,7 +854,16 @@ export default function FlyxaAIAsk() {
                       {/* Footer */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 10, borderTop: `1px solid rgba(255,255,255,0.05)` }}>
                         <span style={{ fontSize: 10.5, color: C.t2 }}>Based on {trades.length} logged trade{trades.length !== 1 ? 's' : ''}</span>
-                        <button type="button" onClick={() => {}} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: C.sans }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const params = new URLSearchParams();
+                            if (symbol && symbol !== 'N/A') params.set('symbol', symbol);
+                            if (focusedTradeConfluences.length > 0) params.set('tags', focusedTradeConfluences.join(','));
+                            navigate(`/flyxa-ai/patterns${params.toString() ? `?${params.toString()}` : ''}`);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 600, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: C.sans }}
+                        >
                           View full pattern history <ArrowRight size={11} />
                         </button>
                       </div>
@@ -762,7 +875,7 @@ export default function FlyxaAIAsk() {
           })()}
 
           {/* Responses */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+          <div style={{ flex: '0 0 auto', padding: '16px 24px 32px' }}>
             {/* Loading card */}
             {loading && (
               <div style={{

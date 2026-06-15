@@ -2112,19 +2112,65 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
     ? Math.abs(trade.tp_price - trade.entry_price) / Math.abs(trade.sl_price - trade.entry_price)
     : 0;
 
+  const sessionContext = trade.sessionContext;
+  const sessionContextLines: string[] = [];
+  if (sessionContext) {
+    if (sessionContext.emotion) sessionContextLines.push(`Pre-session state of mind: ${sessionContext.emotion}`);
+    if (sessionContext.readiness) {
+      const readinessParts = [
+        sessionContext.readiness.status,
+        typeof sessionContext.readiness.score === 'number' ? `${sessionContext.readiness.score}/100` : null,
+        sessionContext.readiness.summary,
+      ].filter(Boolean);
+      if (readinessParts.length) sessionContextLines.push(`Readiness: ${readinessParts.join(' | ')}`);
+      if (Array.isArray(sessionContext.readiness.reasons) && sessionContext.readiness.reasons.length) {
+        sessionContextLines.push(`Readiness reasons: ${sessionContext.readiness.reasons.join(' | ')}`);
+      }
+    }
+    if (sessionContext.bias && typeof sessionContext.bias === 'object') {
+      const biasPairs = Object.entries(sessionContext.bias)
+        .filter(([, value]) => typeof value === 'string' && value.trim())
+        .map(([symbol, value]) => `${symbol}: ${value}`);
+      if (biasPairs.length) sessionContextLines.push(`Pre-session market bias: ${biasPairs.join(' | ')}`);
+    }
+    if (sessionContext.note) sessionContextLines.push(`Pre-session note: ${sessionContext.note}`);
+    if (Array.isArray(sessionContext.sessionPlan) && sessionContext.sessionPlan.length) {
+      const planLines = sessionContext.sessionPlan
+        .map(item => item?.rule)
+        .filter((rule): rule is string => typeof rule === 'string' && rule.trim().length > 0);
+      if (planLines.length) sessionContextLines.push(`Pre-session plan: ${planLines.join(' | ')}`);
+    }
+    const daily = sessionContext.dailyReflection;
+    if (daily) {
+      if (daily.pre) sessionContextLines.push(`Daily pre-market plan: ${daily.pre}`);
+      const dailyParts = [
+        daily.bias ? `daily bias ${daily.bias}` : null,
+        daily.newsRisk ? `news risk ${daily.newsRisk}` : null,
+        typeof daily.sessionTarget === 'number' ? `session target ${daily.sessionTarget}` : null,
+        typeof daily.marketRespectedBias === 'boolean' ? `market respected bias ${daily.marketRespectedBias ? 'yes' : 'no'}` : null,
+      ].filter(Boolean);
+      if (dailyParts.length) sessionContextLines.push(`Daily context: ${dailyParts.join(' | ')}`);
+    }
+  }
+  const sessionContextBlock = sessionContextLines.length
+    ? `\n\n## Pre-session Context\n${sessionContextLines.join('\n')}`
+    : '';
+
   const contextBlock = statsContext
     ? `\n\n## Trader's Historical Data (use ONLY these numbers — do not invent or estimate any figures not present here)\n${statsContext}`
-    : `\n\n## Trader's Historical Data\nNo historical stats available — write N/A for all statistics in the Your Stats section.`;
+    : `\n\n## Trader's Historical Data\nNo historical stats available. Do not output N/A rows; say there is not enough logged history yet only if a comparison is unavailable.`;
 
   const response = await anthropic.messages.create({
     model: MODEL,
     temperature: MODEL_TEMPERATURE,
-    max_tokens: 1200,
+    max_tokens: 900,
     system: `You are a professional trading performance analyst reviewing a trader's logged trade. You have their full historical statistics. Your job is to produce a genuine analysis — not a summary of what happened, but an examination of why it happened, what pattern it represents across their history, and what it reveals about their edge and its breakdown points.
 
 An analysis reasons across the data. It finds the causal chain: what led to this decision, how it connects to prior behaviour, what the stats prove about where the edge exists and where it doesn't.
 
-CRITICAL: Every dollar amount, win rate, P&L figure, and trade count you cite MUST come verbatim from the "Trader's Historical Data" section provided. Never invent, estimate, or extrapolate any numerical figure. If the data does not contain a specific number, write "N/A" — never guess.
+CRITICAL: Every dollar amount, win rate, P&L figure, and trade count you cite MUST come verbatim from the "Trader's Historical Data" section provided. Never invent, estimate, or extrapolate any numerical figure. If a comparison is unavailable, skip it or say there is not enough logged history yet. Do not output filler N/A rows.
+
+Use the pre-session context when it is provided. Judge whether this trade aligned with the trader's stated state of mind, readiness, session plan, and market bias. Treat pre-session bias as context, not a guarantee: a counter-bias trade can still be valid if the notes explain the shift.
 
 Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis. Do not create a new permanent trading rule after every reviewed trade; only recommend a hard rule when repeated historical evidence supports it.`,
     messages: [
@@ -2136,31 +2182,30 @@ Entry ${trade.entry_price} → Exit ${trade.exit_price} | SL ${trade.sl_price} |
 P&L: $${trade.pnl.toFixed(2)} | Planned R:R: ${rr.toFixed(2)} | Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + 'min' : 'unknown'}
 Emotional state: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | Followed plan: ${trade.followed_plan ? 'Yes' : 'No'}
 Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
-Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${contextBlock}
+Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${sessionContextBlock}${contextBlock}
 
 Write a structured analysis using exactly these three sections:
 
 ## Your Stats
-Anchor the analysis in their data. Three bullet points. Use ONLY numbers explicitly stated in the "Trader's Historical Data" section above — never invent, estimate, or extrapolate figures. If a specific number is not available, write "N/A".
-- [Emotional state context: how does trading ${trade.emotional_state} compare to their overall performance — cite exact win rate/P&L from the provided data, or N/A]
-- [Plan adherence split: their win rate and net P&L when they follow the plan vs when they don't — exact figures from the provided data, or N/A]
-- [The most relevant pattern stat for this trade: a confluence they used, this session, or a behavioural pattern — exact figures from the provided data, or N/A]
-TAGS: [2-4 tags, comma separated, chosen from: Emotional override, Post-loss reaction, Plan drifted, Revenge pattern, FOMO entry, Confidence mismatch, Strong setup, Clean execution, Discipline win]
+Anchor the analysis in their data. Write 2-3 bullets maximum. Use only the strongest available stats. Skip weak or unavailable categories. Do not write N/A.
 
-## What Happened
+## The Read
 **[One sharp verdict sentence — what this trade actually represents, beyond the surface result]**
 > [First insight — WHY this decision was made. One sentence, max 18 words. Include a number where possible.]
-> [Second insight — what the setup quality + emotional state + plan adherence together reveal. One sentence.]
-> [Third insight — the causal chain or the pattern this fits. What does it prove about where their edge lives or breaks. One sentence with a stat.]
-> [Fourth insight — the one thing the trader needs to hear that they can't see from the data alone. Sharp and direct.]
+> [Second insight — what setup quality, pre-session state/bias, and plan adherence together reveal. One sentence.]
 
-## Adjustment
-**[State the single most important rule this trade proves they need — make it specific to their pattern, not generic advice]**
-ADJUSTMENT: [One sentence. Frame this as a watch item, filter, or experiment unless the historical data clearly proves a repeated leak.]
+## Next Focus
+**[The one thing to pay attention to before or during the next similar setup, framed as an execution focus rather than a logging task.]**
+FOCUS: [One sentence. Give a practical trading focus such as bias alignment, invalidation clarity, entry timing, risk placement, emotional state, or setup threshold. Do not tell the user to log, record, track, or collect the next N trades.]
 IMPORTANT: Do not recommend a new hard rule unless the historical data shows the same leak repeatedly. Most trade reviews should produce a small observation or test, not a restriction.
-- [The exact stat from the provided historical data that makes this rule non-negotiable — exact figure or N/A]
-- [What following this rule looks like concretely on the next identical setup]
-- [The direct impact on their edge based only on numbers in the provided historical data — do not estimate or extrapolate]`,
+Final output constraints:
+- Section 01 must contain only 2-3 relevant stats. Skip weak or unavailable categories. Do not write N/A.
+- Section 02 must contain one verdict sentence and exactly two > insight lines.
+- Section 03 must be titled Next Focus and use FOCUS:, not RULE: or ADJUSTMENT:.
+- Section 03 must not ask the user to log, record, track, monitor, or collect future trades; every trade is already logged. The focus should change how they prepare, decide, execute, or manage risk.
+- Do not output a TAGS line.
+- If a matching sample has fewer than 5 trades, call it an early signal or something to track, not proof.
+- Do not turn this into a permanent trading-plan rule unless repeated historical evidence clearly supports it.`,
       },
     ],
   });

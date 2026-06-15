@@ -14,6 +14,12 @@ function normalizeEmotion(value: unknown): ApiTrade['emotional_state'] {
 
 type RichStoreTrade = StoreTrade & {
   behavioralFlags?: string[];
+  thesis?: {
+    setup?: string;
+    invalidation?: string;
+    asymmetry?: string;
+    setupType?: string;
+  };
   executionReview?: {
     enteredAtLevel?: boolean | null;
     waitedForConfirmation?: boolean | null;
@@ -23,8 +29,22 @@ type RichStoreTrade = StoreTrade & {
     resistedEarlyExit?: boolean | null;
   };
   preEntry?: {
+    confidenceAtEntry?: number;
     emotionalState?: string;
+    hesitated?: boolean | null;
+    hesitationReason?: string;
   };
+  psychologyRatings?: {
+    setupQuality?: number;
+    discipline?: number;
+    execution?: number;
+    patience?: number;
+    riskManagement?: number;
+    emotionalControl?: number;
+    notes?: Record<string, string>;
+  };
+  stateOfMind?: Array<{ label: string; valence: 'positive' | 'caution' | 'negative' }>;
+  processScore?: number;
 };
 
 function deriveEmotionalState(trade: StoreTrade): ApiTrade['emotional_state'] {
@@ -237,6 +257,12 @@ export function toApiTrade(trade: StoreTrade): ApiTrade {
     })(),
     emotional_state: emotionalState,
     confidence_level: confidenceLevel,
+    preEntry: (trade as RichStoreTrade).preEntry,
+    thesis: (trade as RichStoreTrade).thesis,
+    executionReview: (trade as RichStoreTrade).executionReview,
+    psychologyRatings: (trade as RichStoreTrade).psychologyRatings,
+    stateOfMind: (trade as RichStoreTrade).stateOfMind,
+    processScore: typeof (trade as RichStoreTrade).processScore === 'number' ? (trade as RichStoreTrade).processScore : undefined,
     pre_trade_notes: trade.reflection?.thesis,
     post_trade_notes: trade.reflection?.execution,
     confluences: normalizeConfluences((trade as StoreTrade).confluences),
