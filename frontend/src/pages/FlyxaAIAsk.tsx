@@ -6,6 +6,8 @@ import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
 import { api, aiApi } from '../services/api.js';
 import type { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import { deriveTradeSessionLabel } from '../utils/sessionTimes.js';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
@@ -365,6 +367,7 @@ export default function FlyxaAIAsk() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { trades } = useTrades();
+  const { preferences } = useAppSettings();
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<AIReply[]>([]);
   const [loading, setLoading] = useState(false);
@@ -647,7 +650,9 @@ export default function FlyxaAIAsk() {
             const symbol = String(ft?.symbol ?? 'N/A');
             const tradeDate = String(ft?.trade_date ?? '');
             const tradeTime = String(ft?.trade_time ?? '').slice(0, 5);
-            const session = String(ft?.session ?? '');
+            const session = focusedTrade
+              ? deriveTradeSessionLabel(focusedTrade, preferences.sessionTimes)
+              : String(ft?.session ?? '');
 
             return (
               <div style={{ borderBottom: `1px solid ${C.b0}` }}>
