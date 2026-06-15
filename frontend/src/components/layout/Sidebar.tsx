@@ -37,10 +37,10 @@ const primaryNavItems: NavItemDef[] = [
   { path: '/',             icon: LayoutDashboard, label: 'Dashboard',    extraActivePaths: [] },
   { path: '/pre-session',  icon: ClipboardCheck,  label: 'Session',      extraActivePaths: ['/post-session'] },
   { path: '/scanner',      icon: ScanLine,        label: 'Trade Scanner' },
-  { path: '/journal',      icon: FileText,        label: 'Daily Journal' },
-  { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
-  { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
   { path: '/analytics',    icon: BarChart2,       label: 'Analytics'     },
+  { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
+  { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
+  { path: '/journal',      icon: FileText,        label: 'Daily Journal' },
   { path: '/trading-plan', icon: FileText,        label: 'Trading Plan'  },
   { path: '/rivals',       icon: Swords,          label: 'Rivals'        },
 ];
