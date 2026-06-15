@@ -428,7 +428,7 @@ function gradeCssKey(letter: string): string {
 }
 
 function computeEntryStats(entry: JournalEntry) {
-  const pnl = entry.trades.reduce((sum, trade) => sum + trade.pnl, 0);
+  const pnl = entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
   const wins = entry.trades.filter(trade => trade.result === 'win').length;
   const losses = entry.trades.filter(trade => trade.result === 'loss').length;
   const tradeCount = entry.trades.length;
@@ -1258,6 +1258,29 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
               outline: 'none',
             }}
           />
+          <button
+            type="button"
+            onClick={() => {
+              const parsed = parseFloat(commissionLocal);
+              const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+              setCommissionLocal(value > 0 ? String(value) : '');
+              onMutate({ commission: value > 0 ? value : undefined });
+            }}
+            style={{
+              height: 26,
+              padding: '0 8px',
+              borderRadius: 4,
+              border: '1px solid var(--amber)',
+              background: 'var(--amber-dim, rgba(245,158,11,0.08))',
+              color: 'var(--amber)',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            Save
+          </button>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="tj-pl-summary-label" style={{ marginBottom: 2 }}>NET P&amp;L</div>
@@ -2120,7 +2143,7 @@ export default function TradeJournal() {
 
     // Sparkline: cumulative P&L starting from 0 before first trade
     const cumPnl = [0];
-    last10.forEach(t => { cumPnl.push(cumPnl[cumPnl.length - 1] + t.pnl); });
+    last10.forEach(t => { cumPnl.push(cumPnl[cumPnl.length - 1] + t.pnl - (t.commission ?? 0)); });
     const SW = 240, SH = 48, SP = 4;
     const minV = Math.min(...cumPnl);
     const maxV = Math.max(...cumPnl);
@@ -2139,7 +2162,7 @@ export default function TradeJournal() {
     const last7d = allTrades.filter(t => t.entryDate >= cutoffStr);
     const wins7d = last7d.filter(t => t.result === 'win').length;
     const total7d = last7d.length;
-    const netPnl7d = last7d.reduce((s, t) => s + t.pnl, 0);
+    const netPnl7d = last7d.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
 
     return {
       last10,
