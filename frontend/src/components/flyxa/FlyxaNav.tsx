@@ -12,7 +12,6 @@ const colors = {
 const NAV_ITEMS = [
   { key: 'weekly',         label: 'Weekly debrief',       to: '/flyxa-ai',                        end: true  },
   { key: 'weekly-report',  label: 'Weekly report',        to: '/flyxa-ai/weekly-report',          end: false },
-  { key: 'execution',      label: 'Execution coach',      to: '/flyxa-ai/execution-coach',        end: false },
   { key: 'pattern',        label: 'Pattern library',      to: '/flyxa-ai/patterns',               end: false },
   { key: 'ask',            label: 'Ask Flyxa',            to: '/flyxa-ai/ask',                    end: false },
 ];
