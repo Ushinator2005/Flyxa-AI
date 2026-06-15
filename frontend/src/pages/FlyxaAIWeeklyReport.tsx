@@ -303,58 +303,89 @@ function SlideCover({ stats }: { stats: WeekStats }) {
 }
 
 // ── Slide 2: Numbers ─────────────────────────────────────────────
-function DailyPnlChart({ dailyPnl }: { dailyPnl: { day: string; pnl: number }[] }) {
-  const W = 1000, H = 260;
-  const midY = 126;
-  const usableH = midY - 36; // max bar height (upward from zero line)
-  const PAD_X = 8;
-  const barCount = dailyPnl.length || 1;
-  const barW = (W - PAD_X * 2) / barCount;
-  const barInner = barW * 0.52;
+function NumbersChart({ dailyPnl }: { dailyPnl: { day: string; pnl: number }[] }) {
+  const W = 1000, H = 300;
+  const midY = 148;
+  const usableH = midY - 44;
+  const PAD_X = 24;
+  const count = dailyPnl.length || 1;
+  const slotW = (W - PAD_X * 2) / count;
+  const barW = slotW * 0.3;
   const maxAbs = Math.max(...dailyPnl.map(d => Math.abs(d.pnl)), 1);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
-      {/* Subtle horizontal grid */}
-      {[0.33, 0.66, 1].map(f => (
-        <line key={`g+${f}`} x1={PAD_X} y1={midY - usableH * f} x2={W - PAD_X} y2={midY - usableH * f} stroke="rgba(255,255,255,0.04)" strokeWidth={1} />
+      <defs>
+        <linearGradient id="ng-pos" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={C.grn} stopOpacity="0.95" />
+          <stop offset="100%" stopColor={C.grn} stopOpacity="0.18" />
+        </linearGradient>
+        <linearGradient id="ng-neg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={C.red} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={C.red} stopOpacity="0.95" />
+        </linearGradient>
+      </defs>
+
+      {/* Hairline grid */}
+      {[0.4, 0.75, 1].map(f => (
+        <line key={`gp${f}`} x1={PAD_X} y1={midY - usableH * f} x2={W - PAD_X} y2={midY - usableH * f}
+          stroke="rgba(255,255,255,0.04)" strokeWidth={1} strokeDasharray="4 6" />
       ))}
-      {[0.33, 0.66, 1].map(f => (
-        <line key={`g-${f}`} x1={PAD_X} y1={midY + usableH * f} x2={W - PAD_X} y2={midY + usableH * f} stroke="rgba(255,255,255,0.04)" strokeWidth={1} />
+      {[0.4, 0.75, 1].map(f => (
+        <line key={`gn${f}`} x1={PAD_X} y1={midY + usableH * f} x2={W - PAD_X} y2={midY + usableH * f}
+          stroke="rgba(255,255,255,0.04)" strokeWidth={1} strokeDasharray="4 6" />
       ))}
-      {/* Zero line */}
-      <line x1={PAD_X} y1={midY} x2={W - PAD_X} y2={midY} stroke="rgba(255,255,255,0.18)" strokeWidth={1.5} />
+
+      {/* Zero baseline */}
+      <line x1={PAD_X} y1={midY} x2={W - PAD_X} y2={midY} stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
 
       {dailyPnl.map((d, i) => {
-        const cx = PAD_X + i * barW + barW / 2;
+        const cx = PAD_X + i * slotW + slotW / 2;
         const isPos = d.pnl >= 0;
         const color = d.pnl === 0 ? C.t2 : isPos ? C.grn : C.red;
-        const barH = d.pnl !== 0 ? Math.max(8, (Math.abs(d.pnl) / maxAbs) * usableH) : 0;
+        const barH = d.pnl !== 0 ? Math.max(10, (Math.abs(d.pnl) / maxAbs) * usableH) : 0;
         const barY = isPos ? midY - barH : midY;
+        const x = cx - barW / 2;
+
         return (
           <g key={d.day}>
             {d.pnl !== 0 && (
               <>
-                {/* Bar glow */}
-                <rect x={cx - barInner / 2 - 3} y={barY - 3} width={barInner + 6} height={barH + 6} rx={8} ry={8} fill={`${color}18`} />
-                {/* Bar */}
-                <rect x={cx - barInner / 2} y={barY} width={barInner} height={barH} rx={5} ry={5} fill={`${color}cc`} />
+                {/* Wide soft glow behind bar */}
+                <rect x={cx - barW * 1.6} y={barY - 8} width={barW * 3.2} height={barH + 16}
+                  rx={16} fill={`${color}0e`} />
+                {/* Gradient bar */}
+                <rect x={x} y={barY} width={barW} height={barH}
+                  rx={7} fill={isPos ? 'url(#ng-pos)' : 'url(#ng-neg)'} />
+                {/* Bright cap at tip */}
+                <rect
+                  x={x} y={isPos ? barY : barY + barH - 3}
+                  width={barW} height={3} rx={2}
+                  fill={color} opacity={0.9}
+                />
               </>
             )}
-            {/* P&L label */}
+
+            {/* P&L value */}
             {d.pnl !== 0 && (
-              <text x={cx} y={isPos ? barY - 10 : barY + barH + 20} textAnchor="middle"
-                fill={color} fontSize={13} fontFamily="DM Mono,ui-monospace,monospace" fontWeight="700">
+              <text
+                x={cx} y={isPos ? barY - 13 : barY + barH + 22}
+                textAnchor="middle" fill={color}
+                fontSize={14} fontFamily="DM Mono,ui-monospace,monospace" fontWeight="700"
+              >
                 {fmtSigned(d.pnl)}
               </text>
             )}
             {d.pnl === 0 && (
-              <text x={cx} y={midY - 12} textAnchor="middle" fill={C.t2} fontSize={22} fontFamily="var(--font-sans)">—</text>
+              <text x={cx} y={midY - 14} textAnchor="middle" fill={C.t2} fontSize={26}>—</text>
             )}
+
             {/* Day label */}
-            <text x={cx} y={H - 6} textAnchor="middle"
-              fill={d.pnl !== 0 ? C.t1 : C.t2} fontSize={16}
-              fontFamily="var(--font-sans)" fontWeight={d.pnl !== 0 ? '600' : '400'}>
+            <text x={cx} y={H - 8} textAnchor="middle"
+              fill={d.pnl !== 0 ? C.t0 : C.t2}
+              fontSize={17} fontFamily="var(--font-sans)"
+              fontWeight={d.pnl !== 0 ? '700' : '400'}
+            >
               {d.day}
             </text>
           </g>
@@ -374,8 +405,8 @@ function SlideNumbers({ stats }: { stats: WeekStats }) {
   const totalResolved = stats.wins + stats.losses;
 
   const bottomStats = [
-    { label: 'Avg Winner', value: stats.wins  ? `+${fmtCurrency(stats.avgWinPnl)}` : '—', sub: stats.wins  ? `${stats.avgWinR.toFixed(2)}R`  : undefined, color: C.grn },
-    { label: 'Avg Loser',  value: stats.losses ? `-${fmtCurrency(Math.abs(stats.avgLossPnl))}` : '—', sub: stats.losses ? `${Math.abs(stats.avgLossR).toFixed(2)}R` : undefined, color: C.red },
+    { label: 'Avg Winner', value: stats.wins   ? `+${fmtCurrency(stats.avgWinPnl)}` : '—',                      sub: stats.wins   ? `${stats.avgWinR.toFixed(2)}R avg`            : undefined, color: C.grn },
+    { label: 'Avg Loser',  value: stats.losses ? `-${fmtCurrency(Math.abs(stats.avgLossPnl))}` : '—',            sub: stats.losses ? `${Math.abs(stats.avgLossR).toFixed(2)}R avg`  : undefined, color: C.red },
     { label: 'Best Day',   value: stats.bestDayLabel,  sub: stats.bestDayLabel  !== '—' ? fmtSigned(stats.bestDayPnl)  : undefined, color: C.grn },
     { label: 'Worst Day',  value: stats.worstDayLabel, sub: stats.worstDayLabel !== '—' ? fmtSigned(stats.worstDayPnl) : undefined, color: C.red },
     ...(stats.planAdherence !== null
@@ -384,65 +415,88 @@ function SlideNumbers({ stats }: { stats: WeekStats }) {
   ];
 
   return (
-    <div style={{
-      width: '100%', height: '100%',
-      display: 'flex', flexDirection: 'column',
-      background: `radial-gradient(ellipse 100% 55% at 50% -5%, ${heroColor}10 0%, transparent 60%)`,
-    }}>
-      {/* ── Hero stats ── */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-end', paddingBottom: 14 }}>
-        {/* Net P&L */}
-        <div style={{ flex: 1.7 }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: C.t2, marginBottom: 6 }}>Net P&L</div>
-          <div style={{ fontSize: 'clamp(38px, 6vw, 66px)', fontWeight: 800, fontFamily: C.mono, color: heroColor, lineHeight: 1, letterSpacing: '-0.03em', textShadow: `0 0 80px ${heroColor}38` }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+
+      {/* ── Hero: centered P&L with glow orb ── */}
+      <div style={{ flexShrink: 0, position: 'relative', textAlign: 'center', paddingBottom: 10 }}>
+        {/* Ambient glow behind number */}
+        <div style={{
+          position: 'absolute', left: '50%', top: '50%',
+          transform: 'translate(-50%, -60%)',
+          width: '60%', height: '280%',
+          background: `radial-gradient(ellipse, ${heroColor}1c 0%, transparent 68%)`,
+          pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'relative' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.24em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>
+            Net P&L
+          </div>
+          <div style={{
+            fontSize: 'clamp(54px, 8.5vw, 92px)',
+            fontWeight: 800, fontFamily: C.mono, color: heroColor,
+            lineHeight: 1, letterSpacing: '-0.035em',
+            textShadow: `0 0 120px ${heroColor}50, 0 0 50px ${heroColor}28`,
+          }}>
             {fmtSigned(stats.netPnl)}
           </div>
-        </div>
-        {/* Win Rate */}
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: C.t2, marginBottom: 6 }}>Win Rate</div>
-          <div style={{ fontSize: 'clamp(28px, 4.5vw, 50px)', fontWeight: 800, fontFamily: C.mono, color: stats.winRate >= 50 ? C.grn : C.red, lineHeight: 1, letterSpacing: '-0.02em' }}>
-            {stats.winRate}%
+          <div style={{ marginTop: 7, fontSize: 12.5, color: C.t2, letterSpacing: '0.04em' }}>
+            {pnlPositive ? '↑ Profitable week' : '↓ Losing week'}
           </div>
-          <div style={{ fontSize: 11, color: C.t2, marginTop: 5, fontFamily: C.mono }}>{stats.wins}W · {stats.losses}L</div>
-        </div>
-        {/* Net R */}
-        <div style={{ flex: 1, textAlign: 'right' }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: C.t2, marginBottom: 6 }}>Net R</div>
-          <div style={{ fontSize: 'clamp(28px, 4.5vw, 50px)', fontWeight: 800, fontFamily: C.mono, color: stats.netR >= 0 ? C.grn : C.red, lineHeight: 1, letterSpacing: '-0.02em' }}>
-            {fmtR(stats.netR)}
-          </div>
-          <div style={{ fontSize: 11, color: C.t2, marginTop: 5 }}>{stats.tradeCount} trades · {stats.sessionCount} sessions</div>
         </div>
       </div>
 
-      {/* W/L strip */}
+      {/* ── Secondary stats row (centered) ── */}
+      <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', paddingBottom: 10 }}>
+        {([
+          { value: `${stats.winRate}%`, label: 'Win Rate', color: stats.winRate >= 50 ? C.grn : C.red, sub: `${stats.wins}W · ${stats.losses}L` },
+          { value: fmtR(stats.netR),    label: 'Net R',    color: stats.netR >= 0 ? C.grn : C.red,     sub: undefined },
+          { value: String(stats.tradeCount), label: 'Trades', color: C.t0, sub: `${stats.sessionCount} sessions` },
+        ] as const).map((s, i, arr) => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ textAlign: 'center', padding: '0 clamp(16px, 3.5vw, 38px)' }}>
+              <div style={{ fontSize: 'clamp(20px, 3vw, 30px)', fontWeight: 800, fontFamily: C.mono, color: s.color, lineHeight: 1, letterSpacing: '-0.01em' }}>
+                {s.value}
+              </div>
+              <div style={{ fontSize: 9, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.16em', marginTop: 4 }}>{s.label}</div>
+              {s.sub && <div style={{ fontSize: 10, color: C.t2, fontFamily: C.mono, marginTop: 2 }}>{s.sub}</div>}
+            </div>
+            {i < arr.length - 1 && <div style={{ width: 1, height: 30, background: C.b1, flexShrink: 0 }} />}
+          </div>
+        ))}
+      </div>
+
+      {/* W/L ratio bar */}
       {totalResolved > 0 && (
-        <div style={{ flexShrink: 0, height: 5, borderRadius: 3, background: C.d3, overflow: 'hidden', display: 'flex', marginBottom: 12 }}>
-          <div style={{ flex: stats.wins,   background: C.grn, opacity: 0.85 }} />
+        <div style={{ flexShrink: 0, height: 4, borderRadius: 2, background: C.d3, overflow: 'hidden', display: 'flex', marginBottom: 12 }}>
+          <div style={{ flex: stats.wins,   background: C.grn, opacity: 0.8 }} />
           {stats.wins > 0 && stats.losses > 0 && <div style={{ width: 1, background: C.d0, flexShrink: 0 }} />}
-          <div style={{ flex: stats.losses, background: C.red, opacity: 0.85 }} />
+          <div style={{ flex: stats.losses, background: C.red, opacity: 0.8 }} />
         </div>
       )}
 
       {/* Divider */}
       <div style={{ flexShrink: 0, height: 1, background: C.b0, marginBottom: 10 }} />
 
-      {/* ── Daily chart ── */}
+      {/* ── Daily bar chart ── */}
       <div style={{ flex: 1, minHeight: 0 }}>
-        <DailyPnlChart dailyPnl={stats.dailyPnl} />
+        <NumbersChart dailyPnl={stats.dailyPnl} />
       </div>
 
-      {/* ── Bottom stat strip ── */}
-      <div style={{ flexShrink: 0, display: 'flex', gap: 9, paddingTop: 12, borderTop: `1px solid ${C.b0}` }}>
-        {bottomStats.map(item => (
-          <div key={item.label} style={{ flex: 1, padding: '10px 12px', background: C.d2, border: `1px solid ${C.b0}`, borderRadius: 10, minWidth: 0 }}>
-            <div style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.t2, marginBottom: 5 }}>{item.label}</div>
-            <div style={{ fontSize: 'clamp(11px, 1.5vw, 16px)', fontWeight: 700, fontFamily: C.mono, color: item.color, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
-            {item.sub && <div style={{ fontSize: 9.5, color: C.t2, marginTop: 4 }}>{item.sub}</div>}
+      {/* ── Bottom stat strip (left-accent style) ── */}
+      <div style={{ flexShrink: 0, display: 'flex', gap: 0, paddingTop: 12, borderTop: `1px solid ${C.b0}` }}>
+        {bottomStats.map((item, i) => (
+          <div key={item.label} style={{
+            flex: 1, padding: '8px 14px',
+            borderLeft: i > 0 ? `1px solid ${C.b0}` : 'none',
+            minWidth: 0,
+          }}>
+            <div style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t2, marginBottom: 4 }}>{item.label}</div>
+            <div style={{ fontSize: 'clamp(12px, 1.6vw, 16px)', fontWeight: 700, fontFamily: C.mono, color: item.color, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
+            {item.sub && <div style={{ fontSize: 9.5, color: C.t2, marginTop: 3 }}>{item.sub}</div>}
           </div>
         ))}
       </div>
+
     </div>
   );
 }
