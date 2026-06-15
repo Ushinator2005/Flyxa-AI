@@ -601,7 +601,10 @@ export default function FlyxaAIWeeklyReport() {
       className="animate-fade-in"
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 72,
         zIndex: 800,
         background: C.d0,
         color: C.t0,
