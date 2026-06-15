@@ -303,49 +303,130 @@ function SlideCover({ stats }: { stats: WeekStats }) {
 }
 
 // ── Slide 2: Numbers ─────────────────────────────────────────────
-function MetricCard({ label, value, sub, valueColor }: { label: string; value: string; sub?: string; valueColor?: string }) {
-  return (
-    <div style={{
-      padding: '22px 20px',
-      background: C.d2,
-      border: `1px solid ${C.b0}`,
-      borderRadius: 10,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-    }}>
-      <span style={{ fontSize: 9.5, color: C.t2, textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 28, fontWeight: 700, color: valueColor ?? C.t0, fontFamily: C.mono, lineHeight: 1.1 }}>{value}</span>
-      {sub && <span style={{ fontSize: 11.5, color: C.t2 }}>{sub}</span>}
-    </div>
-  );
-}
-
 function SlideNumbers({ stats }: { stats: WeekStats }) {
   if (stats.tradeCount === 0) {
-    return (
-      <SlideEmpty label="By the Numbers" message="No trade data for this week." />
-    );
+    return <SlideEmpty label="By the Numbers" message="No trade data for this week." />;
   }
 
-  const cards = [
-    { label: 'Net P&L',       value: fmtSigned(stats.netPnl),               sub: undefined,                                                          valueColor: stats.netPnl >= 0 ? C.grn : C.red },
-    { label: 'Net R',          value: fmtR(stats.netR),                       sub: undefined,                                                          valueColor: stats.netR   >= 0 ? C.grn : C.red },
-    { label: 'Win Rate',       value: `${stats.winRate}%`,                    sub: `${stats.wins}W · ${stats.losses}L`,                                valueColor: stats.winRate >= 50 ? C.grn : C.red },
-    { label: 'Sessions',       value: String(stats.sessionCount),             sub: `${stats.tradeCount} trades`,                                       valueColor: C.t0 },
-    { label: 'Avg Winner',     value: stats.wins ? fmtCurrency(stats.avgWinPnl) : '—',       sub: stats.wins ? `${stats.avgWinR.toFixed(2)}R avg` : undefined,     valueColor: stats.wins ? C.grn : C.t2 },
-    { label: 'Avg Loser',      value: stats.losses ? fmtCurrency(Math.abs(stats.avgLossPnl)) : '—', sub: stats.losses ? `${Math.abs(stats.avgLossR).toFixed(2)}R avg` : undefined, valueColor: stats.losses ? C.red : C.t2 },
-    { label: 'Best Day',       value: stats.bestDayLabel,                     sub: stats.bestDayLabel  !== '—' ? fmtSigned(stats.bestDayPnl)  : undefined, valueColor: stats.bestDayLabel  !== '—' ? C.grn : C.t2 },
-    { label: 'Worst Day',      value: stats.worstDayLabel,                    sub: stats.worstDayLabel !== '—' ? fmtSigned(stats.worstDayPnl) : undefined, valueColor: stats.worstDayLabel !== '—' ? C.red : C.t2 },
-    ...(stats.planAdherence !== null
-      ? [{ label: 'Plan Adherence', value: `${stats.planAdherence}%`, sub: undefined, valueColor: stats.planAdherence >= 70 ? C.grn : stats.planAdherence >= 40 ? C.amb : C.red }]
-      : []),
-  ];
+  const pnlPositive   = stats.netPnl >= 0;
+  const heroColor     = pnlPositive ? C.grn : C.red;
+  const totalResolved = stats.wins + stats.losses;
+  const expectancy    = stats.wins > 0 && stats.losses > 0 ? stats.netPnl / stats.tradeCount : null;
 
   return (
     <SlideLayout label="By the Numbers">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))', gap: 12 }}>
-        {cards.map(c => <MetricCard key={c.label} {...c} />)}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 18, alignContent: 'start' }}>
+
+        {/* ── LEFT: Hero P&L ── */}
+        <div style={{
+          padding: '28px 26px 24px',
+          background: `${heroColor}09`,
+          border: `1px solid ${heroColor}20`,
+          borderRadius: 14,
+          display: 'flex', flexDirection: 'column', gap: 22,
+        }}>
+          {/* P&L */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t2, marginBottom: 10 }}>Net P&L</div>
+            <div style={{ fontSize: 'clamp(36px, 5.5vw, 62px)', fontWeight: 800, fontFamily: C.mono, color: heroColor, lineHeight: 1, letterSpacing: '-0.02em', textShadow: `0 0 60px ${heroColor}28` }}>
+              {fmtSigned(stats.netPnl)}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: C.t2, fontFamily: C.mono }}>
+              {fmtR(stats.netR)}&nbsp;&nbsp;·&nbsp;&nbsp;{pnlPositive ? 'Profitable week' : 'Losing week'}
+            </div>
+          </div>
+
+          {/* W/L ratio bar */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
+              <span style={{ fontSize: 11, color: C.grn, fontWeight: 600, fontFamily: C.mono }}>{stats.wins}W &nbsp;{stats.winRate}%</span>
+              <span style={{ fontSize: 11, color: C.red, fontWeight: 600, fontFamily: C.mono }}>{stats.losses}L</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: C.d3, overflow: 'hidden', display: 'flex' }}>
+              {totalResolved > 0 && (
+                <>
+                  <div style={{ flex: stats.wins, background: C.grn, opacity: 0.8 }} />
+                  {stats.wins > 0 && stats.losses > 0 && <div style={{ width: 1, background: C.d0, flexShrink: 0 }} />}
+                  <div style={{ flex: stats.losses, background: C.red, opacity: 0.8 }} />
+                </>
+              )}
+            </div>
+            <div style={{ marginTop: 7, fontSize: 11, color: C.t2 }}>
+              {stats.tradeCount} trades &nbsp;·&nbsp; {stats.sessionCount} sessions
+            </div>
+          </div>
+
+          {/* Plan adherence */}
+          {stats.planAdherence !== null && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 10, color: C.t2, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Plan Adherence</span>
+                <span style={{ fontSize: 12, fontFamily: C.mono, fontWeight: 600, color: stats.planAdherence >= 70 ? C.grn : stats.planAdherence >= 40 ? C.amb : C.red }}>{stats.planAdherence}%</span>
+              </div>
+              <div style={{ height: 4, borderRadius: 2, background: C.d3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${stats.planAdherence}%`, background: stats.planAdherence >= 70 ? C.grn : stats.planAdherence >= 40 ? C.amb : C.red, borderRadius: 2 }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT: Secondary stats ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Avg Winner vs Avg Loser */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ padding: '18px 18px 16px', background: `${C.grn}08`, border: `1px solid ${C.grn}1c`, borderRadius: 12 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>Avg Winner</div>
+              <div style={{ fontSize: 'clamp(18px, 2.8vw, 24px)', fontWeight: 700, fontFamily: C.mono, color: C.grn, lineHeight: 1 }}>
+                {stats.wins ? `+${fmtCurrency(stats.avgWinPnl)}` : '—'}
+              </div>
+              {stats.wins > 0 && <div style={{ fontSize: 11, color: C.t2, marginTop: 6 }}>{stats.avgWinR.toFixed(2)}R avg</div>}
+            </div>
+            <div style={{ padding: '18px 18px 16px', background: `${C.red}08`, border: `1px solid ${C.red}1c`, borderRadius: 12 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>Avg Loser</div>
+              <div style={{ fontSize: 'clamp(18px, 2.8vw, 24px)', fontWeight: 700, fontFamily: C.mono, color: C.red, lineHeight: 1 }}>
+                {stats.losses ? `-${fmtCurrency(Math.abs(stats.avgLossPnl))}` : '—'}
+              </div>
+              {stats.losses > 0 && <div style={{ fontSize: 11, color: C.t2, marginTop: 6 }}>{Math.abs(stats.avgLossR).toFixed(2)}R avg</div>}
+            </div>
+          </div>
+
+          {/* Best / Worst day */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ padding: '16px 18px', background: C.d2, border: `1px solid ${C.b0}`, borderRadius: 12 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>Best Day</div>
+              <div style={{ fontSize: 'clamp(16px, 2.4vw, 22px)', fontWeight: 700, fontFamily: C.mono, color: stats.bestDayLabel !== '—' ? C.grn : C.t2, lineHeight: 1 }}>
+                {stats.bestDayLabel}
+              </div>
+              {stats.bestDayLabel !== '—' && <div style={{ fontSize: 11.5, color: C.t2, marginTop: 6, fontFamily: C.mono }}>{fmtSigned(stats.bestDayPnl)}</div>}
+            </div>
+            <div style={{ padding: '16px 18px', background: C.d2, border: `1px solid ${C.b0}`, borderRadius: 12 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>Worst Day</div>
+              <div style={{ fontSize: 'clamp(16px, 2.4vw, 22px)', fontWeight: 700, fontFamily: C.mono, color: stats.worstDayLabel !== '—' ? C.red : C.t2, lineHeight: 1 }}>
+                {stats.worstDayLabel}
+              </div>
+              {stats.worstDayLabel !== '—' && <div style={{ fontSize: 11.5, color: C.t2, marginTop: 6, fontFamily: C.mono }}>{fmtSigned(stats.worstDayPnl)}</div>}
+            </div>
+          </div>
+
+          {/* Net R + Expectancy */}
+          <div style={{ padding: '18px 20px', background: C.d2, border: `1px solid ${C.b0}`, borderRadius: 12, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.13em', textTransform: 'uppercase', color: C.t2, marginBottom: 8 }}>Net R Multiple</div>
+              <div style={{ fontSize: 'clamp(22px, 3.5vw, 30px)', fontWeight: 700, fontFamily: C.mono, color: stats.netR >= 0 ? C.grn : C.red, lineHeight: 1 }}>
+                {fmtR(stats.netR)}
+              </div>
+            </div>
+            {expectancy !== null && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 9.5, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Expectancy</div>
+                <div style={{ fontSize: 14, fontFamily: C.mono, color: C.t1, fontWeight: 600 }}>{fmtSigned(expectancy)}</div>
+                <div style={{ fontSize: 10, color: C.t2 }}>per trade</div>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
     </SlideLayout>
   );
