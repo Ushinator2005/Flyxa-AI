@@ -80,6 +80,7 @@ export interface JournalEntry {
   date: string;
   content: string;
   screenshots: string[];
+  mood?: string | null;
   created_at: string;
 }
 

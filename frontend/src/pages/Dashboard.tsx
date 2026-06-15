@@ -111,6 +111,11 @@ export default function Dashboard() {
   const { trades, loading, deleteTrade } = useTrades();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  const initialCalendarDate = useMemo(() => new Date(), []);
+  const [calendarMonth, setCalendarMonth] = useState(() => ({
+    year: initialCalendarDate.getFullYear(),
+    month: initialCalendarDate.getMonth() + 1,
+  }));
   const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, preferences, updateAccount } = useAppSettings();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   useEffect(() => {
@@ -361,10 +366,11 @@ export default function Dashboard() {
         {(() => {
           const todayW  = todayTrades.filter(t => t.pnl - (t.commission ?? 0) > 0).length;
           const todayL  = todayTrades.filter(t => t.pnl - (t.commission ?? 0) < 0).length;
-          const monthStr    = format(weekDays[0], 'yyyy-MM');
+          const monthDate   = new Date(calendarMonth.year, calendarMonth.month - 1, 1);
+          const monthStr    = format(monthDate, 'yyyy-MM');
           const monthTrades = filteredTrades.filter(t => t.trade_date?.startsWith(monthStr));
           const monthPnL    = monthTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
-          const monthLabel  = format(weekDays[0], 'MMM yyyy');
+          const monthLabel  = format(monthDate, 'MMM yyyy');
           const nextEv  = todayHighImpact.find(ev => {
             const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
             return t !== null && t > now && !Boolean(ev.actual);
@@ -488,7 +494,7 @@ export default function Dashboard() {
                   {monthTrades.length > 0 ? fmtUSD(monthPnL) : '—'}
                 </p>
                 <p style={{ fontSize: 11, color: T3, margin: 0 }}>
-                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''}` : `No trades in ${format(weekDays[0], 'MMM')}`}
+                  {monthTrades.length > 0 ? `${monthTrades.length} trade${monthTrades.length !== 1 ? 's' : ''}` : `No trades in ${format(monthDate, 'MMM')}`}
                 </p>
               </div>
 
@@ -564,7 +570,7 @@ export default function Dashboard() {
             {/* P&L Calendar */}
             <SectionPanel flush style={{ flexShrink: 0 }} data-tour-id="dashboard-calendar">
               <div style={{ padding: isMobile ? '10px 8px' : '14px 18px' }}>
-                <MonthlyHeatmap trades={filteredTrades} />
+                <MonthlyHeatmap trades={filteredTrades} onVisibleMonthChange={setCalendarMonth} />
               </div>
             </SectionPanel>
 

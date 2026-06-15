@@ -194,9 +194,15 @@ function normalizeBackupDate(value: unknown): string | null {
   return match ? match[1] : null;
 }
 
-function normalizeBackupEntries(value: unknown): Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots'>> {
+function normalizeJournalMood(value: unknown): string | null {
+  return typeof value === 'string' && JOURNAL_MOODS.includes(value as (typeof JOURNAL_MOODS)[number])
+    ? value
+    : null;
+}
+
+function normalizeBackupEntries(value: unknown): Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>> {
   if (!Array.isArray(value)) return [];
-  const output: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots'>> = [];
+  const output: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>> = [];
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
     const record = item as Record<string, unknown>;
@@ -208,6 +214,7 @@ function normalizeBackupEntries(value: unknown): Array<Pick<JournalEntry, 'date'
       screenshots: Array.isArray(record.screenshots)
         ? record.screenshots.filter((s): s is string => typeof s === 'string')
         : [],
+      mood: normalizeJournalMood(record.mood),
     });
   }
   return output;
@@ -398,6 +405,7 @@ export default function Journal() {
         date: entry.date,
         content: typeof entry.content === 'string' ? entry.content : '',
         screenshots: Array.isArray(entry.screenshots) ? entry.screenshots.filter((s): s is string => typeof s === 'string') : [],
+        mood: normalizeJournalMood(entry.mood) ?? normalizeJournalMood(moodByEntryId[entry.id]),
       })),
       moods: moodByEntryId,
       titles: titleByEntryId,
@@ -441,21 +449,30 @@ export default function Journal() {
     }
   }, [moodByEntryId, moodsStorageKey]);
 
-  function updateEntryMood(entryId: string, mood: string) {
+  function getEntryMood(entry: JournalEntry) {
+    return normalizeJournalMood(entry.mood) ?? normalizeJournalMood(moodByEntryId[entry.id]) ?? undefined;
+  }
+
+  async function updateEntryMood(entryId: string, mood: string) {
+    const normalizedMood = normalizeJournalMood(mood);
+    if (!normalizedMood) return;
+    applyEntryUpdateLocally(entryId, { mood: normalizedMood });
     setJournalMoodAction(entryId, mood);
     setSaving(true);
     setSaved(false);
-    void flushSupabaseStoreNow()
-      .then(() => {
-        setSaved(true);
-        window.setTimeout(() => setSaved(false), 1200);
-      })
-      .catch((error) => {
-        console.error(error);
-      })
-      .finally(() => {
-        setSaving(false);
-      });
+    try {
+      await Promise.all([
+        journalApi.update(entryId, { mood: normalizedMood } as Record<string, unknown>),
+        flushSupabaseStoreNow(),
+      ]);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1200);
+    } catch (error) {
+      console.error(error);
+      void flushSupabaseStoreNow();
+    } finally {
+      setSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -610,7 +627,11 @@ export default function Journal() {
         exported_at: new Date().toISOString(),
         user_id: user?.id ?? null,
         entries: normalizeBackupEntries(serverPayload.entries),
-        moods: moodByEntryId,
+        moods: Object.fromEntries(
+          entries
+            .map(entry => [entry.id, getEntryMood(entry)])
+            .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+        ),
         titles: titleByEntryId,
       };
       downloadBackupPayload(payload);
@@ -625,7 +646,11 @@ export default function Journal() {
           content: entry.content ?? '',
           screenshots: Array.isArray(entry.screenshots) ? entry.screenshots : [],
         })),
-        moods: moodByEntryId,
+        moods: Object.fromEntries(
+          entries
+            .map(entry => [entry.id, getEntryMood(entry)])
+            .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+        ),
         titles: titleByEntryId,
       };
       downloadBackupPayload(fallbackPayload);
@@ -900,7 +925,7 @@ export default function Journal() {
                     <EntryItem
                       key={entry.id}
                       entry={entry}
-                      mood={moodByEntryId[entry.id]}
+                      mood={getEntryMood(entry)}
                       titleByEntryId={titleByEntryId}
                       selected={selected?.id === entry.id}
                       onClick={() => setSelected(entry)}
@@ -1019,14 +1044,14 @@ export default function Journal() {
               {/* Mood toggles */}
               <div data-tour-id="journal-mood" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '10px 20px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {JOURNAL_MOODS.map(mood => {
-                  const isActive = moodByEntryId[selected.id] === mood;
+                  const isActive = getEntryMood(selected) === mood;
                   const ms = MOOD_STYLES[mood];
                   const MoodIcon = MOOD_ICONS[mood];
                   return (
                     <button
                       key={mood}
                       type="button"
-                      onClick={() => updateEntryMood(selected.id, mood)}
+                      onClick={() => { void updateEntryMood(selected.id, mood); }}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',

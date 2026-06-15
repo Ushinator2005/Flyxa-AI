@@ -104,6 +104,7 @@ export interface JournalEntry {
   date: string;
   content: string;
   screenshots: string[];
+  mood?: string | null;
   created_at: string;
 }
 
@@ -111,7 +112,7 @@ export interface JournalBackupPayload {
   version: number;
   exported_at: string;
   user_id: string | null;
-  entries: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots'>>;
+  entries: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>>;
   moods: Record<string, string>;
   titles: Record<string, string>;
 }

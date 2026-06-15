@@ -10,6 +10,7 @@ interface BackupEntryPayload {
   date: string;
   content: string;
   screenshots: string[];
+  mood: string | null;
 }
 
 function normalizeBackupDate(value: unknown): string | null {
@@ -26,6 +27,10 @@ function normalizeScreenshots(value: unknown): string[] {
     .slice(0, 40);
 }
 
+function normalizeMood(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim().slice(0, 40) : null;
+}
+
 function normalizeBackupEntries(value: unknown): BackupEntryPayload[] {
   if (!Array.isArray(value)) return [];
   const normalized: BackupEntryPayload[] = [];
@@ -40,6 +45,7 @@ function normalizeBackupEntries(value: unknown): BackupEntryPayload[] {
       date,
       content: typeof record.content === 'string' ? record.content : '',
       screenshots: normalizeScreenshots(record.screenshots),
+      mood: normalizeMood(record.mood),
     });
   }
 
@@ -122,6 +128,7 @@ router.post('/backup/restore', authMiddleware, async (req: AuthenticatedRequest,
           .update({
             content: entry.content,
             screenshots: entry.screenshots,
+            mood: entry.mood,
           })
           .eq('id', existingId)
           .eq('user_id', req.userId!);
@@ -140,6 +147,7 @@ router.post('/backup/restore', authMiddleware, async (req: AuthenticatedRequest,
           date: entry.date,
           content: entry.content,
           screenshots: entry.screenshots,
+          mood: entry.mood,
         })
         .select('id,date')
         .single();
@@ -193,16 +201,20 @@ router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
 // POST /
 router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { date, content, screenshots } = req.body;
+    const { date, content, screenshots, mood } = req.body;
+
+    const insertPayload: Record<string, unknown> = {
+      user_id: req.userId!,
+      date,
+      content: content || '',
+      screenshots: screenshots || [],
+    };
+    const normalizedMood = normalizeMood(mood);
+    if (normalizedMood) insertPayload.mood = normalizedMood;
 
     const { data, error } = await supabase
       .from('journal_entries')
-      .insert({
-        user_id: req.userId!,
-        date,
-        content: content || '',
-        screenshots: screenshots || [],
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -234,9 +246,21 @@ router.put('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
+    const body = req.body as Record<string, unknown>;
+    const updates: Record<string, unknown> = {};
+    if ('date' in body) updates.date = body.date;
+    if ('content' in body) updates.content = typeof body.content === 'string' ? body.content : '';
+    if ('screenshots' in body) updates.screenshots = normalizeScreenshots(body.screenshots);
+    if ('mood' in body) updates.mood = normalizeMood(body.mood);
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: 'No valid journal fields provided' });
+      return;
+    }
+
     const { data, error } = await supabase
       .from('journal_entries')
-      .update(req.body)
+      .update(updates)
       .eq('id', id)
       .select()
       .single();

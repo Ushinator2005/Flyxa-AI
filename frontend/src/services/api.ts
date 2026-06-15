@@ -202,7 +202,7 @@ export const journalApi = {
       exported_at: string;
       entries: JournalEntry[];
     }>('/api/journal/backup'),
-  restoreBackup: (entries: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots'>>) =>
+  restoreBackup: (entries: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>>) =>
     api.post<JournalBackupRestoreResult>('/api/journal/backup/restore', { entries }),
 };
 

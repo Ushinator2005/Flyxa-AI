@@ -815,7 +815,12 @@ const TOKEN_SCOPE_STYLE = {
   '--red-dim': 'rgba(239,68,68,0.10)',
 } as CSSProperties;
 
-export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
+interface MonthlyHeatmapProps {
+  trades?: Trade[];
+  onVisibleMonthChange?: (visible: { year: number; month: number }) => void;
+}
+
+export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: MonthlyHeatmapProps) {
   const now = new Date();
   const today = useMemo(() => new Date(), []);
   const navigate = useNavigate();
@@ -840,6 +845,10 @@ export default function MonthlyHeatmap({ trades = [] }: { trades?: Trade[] }) {
   const [journalError, setJournalError] = useState('');
   const [lastSavedById, setLastSavedById] = useState<Record<string, string>>({});
   const journalRequestRef = useRef(0);
+
+  useEffect(() => {
+    onVisibleMonthChange?.({ year, month });
+  }, [month, onVisibleMonthChange, year]);
 
   useEffect(() => {
     if (activeJournalId) {
