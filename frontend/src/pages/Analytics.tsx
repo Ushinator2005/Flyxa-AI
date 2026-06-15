@@ -712,20 +712,20 @@ export default function Analytics() {
       <PageHeader
         data-tour-id="analytics-header"
         title="Analytics"
-        sub={getPeriodLabel(period, periodOffset, today)}
+        sub="Performance breakdown for your selected period"
         actions={
-          <div data-tour-id="analytics-period-filter" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div data-tour-id="analytics-period-filter" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {/* Date range navigator — hidden for YTD and ALL (no discrete periods) */}
             {period !== 'ALL' && period !== 'YTD' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '0 2px' }}>
                 <button
                   type="button"
                   onClick={() => setPeriodOffset(o => o - 1)}
                   style={{
-                    width: 26, height: 26, borderRadius: 5, border: '1px solid var(--app-border)',
+                    width: 24, height: 24, borderRadius: 5, border: '1px solid var(--app-border)',
                     background: 'transparent', color: 'var(--app-text-muted)',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, lineHeight: 1,
+                    fontSize: 14, lineHeight: 1, flexShrink: 0,
                   }}
                   title="Previous period"
                 >
@@ -733,26 +733,26 @@ export default function Analytics() {
                 </button>
                 <span style={{
                   fontSize: 12, fontWeight: 500, color: 'var(--app-text)',
-                  minWidth: 148, textAlign: 'center', whiteSpace: 'nowrap',
+                  whiteSpace: 'nowrap', padding: '0 4px',
                 }}>
                   {getPeriodLabel(period, periodOffset, today)}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setPeriodOffset(o => o + 1)}
-                  disabled={periodOffset >= 0}
-                  style={{
-                    width: 26, height: 26, borderRadius: 5, border: '1px solid var(--app-border)',
-                    background: 'transparent',
-                    color: periodOffset >= 0 ? 'var(--app-border)' : 'var(--app-text-muted)',
-                    cursor: periodOffset >= 0 ? 'default' : 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, lineHeight: 1,
-                  }}
-                  title="Next period"
-                >
-                  ›
-                </button>
+                {/* Only render › when it's usable — avoids invisible gap at offset 0 */}
+                {periodOffset < 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPeriodOffset(o => o + 1)}
+                    style={{
+                      width: 24, height: 24, borderRadius: 5, border: '1px solid var(--app-border)',
+                      background: 'transparent', color: 'var(--app-text-muted)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, lineHeight: 1, flexShrink: 0,
+                    }}
+                    title="Next period"
+                  >
+                    ›
+                  </button>
+                )}
               </div>
             )}
             {/* Period tabs */}
