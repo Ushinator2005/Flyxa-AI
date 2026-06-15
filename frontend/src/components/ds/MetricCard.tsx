@@ -5,7 +5,7 @@ export type MetricAccent    = 'none' | 'amber' | 'green' | 'red' | 'blue' | 'pur
 export type MetricValueTone = 'positive' | 'negative' | 'neutral';
 
 export interface MetricCardProps {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   sub?: React.ReactNode;
   accent?: MetricAccent;

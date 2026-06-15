@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { Btn, MetricCard, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
 import {
   Area,
@@ -218,6 +218,43 @@ function normalizeConfluences(value: unknown): string[] {
   return normalized;
 }
 
+
+function InfoTooltip({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  return (
+    <span
+      ref={ref}
+      style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle' }}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <span style={{
+        width: 13, height: 13, borderRadius: '50%',
+        border: '1px solid var(--color-border, rgba(255,255,255,0.18))',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'default', fontSize: 8, fontWeight: 700,
+        color: 'var(--color-text-subtle)',
+        lineHeight: 1, userSelect: 'none', flexShrink: 0,
+      }}>?</span>
+      {visible && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 7px)', left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--color-panel)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 7, padding: '9px 11px',
+          width: 230, zIndex: 50, pointerEvents: 'none',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          fontSize: 11, color: 'var(--color-text-muted)',
+          lineHeight: 1.6,
+        }}>
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
 
 export default function Analytics() {
   const { trades, loading } = useTrades();
@@ -774,12 +811,12 @@ export default function Analytics() {
           accent={maxDrawdown > 0 ? 'red' : 'none'}
         />
         <MetricCard
-          label="Win Rate"
-          value={`${metrics.winRate.toFixed(0)}%`}
-          sub={`${metrics.wins.length}W / ${metrics.losses.length}L`}
-        />
-        <MetricCard
-          label="Profit Factor"
+          label={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              Profit Factor
+              <InfoTooltip text="Gross profit ÷ gross loss. A value above 1.0 means you make more on winners than you lose on losers. 1.5+ is solid; 2.0+ is strong." />
+            </span>
+          }
           value={metrics.profitFactor >= 999 ? '∞' : metrics.profitFactor.toFixed(2)}
           sub={metrics.profitFactor >= 1 ? 'Above breakeven' : 'Below breakeven'}
           valueTone={metrics.profitFactor >= 1 ? 'positive' : 'negative'}
@@ -881,10 +918,22 @@ export default function Analytics() {
         </section>
 
         <section data-tour-id="analytics-win-loss" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-[var(--app-text)]">Win / Loss</h2>
-            <span className="rounded-md bg-[var(--accent-dim)] px-2.5 py-1 text-[11px] text-[var(--accent)]">
-              {metrics.winRate.toFixed(0)}% win rate
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-[var(--app-text)]">Win Rate</h2>
+          </div>
+          <div className="mb-3 flex items-baseline gap-2">
+            <span style={{
+              fontSize: 32,
+              fontWeight: 700,
+              lineHeight: 1,
+              color: metrics.winRate >= 50 ? 'var(--green, #34d399)' : 'var(--red, #f87171)',
+              fontVariantNumeric: 'tabular-nums',
+              WebkitFontSmoothing: 'antialiased',
+            }}>
+              {metrics.winRate.toFixed(0)}%
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--app-text-muted)', fontWeight: 400 }}>
+              {metrics.wins.length}W / {metrics.losses.length}L
             </span>
           </div>
 
