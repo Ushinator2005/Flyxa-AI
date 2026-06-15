@@ -1,8 +1,8 @@
-import { CSSProperties, useMemo, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import { useTrades } from '../hooks/useTrades.js';
-import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import { ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 
@@ -56,6 +56,15 @@ const tinyMetaLabelStyle: CSSProperties = {
 
 const cardBorder = `1px solid ${colors.b0}`;
 
+
+function accountStatusColor(status: string): string {
+  const s = status.toLowerCase();
+  if (s === 'blown')  return '#ef4444';
+  if (s === 'eval')   return '#3b82f6';
+  if (s === 'funded') return '#22c55e';
+  if (s === 'live')   return '#f59e0b';
+  return colors.t1;
+}
 
 function patternAccent(type: PatternType) {
   if (type === 'Risk') return '#ef4444';
@@ -900,13 +909,37 @@ export default function FlyxaAIPatterns() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { trades } = useTrades();
-  const { filterTradesBySelectedAccount } = useAppSettings();
+  const { accounts, filterTradesBySelectedAccount } = useAppSettings();
   const storeEntries = useFlyxaStore(state => state.entries);
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
-  const accountTrades = useMemo(
-    () => (filterTradesBySelectedAccount(trades) as Trade[]).filter(Boolean),
-    [filterTradesBySelectedAccount, trades]
-  );
+
+  const [localAccountId, setLocalAccountId] = useState<string>(ALL_ACCOUNTS_ID);
+  const [accountDropOpen, setAccountDropOpen] = useState(false);
+  const accountDropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onOutsideClick(e: MouseEvent) {
+      if (accountDropRef.current && !accountDropRef.current.contains(e.target as Node)) {
+        setAccountDropOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick);
+    return () => document.removeEventListener('mousedown', onOutsideClick);
+  }, []);
+
+  const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived);
+  const selectedAcct = visibleAccounts.find(a => a.id === localAccountId);
+  const selectedAcctColor = selectedAcct ? accountStatusColor(selectedAcct.status) : null;
+  const selectedAcctLabel = selectedAcct?.name ?? 'All Accounts';
+
+  const accountTrades = useMemo(() => {
+    const allDecorated = (filterTradesBySelectedAccount(trades) as Trade[]).filter(Boolean);
+    if (localAccountId === ALL_ACCOUNTS_ID) return allDecorated;
+    return allDecorated.filter(t =>
+      (t as Trade & { accountIds?: string[] }).accountIds?.includes(localAccountId) ||
+      t.account_id === localAccountId
+    );
+  }, [filterTradesBySelectedAccount, trades, localAccountId]);
   const enrichedTrades = useMemo<PatternTrade[]>(() => {
     const entryByTradeId = new Map<string, typeof storeEntries[number]>();
     storeEntries.forEach(entry => {
@@ -1191,6 +1224,87 @@ export default function FlyxaAIPatterns() {
                       {tf}
                     </button>
                   ))}
+                </div>
+
+                {/* Account dropdown */}
+                <div ref={accountDropRef} style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setAccountDropOpen(o => !o)}
+                    style={{
+                      height: 28,
+                      minWidth: 150,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      paddingLeft: 9,
+                      paddingRight: 9,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: colors.t1,
+                      background: colors.d3,
+                      border: `1px solid ${colors.b0}`,
+                      borderRadius: 5,
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: selectedAcctColor ?? colors.t2, flexShrink: 0 }} />
+                    <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {selectedAcctLabel}
+                    </span>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.5, flexShrink: 0 }}>
+                      <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+
+                  {accountDropOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      minWidth: 180,
+                      background: colors.d2,
+                      border: `1px solid ${colors.b1}`,
+                      borderRadius: 7,
+                      padding: '4px 0',
+                      zIndex: 9999,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => { setLocalAccountId(ALL_ACCOUNTS_ID); setAccountDropOpen(false); }}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '7px 12px', fontSize: 12, background: localAccountId === ALL_ACCOUNTS_ID ? colors.d4 : 'transparent',
+                          color: localAccountId === ALL_ACCOUNTS_ID ? colors.t0 : colors.t1,
+                          border: 'none', cursor: 'pointer', textAlign: 'left',
+                        }}
+                      >
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: colors.t2, flexShrink: 0 }} />
+                        All Accounts
+                        {localAccountId === ALL_ACCOUNTS_ID && <span style={{ marginLeft: 'auto', fontSize: 10, color: colors.acc }}>✓</span>}
+                      </button>
+                      {visibleAccounts.map(acct => (
+                        <button
+                          key={acct.id}
+                          type="button"
+                          onClick={() => { setLocalAccountId(acct.id); setAccountDropOpen(false); }}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '7px 12px', fontSize: 12,
+                            background: localAccountId === acct.id ? colors.d4 : 'transparent',
+                            color: localAccountId === acct.id ? colors.t0 : colors.t1,
+                            border: 'none', cursor: 'pointer', textAlign: 'left',
+                          }}
+                        >
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: accountStatusColor(acct.status), flexShrink: 0 }} />
+                          <span style={{ flex: 1 }}>{acct.name}</span>
+                          {localAccountId === acct.id && <span style={{ fontSize: 10, color: colors.acc }}>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <p className="mt-1 text-[12px]" style={{ color: colors.t2 }}>Patterns auto-detected from your trade history &middot; {detectedPatterns.length} found over {detectedTf === 'All' ? 'all time' : detectedTf === '1M' ? 'the last month' : detectedTf === '3M' ? 'the last 3 months' : 'the last 6 months'}</p>

@@ -41,11 +41,11 @@ const primaryNavItems: NavItemDef[] = [
   { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
   { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
   { path: '/journal',      icon: FileText,        label: 'Daily Journal' },
-  { path: '/trading-plan', icon: FileText,        label: 'Trading Plan'  },
   { path: '/rivals',       icon: Swords,          label: 'Rivals'        },
 ];
 
 const moreNavItems: NavItemDef[] = [
+  { path: '/trading-plan', icon: FileText,        label: 'Trading Plan'  },
   { path: '/backtest',     icon: Target,          label: 'Backtest'      },
   { path: '/psychology',   icon: Brain,           label: 'Psychology'    },
   { path: '/goals',        icon: Crosshair,       label: 'Goals'         },
