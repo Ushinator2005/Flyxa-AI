@@ -82,52 +82,82 @@ function parseTradeDateOnly(trade: Trade): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function getPeriodStart(period: PeriodKey, now: Date): Date | null {
+// Returns an inclusive-start / exclusive-end range for a given period + navigation offset.
+// offset 0 = current period, -1 = one period back, etc.
+function getPeriodRange(period: PeriodKey, offset: number, now: Date): { start: Date; end: Date } | null {
   if (period === 'ALL') return null;
 
   const base = new Date(now);
   base.setHours(0, 0, 0, 0);
 
+  if (period === 'YTD') {
+    // YTD is always Jan 1 of this year → today; offset has no effect.
+    return { start: new Date(base.getFullYear(), 0, 1), end: new Date(base.getTime() + 86_400_000) };
+  }
+
   if (period === '1W') {
-    // Roll back to the most recent Monday (week restarts on Monday).
-    const dow = base.getDay(); // 0=Sun,1=Mon,...,6=Sat
+    const dow = base.getDay(); // 0=Sun … 6=Sat
     const daysToMon = dow === 0 ? 6 : dow - 1;
-    base.setDate(base.getDate() - daysToMon);
-    return base;
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - daysToMon + offset * 7);
+    const end = new Date(monday);
+    end.setDate(monday.getDate() + 7);
+    return { start: monday, end };
   }
 
   if (period === '1M') {
-    base.setMonth(base.getMonth() - 1);
-    return base;
+    // Calendar months (Jan=0 … Dec=11), offset shifts by whole months.
+    const month = now.getMonth() + offset;
+    const start = new Date(now.getFullYear(), month, 1);
+    const end = new Date(now.getFullYear(), month + 1, 1);
+    return { start, end };
   }
 
   if (period === '3M') {
-    base.setMonth(base.getMonth() - 3);
-    return base;
+    // Align to calendar quarters: Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec.
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const qMonth = (currentQuarter + offset) * 3;
+    const year = now.getFullYear() + Math.floor(qMonth / 12);
+    const month = ((qMonth % 12) + 12) % 12;
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 3, 1);
+    return { start, end };
   }
 
-  return new Date(base.getFullYear(), 0, 1);
+  return null;
 }
 
-function getPreviousRange(period: PeriodKey, now: Date): { start: Date; end: Date } | null {
-  const currentStart = getPeriodStart(period, now);
-  if (!currentStart) return null;
+function getPeriodLabel(period: PeriodKey, offset: number, now: Date): string {
+  if (period === 'ALL') return 'All Time';
+  if (period === 'YTD') return `Year to Date ${now.getFullYear()}`;
 
-  // For 1W always compare against the prior full calendar week (Mon–Sun).
+  const range = getPeriodRange(period, offset, now);
+  if (!range) return '';
+
+  const { start, end } = range;
+  const endInclusive = new Date(end.getTime() - 86_400_000); // subtract 1 day for display
+
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
   if (period === '1W') {
-    const prevMonday = new Date(currentStart);
-    prevMonday.setDate(prevMonday.getDate() - 7);
-    return { start: prevMonday, end: currentStart };
+    if (start.getFullYear() === endInclusive.getFullYear()) {
+      return `${fmt(start)} – ${fmt(endInclusive)}, ${start.getFullYear()}`;
+    }
+    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – ${endInclusive.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }
 
-  const currentEnd = new Date(now);
-  const duration = currentEnd.getTime() - currentStart.getTime();
-  if (duration <= 0) return null;
+  if (period === '1M') {
+    return start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
 
-  return {
-    start: new Date(currentStart.getTime() - duration),
-    end: currentStart,
-  };
+  if (period === '3M') {
+    if (start.getFullYear() === endInclusive.getFullYear()) {
+      return `${fmt(start)} – ${fmt(endInclusive)}, ${start.getFullYear()}`;
+    }
+    return `${start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} – ${endInclusive.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+  }
+
+  return '';
 }
 
 function formatSignedCurrency(value: number, withCents = false): string {
@@ -198,8 +228,14 @@ export default function Analytics() {
     : undefined;
   const accountPayouts = selectedStoreAcct?.payouts ?? [];
   const [period, setPeriod] = useState<PeriodKey>('1M');
+  const [periodOffset, setPeriodOffset] = useState<number>(0);
   const [timeWindow, setTimeWindow] = useState<TimeWindowMins>(30);
   const today = useMemo(() => new Date(), []);
+
+  const handlePeriodChange = (key: PeriodKey) => {
+    setPeriod(key);
+    setPeriodOffset(0);
+  };
 
   const sourceTrades = trades;
   const isLoading = loading;
@@ -209,12 +245,20 @@ export default function Analytics() {
     [filterTradesBySelectedAccount, sourceTrades]
   );
 
+  const periodRange = useMemo(
+    () => getPeriodRange(period, periodOffset, today),
+    [period, periodOffset, today]
+  );
+
   const filteredTrades = useMemo(() => {
-    const start = getPeriodStart(period, today);
+    const range = periodRange;
     const next = accountTrades.filter(trade => {
-      if (!start) return true;
+      if (!range) return true; // ALL — include everything
       const tradeDate = parseTradeDateOnly(trade);
-      return tradeDate ? tradeDate >= start : false;
+      if (!tradeDate) return false;
+      // YTD: open-ended upper bound (today is the end); others: strict [start, end) range
+      if (period === 'YTD') return tradeDate >= range.start;
+      return tradeDate >= range.start && tradeDate < range.end;
     });
 
     return next.sort((a, b) => {
@@ -222,10 +266,11 @@ export default function Analytics() {
       const bTime = parseTradeDateTime(b)?.getTime() ?? 0;
       return aTime - bTime;
     });
-  }, [accountTrades, period, today]);
+  }, [accountTrades, periodRange, period]);
 
   const previousPeriodNet = useMemo(() => {
-    const prev = getPreviousRange(period, today);
+    if (period === 'ALL' || period === 'YTD') return null;
+    const prev = getPeriodRange(period, periodOffset - 1, today);
     if (!prev) return null;
 
     return accountTrades.reduce((sum, trade) => {
@@ -236,7 +281,7 @@ export default function Analytics() {
       }
       return sum;
     }, 0);
-  }, [accountTrades, period, today]);
+  }, [accountTrades, period, periodOffset, today]);
 
   const metrics = useMemo(() => {
     const wins = filteredTrades.filter(trade => trade.pnl > 0);
@@ -614,7 +659,7 @@ export default function Analytics() {
     );
   }
 
-  const periodSubtitle = period === 'ALL' ? 'all time' : period === 'YTD' ? 'year to date' : period.toLowerCase();
+  const periodSubtitle = getPeriodLabel(period, periodOffset, today);
   const winLossTotal = metrics.wins.length + metrics.losses.length;
   const strongestConfluences = useMemo(
     () => confluenceRows.filter(row => row.netPnL > 0).slice(0, 5),
@@ -630,19 +675,62 @@ export default function Analytics() {
       <PageHeader
         data-tour-id="analytics-header"
         title="Analytics"
-        sub="Performance breakdown for your selected period"
+        sub={getPeriodLabel(period, periodOffset, today)}
         actions={
-          <div data-tour-id="analytics-period-filter" style={{ display: 'flex', gap: 4 }}>
-            {PERIOD_OPTIONS.map(option => (
-              <Btn
-                key={option.key}
-                variant={period === option.key ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setPeriod(option.key)}
-              >
-                {option.label}
-              </Btn>
-            ))}
+          <div data-tour-id="analytics-period-filter" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Date range navigator — hidden for YTD and ALL (no discrete periods) */}
+            {period !== 'ALL' && period !== 'YTD' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setPeriodOffset(o => o - 1)}
+                  style={{
+                    width: 26, height: 26, borderRadius: 5, border: '1px solid var(--app-border)',
+                    background: 'transparent', color: 'var(--app-text-muted)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, lineHeight: 1,
+                  }}
+                  title="Previous period"
+                >
+                  ‹
+                </button>
+                <span style={{
+                  fontSize: 12, fontWeight: 500, color: 'var(--app-text)',
+                  minWidth: 148, textAlign: 'center', whiteSpace: 'nowrap',
+                }}>
+                  {getPeriodLabel(period, periodOffset, today)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPeriodOffset(o => o + 1)}
+                  disabled={periodOffset >= 0}
+                  style={{
+                    width: 26, height: 26, borderRadius: 5, border: '1px solid var(--app-border)',
+                    background: 'transparent',
+                    color: periodOffset >= 0 ? 'var(--app-border)' : 'var(--app-text-muted)',
+                    cursor: periodOffset >= 0 ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, lineHeight: 1,
+                  }}
+                  title="Next period"
+                >
+                  ›
+                </button>
+              </div>
+            )}
+            {/* Period tabs */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {PERIOD_OPTIONS.map(option => (
+                <Btn
+                  key={option.key}
+                  variant={period === option.key ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => handlePeriodChange(option.key)}
+                >
+                  {option.label}
+                </Btn>
+              ))}
+            </div>
           </div>
         }
       />
