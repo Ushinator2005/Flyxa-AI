@@ -351,9 +351,6 @@ function NumbersChart({ dailyPnl }: { dailyPnl: { day: string; pnl: number }[] }
           <g key={d.day}>
             {d.pnl !== 0 && (
               <>
-                {/* Wide soft glow behind bar */}
-                <rect x={cx - barW * 1.6} y={barY - 8} width={barW * 3.2} height={barH + 16}
-                  rx={16} fill={`${color}0e`} />
                 {/* Gradient bar */}
                 <rect x={x} y={barY} width={barW} height={barH}
                   rx={7} fill={isPos ? 'url(#ng-pos)' : 'url(#ng-neg)'} />
