@@ -1264,7 +1264,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
           {effectivePnl !== null ? (() => {
             const net = effectivePnl - (trade.commission ?? 0);
             return (
-              <div className={`tj-pl-summary-value ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`} style={{ fontSize: 18, fontWeight: 700 }}>
+              <div className={`tj-pl-summary-value ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`} style={{ fontSize: 18 }}>
                 {formatCurrencyFixed(net)}
               </div>
             );

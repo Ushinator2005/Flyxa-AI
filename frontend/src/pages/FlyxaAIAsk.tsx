@@ -65,11 +65,11 @@ function inlineChips(text: string): React.ReactNode {
       return (
         <span key={i} style={{
           color: C.acc,
-          fontWeight: 600,
+          fontWeight: 500,
           fontVariantNumeric: 'tabular-nums',
-          fontFamily: 'var(--font-mono, monospace)',
+          fontFamily: C.sans,
           WebkitFontSmoothing: 'antialiased',
-          letterSpacing: '0.01em',
+          MozOsxFontSmoothing: 'grayscale',
         }}>{display}</span>
       );
     }
