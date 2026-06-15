@@ -218,9 +218,10 @@ export default function Dashboard() {
   }, [weekOffset]);
 
   const { wins, losses, breakevens, winRingData } = useMemo(() => {
-    const w = filteredTrades.filter(t => t.pnl > 0).length;
-    const l = filteredTrades.filter(t => t.pnl < 0).length;
-    const b = filteredTrades.filter(t => t.pnl === 0 && (t.exit_price ?? 0) > 0).length;
+    const ep = (t: typeof filteredTrades[0]) => t.pnl - (t.commission ?? 0);
+    const w = filteredTrades.filter(t => ep(t) > 0).length;
+    const l = filteredTrades.filter(t => ep(t) < 0).length;
+    const b = filteredTrades.filter(t => ep(t) === 0 && (t.exit_price ?? 0) > 0).length;
     const total = w + l + b;
     return {
       wins: w,
@@ -358,11 +359,11 @@ export default function Dashboard() {
 
         {/* Command Strip */}
         {(() => {
-          const todayW  = todayTrades.filter(t => t.pnl > 0).length;
-          const todayL  = todayTrades.filter(t => t.pnl < 0).length;
+          const todayW  = todayTrades.filter(t => t.pnl - (t.commission ?? 0) > 0).length;
+          const todayL  = todayTrades.filter(t => t.pnl - (t.commission ?? 0) < 0).length;
           const monthStr    = format(weekDays[0], 'yyyy-MM');
           const monthTrades = filteredTrades.filter(t => t.trade_date?.startsWith(monthStr));
-          const monthPnL    = monthTrades.reduce((s, t) => s + t.pnl, 0);
+          const monthPnL    = monthTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
           const monthLabel  = format(weekDays[0], 'MMM yyyy');
           const nextEv  = todayHighImpact.find(ev => {
             const t = wallTimeToUtcMs(ev.date, ev.time, calendarTimeZone);
@@ -819,8 +820,8 @@ export default function Dashboard() {
                   const ds      = format(day, 'yyyy-MM-dd');
                   const dayTr   = tradesByDate[ds] ?? [];
                   const isToday = ds === todayStr;
-                  const dayW    = dayTr.filter(t => t.pnl > 0);
-                  const dayL    = dayTr.filter(t => t.pnl < 0);
+                  const dayW    = dayTr.filter(t => t.pnl - (t.commission ?? 0) > 0);
+                  const dayL    = dayTr.filter(t => t.pnl - (t.commission ?? 0) < 0);
                   return (
                     <div key={ds} style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
