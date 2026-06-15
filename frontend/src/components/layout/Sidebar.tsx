@@ -601,6 +601,12 @@ export default function Sidebar() {
     window.localStorage.setItem('flyxa-ai.sidebar.collapsed', collapsed ? '1' : '0');
   }, [collapsed]);
 
+  useEffect(() => {
+    const handler = () => setCollapsed(true);
+    window.addEventListener('flyxa:collapse-sidebar', handler);
+    return () => window.removeEventListener('flyxa:collapse-sidebar', handler);
+  }, []);
+
   return (
     <>
       <aside

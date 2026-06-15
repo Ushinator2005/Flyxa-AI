@@ -557,6 +557,10 @@ export default function FlyxaAIWeeklyReport() {
   const stats         = useMemo(() => computeWeekStats(safeTrades, weekOffset), [safeTrades, weekOffset]);
   const actionPlan    = useMemo(() => generateActionPlan(stats), [stats]);
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('flyxa:collapse-sidebar'));
+  }, []);
+
   const storageKey = `flyxa.weekly-reflection.${stats.weekKey}`;
   useEffect(() => {
     try { setReflection(localStorage.getItem(storageKey) ?? ''); } catch { /* ignore */ }
