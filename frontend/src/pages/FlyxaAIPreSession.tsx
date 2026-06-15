@@ -42,7 +42,7 @@ const C = {
 
 
 const emotions = ['Frustrated', 'Anxious', 'Neutral', 'Focused', 'Confident'] as const;
-const biasOptions: BiasValue[] = ['Bull', 'Bear', 'Neutral'];
+const biasOptions: BiasValue[] = ['Bear', 'Neutral', 'Bull'];
 
 const oathChecklistItems: ChecklistItem[] = [
   { id: 'oath-plan-only', label: 'I will only take trades that match my plan' },

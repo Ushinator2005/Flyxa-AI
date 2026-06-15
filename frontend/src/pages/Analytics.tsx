@@ -1221,8 +1221,8 @@ export default function Analytics() {
                 tickFormatter={(v: number) => `$${Math.round(v).toLocaleString()}`}
               />
               <YAxis dataKey="y" type="number" hide domain={[0, 1]} />
-              {/* dot area scales with |P&L|: ~2.5px to ~12px radius */}
-              <ZAxis dataKey="size" range={[20, 450]} />
+              {/* dot area scales with |P&L|: ~2px to ~7px radius */}
+              <ZAxis dataKey="size" range={[14, 160]} />
               {/* Mean / expectancy line — gray, thinner, doesn't compete with $0 */}
               {Math.abs(pnlDistribution.meanPnL) > pnlDistribution.domainMax * 0.01 && (
                 <ReferenceLine
@@ -1235,9 +1235,9 @@ export default function Analytics() {
                     if (!vb) return null;
                     return (
                       <text x={vb.x} y={14}
-                        fill="rgba(148,163,184,0.8)" fontSize={9} fontWeight={600}
+                        fill="rgba(148,163,184,0.9)" fontSize={9} fontWeight={600}
                         textAnchor="middle">
-                        avg
+                        {formatSignedCurrency(pnlDistribution.meanPnL)}
                       </text>
                     );
                   }}
@@ -1252,7 +1252,7 @@ export default function Analytics() {
                   if (!vb) return null;
                   return (
                     <text x={vb.x} y={14}
-                      fill="var(--app-text-subtle)" fontSize={10} fontWeight={700}
+                      fill="var(--accent)" fontSize={10} fontWeight={700}
                       textAnchor="middle">
                       $0
                     </text>

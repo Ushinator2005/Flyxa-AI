@@ -1,5 +1,6 @@
 import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Eye } from 'lucide-react';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
@@ -360,9 +361,10 @@ export default function FlyxaAIPostSession() {
                   ))}
                 </div>
                 <DatePicker
+                  compact
                   value={selectedDate}
                   onChange={handleSelectedDateChange}
-                  className="rounded-[4px] px-3 py-1.5 text-[11px]"
+                  className="rounded-[4px] text-[11px]"
                   style={{
                     backgroundColor: C.d3, color: C.t0,
                     border: CARD_BORDER, outline: 'none',
@@ -696,12 +698,21 @@ export default function FlyxaAIPostSession() {
                               </span>
                             )}
                           </div>
-                          <span
-                            className="text-[12px] font-semibold"
-                            style={{ color: pnl >= 0 ? C.grn : C.red, fontFamily: C.mono }}
-                          >
-                            {fmtSigned(pnl)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="text-[12px] font-semibold"
+                              style={{ color: pnl >= 0 ? C.grn : C.red, fontFamily: C.mono }}
+                            >
+                              {fmtSigned(pnl)}
+                            </span>
+                            <span
+                              title="View trade"
+                              className="inline-flex items-center"
+                              style={{ color: C.t2, lineHeight: 0 }}
+                            >
+                              <Eye size={13} />
+                            </span>
+                          </div>
                         </div>
                       );
                     })}

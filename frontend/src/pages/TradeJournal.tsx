@@ -2111,39 +2111,48 @@ export default function TradeJournal() {
   const rulesTemplate = useMemo(() => getRulesTemplate(), []);
   const entries = useMemo(() => normalizeEntries(persistedEntries, rulesTemplate), [persistedEntries, rulesTemplate]);
 
-  const behaviorCorrelations = useMemo(() => {
-    const groupStats = (dayEntries: JournalEntry[]) => {
-      const trades = dayEntries.flatMap(e => e.trades).filter(t => t.result !== 'open');
-      if (trades.length < 3) return null;
-      const wins = trades.filter(t => t.result === 'win').length;
-      return {
-        winRate: (wins / trades.length) * 100,
-        avgPnl: trades.reduce((s, t) => s + t.pnl, 0) / trades.length,
-        n: trades.length,
-      };
+  const recentForm = useMemo(() => {
+    const allTrades = entries.flatMap(e =>
+      e.trades.filter(t => t.result !== 'open').map(t => ({ ...t, entryDate: e.date }))
+    );
+    const sorted = [...allTrades].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
+    const last10 = sorted.slice(-10);
+
+    // Sparkline: cumulative P&L starting from 0 before first trade
+    const cumPnl = [0];
+    last10.forEach(t => { cumPnl.push(cumPnl[cumPnl.length - 1] + t.pnl); });
+    const SW = 240, SH = 48, SP = 4;
+    const minV = Math.min(...cumPnl);
+    const maxV = Math.max(...cumPnl);
+    const vRange = maxV - minV || 1;
+    const toX = (i: number) => SP + (i / Math.max(cumPnl.length - 1, 1)) * (SW - 2 * SP);
+    const toY = (v: number) => SH - SP - ((v - minV) / vRange) * (SH - 2 * SP);
+    const sparkPoints = cumPnl.map((v, i) => ({ x: toX(i), y: toY(v) }));
+    const sparkZeroY = Math.max(SP, Math.min(SH - SP, toY(0)));
+    const sparkPositive = cumPnl[cumPnl.length - 1] >= 0;
+
+    // 7-day rolling stats
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - 6);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const last7d = allTrades.filter(t => t.entryDate >= cutoffStr);
+    const wins7d = last7d.filter(t => t.result === 'win').length;
+    const total7d = last7d.length;
+    const netPnl7d = last7d.reduce((s, t) => s + t.pnl, 0);
+
+    return {
+      last10,
+      winsLast10: last10.filter(t => t.result === 'win').length,
+      lossesLast10: last10.filter(t => t.result !== 'win').length,
+      sparkPoints,
+      sparkZeroY,
+      sparkPositive,
+      total7d,
+      winRate7d: total7d > 0 ? (wins7d / total7d) * 100 : null,
+      netPnl7d: total7d > 0 ? netPnl7d : null,
+      avgPnl7d: total7d > 0 ? netPnl7d / total7d : null,
     };
-
-    const sleepHigh = entries.filter(e => (e.physicalState?.sleep ?? 0) >= 4);
-    const sleepLow  = entries.filter(e => { const s = e.physicalState?.sleep ?? 0; return s > 0 && s <= 2; });
-
-    const energyHigh = entries.filter(e => (e.physicalState?.energy ?? 0) >= 4);
-    const energyLow  = entries.filter(e => { const s = e.physicalState?.energy ?? 0; return s > 0 && s <= 2; });
-
-    const getDayAvgDisc = (entry: JournalEntry) => {
-      const ts = entry.trades.filter(t => (t.psychologyRatings?.discipline ?? 0) > 0);
-      if (!ts.length) return 0;
-      return ts.reduce((s, t) => s + (t.psychologyRatings?.discipline ?? 0), 0) / ts.length;
-    };
-    const discHigh = entries.filter(e => getDayAvgDisc(e) >= 4);
-    const discLow  = entries.filter(e => { const d = getDayAvgDisc(e); return d > 0 && d <= 2; });
-
-    const items = [
-      { key: 'sleep',       label: 'Sleep quality', high: groupStats(sleepHigh),  low: groupStats(sleepLow)  },
-      { key: 'energy',      label: 'Energy',         high: groupStats(energyHigh), low: groupStats(energyLow) },
-      { key: 'discipline',  label: 'Discipline',     high: groupStats(discHigh),   low: groupStats(discLow)   },
-    ].filter(item => item.high !== null || item.low !== null);
-
-    return items;
   }, [entries]);
 
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -2823,39 +2832,86 @@ export default function TradeJournal() {
           </div>
         </div>
 
-        {/* Psychology → Performance Correlation Insights */}
-        {behaviorCorrelations.length > 0 && (
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)' }}>
-            <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--txt-3)', margin: '0 0 9px' }}>
-              Psychology Insights
+        {/* Recent Form */}
+        {recentForm.last10.length > 0 && (
+          <div style={{ padding: '10px 14px 10px', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' } as React.CSSProperties}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--txt-3)', margin: '0 0 8px' }}>
+              Recent Form
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {behaviorCorrelations.map(item => (
-                <div key={item.key}>
-                  <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-2)', margin: '0 0 3px' }}>{item.label}</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {item.high && (
-                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#34d399' }}>
-                        {item.high.winRate.toFixed(0)}% WR ↑
-                      </span>
-                    )}
-                    {item.high && item.low && (
-                      <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>vs</span>
-                    )}
-                    {item.low && (
-                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
-                        {item.low.winRate.toFixed(0)}% WR ↓
-                      </span>
-                    )}
-                    {item.high && item.low && (
-                      <span style={{ fontSize: 9, color: 'var(--txt-3)', marginLeft: 2 }}>
-                        ({Math.abs(item.high.winRate - item.low.winRate).toFixed(0)}pp gap)
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+            {/* Equity curve sparkline */}
+            {recentForm.sparkPoints.length >= 2 && (
+              <svg viewBox="0 0 240 48" width="100%" height={48} style={{ display: 'block', overflow: 'visible' }}>
+                <defs>
+                  <linearGradient id="rfSparkGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0.22} />
+                    <stop offset="100%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                {/* Zero / breakeven line */}
+                <line x1={4} y1={recentForm.sparkZeroY} x2={236} y2={recentForm.sparkZeroY} stroke="rgba(255,255,255,0.12)" strokeWidth={1} strokeDasharray="3,3" />
+                {/* Area fill */}
+                <polygon
+                  points={[
+                    `${recentForm.sparkPoints[0].x.toFixed(1)},${recentForm.sparkZeroY.toFixed(1)}`,
+                    ...recentForm.sparkPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+                    `${recentForm.sparkPoints[recentForm.sparkPoints.length - 1].x.toFixed(1)},${recentForm.sparkZeroY.toFixed(1)}`,
+                  ].join(' ')}
+                  fill="url(#rfSparkGrad)"
+                />
+                {/* Line */}
+                <polyline
+                  points={recentForm.sparkPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+                  fill="none"
+                  stroke={recentForm.sparkPositive ? '#34d399' : '#f87171'}
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+                {/* End dot */}
+                <circle
+                  cx={recentForm.sparkPoints[recentForm.sparkPoints.length - 1].x}
+                  cy={recentForm.sparkPoints[recentForm.sparkPoints.length - 1].y}
+                  r={2.5}
+                  fill={recentForm.sparkPositive ? '#34d399' : '#f87171'}
+                />
+              </svg>
+            )}
+            {/* W/L count */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '6px 0 9px' }}>
+              <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'rgba(52,211,153,0.75)' }}>{recentForm.winsLast10}W</span>
+              <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
+              <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'rgba(248,113,113,0.75)' }}>{recentForm.lossesLast10}L</span>
+              <span style={{ fontSize: 9, color: 'var(--txt-3)', marginLeft: 2 }}>last {recentForm.last10.length}</span>
             </div>
+            {/* 7-day stats */}
+            {recentForm.total7d > 0 && (
+              <div style={{ display: 'flex', gap: 12 }}>
+                {recentForm.winRate7d !== null && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', lineHeight: 1.2, color: recentForm.winRate7d >= 50 ? 'rgba(52,211,153,0.75)' : 'rgba(248,113,113,0.75)' }}>
+                      {recentForm.winRate7d.toFixed(0)}%
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>7d WR</div>
+                  </div>
+                )}
+                {recentForm.netPnl7d !== null && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', lineHeight: 1.2, color: recentForm.netPnl7d >= 0 ? 'rgba(52,211,153,0.75)' : 'rgba(248,113,113,0.75)' }}>
+                      {formatSignedCurrency(recentForm.netPnl7d)}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>7d P&L</div>
+                  </div>
+                )}
+                {recentForm.avgPnl7d !== null && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', lineHeight: 1.2, color: recentForm.avgPnl7d >= 0 ? 'rgba(52,211,153,0.75)' : 'rgba(248,113,113,0.75)' }}>
+                      {formatSignedCurrency(recentForm.avgPnl7d)}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>avg/trade</div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
