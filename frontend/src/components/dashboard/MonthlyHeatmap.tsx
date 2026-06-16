@@ -1087,7 +1087,7 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
     };
     const parsed = selectedJournal ? parseJournalContent(selectedJournal.content) : fallbackTabs;
     const dayTrades = trades.filter(trade => trade.trade_date === activeJournalDate);
-    const pnl = dayTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+    const pnl = dayTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
 
     const tradesWithScore = dayTrades.filter(trade => typeof trade.plan_score === 'number');
     const tradesWithPlanLogged = tradesWithScore.length > 0

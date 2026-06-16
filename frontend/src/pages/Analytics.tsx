@@ -322,17 +322,18 @@ export default function Analytics() {
   }, [accountTrades, period, periodOffset, today]);
 
   const metrics = useMemo(() => {
-    const wins = filteredTrades.filter(trade => trade.pnl > 0);
-    const losses = filteredTrades.filter(trade => trade.pnl < 0);
+    const ep = (t: typeof filteredTrades[0]) => t.pnl - (t.commission ?? 0);
+    const wins = filteredTrades.filter(trade => ep(trade) > 0);
+    const losses = filteredTrades.filter(trade => ep(trade) < 0);
     const totalTrades = filteredTrades.length;
-    const netPnL = filteredTrades.reduce((sum, trade) => sum + trade.pnl, 0);
-    const grossProfit = wins.reduce((sum, trade) => sum + trade.pnl, 0);
-    const grossLoss = Math.abs(losses.reduce((sum, trade) => sum + trade.pnl, 0));
+    const netPnL = filteredTrades.reduce((sum, trade) => sum + ep(trade), 0);
+    const grossProfit = wins.reduce((sum, trade) => sum + ep(trade), 0);
+    const grossLoss = Math.abs(losses.reduce((sum, trade) => sum + ep(trade), 0));
     const scoredTrades = wins.length + losses.length;
     const winRate = scoredTrades > 0 ? (wins.length / scoredTrades) * 100 : 0;
     const profitFactor = grossLoss === 0 ? (grossProfit > 0 ? 999 : 0) : grossProfit / grossLoss;
     const avgWin = wins.length > 0 ? grossProfit / wins.length : 0;
-    const avgLoss = losses.length > 0 ? losses.reduce((sum, trade) => sum + trade.pnl, 0) / losses.length : 0;
+    const avgLoss = losses.length > 0 ? losses.reduce((sum, trade) => sum + ep(trade), 0) / losses.length : 0;
     const avgPnL = totalTrades > 0 ? netPnL / totalTrades : 0;
     const winRateDecimal = scoredTrades > 0 ? wins.length / scoredTrades : 0;
     const lossRateDecimal = scoredTrades > 0 ? losses.length / scoredTrades : 0;
@@ -540,7 +541,10 @@ export default function Analytics() {
   }, [filteredTrades, preferences.sessionTimes]);
 
   const streakStats = useMemo(() => {
-    const outcomes = filteredTrades.map(trade => (trade.pnl > 0 ? 1 : trade.pnl < 0 ? -1 : 0));
+    const outcomes = filteredTrades.map(trade => {
+      const net = trade.pnl - (trade.commission ?? 0);
+      return net > 0 ? 1 : net < 0 ? -1 : 0;
+    });
     const recent = outcomes.slice(-20);
 
     let currentType: 1 | -1 | 0 = 0;

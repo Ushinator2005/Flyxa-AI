@@ -1,5 +1,5 @@
 export type TradeDirection = 'LONG' | 'SHORT';
-export type TradeResult = 'win' | 'loss' | 'open';
+export type TradeResult = 'win' | 'loss' | 'open' | 'be';
 export type RuleState = 'ok' | 'fail' | 'unchecked';
 export type EmotionState = 'neutral' | 'green' | 'amber' | 'red';
 

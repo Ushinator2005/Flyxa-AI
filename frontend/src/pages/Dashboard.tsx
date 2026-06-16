@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp,
+  TrendingUp, Minus,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X,
 } from 'lucide-react';
 import { Btn, Badge, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
@@ -99,9 +99,11 @@ function DirBadge({ dir }: { dir: 'Long' | 'Short' }) {
 
 function ResultBadge({ trade }: { trade: Trade }) {
   const open = !trade.exit_price || trade.exit_price === 0;
-  if (open)          return <Badge tone="amber">OPEN</Badge>;
-  if (trade.pnl > 0) return <Badge tone="green">WIN</Badge>;
-  return                    <Badge tone="red">LOSS</Badge>;
+  if (open) return <Badge tone="amber">OPEN</Badge>;
+  const net = trade.pnl - (trade.commission ?? 0);
+  if (net > 0) return <Badge tone="green">WIN</Badge>;
+  if (net < 0) return <Badge tone="red">LOSS</Badge>;
+  return <Badge tone="amber">BE</Badge>;
 }
 
 
@@ -951,10 +953,12 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {todayTrades.map(trade => {
                     const open   = !trade.exit_price || trade.exit_price === 0;
-                    const isWin  = trade.pnl > 0;
-                    const badgeBg    = open ? AMBER_DIM   : isWin ? 'rgba(34,197,94,0.10)'  : RED_DIM;
-                    const badgeColor = open ? AMBER        : isWin ? GREEN                    : RED;
-                    const Icon       = open ? TrendingUp   : isWin ? ArrowUpRight             : ArrowDownRight;
+                    const net    = trade.pnl - (trade.commission ?? 0);
+                    const isWin  = !open && net > 0;
+                    const isBE   = !open && net === 0;
+                    const badgeBg    = open ? AMBER_DIM   : isWin ? 'rgba(34,197,94,0.10)'  : isBE ? AMBER_DIM : RED_DIM;
+                    const badgeColor = open ? AMBER        : isWin ? GREEN                    : isBE ? AMBER     : RED;
+                    const Icon       = open ? TrendingUp   : isWin ? ArrowUpRight             : isBE ? Minus     : ArrowDownRight;
                     return (
                       <div key={trade.id} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                         <span style={{ fontSize: 10, fontFamily: MONO, color: T3, flexShrink: 0, width: 36 }}>
@@ -967,8 +971,8 @@ export default function Dashboard() {
                           <div style={{ fontSize: 12, fontWeight: 450, color: T1, fontFamily: MONO }}>{trade.symbol}</div>
                           <div style={{ fontSize: 10, color: T3 }}>{trade.direction} · {trade.session}</div>
                         </div>
-                        <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontFeatureSettings: "'zero' 1", fontWeight: 500, flexShrink: 0, color: open ? AMBER : isWin ? GREEN : RED }}>
-                          {fmtUSD(trade.pnl)}
+                        <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontFeatureSettings: "'zero' 1", fontWeight: 500, flexShrink: 0, color: open ? AMBER : isWin ? GREEN : isBE ? AMBER : RED }}>
+                          {fmtUSD(net)}
                         </span>
                       </div>
                     );

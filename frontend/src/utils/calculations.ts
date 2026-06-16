@@ -46,11 +46,12 @@ export function calcConsecutive(trades: Trade[]): { wins: number; losses: number
       curWins++;
       curLosses = 0;
       if (curWins > maxWins) maxWins = curWins;
-    } else {
+    } else if (t.exit_reason === 'SL') {
       curLosses++;
       curWins = 0;
       if (curLosses > maxLosses) maxLosses = curLosses;
     }
+    // BE resets nothing — it breaks neither streak
   }
   return { wins: maxWins, losses: maxLosses };
 }

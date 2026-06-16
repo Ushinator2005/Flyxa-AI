@@ -197,7 +197,7 @@ function computeResult(pnl: number, exit: number | null): TradeResult {
   if (exit === null || !Number.isFinite(exit)) return 'open';
   if (pnl > 0) return 'win';
   if (pnl < 0) return 'loss';
-  return 'open';
+  return 'be';
 }
 
 const LEGACY_DEFAULT_RISK_RULE_IDS = new Set([
