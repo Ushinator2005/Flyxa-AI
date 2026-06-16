@@ -257,58 +257,38 @@ Any candle positioned to the RIGHT of this boundary is outside the trade — com
 If neither SL nor TP is touched within the P&L box boundary, set exit_reason to null.`
   : `Only scan candles that fall within the colored P&L overlay region. Do not read price action outside the box.`}
 
-PRIMARY SIGNAL — P&L RESULT LABEL (CHECK THIS BEFORE SCANNING CANDLES):
-On the RIGHT AXIS, TradingView shows a small colored rectangular label with the trade's dollar P&L result (e.g. "+$930" or "−$365").
-- Label is GREEN / has a positive number → trade was profitable → TP was hit
-- Label is RED / has a negative number → trade was a loss → SL was hit
-Use this label as your primary bias signal.
+DO NOT USE ANY COLOR OR SIZE BIAS — CANDLE WICKS ARE THE ONLY EVIDENCE.
+Do NOT use the background color of the teal zone, the red/pink zone, or any P&L label to decide the outcome.
+Those zone colors are fixed regardless of what happened. A large teal zone just means TP was far away — it says nothing about whether TP was hit.
+Do NOT use the size of either zone as a signal. Ignore all color cues. The answer comes only from candle wicks.
 
-WARNING — DO NOT use the fill color of the teal/green zone or the red/pink zone as your primary signal.
-Those zones are simply the two sides of the trade setup box: teal = the TP-side zone, red/pink = the SL-side zone.
-Their fill colors are FIXED regardless of outcome. A large teal zone does NOT mean TP was hit — it just means the TP was further away from entry.
-For asymmetric trades (e.g. TP is 46 pts away but SL is only 18 pts), the teal zone will dominate visually even when the SL (smaller zone) was what price actually hit. Do NOT be fooled by zone size.
+Starting from the entry candle (left edge of the P&L box), scan candles strictly left to right, one by one.
 
-If the P&L result label is not clearly visible, proceed to the candle scan below without any color bias.
+EXACT RULES — WHAT COUNTS AS A HIT:
+You must trace a horizontal line at the exact SL price and another at the exact TP price across the chart.
+A level is ONLY hit when a candle wick visually reaches or crosses that exact price line.
+Entering the colored zone is NOT enough — the wick must reach the FAR OUTER BOUNDARY of the zone (the price line itself).
 
-Starting from the entry candle (left edge of the P&L box), scan candles strictly left to right one by one.
-
-IMPORTANT — HOW TO CHECK IF A LEVEL WAS HIT:
-You must compare the actual pixel height of each candle wick against the pixel height of the SL/TP price line.
-A level is only hit if a candle wick visually reaches or crosses that exact price line on the chart.
-The colored price labels on the right axis are reference markers only — their presence does NOT mean price touched that level.
-Do NOT assume a level was hit just because the label is visible. Only count it if a candle wick inside the box clearly touches or crosses the price line.
-When in doubt about borderline cases (wick barely grazing the level), set exit_reason to null. However, if a candle clearly and unambiguously breaks through or beyond the outer boundary of the zone, record the SL/TP hit — do NOT apply doubt to obvious breaches.
-
-CRITICAL — COLORED ZONES vs ACTUAL PRICE LINES:
-The chart shows two filled colored zones that span from the entry price outward to the SL and TP levels.
-A candle merely entering a colored zone does NOT mean that level was hit — the candle must reach the FAR OUTER EDGE of the zone.
-- For SHORT trades: the SL line is the TOP boundary of the upper (red/pink) zone. The TP line is the BOTTOM boundary of the lower (teal/blue) zone. A candle that dips below entry and into the teal zone has NOT hit TP unless its LOW wick reaches all the way to the BOTTOM of that zone.
-- For LONG trades: the SL line is the BOTTOM boundary of the lower (red/pink) zone. The TP line is the TOP boundary of the upper (teal/green) zone. A candle that rises above entry and into the teal zone has NOT hit TP unless its HIGH wick reaches all the way to the TOP of that zone.
-IMPORTANT: If a candle wick extends BEYOND the outer boundary of a colored zone entirely — i.e., the wick tip is visually above the top of the red/pink zone for a SHORT trade, or below the bottom of the red/pink zone for a LONG trade — this is unambiguously an SL hit. A candle that breaks out past the colored zone is the clearest possible SL trigger. Do not treat this as a borderline case.
-Use the exact price numbers from Step 2 to anchor where each boundary is on the price axis. Only confirm a hit when the wick clearly reaches the price label for that level.
-
-CRITICAL MISTAKE TO AVOID — PARTIAL MOVE TOWARD TP BEFORE SL HIT:
-A very common error is to see price partially move toward TP early in the trade (candles entering the TP zone) and conclude TP was hit — when in reality price reversed and later hit SL.
-RULE: A candle entering the TP zone does NOT count as a TP hit. The wick must reach the FAR OUTER PRICE LINE (the actual TP label price). If the candle turns back before reaching that line, TP was NOT hit. Keep scanning — the SL hit may come later.
-Examples:
-- SHORT trade: a candle's LOW dips into the lower teal zone but does NOT reach the BOTTOM edge (tp_price) — this is NOT a TP hit. If a subsequent candle's HIGH reaches the TOP edge (sl_price), that is the SL hit.
-- LONG trade: a candle's HIGH enters the upper teal zone but does NOT reach the TOP edge (tp_price) — this is NOT a TP hit. If a subsequent candle's LOW reaches the BOTTOM edge (sl_price), that is the SL hit.
-
-ESPECIALLY WATCH FOR THIS PATTERN (tight SL, wide TP):
-When the SL zone is narrow (e.g. 18 pts) and the TP zone is wide (e.g. 46 pts), price will frequently enter deep into the TP zone before reversing. The large teal area will dominate the visual. This does NOT mean TP was hit. Only a wick that reaches the exact outer edge of the TP zone counts.
-
-For LONG trades:
-- SL hit: a candle LOW wick visibly touches or goes below the sl_price line (BOTTOM of lower zone)
-- TP hit: a candle HIGH wick visibly touches or exceeds the tp_price line (TOP of upper zone)
+Zone boundary clarification (applies to both LONG and SHORT):
+- The teal/blue zone spans from the entry price outward to tp_price. Its outer edge IS the TP line.
+- The red/pink zone spans from the entry price outward to sl_price. Its outer edge IS the SL line.
+- A candle that enters a zone but turns back before reaching the outer edge has NOT triggered that level. Keep scanning.
 
 For SHORT trades:
-- SL hit: a candle HIGH wick visibly touches or exceeds the sl_price line (TOP of upper zone)
-- TP hit: a candle LOW wick visibly touches or goes below the tp_price line (BOTTOM of lower zone)
+- SL hit: a candle HIGH wick reaches or exceeds sl_price (top edge of upper red/pink zone)
+- TP hit: a candle LOW wick reaches or goes below tp_price (bottom edge of lower teal zone)
 
-THE MOMENT either level is clearly touched within the box boundary, stop scanning immediately.
-Record exit_reason as 'TP' or 'SL'.
-IGNORE everything that happens after the first touch or after the right edge of the P&L box.
-NEVER use the live floating price label (the highlighted current price box on the right axis that shows where price is right now) as any trade level.
+For LONG trades:
+- SL hit: a candle LOW wick reaches or goes below sl_price (bottom edge of lower red/pink zone)
+- TP hit: a candle HIGH wick reaches or exceeds tp_price (top edge of upper teal zone)
+
+FIRST TOUCH RULE: The first candle (leftmost) that triggers either level decides the result. Stop scanning immediately at that candle.
+If price partially moves toward TP then reverses and hits SL — the result is SL, regardless of how far into the TP zone it went.
+NEVER stop scanning early just because price moved deep into one zone. You must check whether it actually reached the outer boundary.
+
+When in doubt on a borderline wick (barely grazing the line), set exit_reason to null.
+If a wick clearly breaks THROUGH the zone boundary (extends past the outer edge entirely), that is an unambiguous hit.
+NEVER use the live floating current-price label on the right axis as a trade level.
 
 STEP 5 — ESTIMATE DURATION:
 entry_time: Read the x-axis time label at the LEFT EDGE of the colored P&L box (where the box starts). This is when the trade was entered.
