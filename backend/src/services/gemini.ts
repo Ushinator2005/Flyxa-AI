@@ -257,11 +257,18 @@ Any candle positioned to the RIGHT of this boundary is outside the trade — com
 If neither SL nor TP is touched within the P&L box boundary, set exit_reason to null.`
   : `Only scan candles that fall within the colored P&L overlay region. Do not read price action outside the box.`}
 
-PRIMARY SIGNAL — P&L BOX BACKGROUND COLOR (CHECK THIS BEFORE SCANNING CANDLES):
-Look at the dominant background tint of the entire P&L overlay box:
-- Box is predominantly RED or PINK → the trade closed as a LOSS (SL was hit). Bias your candle scan toward finding the SL touch.
-- Box is predominantly TEAL or GREEN → the trade closed as a WIN (TP was hit). Bias your candle scan toward finding the TP touch.
-This box color is highly reliable. If your candle-by-candle analysis contradicts the box color, re-examine — you have likely made an error in the candle scan.
+PRIMARY SIGNAL — P&L RESULT LABEL (CHECK THIS BEFORE SCANNING CANDLES):
+On the RIGHT AXIS, TradingView shows a small colored rectangular label with the trade's dollar P&L result (e.g. "+$930" or "−$365").
+- Label is GREEN / has a positive number → trade was profitable → TP was hit
+- Label is RED / has a negative number → trade was a loss → SL was hit
+Use this label as your primary bias signal.
+
+WARNING — DO NOT use the fill color of the teal/green zone or the red/pink zone as your primary signal.
+Those zones are simply the two sides of the trade setup box: teal = the TP-side zone, red/pink = the SL-side zone.
+Their fill colors are FIXED regardless of outcome. A large teal zone does NOT mean TP was hit — it just means the TP was further away from entry.
+For asymmetric trades (e.g. TP is 46 pts away but SL is only 18 pts), the teal zone will dominate visually even when the SL (smaller zone) was what price actually hit. Do NOT be fooled by zone size.
+
+If the P&L result label is not clearly visible, proceed to the candle scan below without any color bias.
 
 Starting from the entry candle (left edge of the P&L box), scan candles strictly left to right one by one.
 
@@ -286,6 +293,9 @@ RULE: A candle entering the TP zone does NOT count as a TP hit. The wick must re
 Examples:
 - SHORT trade: a candle's LOW dips into the lower teal zone but does NOT reach the BOTTOM edge (tp_price) — this is NOT a TP hit. If a subsequent candle's HIGH reaches the TOP edge (sl_price), that is the SL hit.
 - LONG trade: a candle's HIGH enters the upper teal zone but does NOT reach the TOP edge (tp_price) — this is NOT a TP hit. If a subsequent candle's LOW reaches the BOTTOM edge (sl_price), that is the SL hit.
+
+ESPECIALLY WATCH FOR THIS PATTERN (tight SL, wide TP):
+When the SL zone is narrow (e.g. 18 pts) and the TP zone is wide (e.g. 46 pts), price will frequently enter deep into the TP zone before reversing. The large teal area will dominate the visual. This does NOT mean TP was hit. Only a wick that reaches the exact outer edge of the TP zone counts.
 
 For LONG trades:
 - SL hit: a candle LOW wick visibly touches or goes below the sl_price line (BOTTOM of lower zone)
