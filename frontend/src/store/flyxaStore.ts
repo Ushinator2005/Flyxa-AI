@@ -342,7 +342,7 @@ function normalizeTradeUnknown(input: unknown, entryId: string, date: string, ac
     contracts: Math.max(1, asNumber(input.contracts, 1)),
     rr: asNumber(input.rr, 0),
     pnl: asNumber(input.pnl, 0),
-    result: input.result === 'win' || input.result === 'loss' || input.result === 'open' ? input.result : 'open',
+    result: input.result === 'win' || input.result === 'loss' || input.result === 'open' || input.result === 'be' ? input.result : 'open',
     time: asString(typeof input.time === 'string' ? input.time : input.entryTime, '09:30').slice(0, 5),
     exitTime: typeof input.exitTime === 'string' ? input.exitTime.slice(0, 5) : null,
     duration: (() => {

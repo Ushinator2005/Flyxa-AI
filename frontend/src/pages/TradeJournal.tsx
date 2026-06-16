@@ -2187,6 +2187,9 @@ export default function TradeJournal() {
   const [query, setQuery] = useState('');
   const [activeTradeId, setActiveTradeId] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(true);
+  // Optimistic ref: holds a just-created blank entry until the Zustand store
+  // propagates it, preventing a render where selectedEntry is briefly null.
+  const optimisticEntryRef = useRef<JournalEntry | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scanPreviewUrl, setScanPreviewUrl] = useState('');
@@ -2351,10 +2354,19 @@ export default function TradeJournal() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [dayFilter, entriesInMonth, query]);
 
-  const selectedEntry = useMemo(
-    () => entries.find(entry => entry.id === selectedEntryId) ?? null,
-    [entries, selectedEntryId],
-  );
+  const selectedEntry = useMemo(() => {
+    const fromStore = entries.find(entry => entry.id === selectedEntryId) ?? null;
+    if (fromStore) {
+      optimisticEntryRef.current = null; // store has caught up — clear optimistic
+      return fromStore;
+    }
+    // Fallback: if we just created this entry optimistically, use it until the
+    // Zustand store propagates (prevents ScannerDropZone re-appearing for one render).
+    if (optimisticEntryRef.current?.id === selectedEntryId) {
+      return optimisticEntryRef.current;
+    }
+    return null;
+  }, [entries, selectedEntryId]);
 
   const activeTrade = useMemo(() => {
     if (!selectedEntry || !selectedEntry.trades.length) return null;
@@ -2393,6 +2405,9 @@ export default function TradeJournal() {
       return;
     }
     const blank = createEmptyEntry(date, rulesTemplate);
+    // Set optimistic ref BEFORE the Zustand write so that selectedEntry is
+    // non-null on the very first render after state updates apply.
+    optimisticEntryRef.current = blank;
     mutateEntries(prev => [blank, ...prev]);
     setSelectedEntryId(blank.id);
     setShowScanner(false);
