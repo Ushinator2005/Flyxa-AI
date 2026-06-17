@@ -614,8 +614,8 @@ export default function Dashboard() {
                               {trade.symbol || 'N/A'}
                             </span>
                           </div>
-                          <span style={{ fontSize: 13, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontWeight: 500, flexShrink: 0, color: trade.pnl > 0 ? GREEN : trade.pnl < 0 ? RED : AMBER }}>
-                            {fmtUSD(trade.pnl)}
+                          <span style={{ fontSize: 13, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontWeight: 500, flexShrink: 0, color: trade.pnl - (trade.commission ?? 0) > 0 ? GREEN : trade.pnl - (trade.commission ?? 0) < 0 ? RED : AMBER }}>
+                            {fmtUSD(trade.pnl - (trade.commission ?? 0))}
                           </span>
                         </div>
                         {/* Row 2: Date · R:R | Result + actions */}
@@ -714,8 +714,8 @@ export default function Dashboard() {
                             <td style={{ padding: '9px 14px', fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontSize: 12, color: T2 }}>
                               {rrVal !== null ? fmtRR(rrVal) : '—'}
                             </td>
-                            <td style={{ padding: '9px 14px', textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 400, color: trade.pnl > 0 ? GREEN : trade.pnl < 0 ? RED : AMBER }}>
-                              {fmtUSD(trade.pnl)}
+                            <td style={{ padding: '9px 14px', textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 400, color: trade.pnl - (trade.commission ?? 0) > 0 ? GREEN : trade.pnl - (trade.commission ?? 0) < 0 ? RED : AMBER }}>
+                              {fmtUSD(trade.pnl - (trade.commission ?? 0))}
                             </td>
                             <td style={{ padding: '9px 14px', textAlign: 'right' }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

@@ -289,16 +289,17 @@ function tradeR(trade?: Partial<Trade> | null): number {
 
 function summarize(trades: Trade[]) {
   const rs = trades.map(tradeR);
-  const winners = trades.filter(t => t.pnl > 0);
-  const losers = trades.filter(t => t.pnl < 0);
+  const ep = (t: Trade) => Number(t.pnl ?? 0) - Number(t.commission ?? 0);
+  const winners = trades.filter(t => ep(t) > 0);
+  const losers = trades.filter(t => ep(t) < 0);
   const winnerRs = winners.map(tradeR);
   const loserRs = losers.map(tradeR);
-  const pnls = trades.map(trade => Number(trade.pnl ?? 0));
-  const winnerPnls = winners.map(trade => Number(trade.pnl ?? 0));
-  const loserPnls = losers.map(trade => Number(trade.pnl ?? 0));
+  const pnls = trades.map(ep);
+  const winnerPnls = winners.map(ep);
+  const loserPnls = losers.map(ep);
   return {
     netR: rs.reduce((s, r) => s + r, 0),
-    netPnl: trades.reduce((sum, trade) => sum + Number(trade.pnl ?? 0), 0),
+    netPnl: trades.reduce((sum, trade) => sum + ep(trade), 0),
     avgPnl: avg(pnls),
     avgR: avg(rs),
     winRate: pct(winners.length, winners.length + losers.length),
@@ -681,7 +682,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
     const tradeConfluences = normalizeConfluences(trade.confluences);
     if (!tradeConfluences.length) return;
     const tradeConfluenceSet = new Set(tradeConfluences.map(confluence => confluence.toLowerCase()));
-    const currentPnl = Number(trade.pnl ?? 0);
+    const currentPnl = Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
 
     tradeConfluenceSet.forEach(confluenceKey => {
       const label = tradeConfluences.find(confluence => confluence.toLowerCase() === confluenceKey) ?? confluenceKey;
@@ -693,7 +694,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
       };
       current.trades += 1;
       current.netPnl += currentPnl;
-      if (trade.pnl > 0) current.wins += 1;
+      if (currentPnl > 0) current.wins += 1;
       confluenceGroups.set(confluenceKey, current);
     });
   });
@@ -1361,7 +1362,7 @@ export default function FlyxaAI() {
     const padTop = 4;
     const padBottom = 6;
     const chartHeight = height - padTop - padBottom;
-    const pnls = weeklyWindow.weeklyTrades.map(trade => Number(trade.pnl ?? 0));
+    const pnls = weeklyWindow.weeklyTrades.map(trade => Number(trade.pnl ?? 0) - Number(trade.commission ?? 0));
     const cumulative: number[] = [0];
     pnls.forEach(pnl => cumulative.push((cumulative[cumulative.length - 1] ?? 0) + pnl));
     const min = Math.min(0, ...cumulative);
@@ -1407,7 +1408,7 @@ export default function FlyxaAI() {
   const bestTrade = useMemo(() => {
     if (!weeklyWindow.weeklyTrades.length) return null;
     const ranked = weeklyWindow.weeklyTrades
-      .map(trade => ({ trade, pnl: Number(trade.pnl ?? 0) }))
+      .map(trade => ({ trade, pnl: Number(trade.pnl ?? 0) - Number(trade.commission ?? 0) }))
       .sort((a, b) => b.pnl - a.pnl);
     const top = ranked[0];
     if (!top) return null;

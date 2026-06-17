@@ -315,7 +315,7 @@ export default function Analytics() {
       const tradeDate = parseTradeDateOnly(trade);
       if (!tradeDate) return sum;
       if (tradeDate >= prev.start && tradeDate < prev.end) {
-        return sum + trade.pnl;
+        return sum + trade.pnl - (trade.commission ?? 0);
       }
       return sum;
     }, 0);
@@ -349,7 +349,7 @@ export default function Analytics() {
     const tradesPerDay = activeDays > 0 ? totalTrades / activeDays : 0;
     const avgWinHold = safeAverage(wins.map(trade => trade.trade_length_seconds || 0));
     const avgLossHold = safeAverage(losses.map(trade => trade.trade_length_seconds || 0));
-    const largestLoss = losses.length > 0 ? Math.min(...losses.map(trade => trade.pnl)) : 0;
+    const largestLoss = losses.length > 0 ? Math.min(...losses.map(trade => trade.pnl - (trade.commission ?? 0))) : 0;
 
     return {
       wins,
@@ -382,7 +382,7 @@ export default function Analytics() {
     filteredTrades.forEach(trade => {
       const key = trade.trade_date || trade.created_at?.slice(0, 10);
       if (!key) return;
-      grouped.set(key, (grouped.get(key) ?? 0) + trade.pnl);
+      grouped.set(key, (grouped.get(key) ?? 0) + (trade.pnl - (trade.commission ?? 0)));
     });
 
     // Collect all dates (trades + payouts)
@@ -435,7 +435,7 @@ export default function Analytics() {
 
   const pnlDistribution = useMemo(() => {
     if (filteredTrades.length < 2) return null;
-    const pnls = filteredTrades.map(t => t.pnl);
+    const pnls = filteredTrades.map(t => t.pnl - (t.commission ?? 0));
     const minVal = Math.min(...pnls);
     const maxVal = Math.max(...pnls);
     if (maxVal - minVal < 0.01) return null;
@@ -446,11 +446,12 @@ export default function Analytics() {
     // Group trades into x-bins, sorted by pnl for deterministic order
     const bins = new Map<number, { pnl: number; isPositive: boolean }[]>();
     [...filteredTrades]
-      .sort((a, b) => a.pnl - b.pnl)
+      .sort((a, b) => (a.pnl - (a.commission ?? 0)) - (b.pnl - (b.commission ?? 0)))
       .forEach(trade => {
-        const key = Math.floor((trade.pnl - minVal) / binWidth);
+        const netPnl = trade.pnl - (trade.commission ?? 0);
+        const key = Math.floor((netPnl - minVal) / binWidth);
         const bin = bins.get(key) ?? [];
-        bin.push({ pnl: trade.pnl, isPositive: trade.pnl >= 0 });
+        bin.push({ pnl: netPnl, isPositive: netPnl >= 0 });
         bins.set(key, bin);
       });
 
@@ -470,7 +471,7 @@ export default function Analytics() {
     const absExtreme = Math.max(Math.abs(minVal), Math.abs(maxVal));
     const step = absExtreme * 2 < 200 ? 10 : absExtreme * 2 < 1000 ? 100 : absExtreme * 2 < 5000 ? 500 : 1000;
     const domainExtent = Math.ceil((absExtreme * 1.15) / step) * step;
-    const meanPnL = filteredTrades.reduce((sum, t) => sum + t.pnl, 0) / filteredTrades.length;
+    const meanPnL = filteredTrades.reduce((sum, t) => sum + t.pnl - (t.commission ?? 0), 0) / filteredTrades.length;
 
     return {
       wins: dots.filter(d => d.isPositive),
@@ -507,7 +508,7 @@ export default function Analytics() {
       if (!tradeDate) return;
       const dayLabel = DAY_LABELS[tradeDate.getDay()];
       if (dayLabel in values) {
-        values[dayLabel] += trade.pnl;
+        values[dayLabel] += trade.pnl - (trade.commission ?? 0);
       }
     });
 
@@ -525,7 +526,7 @@ export default function Analytics() {
     filteredTrades.forEach(trade => {
       const sessionKey = getSessionKeyForTime(trade.trade_time, preferences.sessionTimes);
       if (!totals.has(sessionKey)) return;
-      totals.set(sessionKey, (totals.get(sessionKey) ?? 0) + trade.pnl);
+      totals.set(sessionKey, (totals.get(sessionKey) ?? 0) + (trade.pnl - (trade.commission ?? 0)));
     });
 
     const maxAbs = Math.max(1, ...SESSION_BUCKETS.map(item => Math.abs(totals.get(item.key) ?? 0)));
@@ -606,7 +607,7 @@ export default function Analytics() {
         sumPnL: 0,
       };
       current.count += 1;
-      current.sumPnL += trade.pnl;
+      current.sumPnL += trade.pnl - (trade.commission ?? 0);
       bucketMap.set(bucketStart, current);
     });
 
@@ -657,8 +658,8 @@ export default function Analytics() {
           netPnL: 0,
         };
         current.trades += 1;
-        current.netPnL += trade.pnl;
-        if (trade.pnl > 0) current.wins += 1;
+        current.netPnL += trade.pnl - (trade.commission ?? 0);
+        if (trade.pnl - (trade.commission ?? 0) > 0) current.wins += 1;
         grouped.set(key, current);
       });
     });
@@ -699,7 +700,7 @@ export default function Analytics() {
           netPnL: 0,
         };
         current.count += 1;
-        current.netPnL += trade.pnl;
+        current.netPnL += trade.pnl - (trade.commission ?? 0);
         grouped.set(key, current);
       });
     });

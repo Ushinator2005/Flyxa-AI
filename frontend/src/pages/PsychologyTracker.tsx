@@ -119,7 +119,7 @@ function compareTradeGroups(label: string, strongTrades: RichTrade[], weakTrades
     const closed = trades.filter(trade => trade.result !== 'open');
     return {
       count: closed.length,
-      pnl: closed.reduce((sum, trade) => sum + trade.pnl, 0),
+      pnl: closed.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
       winRate: pct(closed.filter(trade => trade.result === 'win').length, closed.length),
     };
   };
@@ -240,7 +240,7 @@ export default function PsychologyTracker() {
       (trade.behavioralFlags ?? []).forEach(flag => {
         const row = rows.get(flag) ?? { label: FLAG_LABELS[flag] ?? flag, count: 0, pnl: 0 };
         row.count += 1;
-        row.pnl += trade.pnl;
+        row.pnl += trade.pnl - (trade.commission ?? 0);
         rows.set(flag, row);
       });
     });
@@ -256,7 +256,7 @@ export default function PsychologyTracker() {
       labels.forEach(label => {
         const row = rows.get(label) ?? { label, count: 0, pnl: 0 };
         row.count += 1;
-        row.pnl += trade.pnl;
+        row.pnl += trade.pnl - (trade.commission ?? 0);
         rows.set(label, row);
       });
     });
@@ -280,7 +280,7 @@ export default function PsychologyTracker() {
   const guidance = useMemo(() => {
     const items: Array<{ title: string; body: string; tone: Tone; icon: typeof Brain }> = [];
     if (metrics.flaggedTrades.length > 0) {
-      const cost = metrics.flaggedTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+      const cost = metrics.flaggedTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
       items.push({
         title: 'Behavioral Cost',
         body: `${metrics.flaggedTrades.length} flagged trade${metrics.flaggedTrades.length !== 1 ? 's' : ''} total ${formatCurrency(cost)}. Review the top flag before your next session.`,

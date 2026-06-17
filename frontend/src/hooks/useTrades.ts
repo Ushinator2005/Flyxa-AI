@@ -239,6 +239,7 @@ export function toApiTrade(trade: StoreTrade): ApiTrade {
     exit_reason: trade.result === 'win' ? 'TP' : trade.result === 'loss' ? 'SL' : 'BE',
     pnl: trade.pnl,
     pnlOverride: typeof trade.pnlOverride === 'number' ? trade.pnlOverride : undefined,
+    commission: typeof trade.commission === 'number' ? trade.commission : undefined,
     contract_size: trade.contracts,
     point_value: 1,
     trade_date: trade.date,
