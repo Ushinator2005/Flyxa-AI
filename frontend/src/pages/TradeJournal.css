@@ -402,18 +402,27 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 18px 24px 16px;
+  padding: 14px 20px 14px 18px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-left: 3px solid transparent;
+  background: var(--surface-1);
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.tj-head-left {
+  min-width: 0;
 }
 
 .tj-entry-title {
-  margin: 0 0 3px;
-  font-size: 18px;
-  font-weight: 600;
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   color: var(--txt);
 }
 
@@ -421,6 +430,27 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.tj-entry-acct {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--txt-2);
+}
+
+.tj-entry-acct-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tj-entry-acct-sep {
+  color: var(--txt-3);
 }
 
 .tj-entry-sub {
@@ -434,13 +464,30 @@
   font-weight: 500;
 }
 
+.tj-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tj-head-pnl {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
 .tj-head-actions {
   display: flex;
   gap: 8px;
 }
 
 .tj-date-edit-row {
-  margin-top: 8px;
+  margin-top: 6px;
   display: inline-flex;
   align-items: center;
   gap: 6px;

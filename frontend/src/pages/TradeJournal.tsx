@@ -3073,81 +3073,98 @@ export default function TradeJournal() {
       <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
         {!showScanner && selectedEntry ? (
           <>
-            <div className="tj-sticky-head">
-              <div>
-                <div className="tj-entry-title-row">
-                  <p className="tj-entry-title">{formatDateTitle(selectedEntry.date)}</p>
+            {(() => {
+              const resolvedId = selectedAccountId && selectedAccountId !== DEFAULT_ACCOUNT_ID
+                ? selectedAccountId
+                : activeTrade?.accountId;
+              const acct = accounts.find(a => a.id === resolvedId);
+              const entryStats = computeEntryStats(selectedEntry);
+              const pnlAccent = entryStats.tradeCount === 0
+                ? 'var(--border)'
+                : entryStats.pnl > 0
+                  ? 'var(--green)'
+                  : entryStats.pnl < 0
+                    ? 'var(--red)'
+                    : 'var(--txt-3)';
+              return (
+                <div className="tj-sticky-head" style={{ borderLeftColor: pnlAccent }}>
+                  <div className="tj-head-left">
+                    <p className="tj-entry-title">{formatDateTitle(selectedEntry.date)}</p>
+                    {acct && (
+                      <div className="tj-entry-acct">
+                        <span className="tj-entry-acct-dot" style={{ background: acct.color ?? 'var(--txt-3)' }} />
+                        <span>{acct.name}</span>
+                        <span className="tj-entry-acct-sep">·</span>
+                        <span>{acct.type}</span>
+                      </div>
+                    )}
+                    {activeTrade && !deleteEntryConfirm && (
+                      <div className="tj-date-edit-row">
+                        <span className="tj-entry-sub" style={{ margin: 0 }}>
+                          Trade date: {getTradeDateValue(activeTrade, selectedEntry.date)}
+                        </span>
+                        <button
+                          type="button"
+                          className="tj-mini-btn"
+                          onClick={() => {
+                            setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
+                            setIsTradeDateEditorOpen(true);
+                          }}
+                        >
+                          Edit trade date
+                        </button>
+                      </div>
+                    )}
+                    {isTradeDateEditorOpen && activeTrade && !deleteEntryConfirm && (
+                      <div className="tj-date-edit-row">
+                        <DatePicker
+                          className="tj-date-edit-input"
+                          value={tradeDateDraft}
+                          onChange={setTradeDateDraft}
+                          compact
+                          align="left"
+                          max={getTodayIso(preferences.timezone)}
+                        />
+                        <button type="button" className="tj-mini-btn" onClick={saveTradeDate}>Save</button>
+                        <button type="button" className="tj-mini-btn" onClick={() => {
+                          setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
+                          setIsTradeDateEditorOpen(false);
+                        }}>
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="tj-head-right">
+                    {entryStats.tradeCount > 0 && (
+                      <p className="tj-head-pnl" style={{ color: pnlAccent }}>
+                        {formatSignedCurrency(entryStats.pnl)}
+                      </p>
+                    )}
+                    <div className="tj-head-actions">
+                      {deleteEntryConfirm ? (
+                        <>
+                          <span className="tj-delete-text">Delete this day?</span>
+                          <button type="button" className="tj-mini-btn" onClick={() => setDeleteEntryConfirm(false)}>Cancel</button>
+                          <button type="button" className="tj-mini-btn red" onClick={deleteEntry}>Delete</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="tj-btn-ghost" onClick={() => setDeleteEntryConfirm(true)}>
+                            <Trash2 size={13} />
+                            Delete
+                          </button>
+                          <button type="button" className="tj-btn-primary tj-btn-save" onClick={goToScanner} data-tour-id="scanner-log-trade-button">
+                            <Plus size={13} />
+                            Log trade
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <p className="tj-entry-sub">
-                  {(() => {
-                    // Use the globally selected account; fall back to the trade's own account
-                    // when "All Accounts" is active or the selected account can't be found.
-                    const resolvedId =
-                      selectedAccountId && selectedAccountId !== DEFAULT_ACCOUNT_ID
-                        ? selectedAccountId
-                        : activeTrade?.accountId;
-                    const acct = accounts.find(a => a.id === resolvedId);
-                    return acct ? `${acct.name} | ${acct.type}` : null;
-                  })()} | <strong>{formatSignedCurrency(computeEntryStats(selectedEntry).pnl)}</strong>
-                </p>
-                {activeTrade && !deleteEntryConfirm && (
-                  <div className="tj-date-edit-row">
-                    <span className="tj-entry-sub" style={{ margin: 0 }}>
-                      Trade date: {getTradeDateValue(activeTrade, selectedEntry.date)}
-                    </span>
-                    <button
-                      type="button"
-                      className="tj-mini-btn"
-                      onClick={() => {
-                        setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
-                        setIsTradeDateEditorOpen(true);
-                      }}
-                    >
-                      Edit trade date
-                    </button>
-                  </div>
-                )}
-                {isTradeDateEditorOpen && activeTrade && !deleteEntryConfirm && (
-                  <div className="tj-date-edit-row">
-                    <DatePicker
-                      className="tj-date-edit-input"
-                      value={tradeDateDraft}
-                      onChange={setTradeDateDraft}
-                      compact
-                      align="left"
-                      max={getTodayIso(preferences.timezone)}
-                    />
-                    <button type="button" className="tj-mini-btn" onClick={saveTradeDate}>Save</button>
-                    <button type="button" className="tj-mini-btn" onClick={() => {
-                      setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
-                      setIsTradeDateEditorOpen(false);
-                    }}>
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="tj-head-actions">
-                {deleteEntryConfirm ? (
-                  <>
-                    <span className="tj-delete-text">Delete this day?</span>
-                    <button type="button" className="tj-mini-btn" onClick={() => setDeleteEntryConfirm(false)}>Cancel</button>
-                    <button type="button" className="tj-mini-btn red" onClick={deleteEntry}>Delete</button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" className="tj-btn-ghost" onClick={() => setDeleteEntryConfirm(true)}>
-                      <Trash2 size={13} />
-                      Delete
-                    </button>
-                    <button type="button" className="tj-btn-primary tj-btn-save" onClick={goToScanner} data-tour-id="scanner-log-trade-button">
-                      <Plus size={13} />
-                      Log trade
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+              );
+            })()}
 
             <div className="tj-entry-body">
               <div className="tj-stats" data-tour-id="scanner-trade-stats">
