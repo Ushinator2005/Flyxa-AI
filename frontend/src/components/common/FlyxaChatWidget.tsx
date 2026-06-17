@@ -83,7 +83,7 @@ RECENT TRADES (last 20):
 ${recent.map(trade =>
 `  ${trade.date} ${trade.symbol} ${trade.direction} | Entry ${trade.entry} |
    SL ${trade.sl} | TP ${trade.tp} | Exit ${trade.exit ?? 'OPEN'} |
-   P&L ${formatCurrency(trade.pnl)} | R:R ${trade.rr.toFixed(2)} | ${trade.result.toUpperCase()}`
+   P&L ${formatCurrency(trade.pnl - (trade.commission ?? 0))} | R:R ${trade.rr.toFixed(2)} | ${trade.result.toUpperCase()}`
 ).join('\n')}
 
 PSYCHOLOGY TREND (last 7 days):

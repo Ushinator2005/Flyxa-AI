@@ -1527,7 +1527,7 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
   const tradeIndex = dayTrades.findIndex(t => t.id === trade.id);
   const tradeNumber = tradeIndex + 1;
   const prevTrades = dayTrades.slice(0, tradeIndex);
-  const dailyPnlBefore = prevTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+  const dailyPnlBefore = prevTrades.reduce((sum, t) => sum + (t.pnl ?? 0) - (t.commission ?? 0), 0);
   const prevWasLoss = tradeIndex > 0 && (dayTrades[tradeIndex-1]?.result === 'loss');
   const isThirdPlus = tradeNumber >= 3;
 
