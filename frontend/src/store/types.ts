@@ -26,6 +26,7 @@ export interface Trade {
   rr: number;
   pnl: number;
   pnlOverride?: number;
+  commission?: number;
   result: TradeResult;
   time: string;
   exitTime: string | null;

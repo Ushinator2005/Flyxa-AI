@@ -61,12 +61,12 @@ export const useDashboardStats = () => {
     const todayTrades = trades.filter((trade) => trade.date === today);
 
     return {
-      netPnL: trades.reduce((sum, trade) => sum + trade.pnl, 0),
+      netPnL: trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
       winRate: trades.length ? (wins.length / Math.max(1, wins.length + losses.length)) * 100 : 0,
       avgRR: trades.length ? trades.reduce((sum, trade) => sum + trade.rr, 0) / trades.length : 0,
       totalTrades: trades.length,
       todayTrades,
-      todayPnL: todayTrades.reduce((sum, trade) => sum + trade.pnl, 0),
+      todayPnL: todayTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
     };
   }, [trades]);
 };
@@ -80,7 +80,7 @@ export const useMonthlyPnLByDay = (year: number, month: number) => {
     })
     .map((entry) => ({
       date: entry.date,
-      pnl: entry.trades.reduce((sum, trade) => sum + trade.pnl, 0),
+      pnl: entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
       trades: entry.trades.length,
       grade: entry.grade,
     })), [entries, month, year]);
@@ -94,7 +94,7 @@ export const useEquityCurve = () => {
     return [...entries]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((entry) => {
-        const dayPnL = entry.trades.reduce((sum, trade) => sum + trade.pnl, 0);
+        const dayPnL = entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
         running += dayPnL;
         return { date: entry.date, equity: running, pnl: dayPnL };
       });
@@ -115,7 +115,7 @@ export const useSetupPerformance = () => {
       trades: symbolTrades.length,
       winRate: (symbolTrades.filter((trade) => trade.result === 'win').length / Math.max(1, symbolTrades.length)) * 100,
       avgRR: symbolTrades.reduce((sum, trade) => sum + trade.rr, 0) / Math.max(1, symbolTrades.length),
-      totalPnL: symbolTrades.reduce((sum, trade) => sum + trade.pnl, 0),
+      totalPnL: symbolTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
     }));
   }, [trades]);
 };
@@ -136,7 +136,7 @@ export const usePerformanceByHour = () => {
       hour: Number.parseInt(hour, 10),
       trades: hourTrades.length,
       winRate: (hourTrades.filter((trade) => trade.result === 'win').length / Math.max(1, hourTrades.length)) * 100,
-      avgPnL: hourTrades.reduce((sum, trade) => sum + trade.pnl, 0) / Math.max(1, hourTrades.length),
+      avgPnL: hourTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0) / Math.max(1, hourTrades.length),
     }));
   }, [trades]);
 };
@@ -148,7 +148,7 @@ export const usePsychologyCorrelation = () => {
     discipline: entry.psychology.discipline,
     setupQuality: entry.psychology.setupQuality,
     execution: entry.psychology.execution,
-    pnl: entry.trades.reduce((sum, trade) => sum + trade.pnl, 0),
+    pnl: entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
     winRate: entry.trades.length
       ? (entry.trades.filter((trade) => trade.result === 'win').length / entry.trades.length) * 100
       : 0,
@@ -160,7 +160,7 @@ export const useDailyLossUsed = () => {
   const todayTrades = useTradesInRange(startOfToday(), endOfToday());
 
   return useMemo(() => {
-    const todayPnL = todayTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+    const todayPnL = todayTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
     const used = Math.min(0, todayPnL);
     const limit = account?.dailyLossLimit ?? 0;
     return {
