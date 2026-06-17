@@ -2,8 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(2, 6, 23, 0.55);
-  backdrop-filter: blur(3px);
+  background: transparent;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.22s ease;
@@ -20,14 +19,14 @@
   right: 0;
   z-index: 60;
   height: 100vh;
-  width: min(380px, 100vw);
+  width: min(360px, 100vw);
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.26s ease;
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   border-left: 1px solid var(--app-border);
   background: var(--app-panel);
-  box-shadow: -24px 0 48px rgba(2, 6, 23, 0.45);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25);
 }
 
 .rival-chat-panel.open {
@@ -180,9 +179,9 @@
 }
 
 .rival-chat-msg.me {
-  border: 1px solid rgba(96, 165, 250, 0.28);
-  background: rgba(96, 165, 250, 0.1);
-  color: #dfeaff;
+  border: 1px solid var(--amber-border);
+  background: var(--amber-dim);
+  color: var(--app-text);
   border-bottom-right-radius: 4px;
 }
 
@@ -226,16 +225,16 @@
 }
 
 .rival-chat-input:focus {
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: var(--amber-border);
 }
 
 .rival-chat-send {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  border: 1px solid rgba(96, 165, 250, 0.38);
-  background: rgba(96, 165, 250, 0.14);
-  color: #93c5fd;
+  border: 1px solid var(--amber-border);
+  background: var(--amber-dim);
+  color: var(--amber);
   display: inline-flex;
   align-items: center;
   justify-content: center;
