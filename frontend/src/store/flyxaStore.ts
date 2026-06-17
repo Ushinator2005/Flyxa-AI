@@ -265,7 +265,7 @@ function recalcTrade(trade: Trade): Trade {
     exit,
     pnl,
     rr,
-    result: computeResult(pnl, exit),
+    result: computeResult(pnl - (trade.commission ?? 0), exit),
   };
 }
 

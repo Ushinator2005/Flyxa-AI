@@ -548,9 +548,11 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
         const exitPrice = typeof trade.exitPrice === 'number' && trade.exitPrice > 0 ? trade.exitPrice : typeof trade.exit === 'number' && trade.exit > 0 ? trade.exit : 0;
         const contracts = typeof trade.contracts === 'number' && trade.contracts > 0 ? trade.contracts : 1;
         const pnl = typeof trade.pnl === 'number' ? trade.pnl : 0;
+        const tradeCommission = typeof trade.commission === 'number' ? trade.commission : 0;
+        const netPnl = pnl - tradeCommission;
         const result: TradeResult = trade.result === 'win' || trade.result === 'loss' || trade.result === 'open' || trade.result === 'be'
           ? trade.result
-          : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'open';
+          : netPnl > 0 ? 'win' : netPnl < 0 ? 'loss' : 'open';
         const tradeRef = (() => {
           const r = trade.reflection as Record<string, unknown> | undefined;
           if (!r || typeof r !== 'object') return undefined;
