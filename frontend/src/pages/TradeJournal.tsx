@@ -2908,22 +2908,17 @@ export default function TradeJournal() {
 
         {/* Recent Form */}
         {recentForm.last10.length > 0 && (
-          <div style={{ padding: '10px 14px 10px', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' } as React.CSSProperties}>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--txt-3)', margin: '0 0 8px' }}>
-              Recent Form
-            </p>
-            {/* Equity curve sparkline */}
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border)' }}>
+            {/* Sparkline */}
             {recentForm.sparkPoints.length >= 2 && (
-              <svg viewBox="0 0 240 48" width="100%" height={48} style={{ display: 'block', overflow: 'visible' }}>
+              <svg viewBox="0 0 240 36" width="100%" height={36} style={{ display: 'block', overflow: 'visible' }}>
                 <defs>
                   <linearGradient id="rfSparkGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0.22} />
+                    <stop offset="0%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0.18} />
                     <stop offset="100%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                {/* Zero / breakeven line */}
-                <line x1={4} y1={recentForm.sparkZeroY} x2={236} y2={recentForm.sparkZeroY} stroke="rgba(255,255,255,0.12)" strokeWidth={1} strokeDasharray="3,3" />
-                {/* Area fill */}
+                <line x1={4} y1={recentForm.sparkZeroY} x2={236} y2={recentForm.sparkZeroY} stroke="rgba(255,255,255,0.08)" strokeWidth={1} strokeDasharray="3,3" />
                 <polygon
                   points={[
                     `${recentForm.sparkPoints[0].x.toFixed(1)},${recentForm.sparkZeroY.toFixed(1)}`,
@@ -2932,7 +2927,6 @@ export default function TradeJournal() {
                   ].join(' ')}
                   fill="url(#rfSparkGrad)"
                 />
-                {/* Line */}
                 <polyline
                   points={recentForm.sparkPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
                   fill="none"
@@ -2941,7 +2935,6 @@ export default function TradeJournal() {
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
-                {/* End dot */}
                 <circle
                   cx={recentForm.sparkPoints[recentForm.sparkPoints.length - 1].x}
                   cy={recentForm.sparkPoints[recentForm.sparkPoints.length - 1].y}
@@ -2950,42 +2943,24 @@ export default function TradeJournal() {
                 />
               </svg>
             )}
-            {/* W/L count */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '6px 0 9px' }}>
-              <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'rgba(52,211,153,0.75)' }}>{recentForm.winsLast10}W</span>
+            {/* Single compact stat line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(52,211,153,0.8)' }}>{recentForm.winsLast10}W</span>
               <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
-              <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'rgba(248,113,113,0.75)' }}>{recentForm.lossesLast10}L</span>
-              <span style={{ fontSize: 9, color: 'var(--txt-3)', marginLeft: 2 }}>last {recentForm.last10.length}</span>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(248,113,113,0.8)' }}>{recentForm.lossesLast10}L</span>
+              {recentForm.winRate7d !== null && (
+                <>
+                  <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: recentForm.winRate7d >= 50 ? 'rgba(52,211,153,0.8)' : 'rgba(248,113,113,0.8)' }}>{recentForm.winRate7d.toFixed(0)}% WR</span>
+                </>
+              )}
+              {recentForm.netPnl7d !== null && (
+                <>
+                  <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: recentForm.netPnl7d >= 0 ? 'rgba(52,211,153,0.8)' : 'rgba(248,113,113,0.8)' }}>{formatSignedCurrency(recentForm.netPnl7d)}</span>
+                </>
+              )}
             </div>
-            {/* 7-day stats */}
-            {recentForm.total7d > 0 && (
-              <div style={{ display: 'flex', gap: 12 }}>
-                {recentForm.winRate7d !== null && (
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', lineHeight: 1.2, color: recentForm.winRate7d >= 50 ? 'rgba(52,211,153,0.75)' : 'rgba(248,113,113,0.75)' }}>
-                      {recentForm.winRate7d.toFixed(0)}%
-                    </div>
-                    <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>7d WR</div>
-                  </div>
-                )}
-                {recentForm.netPnl7d !== null && (
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', lineHeight: 1.2, color: recentForm.netPnl7d >= 0 ? 'rgba(52,211,153,0.75)' : 'rgba(248,113,113,0.75)' }}>
-                      {formatSignedCurrency(recentForm.netPnl7d)}
-                    </div>
-                    <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>7d P&L</div>
-                  </div>
-                )}
-                {recentForm.avgPnl7d !== null && (
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', lineHeight: 1.2, color: recentForm.avgPnl7d >= 0 ? 'rgba(52,211,153,0.75)' : 'rgba(248,113,113,0.75)' }}>
-                      {formatSignedCurrency(recentForm.avgPnl7d)}
-                    </div>
-                    <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>avg/trade</div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
 
