@@ -1964,22 +1964,52 @@ export default function Settings() {
                       placeholder="Account name"
                     />
                     {account.id === defaultTradeAccountId && (
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          marginTop: '4px',
-                          background: AMBER_DIM,
-                          color: AMBER,
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.06em',
-                          borderRadius: '999px',
-                          padding: '3px 9px',
-                        }}
-                      >
-                        Default
-                      </span>
+                      account.isDefault === true ? (
+                        <button
+                          type="button"
+                          onClick={() => setDefaultAccount(null)}
+                          title="Remove manual default"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            marginTop: '4px',
+                            background: AMBER_DIM,
+                            color: AMBER,
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            borderRadius: '999px',
+                            padding: '3px 7px 3px 9px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.25)'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = AMBER_DIM as string; }}
+                        >
+                          Default
+                          <X size={9} strokeWidth={2.5} />
+                        </button>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            marginTop: '4px',
+                            background: AMBER_DIM,
+                            color: AMBER,
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            borderRadius: '999px',
+                            padding: '3px 9px',
+                          }}
+                        >
+                          Default
+                        </span>
+                      )
                     )}
                   </div>
 
@@ -2044,48 +2074,21 @@ export default function Settings() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {/* Unset default button — only for the manually-pinned default */}
-                    {account.isDefault === true && account.id === defaultTradeAccountId && (
-                      <button
-                        type="button"
-                        onClick={() => setDefaultAccount(null)}
-                        title="Remove manual default — revert to automatic selection"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          background: 'rgba(245,158,11,0.1)',
-                          border: '1px solid rgba(245,158,11,0.4)',
-                          borderRadius: '6px',
-                          padding: '4px 8px',
-                          color: '#f59e0b',
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                          transition: 'background 0.15s',
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.2)'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.1)'; }}
-                      >
-                        <Star size={11} fill="currentColor" />
-                        Unset default
-                      </button>
-                    )}
-                    {/* Set as default button — active non-default accounts only */}
+                    {/* Set as default — icon-only star, active non-default accounts only */}
                     {account.id !== DEFAULT_ACCOUNT_ID && account.id !== defaultTradeAccountId && account.status !== 'Blown' && account.status !== 'Passed' && (
                       <button
                         type="button"
                         onClick={() => setDefaultAccount(account.id)}
-                        title="Set as the default account for new trades"
+                        title="Set as default account"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          justifyContent: 'center',
                           background: 'transparent',
-                          border: '1px solid rgba(245,158,11,0.3)',
+                          border: '1px solid rgba(107,114,128,0.3)',
                           borderRadius: '6px',
-                          padding: '4px 8px',
-                          color: 'rgba(251,191,36,0.8)',
-                          fontSize: '11px',
+                          padding: '4px 7px',
+                          color: 'rgba(156,163,175,0.6)',
                           cursor: 'pointer',
                           transition: 'background 0.15s, color 0.15s, border-color 0.15s',
                         }}
@@ -2093,17 +2096,16 @@ export default function Settings() {
                           const el = e.currentTarget as HTMLButtonElement;
                           el.style.background = 'rgba(245,158,11,0.1)';
                           el.style.color = '#f59e0b';
-                          el.style.borderColor = 'rgba(245,158,11,0.5)';
+                          el.style.borderColor = 'rgba(245,158,11,0.4)';
                         }}
                         onMouseLeave={e => {
                           const el = e.currentTarget as HTMLButtonElement;
                           el.style.background = 'transparent';
-                          el.style.color = 'rgba(251,191,36,0.8)';
-                          el.style.borderColor = 'rgba(245,158,11,0.3)';
+                          el.style.color = 'rgba(156,163,175,0.6)';
+                          el.style.borderColor = 'rgba(107,114,128,0.3)';
                         }}
                       >
-                        <Star size={11} />
-                        Set default
+                        <Star size={12} />
                       </button>
                     )}
                     {/* Payouts button — live/funded accounts only */}
