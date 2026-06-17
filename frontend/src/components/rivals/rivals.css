@@ -32,9 +32,13 @@
   background: var(--rv-bg);
   font-family: var(--rv-sans);
   color: var(--rv-text);
+  display: flex;
+  flex-direction: row;
 }
 
 .rivals-shell {
+  flex: 1;
+  min-width: 0;
   height: 100%;
   overflow-y: auto;
   padding: 28px 32px;

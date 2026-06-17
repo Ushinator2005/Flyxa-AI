@@ -1,36 +1,32 @@
 .rival-chat-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: transparent;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.22s ease;
+  display: none;
 }
 
-.rival-chat-overlay.open {
+.rival-chat-panel {
+  position: relative;
+  height: 100%;
+  width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  border-left: 1px solid var(--app-border);
+  background: var(--app-panel);
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.rival-chat-panel.open {
+  width: 360px;
   opacity: 1;
   pointer-events: auto;
 }
 
-.rival-chat-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 60;
-  height: 100vh;
-  width: min(360px, 100vw);
-  display: flex;
-  flex-direction: column;
-  transform: translateX(100%);
-  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
-  border-left: 1px solid var(--app-border);
-  background: var(--app-panel);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25);
-}
-
-.rival-chat-panel.open {
-  transform: translateX(0);
+.rival-chat-header,
+.rival-chat-body,
+.rival-chat-footer {
+  min-width: 360px;
 }
 
 .rival-chat-topline {

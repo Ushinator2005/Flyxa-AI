@@ -103,10 +103,6 @@ export default function RivalChatPanel({ open, rival, myUserId, onClose }: Rival
 
   return (
     <>
-      <div
-        className={`rival-chat-overlay${open ? ' open' : ''}`}
-        onClick={onClose}
-      />
       <div className={`rival-chat-panel${open ? ' open' : ''}`}>
         <div className="rival-chat-topline" />
 
