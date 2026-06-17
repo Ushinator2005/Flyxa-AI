@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, RotateCcw, Scan, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, RotateCcw, Scan, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { SectionPanel } from '../components/ds/SectionPanel.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -504,6 +504,7 @@ export default function Settings() {
     addAccount,
     updateAccount,
     deleteAccount,
+    setDefaultAccount,
     updatePreferences,
     addConfluenceOption,
     updateConfluenceOption,
@@ -2043,6 +2044,42 @@ export default function Settings() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {/* Set as default button — active non-default accounts only */}
+                    {account.id !== DEFAULT_ACCOUNT_ID && account.id !== defaultTradeAccountId && account.status !== 'Blown' && account.status !== 'Passed' && (
+                      <button
+                        type="button"
+                        onClick={() => setDefaultAccount(account.id)}
+                        title="Set as the default account for new trades"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'transparent',
+                          border: '1px solid rgba(245,158,11,0.3)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          color: 'rgba(251,191,36,0.8)',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = 'rgba(245,158,11,0.1)';
+                          el.style.color = '#f59e0b';
+                          el.style.borderColor = 'rgba(245,158,11,0.5)';
+                        }}
+                        onMouseLeave={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = 'transparent';
+                          el.style.color = 'rgba(251,191,36,0.8)';
+                          el.style.borderColor = 'rgba(245,158,11,0.3)';
+                        }}
+                      >
+                        <Star size={11} />
+                        Set default
+                      </button>
+                    )}
                     {/* Payouts button — live/funded accounts only */}
                     {(account.status === 'Funded' || account.status === 'Live') && (
                       <button

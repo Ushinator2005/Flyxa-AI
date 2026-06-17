@@ -151,6 +151,7 @@ interface AppSettingsContextValue {
   addAccount: (account: Omit<TradingAccount, 'id' | 'createdAt'>) => void;
   updateAccount: (accountId: string, updates: Partial<Omit<TradingAccount, 'id' | 'createdAt'>>) => void;
   deleteAccount: (accountId: string) => void;
+  setDefaultAccount: (accountId: string) => void;
   addConfluenceOption: (option: string) => void;
   updateConfluenceOption: (index: number, option: string) => void;
   deleteConfluenceOption: (index: number) => void;
@@ -560,6 +561,25 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     }
   }, [accounts, user]);
 
+  const setDefaultAccount = useCallback((accountId: string) => {
+    const nextAccounts = ensureDefaultAccount(
+      accountsRef.current.map(account => ({
+        ...account,
+        ...(account.id === accountId ? { isDefault: true } : { isDefault: undefined }),
+      }))
+    );
+    setAccounts(nextAccounts);
+    if (user && initialLoadDone.current) {
+      void saveAppSettingsToSupabase(user.id, {
+        accounts: nextAccounts,
+        preferences: preferencesRef.current,
+        selectedAccountId: selectedAccountIdRef.current,
+        tradeAccounts: tradeAccountsRef.current,
+        confluenceOptions: confluenceOptionsRef.current,
+      });
+    }
+  }, [user]);
+
   const updatePreferences = useCallback((updates: Partial<AppPreferences>) => {
     setPreferences(current => ({ ...current, ...updates }));
   }, []);
@@ -613,6 +633,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     addAccount,
     updateAccount,
     deleteAccount,
+    setDefaultAccount,
     addConfluenceOption,
     updateConfluenceOption,
     deleteConfluenceOption,
@@ -634,6 +655,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     addAccount,
     updateAccount,
     deleteAccount,
+    setDefaultAccount,
     addConfluenceOption,
     updateConfluenceOption,
     deleteConfluenceOption,

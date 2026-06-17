@@ -43,6 +43,7 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
     ...(account.startingBalance !== undefined ? { startingBalance: account.startingBalance } : {}),
     ...(account.targetBalance !== undefined ? { targetBalance: account.targetBalance } : {}),
     ...(account.archived === true ? { archived: true } : {}),
+    ...(account.isDefault === true ? { isDefault: true } : {}),
   }));
 
   const withoutDuplicates = normalizedAccounts.filter((account, index, collection) => (
@@ -63,6 +64,14 @@ export function getAccountCreatedAtMs(account: TradingAccount): number {
 
 export function resolveDefaultTradeAccountId(accounts: TradingAccount[]): string {
   const isInactive = (s: TradingAccountStatus) => s === 'Blown' || s === 'Passed';
+
+  // Manually pinned default takes priority
+  const manualDefault = accounts.find(account =>
+    account.isDefault === true &&
+    account.id !== DEFAULT_ACCOUNT_ID &&
+    !isInactive(account.status)
+  );
+  if (manualDefault) return manualDefault.id;
 
   const oldestRealAccount = accounts
     .filter(account => account.id !== DEFAULT_ACCOUNT_ID && !isInactive(account.status))

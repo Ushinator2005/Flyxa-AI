@@ -236,6 +236,7 @@ export interface TradingAccount {
   startingBalance?: number;
   targetBalance?: number;
   archived?: boolean;
+  isDefault?: boolean;
 }
 
 export interface AppPreferences {
