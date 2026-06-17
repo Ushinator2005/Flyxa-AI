@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, RotateCcw, Scan, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, GripVertical, Monitor, Palette, Pencil, Plus, RotateCcw, Scan, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { SectionPanel } from '../components/ds/SectionPanel.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -123,6 +123,46 @@ const SESSION_COLORS: Record<SessionTimeKey, string> = {
   newYork: '#34d399',
 };
 
+const CONFLUENCE_GROUPS = [
+  {
+    key: 'bias',
+    title: 'Bias & narrative',
+    description: 'Directional context',
+    match: (label: string) => /\b(htf|ltf|bias|narrative|trend|smt)\b/i.test(label),
+  },
+  {
+    key: 'liquidity',
+    title: 'Liquidity',
+    description: 'Sweeps and traps',
+    match: (label: string) => /\b(liquidity|sweep|turtle|soup)\b/i.test(label),
+  },
+  {
+    key: 'structure',
+    title: 'Structure',
+    description: 'Blocks, shifts and levels',
+    match: (label: string) => /\b(structure|order\s*block|orderblock|ob|bisi|disrespect)\b/i.test(label),
+  },
+  {
+    key: 'imbalance',
+    title: 'Imbalance',
+    description: 'FVGs and repricing',
+    match: (label: string) => /\b(fvg|ifvg|fair value|rebalance|reabalance|sibi|iifvg)\b/i.test(label),
+  },
+  {
+    key: 'execution',
+    title: 'Execution',
+    description: 'Confirmation and timing',
+    match: (label: string) => /\b(volume|confirmation|displacement|amd|discount|stdv)\b/i.test(label),
+  },
+  {
+    key: 'other',
+    title: 'Other',
+    description: 'Custom tags',
+    match: () => true,
+  },
+] as const;
+type ConfluenceGroupKey = (typeof CONFLUENCE_GROUPS)[number]['key'];
+
 const AMBER = '#f59e0b';
 const AMBER_DIM = 'rgba(245,158,11,0.1)';
 const S1 = 'var(--app-panel)';
@@ -150,6 +190,14 @@ function normalizeUsername(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, '')
     .slice(0, 24);
+}
+
+function getConfluenceCategoryOverridesKey(userId: string) {
+  return `tw_confluence_category_overrides_${userId}`;
+}
+
+function getConfluenceStorageKey(label: string) {
+  return normalizeConfluenceTag(label).toLowerCase();
 }
 
 function toMinutes(value: string): number {
@@ -545,10 +593,14 @@ export default function Settings() {
   const [newConfluenceDraft, setNewConfluenceDraft] = useState('');
   const [editingConfluenceIndex, setEditingConfluenceIndex] = useState<number | null>(null);
   const [editingConfluenceDraft, setEditingConfluenceDraft] = useState('');
+  const [confluenceCategoryOverrides, setConfluenceCategoryOverrides] = useState<Record<string, ConfluenceGroupKey>>({});
+  const [draggingConfluenceIndex, setDraggingConfluenceIndex] = useState<number | null>(null);
+  const [dragOverConfluenceGroup, setDragOverConfluenceGroup] = useState<ConfluenceGroupKey | null>(null);
   const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveToastReadyRef = useRef(false);
   const confluenceSyncedRef = useRef(false);
+  const skipConfluenceOverrideSaveRef = useRef(false);
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importFeedback, setImportFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const deletedSet = new Set(deletedTradeIds);
@@ -1052,6 +1104,38 @@ export default function Settings() {
     }
   ), []);
 
+  useEffect(() => {
+    if (!user?.id) {
+      skipConfluenceOverrideSaveRef.current = true;
+      setConfluenceCategoryOverrides({});
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem(getConfluenceCategoryOverridesKey(user.id));
+      const parsed = raw ? JSON.parse(raw) : {};
+      const next = typeof parsed === 'object' && parsed !== null ? parsed as Record<string, ConfluenceGroupKey> : {};
+      skipConfluenceOverrideSaveRef.current = true;
+      setConfluenceCategoryOverrides(next);
+    } catch {
+      skipConfluenceOverrideSaveRef.current = true;
+      setConfluenceCategoryOverrides({});
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (skipConfluenceOverrideSaveRef.current) {
+      skipConfluenceOverrideSaveRef.current = false;
+      return;
+    }
+
+    localStorage.setItem(
+      getConfluenceCategoryOverridesKey(user.id),
+      JSON.stringify(confluenceCategoryOverrides),
+    );
+  }, [user?.id, confluenceCategoryOverrides]);
+
   // Seed confluenceOptions with tags used in journal trades, normalising aliases to canonical names
   useEffect(() => {
     if (confluenceSyncedRef.current || journalEntries.length === 0) return;
@@ -1078,6 +1162,99 @@ export default function Settings() {
       });
     });
   }, [journalEntries, confluenceOptions, addConfluenceOption, updateConfluenceOption]);
+
+  useEffect(() => {
+    const validTagKeys = new Set(confluenceOptions.map(getConfluenceStorageKey));
+    const validGroupKeys = new Set(CONFLUENCE_GROUPS.map(group => group.key));
+
+    setConfluenceCategoryOverrides(current => {
+      const next: Record<string, ConfluenceGroupKey> = {};
+      let changed = false;
+
+      Object.entries(current).forEach(([tagKey, groupKey]) => {
+        if (validTagKeys.has(tagKey) && validGroupKeys.has(groupKey)) {
+          next[tagKey] = groupKey;
+        } else {
+          changed = true;
+        }
+      });
+
+      return changed || Object.keys(next).length !== Object.keys(current).length ? next : current;
+    });
+  }, [confluenceOptions]);
+
+  const confluenceUsageCounts = journalEntries.reduce<Record<string, number>>((counts, entry) => {
+    entry.trades.forEach(trade => {
+      if (deletedSet.has(trade.id)) return;
+      (trade.confluences ?? []).forEach(tag => {
+        const storageKey = getConfluenceStorageKey(tag);
+        if (!storageKey) return;
+        counts[storageKey] = (counts[storageKey] ?? 0) + 1;
+      });
+    });
+    return counts;
+  }, {});
+
+  const confluenceGroups = CONFLUENCE_GROUPS.map(group => ({
+    ...group,
+    items: [] as Array<{ option: string; index: number; usageCount: number; isManual: boolean }>,
+  }));
+
+  confluenceOptions.forEach((option, index) => {
+    const storageKey = getConfluenceStorageKey(option);
+    const overrideKey = confluenceCategoryOverrides[storageKey];
+    const manualGroup = overrideKey ? confluenceGroups.find(group => group.key === overrideKey) : undefined;
+    const targetGroup = manualGroup ?? confluenceGroups.find(group => group.match(option)) ?? confluenceGroups[confluenceGroups.length - 1];
+    targetGroup.items.push({
+      option,
+      index,
+      usageCount: confluenceUsageCounts[storageKey] ?? 0,
+      isManual: Boolean(manualGroup),
+    });
+  });
+
+  confluenceGroups.forEach(group => {
+    group.items.sort((a, b) => a.option.localeCompare(b.option, undefined, { sensitivity: 'base' }));
+  });
+
+  const visibleConfluenceGroups = confluenceGroups;
+
+  function startEditingConfluence(index: number, option: string) {
+    setEditingConfluenceIndex(index);
+    setEditingConfluenceDraft(option);
+  }
+
+  function commitEditingConfluence(index: number, option: string) {
+    const canonical = normalizeConfluenceTag(editingConfluenceDraft);
+    if (canonical && canonical !== option) {
+      const oldStorageKey = getConfluenceStorageKey(option);
+      const newStorageKey = getConfluenceStorageKey(canonical);
+      setConfluenceCategoryOverrides(current => {
+        if (!current[oldStorageKey] || oldStorageKey === newStorageKey) return current;
+        const next = { ...current, [newStorageKey]: current[oldStorageKey] };
+        delete next[oldStorageKey];
+        return next;
+      });
+      updateConfluenceOption(index, canonical);
+    }
+    setEditingConfluenceIndex(null);
+  }
+
+  function handleAddConfluence() {
+    const canonical = normalizeConfluenceTag(newConfluenceDraft);
+    if (!canonical || confluenceOptions.length >= 64) return;
+    addConfluenceOption(canonical);
+    setNewConfluenceDraft('');
+  }
+
+  function moveConfluenceToGroup(index: number, groupKey: ConfluenceGroupKey) {
+    const option = confluenceOptions[index];
+    if (!option) return;
+    const storageKey = getConfluenceStorageKey(option);
+    setConfluenceCategoryOverrides(current => ({ ...current, [storageKey]: groupKey }));
+    setDraggingConfluenceIndex(null);
+    setDragOverConfluenceGroup(null);
+  }
 
   return (
     <div
@@ -2481,99 +2658,246 @@ export default function Settings() {
         <SectionDivider label="Journal" />
         <SectionPanel
           title="Confluence tags"
-          subtitle="Pre-defined tags you can quickly apply when logging trades in the journal. Click a tag to rename it."
+          subtitle="Keep your journal tags tidy so trade reviews stay readable. Drag tags between categories to organize them."
         >
-          {/* Existing tags */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: confluenceOptions.length > 0 ? '14px' : '0' }}>
-            {confluenceOptions.map((option, idx) => (
-              editingConfluenceIndex === idx ? (
-                <input
-                  key={idx}
-                  autoFocus
-                  value={editingConfluenceDraft}
-                  maxLength={64}
-                  onChange={e => setEditingConfluenceDraft(e.target.value)}
-                  onBlur={() => {
-                    const canonical = normalizeConfluenceTag(editingConfluenceDraft);
-                    if (canonical && canonical !== option) updateConfluenceOption(idx, canonical);
-                    setEditingConfluenceIndex(null);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      const canonical = normalizeConfluenceTag(editingConfluenceDraft);
-                      if (canonical && canonical !== option) updateConfluenceOption(idx, canonical);
-                      setEditingConfluenceIndex(null);
-                    }
-                    if (e.key === 'Escape') setEditingConfluenceIndex(null);
-                  }}
-                  style={{
-                    height: '28px',
-                    padding: '0 10px',
-                    borderRadius: '6px',
-                    border: `1px solid ${AMBER}`,
-                    background: AMBER_DIM,
-                    color: T1,
-                    fontSize: '12px',
-                    fontFamily: SANS,
-                    outline: 'none',
-                    minWidth: '80px',
-                    maxWidth: '200px',
-                  }}
-                />
-              ) : (
-                <div
-                  key={idx}
-                  style={{
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '10px',
+            marginBottom: '14px',
+          }}>
+            {visibleConfluenceGroups.map(group => (
+              <div
+                key={group.key}
+                onDragOver={event => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  setDragOverConfluenceGroup(group.key);
+                }}
+                onDragLeave={() => setDragOverConfluenceGroup(current => current === group.key ? null : current)}
+                onDrop={event => {
+                  event.preventDefault();
+                  const transferValue = event.dataTransfer.getData('text/plain');
+                  const indexFromTransfer = transferValue === '' ? NaN : Number(transferValue);
+                  const indexToMove = Number.isInteger(indexFromTransfer) ? indexFromTransfer : draggingConfluenceIndex;
+                  if (indexToMove !== null) moveConfluenceToGroup(indexToMove, group.key);
+                }}
+                style={{
+                  minWidth: 0,
+                  borderRadius: '8px',
+                  border: dragOverConfluenceGroup === group.key ? `1px solid ${AMBER}` : `1px solid ${BSUB}`,
+                  background: dragOverConfluenceGroup === group.key ? AMBER_DIM : 'rgba(255,255,255,0.018)',
+                  overflow: 'hidden',
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                  padding: '10px 12px',
+                  borderBottom: `1px solid ${BSUB}`,
+                  background: 'rgba(255,255,255,0.018)',
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: T1 }}>{group.title}</div>
+                    <div style={{ marginTop: '2px', fontSize: '10px', color: T3 }}>{group.description}</div>
+                  </div>
+                  <span style={{
+                    flexShrink: 0,
+                    minWidth: '24px',
+                    height: '22px',
+                    padding: '0 7px',
+                    borderRadius: '999px',
+                    border: `1px solid ${BORDER}`,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '5px',
-                    height: '28px',
-                    padding: '0 4px 0 10px',
-                    borderRadius: '6px',
-                    border: `1px solid ${BORDER}`,
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    color: T2,
                     background: S2,
-                    cursor: 'text',
-                    userSelect: 'none',
-                  }}
-                  onClick={() => {
-                    setEditingConfluenceIndex(idx);
-                    setEditingConfluenceDraft(option);
-                  }}
-                >
-                  <span style={{ fontSize: '12px', color: T1 }}>{option}</span>
-                  <button
-                    type="button"
-                    onClick={e => {
-                      e.stopPropagation();
-                      deleteConfluenceOption(idx);
-                      if (editingConfluenceIndex === idx) setEditingConfluenceIndex(null);
-                    }}
-                    style={{
+                  }}>
+                    {group.items.length}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', minHeight: '42px' }}>
+                  {group.items.length === 0 && (
+                    <div style={{
+                      minHeight: '42px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '4px',
-                      border: 'none',
-                      background: 'transparent',
+                      padding: '0 12px',
+                      fontSize: '11px',
                       color: T3,
-                      cursor: 'pointer',
-                      padding: 0,
-                      flexShrink: 0,
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fca5a5'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.12)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                  >
-                    <X size={10} />
-                  </button>
+                    }}>
+                      Drop tags here
+                    </div>
+                  )}
+                  {group.items.map(({ option, index, usageCount }) => (
+                    <div
+                      key={`${option}-${index}`}
+                      draggable={editingConfluenceIndex !== index}
+                      onDragStart={event => {
+                        setDraggingConfluenceIndex(index);
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', String(index));
+                      }}
+                      onDragEnd={() => {
+                        setDraggingConfluenceIndex(null);
+                        setDragOverConfluenceGroup(null);
+                      }}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '18px 42px minmax(0, 1fr) 58px',
+                        alignItems: 'center',
+                        gap: '8px',
+                        minHeight: '38px',
+                        padding: '6px 8px 6px 12px',
+                        borderTop: `1px solid ${BSUB}`,
+                        cursor: editingConfluenceIndex === index ? 'default' : 'grab',
+                        opacity: draggingConfluenceIndex === index ? 0.45 : 1,
+                      }}
+                    >
+                      <GripVertical size={13} style={{ color: T3 }} />
+                      <span
+                        title={`${usageCount} trade${usageCount === 1 ? '' : 's'} tagged with ${option}`}
+                        style={{
+                          minWidth: 0,
+                          height: '22px',
+                          padding: '0 7px',
+                          borderRadius: '999px',
+                          border: `1px solid ${BSUB}`,
+                          background: usageCount > 0 ? 'rgba(74,222,128,0.08)' : 'rgba(255,255,255,0.018)',
+                          color: usageCount > 0 ? '#86efac' : T3,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {usageCount}x
+                      </span>
+
+                      {editingConfluenceIndex === index ? (
+                        <input
+                          autoFocus
+                          value={editingConfluenceDraft}
+                          maxLength={64}
+                          onChange={e => setEditingConfluenceDraft(e.target.value)}
+                          onBlur={() => commitEditingConfluence(index, option)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') commitEditingConfluence(index, option);
+                            if (e.key === 'Escape') setEditingConfluenceIndex(null);
+                          }}
+                          style={{
+                            width: '100%',
+                            minWidth: 0,
+                            height: '28px',
+                            padding: '0 9px',
+                            borderRadius: '6px',
+                            border: `1px solid ${AMBER}`,
+                            background: AMBER_DIM,
+                            color: T1,
+                            fontSize: '12px',
+                            fontFamily: SANS,
+                            outline: 'none',
+                          }}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditingConfluence(index, option)}
+                          title={`Rename ${option}`}
+                          style={{
+                            width: '100%',
+                            minWidth: 0,
+                            border: 'none',
+                            background: 'transparent',
+                            color: T1,
+                            padding: 0,
+                            fontFamily: SANS,
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            textAlign: 'left',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            cursor: 'text',
+                          }}
+                        >
+                          {option}
+                        </button>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                        <button
+                          type="button"
+                          title={`Rename ${option}`}
+                          onClick={() => startEditingConfluence(index, option)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '6px',
+                            border: `1px solid ${BORDER}`,
+                            background: 'transparent',
+                            color: T3,
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = AMBER; (e.currentTarget as HTMLButtonElement).style.background = AMBER_DIM; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          title={`Delete ${option}`}
+                          onClick={() => {
+                            const storageKey = getConfluenceStorageKey(option);
+                            setConfluenceCategoryOverrides(current => {
+                              if (!current[storageKey]) return current;
+                              const next = { ...current };
+                              delete next[storageKey];
+                              return next;
+                            });
+                            deleteConfluenceOption(index);
+                            if (editingConfluenceIndex === index) setEditingConfluenceIndex(null);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '6px',
+                            border: `1px solid ${BORDER}`,
+                            background: 'transparent',
+                            color: T3,
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fca5a5'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.12)'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )
+              </div>
             ))}
           </div>
 
-          {/* Add new tag */}
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '8px', alignItems: 'center' }}>
             <input
               placeholder={confluenceOptions.length >= 64 ? 'Max 64 tags reached' : 'New confluence tag…'}
               value={newConfluenceDraft}
@@ -2582,17 +2906,13 @@ export default function Settings() {
               onChange={e => setNewConfluenceDraft(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
-                  const canonical = normalizeConfluenceTag(newConfluenceDraft);
-                  if (canonical && confluenceOptions.length < 64) {
-                    addConfluenceOption(canonical);
-                    setNewConfluenceDraft('');
-                  }
+                  handleAddConfluence();
                 }
               }}
               style={{
                 flex: 1,
-                height: '32px',
-                padding: '0 10px',
+                height: '36px',
+                padding: '0 12px',
                 borderRadius: '6px',
                 border: `1px solid ${BORDER}`,
                 background: S2,
@@ -2606,27 +2926,22 @@ export default function Settings() {
             <button
               type="button"
               disabled={!newConfluenceDraft.trim() || confluenceOptions.length >= 64}
-              onClick={() => {
-                const canonical = normalizeConfluenceTag(newConfluenceDraft);
-                if (canonical && confluenceOptions.length < 64) {
-                  addConfluenceOption(canonical);
-                  setNewConfluenceDraft('');
-                }
-              }}
+              onClick={handleAddConfluence}
               style={{
-                height: '32px',
-                padding: '0 12px',
+                height: '36px',
+                padding: '0 14px',
                 borderRadius: '6px',
-                border: `1px solid ${BORDER}`,
-                background: 'transparent',
-                color: T3,
+                border: `1px solid ${AMBER}`,
+                background: AMBER_DIM,
+                color: AMBER,
                 fontSize: '12px',
+                fontWeight: 700,
                 fontFamily: SANS,
                 cursor: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 'not-allowed' : 'pointer',
-                opacity: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 0.4 : 1,
+                opacity: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 0.45 : 1,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
+                gap: '6px',
                 flexShrink: 0,
               }}
             >
@@ -2637,7 +2952,7 @@ export default function Settings() {
 
           {confluenceOptions.length > 0 && (
             <p style={{ marginTop: '10px', fontSize: '11px', color: T3 }}>
-              {confluenceOptions.length} of 64 tags · Click a tag to rename, or × to delete.
+              {confluenceOptions.length} of 64 tags. New tags are grouped automatically; dragged tags stay where you place them.
             </p>
           )}
         </SectionPanel>
