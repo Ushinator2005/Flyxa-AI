@@ -2398,20 +2398,54 @@ export default function TradeJournal() {
   const addBlankDay = useCallback(() => {
     // Always create for today — never inherit the currently-viewed entry's date
     const date = getTodayIso(preferences.timezone);
+
+    const blankTrade: JournalTrade = withTradeDerivedValues({
+      id: crypto.randomUUID(),
+      date,
+      symbol: 'NQ',
+      direction: 'LONG',
+      entryTime: getNowTime(),
+      exitTime: getNowTime(),
+      durationMinutes: null,
+      entryPrice: 0,
+      exitPrice: 0,
+      entry: undefined,
+      exit: undefined,
+      priceLevelsSource: 'manual',
+      priceLevelsEdited: false,
+      contracts: 1,
+      rr: 0,
+      pnl: 0,
+      result: 'open',
+      confluences: [],
+    });
+
     const existing = entries.find(entry => entry.date === date);
     if (existing) {
+      // Day already exists — add a blank trade to it so the user gets a fresh row
+      const entryAccount = accounts.find(a => a.id === existing.account);
+      if (entryAccount?.status !== 'Passed') {
+        mutateEntries(prev => prev.map(entry =>
+          entry.id === existing.id
+            ? { ...entry, trades: [blankTrade, ...entry.trades] }
+            : entry
+        ));
+      }
+      optimisticEntryRef.current = { ...existing, trades: [blankTrade, ...existing.trades] };
       setSelectedEntryId(existing.id);
       setShowScanner(false);
       return;
     }
+
     const blank = createEmptyEntry(date, rulesTemplate);
+    blank.trades = [blankTrade];
     // Set optimistic ref BEFORE the Zustand write so that selectedEntry is
     // non-null on the very first render after state updates apply.
     optimisticEntryRef.current = blank;
     mutateEntries(prev => [blank, ...prev]);
     setSelectedEntryId(blank.id);
     setShowScanner(false);
-  }, [entries, mutateEntries, preferences.timezone, rulesTemplate]);
+  }, [accounts, entries, mutateEntries, preferences.timezone, rulesTemplate]);
 
   const saveTradeDate = useCallback(() => {
     if (!selectedEntry || !activeTrade) return;
