@@ -193,10 +193,12 @@ function normalizeConfluences(value: unknown): string[] {
   return normalized;
 }
 
-function computeResult(pnl: number, exit: number | null): TradeResult {
+function computeResult(grossPnl: number, exit: number | null, commission = 0): TradeResult {
   if (exit === null || !Number.isFinite(exit)) return 'open';
-  if (pnl > 0) return 'win';
-  if (pnl < 0) return 'loss';
+  if (grossPnl === 0) return 'be';
+  const net = grossPnl - commission;
+  if (net > 0) return 'win';
+  if (net < 0) return 'loss';
   return 'be';
 }
 
@@ -265,7 +267,7 @@ function recalcTrade(trade: Trade): Trade {
     exit,
     pnl,
     rr,
-    result: computeResult(pnl - (trade.commission ?? 0), exit),
+    result: computeResult(pnl, exit, trade.commission ?? 0),
   };
 }
 

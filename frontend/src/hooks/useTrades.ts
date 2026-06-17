@@ -169,10 +169,14 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
   const sl = typeof data.sl_price === 'number' ? data.sl_price : entry;
   const tp = typeof data.tp_price === 'number' ? data.tp_price : entry;
   const exit = typeof data.exit_price === 'number' ? data.exit_price : null;
-  const netPnl = (typeof data.pnl === 'number' ? data.pnl : 0) - (typeof data.commission === 'number' ? data.commission : 0);
+  const grossPnl = typeof data.pnl === 'number' ? data.pnl : 0;
+  const commission = typeof data.commission === 'number' ? data.commission : 0;
+  const netPnl = grossPnl - commission;
   const result: StoreTrade['result'] =
     data.exit_reason === 'TP' ? 'win'
     : data.exit_reason === 'SL' ? 'loss'
+    : data.exit_reason === 'BE' ? 'be'
+    : grossPnl === 0 ? 'be'
     : netPnl > 0 ? 'win'
     : netPnl < 0 ? 'loss'
     : 'open';

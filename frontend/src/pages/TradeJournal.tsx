@@ -552,7 +552,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
         const netPnl = pnl - tradeCommission;
         const result: TradeResult = trade.result === 'win' || trade.result === 'loss' || trade.result === 'open' || trade.result === 'be'
           ? trade.result
-          : netPnl > 0 ? 'win' : netPnl < 0 ? 'loss' : 'open';
+          : pnl === 0 ? 'be' : netPnl > 0 ? 'win' : netPnl < 0 ? 'loss' : 'open';
         const tradeRef = (() => {
           const r = trade.reflection as Record<string, unknown> | undefined;
           if (!r || typeof r !== 'object') return undefined;
