@@ -20,6 +20,11 @@ const LEGACY_SAVED_AT_KEY         = 'flyxa-store-saved-at';
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingValue: string | null = null;
+// latestValue is set synchronously at the start of setItem (before any awaits)
+// so flushSupabaseStoreNow always has the freshest state even when setItem's
+// async getUserId() call hasn't completed yet — fixing the race condition where
+// flushSupabaseStoreNow could read stale localStorage and save the wrong state.
+let latestValue: string | null = null;
 let cachedUserId: string | null = null;
 let cachedToken: string | null = null;
 
@@ -125,11 +130,36 @@ function sanitizeStoreValue(value: string): string {
 
 function mirrorLocalEntriesSafe(entries: Record<string, unknown>[], userId: string): void {
   try {
+    // Merge into the existing safe backup rather than overwriting it wholesale.
+    // This ensures the backup only ever grows: if the incoming state has fewer
+    // trades for an entry than what's already saved (e.g. after a failed cloud
+    // sync caused an older state to be reloaded), we keep the richer version.
+    const existing = readLocalEntriesSafe(userId);
     const next: Record<string, unknown> = {};
+
+    // Seed with existing safe entries
+    for (const entry of existing) {
+      next[entry.id as string] = entry;
+    }
+
+    // Merge incoming entries: replace only when the incoming version has at
+    // least as many trades as what's already stored.
     for (const entry of entries) {
       const id = entry.id as string;
-      next[id] = stripBase64Images(entry);
+      const stripped = stripBase64Images(entry) as Record<string, unknown>;
+      const existingEntry = next[id] as Record<string, unknown> | undefined;
+      if (!existingEntry) {
+        next[id] = stripped;
+      } else {
+        const existingCount = Array.isArray(existingEntry.trades) ? existingEntry.trades.length : 0;
+        const incomingCount = Array.isArray(entry.trades) ? entry.trades.length : 0;
+        if (incomingCount >= existingCount) {
+          next[id] = stripped;
+        }
+        // else keep existing — it has more trades than what's being written now
+      }
     }
+
     localStorage.setItem(localEntriesSafeKey(userId), JSON.stringify(next));
   } catch { /* quota */ }
 }
@@ -294,15 +324,28 @@ export async function flushSupabaseStoreNow(): Promise<void> {
   const userId = await getUserId();
   if (!userId) return;
 
-  const value = pendingValue ?? (
+  // Prefer latestValue (set synchronously at the start of setItem before any
+  // awaits) so we always flush the freshest state, even when setItem's async
+  // getUserId() hasn't completed yet and localStorage is still stale.
+  const value = latestValue ?? pendingValue ?? (
     typeof window !== 'undefined'
       ? (localStorage.getItem(localStoreKey(userId)) ?? localStorage.getItem(LEGACY_STORE_KEY))
       : null
   );
   if (!value) return;
 
+  latestValue = null;
   pendingValue = null;
   await flushSaveWithRetry(userId, value);
+}
+
+/**
+ * Returns entries stored in the per-user safe-entry localStorage backup.
+ * This backup is written on every save, even before Supabase sync completes,
+ * so it can contain recently-logged trades that didn't make it to the cloud.
+ */
+export function readLocalSafeBackupEntries(userId: string): Record<string, unknown>[] {
+  return readLocalEntriesSafe(userId);
 }
 
 export async function clearCurrentUserStoreCache(): Promise<void> {
@@ -481,6 +524,11 @@ export const supabaseZustandStorage: StateStorage = {
 
   setItem: async (_key: string, value: string): Promise<void> => {
     const sanitizedValue = sanitizeStoreValue(value);
+
+    // Capture the latest value synchronously before any awaits so that
+    // flushSupabaseStoreNow (called concurrently from mutateEntries) always
+    // reads the freshest state rather than stale localStorage.
+    latestValue = sanitizedValue;
 
     // Guard: never overwrite existing journal data with a blank/default state
     // (protects against HMR in dev transiently wiping data).

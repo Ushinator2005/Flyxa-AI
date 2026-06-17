@@ -249,20 +249,21 @@ STEP 3 — DETERMINE DIRECTION:
 - If take profit price < entry price → SHORT
 Use the prices you found in Step 2 to determine this. Never guess direction from box position alone.
 
-STEP 4 — FIND THE EXIT (FIRST TOUCH ONLY, WITHIN THE P&L BOX ONLY):
+STEP 4 — FIND THE EXIT (FIRST TOUCH ONLY, INSIDE THE P&L CARD ONLY):
+The P&L card is the colored overlay on the chart — the region covered by the red/pink zone and the teal zone together. You must ONLY read candles whose bodies and wicks fall physically inside this colored overlay. Nothing outside it exists for this analysis.
 ${boxBounds
-  ? `CRITICAL BOUNDARY: The colored P&L overlay spans from approximately ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% of the image width from the left edge.
-YOU MUST STOP SCANNING AT THE RIGHT EDGE OF THE COLORED BOX (${Math.round(boxBounds.rightRatio * 100)}% from the left).
-Any candle positioned to the RIGHT of this boundary is outside the trade — completely ignore it even if price reaches SL or TP there.
-If neither SL nor TP is touched within the P&L box boundary, set exit_reason to null.`
-  : `Only scan candles that fall within the colored P&L overlay region. Do not read price action outside the box.`}
+  ? `The P&L card occupies image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
+The FIRST candle inside the card (at the ${Math.round(boxBounds.leftRatio * 100)}% left edge) is the entry candle — start here.
+HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist. Do not look at it. Do not count it. Even if a large wick from a pre-trade candle visually extends into the price range of SL or TP, that candle is outside the P&L card and must be completely disregarded.
+HARD RULE: Any candle whose center x-position is to the RIGHT of ${Math.round(boxBounds.rightRatio * 100)}% does not exist. Do not look at it.
+Scan only the candles physically inside the card, left to right, starting from the entry candle.
+If neither SL nor TP is touched by any candle inside the card, set exit_reason to null.`
+  : `Scan only candles physically inside the colored P&L overlay. Ignore all candles to the left (pre-trade) and right (post-trade) of the overlay — treat them as if they are not on the chart.`}
 
 DO NOT USE ANY COLOR OR SIZE BIAS — CANDLE WICKS ARE THE ONLY EVIDENCE.
 Do NOT use the background color of the teal zone, the red/pink zone, or any P&L label to decide the outcome.
 Those zone colors are fixed regardless of what happened. A large teal zone just means TP was far away — it says nothing about whether TP was hit.
-Do NOT use the size of either zone as a signal. Ignore all color cues. The answer comes only from candle wicks.
-
-Starting from the entry candle (left edge of the P&L box), scan candles strictly left to right, one by one.
+Do NOT use the size of either zone as a signal. Ignore all color cues. The answer comes only from candle wicks inside the P&L card.
 
 EXACT RULES — WHAT COUNTS AS A HIT:
 You must trace a horizontal line at the exact SL price and another at the exact TP price across the chart.

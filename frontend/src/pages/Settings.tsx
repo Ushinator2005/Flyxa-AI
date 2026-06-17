@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, Scan, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, Plus, RotateCcw, Scan, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { SectionPanel } from '../components/ds/SectionPanel.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -10,7 +10,7 @@ import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsConte
 import { useRivals } from '../hooks/useRivals.js';
 import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { clearCurrentUserStoreCache } from '../store/supabaseStorage.js';
+import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
 
@@ -637,6 +637,63 @@ export default function Settings() {
       }
     };
     reader.readAsText(file);
+  }
+
+  async function handleRecoverFromLocalCache() {
+    if (!user?.id) return;
+    const safeEntries = readLocalSafeBackupEntries(user.id);
+    if (safeEntries.length === 0) {
+      setImportFeedback({ ok: false, msg: 'No local browser backup found.' });
+      setTimeout(() => setImportFeedback(null), 4000);
+      return;
+    }
+
+    // Build a map of current entries by ID for fast lookup
+    const currentById = new Map(journalEntries.map(e => [e.id, e]));
+    let tradesRecovered = 0;
+    let daysRecovered = 0;
+
+    // Deep merge: for each entry in the safe backup, either add it wholesale
+    // (if missing from store) or merge its trades into the existing entry.
+    const merged = [...journalEntries] as typeof journalEntries;
+
+    for (const safeRaw of safeEntries) {
+      const safeEntry = safeRaw as unknown as typeof journalEntries[number];
+      const existing = currentById.get(safeEntry.id);
+
+      if (!existing) {
+        // Whole day is missing — add it
+        merged.push(safeEntry);
+        daysRecovered++;
+        tradesRecovered += Array.isArray(safeEntry.trades) ? safeEntry.trades.length : 0;
+      } else {
+        // Day exists but may have fewer trades — merge trade-level
+        const existingTradeIds = new Set(existing.trades.map((t: { id: string }) => t.id));
+        const newTrades = (Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
+          .filter((t: { id: string }) => !existingTradeIds.has(t.id));
+        if (newTrades.length > 0) {
+          const idx = merged.findIndex(e => e.id === existing.id);
+          if (idx !== -1) {
+            merged[idx] = { ...merged[idx], trades: [...merged[idx].trades, ...newTrades] } as typeof merged[number];
+          }
+          tradesRecovered += newTrades.length;
+        }
+      }
+    }
+
+    if (tradesRecovered === 0 && daysRecovered === 0) {
+      setImportFeedback({ ok: true, msg: 'Already up to date — no missing trades found.' });
+      setTimeout(() => setImportFeedback(null), 4000);
+      return;
+    }
+
+    setEntries(merged, { notifyAchievements: false });
+    await flushSupabaseStoreNow();
+    const parts: string[] = [];
+    if (tradesRecovered > 0) parts.push(`${tradesRecovered} trade${tradesRecovered !== 1 ? 's' : ''}`);
+    if (daysRecovered > 0) parts.push(`${daysRecovered} day${daysRecovered !== 1 ? 's' : ''}`);
+    setImportFeedback({ ok: true, msg: `Recovered ${parts.join(' and ')} from browser cache.` });
+    setTimeout(() => setImportFeedback(null), 6000);
   }
 
   const navSections = [
@@ -1300,6 +1357,48 @@ export default function Settings() {
                   {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
                 </p>
               )}
+            </div>
+
+            {/* Recover from browser cache */}
+            <div>
+              <FieldLabel>Recover from browser cache</FieldLabel>
+              <button
+                type="button"
+                onClick={() => { void handleRecoverFromLocalCache(); }}
+                style={{
+                  height: '38px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  paddingInline: '14px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(251,191,36,0.35)',
+                  background: 'rgba(251,191,36,0.07)',
+                  color: '#fbbf24',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontFamily: SANS,
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLButtonElement;
+                  el.style.background = 'rgba(251,191,36,0.14)';
+                  el.style.borderColor = 'rgba(251,191,36,0.6)';
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLButtonElement;
+                  el.style.background = 'rgba(251,191,36,0.07)';
+                  el.style.borderColor = 'rgba(251,191,36,0.35)';
+                }}
+              >
+                <RotateCcw size={13} />
+                Recover missing trades
+              </button>
+              <p style={{ marginTop: '6px', fontSize: '11px', color: T3, fontFamily: SANS, lineHeight: 1.4 }}>
+                Merges trades from this browser's local backup that are missing from your cloud journal.
+                Use this if trades you logged recently have disappeared.
+              </p>
             </div>
 
           </div>
