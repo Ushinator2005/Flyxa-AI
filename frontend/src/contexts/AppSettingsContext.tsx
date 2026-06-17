@@ -151,7 +151,7 @@ interface AppSettingsContextValue {
   addAccount: (account: Omit<TradingAccount, 'id' | 'createdAt'>) => void;
   updateAccount: (accountId: string, updates: Partial<Omit<TradingAccount, 'id' | 'createdAt'>>) => void;
   deleteAccount: (accountId: string) => void;
-  setDefaultAccount: (accountId: string) => void;
+  setDefaultAccount: (accountId: string | null) => void;
   addConfluenceOption: (option: string) => void;
   updateConfluenceOption: (index: number, option: string) => void;
   deleteConfluenceOption: (index: number) => void;
@@ -561,11 +561,11 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     }
   }, [accounts, user]);
 
-  const setDefaultAccount = useCallback((accountId: string) => {
+  const setDefaultAccount = useCallback((accountId: string | null) => {
     const nextAccounts = ensureDefaultAccount(
       accountsRef.current.map(account => ({
         ...account,
-        ...(account.id === accountId ? { isDefault: true } : { isDefault: undefined }),
+        ...(accountId !== null && account.id === accountId ? { isDefault: true } : { isDefault: undefined }),
       }))
     );
     setAccounts(nextAccounts);

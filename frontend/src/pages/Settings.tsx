@@ -2044,6 +2044,32 @@ export default function Settings() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {/* Unset default button — only for the manually-pinned default */}
+                    {account.isDefault === true && account.id === defaultTradeAccountId && (
+                      <button
+                        type="button"
+                        onClick={() => setDefaultAccount(null)}
+                        title="Remove manual default — revert to automatic selection"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'rgba(245,158,11,0.1)',
+                          border: '1px solid rgba(245,158,11,0.4)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          color: '#f59e0b',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.2)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.1)'; }}
+                      >
+                        <Star size={11} fill="currentColor" />
+                        Unset default
+                      </button>
+                    )}
                     {/* Set as default button — active non-default accounts only */}
                     {account.id !== DEFAULT_ACCOUNT_ID && account.id !== defaultTradeAccountId && account.status !== 'Blown' && account.status !== 'Passed' && (
                       <button
