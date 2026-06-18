@@ -302,6 +302,7 @@ export function useTrades() {
   const entries = useFlyxaStore((state) => state.entries);
   const activeAccountId = useFlyxaStore((state) => state.activeAccountId);
   const deletedTradeIds = useFlyxaStore((state) => state.deletedTradeIds);
+  const restoredEntryDates = useFlyxaStore((state) => state.restoredEntryDates);
   const addEntry = useFlyxaStore((state) => state.addEntry);
   const addTrade = useFlyxaStore((state) => state.addTrade);
   const setEntries = useFlyxaStore((state) => state.setEntries);
@@ -309,7 +310,13 @@ export function useTrades() {
   const deleteTradeInStore = useFlyxaStore((state) => state.deleteTrade);
 
   const trades = useMemo(() => {
-    const deleted = new Set(deletedTradeIds);
+    const restoredDates = new Set(restoredEntryDates);
+    const restoredTradeIds = new Set(
+      entries
+        .filter((entry) => restoredDates.has(entry.date))
+        .flatMap((entry) => entry.trades.map((trade) => trade.id))
+    );
+    const deleted = new Set(deletedTradeIds.filter((id) => !restoredTradeIds.has(id)));
     // No account pre-filter here. Account filtering is handled exclusively by
     // filterTradesBySelectedAccount (AppSettingsContext) which reads from
     // selectedAccountId — the UI source of truth. Pre-filtering here caused a
@@ -319,7 +326,7 @@ export function useTrades() {
     return entries
       .flatMap((entry) => entry.trades.map(toApiTrade))
       .filter((trade) => !deleted.has(trade.id));
-  }, [deletedTradeIds, entries]);
+  }, [deletedTradeIds, entries, restoredEntryDates]);
 
   const fetchTrades = useCallback(async () => {
     return;

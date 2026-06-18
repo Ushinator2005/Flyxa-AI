@@ -523,7 +523,7 @@ function syncAchievements(data: FlyxaStateData, options: { notify?: boolean } = 
 
 function withDerivedEntries(entries: JournalEntry[]): JournalEntry[] {
   const seenTradeIds = new Set<string>();
-  return entries
+  const normalized = entries
     .map((entry) => {
       const uniqueTrades = entry.trades.filter((trade) => {
         if (seenTradeIds.has(trade.id)) return false;
@@ -531,8 +531,46 @@ function withDerivedEntries(entries: JournalEntry[]): JournalEntry[] {
         return true;
       });
       return withEntryDerived({ ...entry, trades: uniqueTrades });
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
+    });
+  const byDate = new Map<string, JournalEntry>();
+
+  for (const entry of normalized) {
+    const existing = byDate.get(entry.date);
+    if (!existing) {
+      byDate.set(entry.date, entry);
+      continue;
+    }
+
+    const richer = entry.trades.length > existing.trades.length ? entry : existing;
+    const fallback = richer === entry ? existing : entry;
+    const trades = [...existing.trades, ...entry.trades];
+    const accountIds = Array.from(new Set([
+      ...(existing.accountIds ?? []),
+      ...(entry.accountIds ?? []),
+      ...trades.flatMap((trade) => trade.accountIds ?? []),
+      ...trades.map((trade) => trade.account).filter(Boolean),
+    ]));
+    const screenshots = [0, 1, 2].map(
+      (index) => richer.screenshots?.[index] || fallback.screenshots?.[index] || ''
+    );
+
+    byDate.set(entry.date, withEntryDerived({
+      ...fallback,
+      ...richer,
+      date: entry.date,
+      accountIds,
+      screenshots,
+      scannedImageUrl: richer.scannedImageUrl || fallback.scannedImageUrl,
+      reflection: {
+        pre: richer.reflection.pre || fallback.reflection.pre,
+        post: richer.reflection.post || fallback.reflection.post,
+        lessons: richer.reflection.lessons || fallback.reflection.lessons,
+      },
+      trades,
+    }));
+  }
+
+  return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function filterEntriesByTombstones(
@@ -550,6 +588,14 @@ function filterEntriesByTombstones(
         ...entry,
         trades: entry.trades.filter((trade) => !deletedTrades.has(trade.id)),
       }))
+  );
+}
+
+function tradeIdsForEntryDates(entries: JournalEntry[], dates: Set<string>): Set<string> {
+  return new Set(
+    entries
+      .filter((entry) => dates.has(entry.date))
+      .flatMap((entry) => entry.trades.map((trade) => trade.id))
   );
 }
 
@@ -955,14 +1001,24 @@ const useFlyxaStore = create<FlyxaStore>()(
           billingAccounts.forEach((account) => {
             nextAccounts = maybeCreateFundedAccount(nextAccounts, account);
           });
+          const restoredEntryDates = Array.from(new Set([
+            ...state.restoredEntryDates,
+            ...(payload.restoredEntryDates ?? []),
+          ]));
+          const restoredDates = new Set(restoredEntryDates);
+          const restorationEntries = [
+            ...state.entries,
+            ...withDerivedEntries(ensureAccount(payload.entries ?? [], entryAccountFallback)),
+          ];
+          const restoredTradeIds = tradeIdsForEntryDates(restorationEntries, restoredDates);
           const deletedTradeIds = Array.from(new Set([
             ...state.deletedTradeIds,
             ...(payload.deletedTradeIds ?? []),
-          ]));
+          ])).filter((id) => !restoredTradeIds.has(id));
           const deletedEntryDates = Array.from(new Set([
             ...state.deletedEntryDates,
             ...(payload.deletedEntryDates ?? []),
-          ]));
+          ])).filter((date) => !restoredDates.has(date));
           const incomingEntries = payload.entries
             ? withDerivedEntries(ensureAccount(payload.entries, entryAccountFallback))
             : state.entries;
@@ -987,7 +1043,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             rivals: payload.rivals ?? state.rivals,
             deletedTradeIds,
             deletedEntryDates,
-            restoredEntryDates: payload.restoredEntryDates ?? state.restoredEntryDates,
+            restoredEntryDates,
             backtestSessions: payload.backtestSessions ?? state.backtestSessions,
             onboarding: payload.onboarding ?? state.onboarding,
             preSession: payload.preSession ?? state.preSession,
@@ -1011,16 +1067,28 @@ const useFlyxaStore = create<FlyxaStore>()(
           ? persisted.activeAccountId
           : (base.activeAccountId !== undefined ? base.activeAccountId : DEFAULT_ACCOUNT_ID);
         const entryAccountFallback = activeAccountId ?? DEFAULT_ACCOUNT_ID;
+        const restoredEntryDates = Array.from(new Set([
+          ...(base.restoredEntryDates ?? []),
+          ...(persisted.restoredEntryDates ?? []),
+        ]));
+        const restoredDates = new Set(restoredEntryDates);
+        const persistedEntries = withDerivedEntries(
+          ensureAccount(persisted.entries ?? [], entryAccountFallback)
+        );
+        const restoredTradeIds = tradeIdsForEntryDates(
+          [...base.entries, ...persistedEntries],
+          restoredDates
+        );
         const deletedTradeIds = Array.from(new Set([
           ...(base.deletedTradeIds ?? []),
           ...(persisted.deletedTradeIds ?? []),
-        ]));
+        ])).filter((id) => !restoredTradeIds.has(id));
         const deletedEntryDates = Array.from(new Set([
           ...(base.deletedEntryDates ?? []),
           ...(persisted.deletedEntryDates ?? []),
-        ]));
+        ])).filter((date) => !restoredDates.has(date));
         const incomingEntries = filterEntriesByTombstones(
-          withDerivedEntries(ensureAccount(persisted.entries ?? [], entryAccountFallback)),
+          persistedEntries,
           deletedTradeIds,
           deletedEntryDates
         );
@@ -1063,7 +1131,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             : base.journalTitles,
           deletedTradeIds,
           deletedEntryDates,
-          restoredEntryDates: persisted.restoredEntryDates ?? base.restoredEntryDates,
+          restoredEntryDates,
           // Same protection for preSessionHistory — an empty {} from Supabase should never
           // erase existing local history (older saves may not have this field yet).
           preSessionHistory: (persisted.preSessionHistory && Object.keys(persisted.preSessionHistory).length > 0)

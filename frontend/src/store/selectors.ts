@@ -3,9 +3,19 @@ import useFlyxaStore from './flyxaStore.js';
 import { computeAchievementProgress, computeJournalStreak } from './achievements.js';
 import type { Achievement, JournalEntry, Trade } from './types.js';
 
-function withoutDeletedTrades(entries: JournalEntry[], deletedTradeIds: string[]): JournalEntry[] {
+function withoutDeletedTrades(
+  entries: JournalEntry[],
+  deletedTradeIds: string[],
+  restoredEntryDates: string[]
+): JournalEntry[] {
   if (deletedTradeIds.length === 0) return entries;
-  const deleted = new Set(deletedTradeIds);
+  const restoredDates = new Set(restoredEntryDates);
+  const restoredTradeIds = new Set(
+    entries
+      .filter((entry) => restoredDates.has(entry.date))
+      .flatMap((entry) => entry.trades.map((trade) => trade.id))
+  );
+  const deleted = new Set(deletedTradeIds.filter((id) => !restoredTradeIds.has(id)));
   return entries.map((entry) => ({
     ...entry,
     trades: entry.trades.filter((trade) => !deleted.has(trade.id)),
@@ -32,11 +42,12 @@ export const useActiveAccountEntries = (): JournalEntry[] => {
   const entries = useFlyxaStore((state) => state.entries);
   const activeAccountId = useFlyxaStore((state) => state.activeAccountId);
   const deletedTradeIds = useFlyxaStore((state) => state.deletedTradeIds);
+  const restoredEntryDates = useFlyxaStore((state) => state.restoredEntryDates);
   return useMemo(() => {
-    const visibleEntries = withoutDeletedTrades(entries, deletedTradeIds);
+    const visibleEntries = withoutDeletedTrades(entries, deletedTradeIds, restoredEntryDates);
     if (!activeAccountId) return visibleEntries;
     return visibleEntries.filter((entry) => entry.account === activeAccountId);
-  }, [activeAccountId, deletedTradeIds, entries]);
+  }, [activeAccountId, deletedTradeIds, entries, restoredEntryDates]);
 };
 
 export const useAllTrades = (): Trade[] => {
