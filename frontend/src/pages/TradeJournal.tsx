@@ -23,7 +23,7 @@ import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
-import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
+import { flushSupabaseStoreNow, deleteBackupEntryById } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -735,31 +735,6 @@ interface ContractSizingBlockProps {
   onMutate: (fields: Partial<JournalTrade>) => void;
 }
 
-function DirectionSelectorBlock({ trade, onMutate }: ContractSizingBlockProps) {
-  const options: Array<{ value: TradeDirection; label: string }> = [
-    { value: 'LONG', label: 'Long' },
-    { value: 'SHORT', label: 'Short' },
-  ];
-
-  return (
-    <div className="tj-sizing-row">
-      <span className="tj-size-label">Direction</span>
-      <div className="tj-direction-toggle" role="group" aria-label="Trade direction">
-        {options.map(option => (
-          <button
-            key={option.value}
-            type="button"
-            className={`tj-direction-btn ${option.value.toLowerCase()} ${trade.direction === option.value ? 'active' : ''}`}
-            onClick={() => onMutate({ direction: option.value, priceLevelsSource: 'manual', priceLevelsEdited: true })}
-            aria-pressed={trade.direction === option.value}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function ContractSizingBlock({ trade, onMutate }: ContractSizingBlockProps) {
   const [localContracts, setLocalContracts] = useState(String(Math.max(1, Math.round(trade.contracts || 1))));
@@ -2721,8 +2696,11 @@ export default function TradeJournal() {
 
   const deleteEntry = useCallback(() => {
     if (!selectedEntry) return;
-    mutateEntries(prev => prev.filter(e => e.id !== selectedEntry.id));
+    const entryId = selectedEntry.id;
+    mutateEntries(prev => prev.filter(e => e.id !== entryId));
     setDeleteEntryConfirm(false);
+    // Hard-delete the backup row so the recovery logic can't resurrect it.
+    void deleteBackupEntryById(entryId).catch(() => {});
   }, [mutateEntries, selectedEntry]);
 
   const onShotPick = useCallback((index: number) => {

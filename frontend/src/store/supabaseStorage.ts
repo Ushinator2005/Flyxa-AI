@@ -468,6 +468,20 @@ export function readLocalSafeBackupEntries(userId: string): Record<string, unkno
   return readLocalEntriesSafe(userId);
 }
 
+/**
+ * Hard-deletes a journal entry row from store_entries_backup so the recovery
+ * logic in mergeEntriesWithRecovery cannot resurrect it after a user delete.
+ */
+export async function deleteBackupEntryById(entryId: string): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+  await supabase
+    .from('store_entries_backup')
+    .delete()
+    .eq('id', entryId)
+    .eq('user_id', userId);
+}
+
 export async function clearCurrentUserStoreCache(): Promise<void> {
   if (saveTimer) {
     clearTimeout(saveTimer);
