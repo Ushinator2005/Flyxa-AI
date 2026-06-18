@@ -111,7 +111,7 @@ function sanitizeStoreBlob(parsed: unknown): unknown {
           ? removeDeletedTradesFromEntry(entry as Record<string, unknown>, deletedTradeIds)
           : entry
       )),
-      deletedTradeIds: [],
+      deletedTradeIds: Array.from(deletedTradeIds),
     },
   };
 }
@@ -128,7 +128,11 @@ function sanitizeStoreValue(value: string): string {
 // Per-user safe-entry backup
 // ---------------------------------------------------------------------------
 
-function mirrorLocalEntriesSafe(entries: Record<string, unknown>[], userId: string): void {
+function mirrorLocalEntriesSafe(
+  entries: Record<string, unknown>[],
+  userId: string,
+  deletedTradeIds: Set<string> = new Set()
+): void {
   try {
     // Merge into the existing safe backup rather than overwriting it wholesale.
     // This ensures the backup only ever grows: if the incoming state has fewer
@@ -139,7 +143,9 @@ function mirrorLocalEntriesSafe(entries: Record<string, unknown>[], userId: stri
 
     // Seed with existing safe entries
     for (const entry of existing) {
-      next[entry.id as string] = entry;
+      const cleaned = removeDeletedTradesFromEntry(entry, deletedTradeIds);
+      const trades = Array.isArray(cleaned.trades) ? cleaned.trades : [];
+      if (trades.length > 0) next[entry.id as string] = cleaned;
     }
 
     // Merge incoming entries: replace only when the incoming version has at
@@ -234,10 +240,16 @@ async function syncPreSessionsToTable(userId: string, sessions: Array<{ id: stri
   await supabase.from('pre_sessions').upsert(rows, { onConflict: 'user_id,id' });
 }
 
-async function syncEntriesToTable(userId: string, entries: Record<string, unknown>[]): Promise<void> {
+async function syncEntriesToTable(
+  userId: string,
+  entries: Record<string, unknown>[],
+  deletedTradeIds: Set<string>
+): Promise<void> {
   if (entries.length === 0) return;
 
-  const rows = entries.map(e => ({
+  const existingBackups = await readBackupEntries(userId);
+  const protectedEntries = mergeEntriesWithRecovery(entries, existingBackups, deletedTradeIds);
+  const rows = protectedEntries.map(e => ({
     id: e.id as string,
     user_id: userId,
     date: e.date as string,
@@ -245,13 +257,127 @@ async function syncEntriesToTable(userId: string, entries: Record<string, unknow
     updated_at: new Date().toISOString(),
   }));
   await supabase.from('store_entries_backup').upsert(rows, { onConflict: 'id' });
+}
 
-  const currentIds = entries.map(e => e.id as string);
-  await supabase
+async function readBackupEntries(userId: string): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase
     .from('store_entries_backup')
-    .delete()
+    .select('data')
     .eq('user_id', userId)
-    .not('id', 'in', `(${currentIds.join(',')})`);
+    .order('date', { ascending: false });
+
+  if (error || !data) return [];
+  return data
+    .map((row: { data: unknown }) => row.data)
+    .filter((entry): entry is Record<string, unknown> => entry != null && typeof entry === 'object');
+}
+
+function mergeEntriesWithRecovery(
+  primaryEntries: Record<string, unknown>[],
+  recoveryEntries: Record<string, unknown>[],
+  deletedTradeIds: Set<string>
+): Record<string, unknown>[] {
+  const merged = new Map<string, Record<string, unknown>>();
+
+  for (const entry of primaryEntries) {
+    if (typeof entry.id === 'string') {
+      merged.set(entry.id, removeDeletedTradesFromEntry(entry, deletedTradeIds));
+    }
+  }
+
+  for (const recoveryEntry of recoveryEntries) {
+    if (typeof recoveryEntry.id !== 'string') continue;
+    const cleanedRecovery = removeDeletedTradesFromEntry(recoveryEntry, deletedTradeIds);
+    const existing = merged.get(recoveryEntry.id);
+
+    if (!existing) {
+      const recoveredTrades = Array.isArray(cleanedRecovery.trades) ? cleanedRecovery.trades : [];
+      // Only revive missing entries that contain real trades. This avoids
+      // resurrecting intentionally deleted blank journal days.
+      if (recoveredTrades.length > 0) merged.set(recoveryEntry.id, cleanedRecovery);
+      continue;
+    }
+
+    const existingTrades = Array.isArray(existing.trades) ? existing.trades : [];
+    const recoveryTrades = Array.isArray(cleanedRecovery.trades) ? cleanedRecovery.trades : [];
+    const tradesById = new Map<string, unknown>();
+
+    for (const trade of recoveryTrades) {
+      if (trade && typeof trade === 'object' && typeof (trade as Record<string, unknown>).id === 'string') {
+        tradesById.set((trade as Record<string, unknown>).id as string, trade);
+      }
+    }
+    for (const trade of existingTrades) {
+      if (trade && typeof trade === 'object' && typeof (trade as Record<string, unknown>).id === 'string') {
+        tradesById.set((trade as Record<string, unknown>).id as string, trade);
+      }
+    }
+
+    merged.set(recoveryEntry.id, {
+      ...cleanedRecovery,
+      ...existing,
+      trades: Array.from(tradesById.values()),
+    });
+  }
+
+  const consolidated = new Map<string, Record<string, unknown>>();
+
+  for (const entry of merged.values()) {
+    const date = typeof entry.date === 'string' ? entry.date : '';
+    const account = typeof entry.account === 'string' ? entry.account : '';
+    const key = date && account ? `${date}::${account}` : `id::${String(entry.id ?? '')}`;
+    const existing = consolidated.get(key);
+
+    if (!existing) {
+      consolidated.set(key, entry);
+      continue;
+    }
+
+    const existingTrades = Array.isArray(existing.trades) ? existing.trades : [];
+    const incomingTrades = Array.isArray(entry.trades) ? entry.trades : [];
+    const richerEntry = incomingTrades.length > existingTrades.length ? entry : existing;
+    const fallbackEntry = richerEntry === entry ? existing : entry;
+    const tradesById = new Map<string, unknown>();
+
+    for (const trade of [...existingTrades, ...incomingTrades]) {
+      if (trade && typeof trade === 'object' && typeof (trade as Record<string, unknown>).id === 'string') {
+        tradesById.set((trade as Record<string, unknown>).id as string, trade);
+      }
+    }
+
+    consolidated.set(key, {
+      ...fallbackEntry,
+      ...richerEntry,
+      trades: Array.from(tradesById.values()),
+    });
+  }
+
+  return Array.from(consolidated.values());
+}
+
+function countStoredTrades(entries: Record<string, unknown>[]): number {
+  return entries.reduce(
+    (total, entry) => total + (Array.isArray(entry.trades) ? entry.trades.length : 0),
+    0
+  );
+}
+
+function storedEntrySignature(entries: Record<string, unknown>[]): string {
+  return entries
+    .map(entry => {
+      const entryId = typeof entry.id === 'string' ? entry.id : '';
+      const tradeIds = (Array.isArray(entry.trades) ? entry.trades : [])
+        .map(trade => (
+          trade && typeof trade === 'object' && typeof (trade as Record<string, unknown>).id === 'string'
+            ? (trade as Record<string, unknown>).id as string
+            : ''
+        ))
+        .filter(Boolean)
+        .sort();
+      return `${entryId}:${tradeIds.join(',')}`;
+    })
+    .sort()
+    .join('|');
 }
 
 async function recoverFromJournalEntries(
@@ -259,15 +385,8 @@ async function recoverFromJournalEntries(
   baseBlob: unknown
 ): Promise<string | null> {
   try {
-    const { data, error } = await supabase
-      .from('store_entries_backup')
-      .select('data')
-      .eq('user_id', userId)
-      .order('date', { ascending: false });
-
-    if (error || !data || data.length === 0) return null;
-
-    const entries = data.map((row: { data: unknown }) => row.data);
+    const entries = await readBackupEntries(userId);
+    if (entries.length === 0) return null;
     const base = (baseBlob ?? { state: {}, version: 1 }) as Record<string, unknown>;
     const rebuilt = {
       ...base,
@@ -297,8 +416,9 @@ async function flushSave(userId: string, value: string): Promise<void> {
   try { localStorage.setItem(localSavedAtKey(userId), Date.now().toString()); } catch { /* quota */ }
 
   const entries = extractEntries(sanitizedValue);
-  await syncEntriesToTable(userId, entries);
-  mirrorLocalEntriesSafe(entries, userId);
+  const deletedTradeIds = deletedTradeIdsFromBlob(sanitized);
+  await syncEntriesToTable(userId, entries, deletedTradeIds);
+  mirrorLocalEntriesSafe(entries, userId, deletedTradeIds);
 
   const preSessions = extractPreSessionHistory(sanitizedValue);
   await syncPreSessionsToTable(userId, preSessions);
@@ -450,6 +570,33 @@ export const supabaseZustandStorage: StateStorage = {
 
         const remoteEntries = (flyxaData as { state?: { entries?: unknown[] } })?.state?.entries;
         if (Array.isArray(remoteEntries) && remoteEntries.length > 0) {
+          const remoteRecords = remoteEntries.filter(
+            (entry): entry is Record<string, unknown> => entry != null && typeof entry === 'object'
+          );
+          const backupEntries = await readBackupEntries(userId);
+          const safeEntries = readLocalEntriesSafe(userId);
+          const deletedTradeIds = deletedTradeIdsFromBlob(flyxaData);
+          const recoveredEntries = mergeEntriesWithRecovery(
+            mergeEntriesWithRecovery(remoteRecords, backupEntries, deletedTradeIds),
+            safeEntries,
+            deletedTradeIds
+          );
+
+          if (
+            recoveredEntries.length !== remoteRecords.length ||
+            countStoredTrades(recoveredEntries) !== countStoredTrades(remoteRecords) ||
+            storedEntrySignature(recoveredEntries) !== storedEntrySignature(remoteRecords)
+          ) {
+            flyxaData = {
+              ...flyxaData,
+              state: {
+                ...(flyxaData.state as Record<string, unknown> ?? {}),
+                entries: recoveredEntries,
+              },
+            };
+            void flushSaveWithRetry(userId, JSON.stringify(flyxaData));
+          }
+
           return sanitizeStoreValue(JSON.stringify(flyxaData));
         }
 
@@ -570,7 +717,13 @@ export const supabaseZustandStorage: StateStorage = {
     if (saveTimer) clearTimeout(saveTimer);
 
     const entries = extractEntries(sanitizedValue);
-    mirrorLocalEntriesSafe(entries, userId);
+    let deletedTradeIds = new Set<string>();
+    try {
+      deletedTradeIds = deletedTradeIdsFromBlob(JSON.parse(sanitizedValue) as unknown);
+    } catch {
+      // sanitizedValue was already validated by extractEntries; keep an empty tombstone set.
+    }
+    mirrorLocalEntriesSafe(entries, userId, deletedTradeIds);
 
     saveTimer = setTimeout(() => {
       if (pendingValue) void flushSaveWithRetry(userId, pendingValue);

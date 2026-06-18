@@ -742,11 +742,8 @@ function DirectionSelectorBlock({ trade, onMutate }: ContractSizingBlockProps) {
   ];
 
   return (
-    <div className="tj-direction-card">
-      <div className="tj-size-inline">
-        <span className="tj-size-title">DIRECTION</span>
-        <span className="tj-size-caption">Manual trade</span>
-      </div>
+    <div className="tj-sizing-row">
+      <span className="tj-size-label">Direction</span>
       <div className="tj-direction-toggle" role="group" aria-label="Trade direction">
         {options.map(option => (
           <button
@@ -787,11 +784,8 @@ function ContractSizingBlock({ trade, onMutate }: ContractSizingBlockProps) {
   };
 
   return (
-    <div className="tj-size-card">
-      <div className="tj-size-inline">
-        <span className="tj-size-title">CONTRACT SIZING</span>
-        <span className="tj-size-caption">Per trade</span>
-      </div>
+    <div className="tj-sizing-row">
+      <span className="tj-size-label">Contracts</span>
       <div className="tj-size-body">
         <button
           type="button"
@@ -842,8 +836,8 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
   };
 
   return (
-    <div className="tj-account-card">
-      <span className="tj-size-title">ACCOUNTS</span>
+    <div className="tj-sizing-row">
+      <span className="tj-size-label">Accounts</span>
       <div className="tj-account-check-list">
         {accounts.filter(account =>
           account.id !== DEFAULT_ACCOUNT_ID &&
@@ -853,6 +847,7 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
         ).map(account => {
           const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
           const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
+          const dotColor = ACCOUNT_STATUS_DOT[account.status] ?? 'rgba(255,255,255,0.25)';
           return (
             <label
               key={account.id}
@@ -865,19 +860,16 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
                 onChange={event => toggleAccount(account.id, event.target.checked)}
                 disabled={isInactive}
               />
+              <span
+                className="tj-account-status-dot"
+                style={{ background: dotColor }}
+                title={account.status}
+              />
               <span>{account.name}{statusLabel}</span>
             </label>
           );
         })}
       </div>
-      {(() => {
-        const selected = accounts.find(a => a.id === selectedAccountIds[0]);
-        if (!selected) return null;
-        const dotColor = ACCOUNT_STATUS_DOT[selected.status] ?? '#888';
-        return (
-          <span className="tj-account-dot" style={{ background: dotColor }} title={selected.status} />
-        );
-      })()}
     </div>
   );
 }
@@ -2290,6 +2282,45 @@ export default function TradeJournal() {
     }));
   }, [mutateEntries, selectedEntryId]);
 
+  // Helper: a "phantom" trade has no meaningful data — it was created by clicking
+  // "Add trade" but never filled in. We identify it by the combination of:
+  //   result === 'open', pnl === 0, entryPrice === 0, exitPrice === 0, no screenshot.
+  const isPhantomTrade = useCallback((t: JournalTrade) =>
+    t.result === 'open' && t.pnl === 0 && t.entryPrice === 0 && t.exitPrice === 0 && !t.screenshotUrl,
+  []);
+
+  // One-time mount cleanup: remove phantom trades that were accidentally persisted
+  // in previous sessions (before setActiveTradeId was called after addManualTrade).
+  const phantomCleanupDone = useRef(false);
+  useEffect(() => {
+    if (phantomCleanupDone.current) return;
+    phantomCleanupDone.current = true;
+    mutateEntries(prev => {
+      const next = prev.map(entry => ({
+        ...entry,
+        trades: entry.trades.filter(t => !isPhantomTrade(t)),
+      }));
+      const changed = next.some((e, i) => e.trades.length !== prev[i]?.trades.length);
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Entry-leave cleanup: when the user navigates to a different entry, strip any
+  // unfilled blank trades from the entry they just left so they don't accumulate.
+  const prevSelectedEntryIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prevId = prevSelectedEntryIdRef.current;
+    prevSelectedEntryIdRef.current = selectedEntryId;
+    if (!prevId || prevId === selectedEntryId) return;
+    mutateEntries(prev => {
+      const entry = prev.find(e => e.id === prevId);
+      if (!entry) return prev;
+      const cleanedTrades = entry.trades.filter(t => !isPhantomTrade(t));
+      if (cleanedTrades.length === entry.trades.length) return prev;
+      return prev.map(e => e.id === prevId ? { ...e, trades: cleanedTrades } : e);
+    });
+  }, [selectedEntryId, mutateEntries, isPhantomTrade]);
 
   useEffect(() => {
     if (!entries.length) {
@@ -2542,6 +2573,7 @@ export default function TradeJournal() {
       confluences: [],
     };
     mutateEntries(prev => prev.map(entry => entry.id === selectedEntry.id ? { ...entry, trades: [withTradeDerivedValues(newTrade), ...entry.trades] } : entry));
+    setActiveTradeId(newTrade.id);
   }, [accounts, mutateEntries, selectedEntry]);
 
   const applyScannedTrade = useCallback((fileDataUrl: string, trade: JournalTrade, date: string) => {
@@ -3399,7 +3431,7 @@ export default function TradeJournal() {
                     <div
                       key={trade.id}
                       className={`tj-trade-card ${trade.result}${activeTradeId === trade.id ? ' active' : ''}${selectedTradeIds.has(trade.id) ? ' tj-trade-selected' : ''}`}
-                      onClick={() => setActiveTradeId(trade.id)}
+                      onClick={() => { setActiveTradeId(trade.id); setSelectedTradeIds(new Set()); setBulkDeleteConfirm(false); }}
                       aria-current={activeTradeId === trade.id ? 'true' : undefined}
                     >
                       <button
@@ -3465,21 +3497,16 @@ export default function TradeJournal() {
                   <div className="tj-section-head">
                     <span className="tj-section-title">Contract Sizing</span>
                   </div>
-                  {activeTrade.priceLevelsSource !== 'ai' && (
-                    <DirectionSelectorBlock
+                  <div className="tj-sizing-group">
+                    <AccountSelectorBlock
                       trade={activeTrade}
                       onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
                     />
-                  )}
-                  <AccountSelectorBlock
-                    trade={activeTrade}
-                    onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                  />
-                  <ContractSizingBlock
-                    trade={activeTrade}
-                    onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                  />
-
+                    <ContractSizingBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                  </div>
                 </>
               )}
 

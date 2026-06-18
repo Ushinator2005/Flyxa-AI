@@ -214,23 +214,6 @@ function buildPatternInstruction(pattern: PatternItem, mode: 'watch' | 'protect'
 }
 
 
-function customCheckbox(checked: boolean) {
-  return (
-    <span
-      className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] border"
-      style={{
-        borderColor: checked ? '#22c55e' : 'rgba(255,255,255,0.2)',
-        backgroundColor: checked ? '#22c55e' : 'transparent',
-      }}
-    >
-      {checked && (
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-          <path d="M2 5.1L4.1 7.2L8 3.2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-    </span>
-  );
-}
 
 export default function FlyxaAIPreSession() {
   const navigate = useNavigate();
@@ -385,7 +368,7 @@ export default function FlyxaAIPreSession() {
   const openRiskEditor = () => {
     setRiskDraft({
       daily_loss_limit: riskLimits.noLossLimit ? '0' : String(Math.round(riskLimits.maxDailyLoss)),
-      daily_profit_limit: maxWinStored ? String(Math.round(maxWinStored)) : '',
+      daily_profit_limit: String(Math.round(riskLimits.maxWin)),
       max_trades_per_day: String(riskLimits.maxTrades),
       max_contracts_per_trade: String(riskLimits.maxContracts),
       account_size: String(Math.round(riskLimits.accountSize)),
@@ -507,33 +490,39 @@ export default function FlyxaAIPreSession() {
     const recentPlanDrag = recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80;
     const recentEmotionDrag = recentBehavior.revengeTagged > 0;
     return [
-      ...(priorFlow ? [{
+      // Carry-forward: only when there's an actual behavioral leak
+      ...(priorFlow?.biggestLeak ? [{
         id: 'tomorrow-rule',
         source: 'Hard stop' as const,
         rule: priorFlow.tomorrowRule,
       }] : []),
-      {
+      // Primary focus: only when there's a confirmed edge pattern
+      ...(topEdge ? [{
         id: 'focus',
-        source: 'Primary focus',
-        rule: topEdge
-          ? `Prioritize ${topEdge.session} entries in ${topEdge.instrument}; this is your highest-confidence edge window today.`
-          : 'Prioritize your cleanest A+ continuation window and skip marginal entries.',
-      },
-      {
-        id: 'avoid',
-        source: 'Avoid today',
-        rule: topRisk
-          ? `Avoid ${topRisk.title.toLowerCase()} by pausing after the first loss and requiring full checklist confirmation.`
-          : recentEmotionDrag
-            ? 'Do not chase recovery trades. If frustration shows up, step away before taking another entry.'
-            : recentPlanDrag
-              ? 'Do not take trades that skip your plan confirmation; recent execution drift says this matters today.'
-              : 'Avoid unplanned entries and keep the session narrow enough to protect your best execution.',
-      },
+        source: 'Primary focus' as const,
+        rule: `Prioritize ${topEdge.session} entries in ${topEdge.instrument}; this is your highest-confidence edge window today.`,
+      }] : []),
+      // Avoid today: only when there's real behavioral data
+      ...(topRisk ? [{
+        id: 'avoid-risk',
+        source: 'Avoid today' as const,
+        rule: `Avoid ${topRisk.title.toLowerCase()} by pausing after the first loss and requiring full checklist confirmation.`,
+      }] : recentEmotionDrag ? [{
+        id: 'avoid-emotion',
+        source: 'Avoid today' as const,
+        rule: 'Do not chase recovery trades. If frustration shows up, step away before the next entry.',
+      }] : recentPlanDrag ? [{
+        id: 'avoid-plan',
+        source: 'Avoid today' as const,
+        rule: `Plan adherence is ${recentBehavior.planAdherence}%. Every entry must clear your written plan before execution.`,
+      }] : []),
+      // Hard stop: always data-driven
       {
         id: 'hard-stop',
         source: 'Hard stop',
-        rule: `Walk away for the day at ${formatCurrency(-riskLimits.maxDailyLoss)} or after ${riskLimits.maxTrades} trades, whichever comes first.`,
+        rule: riskLimits.noLossLimit
+          ? `Stop after ${riskLimits.maxTrades} trades or when you feel the session is done.`
+          : `Stop at ${formatCurrency(-riskLimits.maxDailyLoss)} loss or after ${riskLimits.maxTrades} trades — whichever comes first.`,
       },
     ];
   }, [activeRiskPatterns, confirmedEdgePatterns, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
@@ -717,6 +706,7 @@ export default function FlyxaAIPreSession() {
 
   const readinessColor = readiness.status === 'Ready' ? C.grn : readiness.status === 'Caution' ? C.acc : C.red;
   const oathCompleted = activeOathItems.filter(item => Boolean(checklistState[item.id])).length;
+  const activeOathIdx = activeOathItems.findIndex(item => !Boolean(checklistState[item.id]));
   const mentalCompleted = mentalChecklistWithAdaptiveItems.filter(item => item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id])).length;
   const technicalCompleted = technicalChecklistItems.filter(item => Boolean(checklistState[item.id])).length;
   const visiblePatterns = [...activeRiskPatterns.slice(0, 2), ...confirmedEdgePatterns.slice(0, 2)];
@@ -912,7 +902,7 @@ export default function FlyxaAIPreSession() {
                     { label: 'Contracts', value: String(riskLimits.maxContracts), color: C.t1 },
                   ].map((stat, i) => (
                     <div key={stat.label} style={{ padding: '16px 18px', borderRight: i < 3 ? `1px solid ${C.b0}` : 'none' }}>
-                      <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: stat.color, lineHeight: 1, marginBottom: 6 }}>{stat.value}</p>
+                      <p style={{ fontFamily: 'monospace', fontSize: 17, fontWeight: 500, color: stat.color, lineHeight: 1, marginBottom: 6, letterSpacing: '-0.02em' }}>{stat.value}</p>
                       <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.03em' }}>{stat.label}</p>
                     </div>
                   ))}
@@ -985,7 +975,7 @@ export default function FlyxaAIPreSession() {
                 )}
               </div>
 
-              {priorFlow && (
+              {priorFlow?.biggestLeak && (
                 <div style={{
                   padding: '14px 16px', borderRadius: 8,
                   border: `1px solid ${C.b0}`,
@@ -1005,25 +995,21 @@ export default function FlyxaAIPreSession() {
           {/* ─── STEP 3: Checklist ─── */}
           {step === 3 && (
             <>
+              {/* Trader Oath — sequential commitment flow */}
               <div data-tour-id="pre-session-oath" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <div>
                     <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Trader Oath</h2>
-                    <p style={{ fontSize: 11, color: C.t2 }}>Acknowledge each commitment before you trade.</p>
+                    <p style={{ fontSize: 11, color: C.t2 }}>
+                      {activeOathIdx === -1 ? 'All commitments accepted.' : `${oathCompleted} of ${activeOathItems.length} accepted`}
+                    </p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {oathCooldownActive && (
-                      <span style={{ fontSize: 9, color: C.t2, fontFamily: 'monospace' }}>wait {oathCooldownRemaining}s</span>
-                    )}
-                    <span style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 700, color: oathCompleted === activeOathItems.length ? C.grn : C.acc }}>
-                      {oathCompleted}/{activeOathItems.length}
-                    </span>
-                    <button type="button" onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
-                      style={{ fontSize: 10, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                      {oathEditOpen ? 'cancel' : 'edit'}
-                    </button>
-                  </div>
+                  <button type="button" onClick={oathEditOpen ? () => setOathEditOpen(false) : openOathEditor}
+                    style={{ fontSize: 10, color: C.t2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    {oathEditOpen ? 'cancel' : 'edit'}
+                  </button>
                 </div>
+
                 {oathEditOpen ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px' }}>
                     {oathDraft.map((item, idx) => (
@@ -1042,64 +1028,131 @@ export default function FlyxaAIPreSession() {
                       style={{ padding: '8px 0', borderRadius: 4, border: `1px solid ${C.acc}44`, backgroundColor: `${C.acc}10`, color: C.acc, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
                   </div>
                 ) : (
-                  <div>
-                    {activeOathItems.map((item, i) => {
-                      const checked = Boolean(checklistState[item.id]);
-                      const locked = oathCooldownActive;
-                      return (
-                        <button key={item.id} type="button" disabled={locked} onClick={() => toggleOathChecklist(item)} style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px',
-                          width: '100%', textAlign: 'left',
-                          border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
-                          backgroundColor: checked ? `${C.acc}07` : 'transparent',
-                          cursor: locked ? 'not-allowed' : 'pointer',
-                          opacity: locked && !checked ? 0.5 : 1,
-                          transition: 'background 0.12s ease, opacity 0.12s ease',
-                        }}>
-                          {customCheckbox(checked)}
-                          <p style={{ fontSize: 12.5, lineHeight: 1.55, color: checked ? C.t1 : C.t0, flex: 1 }}>{item.label}</p>
-                        </button>
-                      );
-                    })}
+                  <>
+                  <div style={{ padding: '18px 16px' }}>
+
+                    {/* Completed items — collapsed, struck through */}
+                    {oathCompleted > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: activeOathIdx !== -1 ? 18 : 0 }}>
+                        {activeOathItems.filter(item => Boolean(checklistState[item.id])).map(item => (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 9, opacity: 0.45 }}>
+                            <span style={{
+                              width: 15, height: 15, borderRadius: '50%', flexShrink: 0,
+                              backgroundColor: `${C.grn}20`, border: `1px solid ${C.grn}50`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 7, color: C.grn,
+                            }}>✓</span>
+                            <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.4, textDecoration: 'line-through' }}>{item.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {activeOathIdx === -1 ? (
+                      /* All done */
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                        <span style={{ fontSize: 18, color: C.grn }}>✓</span>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.grn }}>Oath complete — you're committed.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Active commitment */}
+                        <div style={{ borderLeft: `3px solid ${C.acc}`, paddingLeft: 14, marginBottom: activeOathItems.slice(activeOathIdx + 1).length > 0 ? 18 : 0 }}>
+                          <p style={{ fontSize: 9, fontWeight: 700, color: C.acc, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 10 }}>
+                            Commitment {activeOathIdx + 1} of {activeOathItems.length}
+                          </p>
+                          <p style={{ fontSize: 14, lineHeight: 1.7, color: C.t0, fontWeight: 500 }}>
+                            {activeOathItems[activeOathIdx].label}
+                          </p>
+                        </div>
+
+                        {/* Upcoming — faded queue */}
+                        {activeOathItems.slice(activeOathIdx + 1).map((item, i) => (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: i < activeOathItems.slice(activeOathIdx + 1).length - 1 ? 10 : 0, opacity: Math.max(0.12, 0.35 - i * 0.08) }}>
+                            <span style={{ width: 15, height: 15, borderRadius: '50%', border: `1px solid ${C.b0}`, flexShrink: 0, marginTop: 3 }} />
+                            <p style={{ fontSize: 11.5, color: C.t2, lineHeight: 1.5 }}>{item.label}</p>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
+
+                  {/* Accept — card footer, always at bottom */}
+                  {activeOathIdx !== -1 && (
+                    <button
+                      type="button"
+                      disabled={oathCooldownActive}
+                      onClick={() => toggleOathChecklist(activeOathItems[activeOathIdx])}
+                      style={{
+                        width: '100%', padding: '13px 16px',
+                        border: 'none', borderTop: `1px solid ${C.b0}`,
+                        backgroundColor: oathCooldownActive ? 'transparent' : C.d3,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        color: oathCooldownActive ? C.t2 : C.acc,
+                        fontSize: 12, fontWeight: 600,
+                        cursor: oathCooldownActive ? 'default' : 'pointer',
+                      }}>
+                      <span>{oathCooldownActive ? `Accepted — next in ${oathCooldownRemaining}s` : 'I accept this'}</span>
+                      {!oathCooldownActive && <span style={{ fontSize: 14, opacity: 0.7 }}>→</span>}
+                    </button>
+                  )}
+                  </>
                 )}
               </div>
 
+              {/* Readiness checks */}
               <div data-tour-id="pre-session-checklist" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <div>
                     <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Readiness checks</h2>
                     <p style={{ fontSize: 11, color: C.t2 }}>Mental clarity + platform setup.</p>
                   </div>
-                  <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.t2 }}>{mentalCompleted + technicalCompleted}/{mentalChecklistWithAdaptiveItems.length + technicalChecklistItems.length}</span>
+                  <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 600, color: mentalCompleted + technicalCompleted === mentalChecklistWithAdaptiveItems.length + technicalChecklistItems.length ? C.grn : C.t2 }}>
+                    {mentalCompleted + technicalCompleted}/{mentalChecklistWithAdaptiveItems.length + technicalChecklistItems.length}
+                  </span>
                 </div>
                 <div>
                   {[
-                    { label: 'Mental', items: mentalChecklistWithAdaptiveItems },
-                    { label: 'Technical', items: technicalChecklistItems },
+                    { label: 'Mental', items: mentalChecklistWithAdaptiveItems, done: mentalCompleted === mentalChecklistWithAdaptiveItems.length },
+                    { label: 'Technical', items: technicalChecklistItems, done: technicalCompleted === technicalChecklistItems.length },
                   ].map((group, gi) => (
                     <div key={group.label} style={{ borderTop: gi === 0 ? 'none' : `1px solid ${C.b0}` }}>
-                      <p style={{ fontSize: 9, fontWeight: 700, color: C.t2, letterSpacing: '0.07em', textTransform: 'uppercase', padding: '8px 16px 4px' }}>{group.label}</p>
-                      {group.items.map((item, i) => {
-                        const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
-                        return (
-                          <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
-                            display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 16px',
-                            width: '100%', textAlign: 'left',
-                            border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
-                            backgroundColor: checked ? `${C.grn}05` : 'transparent',
-                            cursor: item.autoFromEmotion ? 'default' : 'pointer',
-                          }}>
-                            {customCheckbox(checked)}
-                            <div style={{ minWidth: 0 }}>
-                              <p style={{ fontSize: 12, color: checked ? C.t2 : C.t1, lineHeight: 1.45 }}>{item.label}</p>
-                              {(item.autoFromEmotion || item.source) && (
-                                <p style={{ fontSize: 9, color: C.t2, marginTop: 2 }}>{item.autoFromEmotion ? 'auto · emotion' : item.source}</p>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 16px 5px' }}>
+                        <p style={{ fontSize: 9, fontWeight: 700, color: group.done ? C.grn : C.t2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{group.label}</p>
+                        {group.done && <span style={{ fontSize: 9, color: C.grn, fontFamily: 'monospace', letterSpacing: '0.04em' }}>ALL CLEAR</span>}
+                      </div>
+                      {(() => {
+                        const allItems = [...mentalChecklistWithAdaptiveItems, ...technicalChecklistItems];
+                        const nextUncheckedId = allItems.find(it => !(it.autoFromEmotion ? emotionLogged : Boolean(checklistState[it.id])))?.id ?? null;
+                        return group.items.map((item, i) => {
+                          const checked = item.autoFromEmotion ? emotionLogged : Boolean(checklistState[item.id]);
+                          const isNext = !checked && item.id === nextUncheckedId;
+                          return (
+                            <button key={item.id} type="button" onClick={() => toggleChecklist(item)} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              gap: 12, padding: '11px 16px',
+                              width: '100%', textAlign: 'left',
+                              border: 'none',
+                              borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                              borderLeft: `3px solid ${checked ? C.grn : isNext ? C.acc : 'transparent'}`,
+                              backgroundColor: checked ? `${C.grn}06` : isNext ? `${C.acc}07` : 'transparent',
+                              cursor: item.autoFromEmotion ? 'default' : 'pointer',
+                              opacity: checked ? 0.5 : isNext ? 1 : 0.45,
+                              transition: 'opacity 0.15s',
+                            }}>
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ fontSize: 12, fontWeight: isNext ? 600 : 500, color: checked ? C.t2 : C.t0, lineHeight: 1.45 }}>{item.label}</p>
+                                {item.source && (
+                                  <p style={{ fontSize: 9, color: C.t2, marginTop: 2 }}>{item.source}</p>
+                                )}
+                              </div>
+                              <span style={{ flexShrink: 0, fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: checked ? C.grn : isNext ? C.acc : C.t2 }}>
+                                {checked ? '✓' : item.autoFromEmotion ? 'auto' : isNext ? 'tap' : '—'}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -1110,28 +1163,27 @@ export default function FlyxaAIPreSession() {
           {/* ─── STEP 4: Session Brief ─── */}
           {step === 4 && (
             <>
-              <div style={{
-                padding: '16px',
-                borderRadius: 8,
-                border: `1px solid ${readiness.status === 'Stand Down' ? `${C.red}30` : readiness.status === 'Caution' ? `${C.acc}28` : `${C.grn}28`}`,
-                borderLeft: `3px solid ${readinessColor}`,
-                backgroundColor: readiness.status === 'Stand Down' ? `${C.red}0a` : readiness.status === 'Caution' ? `${C.acc}08` : `${C.grn}08`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: readinessColor, letterSpacing: '0.09em', textTransform: 'uppercase' }}>{readiness.status}</span>
-                  <span style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: readinessColor }}>{readiness.score}/100</span>
+              <div style={{ borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
+                {/* Colored top bar */}
+                <div style={{ height: 3, backgroundColor: `${readinessColor}30` }}>
+                  <div style={{ height: '100%', width: `${readiness.score}%`, backgroundColor: readinessColor, transition: 'width 0.4s ease' }} />
                 </div>
-                <p style={{ fontSize: 12.5, color: C.t0, lineHeight: 1.55, marginBottom: readiness.reasons.length > 0 ? 10 : 0 }}>{readiness.summary}</p>
-                {readiness.reasons.length > 0 && (
-                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {readiness.reasons.map((r, i) => (
-                      <li key={i} style={{ fontSize: 11, color: C.t2, paddingLeft: 10, position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: 0, color: readinessColor }}>·</span>
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {/* Score + status + summary */}
+                <div style={{ padding: '14px 18px 16px', borderBottom: readiness.reasons.length > 0 ? `1px solid ${C.b0}` : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 40, fontWeight: 500, color: readinessColor, lineHeight: 1, letterSpacing: '-0.04em' }}>{readiness.score}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.t2 }}>/100</span>
+                    <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, color: readinessColor, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.85 }}>{readiness.status}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: C.t1, lineHeight: 1.6 }}>{readiness.summary}</p>
+                </div>
+                {/* Reasons */}
+                {readiness.reasons.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 18px', borderTop: `1px solid ${C.b0}` }}>
+                    <span style={{ width: 3, height: 3, borderRadius: '50%', flexShrink: 0, backgroundColor: readinessColor, marginTop: 6, opacity: 0.7 }} />
+                    <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{r}</p>
+                  </div>
+                ))}
               </div>
 
               <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
@@ -1185,27 +1237,27 @@ export default function FlyxaAIPreSession() {
                 </div>
               )}
 
-              <div data-tour-id="pre-session-begin" style={{ padding: '16px', borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1 }}>
-                <p style={{ fontSize: 11.5, fontWeight: 600, color: C.t0, marginBottom: 5 }}>Today&apos;s operating mode</p>
-                <p style={{ fontSize: 12, color: C.t1, lineHeight: 1.55, marginBottom: 14 }}>
-                  {readiness.status === 'Ready'
-                    ? 'Green light only for planned trades. Keep execution narrow and measurable.'
-                    : readiness.status === 'Caution'
-                      ? 'Trade smaller and slower. One clean trade is better than a busy session.'
-                      : 'Stand down until the blockers are cleared. Capital protection is the win condition.'}
-                </p>
+              <div data-tour-id="pre-session-begin" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
                 {sessionAlreadyStarted ? (
                   <button type="button" onClick={() => navigate('/session')} style={{
-                    width: '100%', padding: '12px 0', borderRadius: 6,
-                    border: `1px solid ${C.grn}50`, backgroundColor: `${C.grn}10`,
+                    width: '100%', padding: '14px 16px',
+                    border: 'none', backgroundColor: 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     color: C.grn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}>Continue session →</button>
+                  }}>
+                    <span>Continue session</span>
+                    <span style={{ fontSize: 15, opacity: 0.8 }}>→</span>
+                  </button>
                 ) : (
                   <button type="button" onClick={startSession} style={{
-                    width: '100%', padding: '12px 0', borderRadius: 6,
-                    border: `1px solid ${C.acc}`, backgroundColor: C.acc,
-                    color: C.d0, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                  }}>Accept oath — begin session</button>
+                    width: '100%', padding: '14px 16px',
+                    border: 'none', backgroundColor: C.d3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    color: C.acc, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}>
+                    <span>Begin session</span>
+                    <span style={{ fontSize: 15, opacity: 0.8 }}>→</span>
+                  </button>
                 )}
               </div>
             </>

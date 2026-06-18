@@ -195,6 +195,7 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     rr: 0,
     pnl: typeof data.pnl === 'number' ? data.pnl : 0,
     pnlOverride: typeof data.pnlOverride === 'number' && Number.isFinite(data.pnlOverride) ? data.pnlOverride : undefined,
+    commission: typeof data.commission === 'number' && Number.isFinite(data.commission) ? data.commission : undefined,
     result,
     time: (data.trade_time ?? '09:30').slice(0, 5),
     exitTime: typeof data.close_time === 'string' ? data.close_time.slice(0, 5) : (data.trade_time ?? '09:30').slice(0, 5),
@@ -372,6 +373,7 @@ export function useTrades() {
 
     const trade = toStoreTrade(data, entry.id, accountId);
     addTrade(entry.id, trade);
+    await flushSupabaseStoreNow();
     return toApiTrade(trade);
   }, [activeAccountId, addEntry, addTrade, entries]);
 

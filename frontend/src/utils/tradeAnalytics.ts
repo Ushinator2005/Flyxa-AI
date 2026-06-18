@@ -95,7 +95,10 @@ export function buildMonthlyHeatmapData(trades: Trade[], year: number, month: nu
     if (date.getFullYear() !== year || date.getMonth() + 1 !== month) return;
 
     const day = date.getDate();
-    days[day] = (days[day] ?? 0) + (trade.pnl - (trade.commission ?? 0));
+    const grossPnl = typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride)
+      ? trade.pnlOverride
+      : trade.pnl;
+    days[day] = (days[day] ?? 0) + (grossPnl - (trade.commission ?? 0));
     counts[day] = (counts[day] ?? 0) + 1;
   });
 

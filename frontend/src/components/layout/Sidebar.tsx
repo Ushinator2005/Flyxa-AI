@@ -35,8 +35,8 @@ type NavItemDef = { path: string; icon: typeof LayoutDashboard; label: string; e
 
 const primaryNavItems: NavItemDef[] = [
   { path: '/',             icon: LayoutDashboard, label: 'Dashboard',    extraActivePaths: [] },
-  { path: '/pre-session',  icon: ClipboardCheck,  label: 'Session',      extraActivePaths: ['/post-session'] },
   { path: '/scanner',      icon: ScanLine,        label: 'Trade Scanner' },
+  { path: '/pre-session',  icon: ClipboardCheck,  label: 'Session',      extraActivePaths: ['/post-session'] },
   { path: '/analytics',    icon: BarChart2,       label: 'Analytics'     },
   { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
   { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
