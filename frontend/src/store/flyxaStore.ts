@@ -5,6 +5,7 @@ import { supabaseZustandStorage } from './supabaseStorage.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { DEFAULT_ACHIEVEMENTS, mergeAchievementCatalog, refreshAchievements } from './achievements.js';
 import { pushToast } from './toastStore.js';
+import { scaleContractAmount } from '../utils/contractSizing.js';
 import type {
   Account,
   Achievement,
@@ -73,6 +74,8 @@ interface FlyxaStateData {
   journalTitles: Record<string, string>;
   rivals: StoredRival[];
   deletedTradeIds: string[];
+  deletedEntryDates: string[];
+  restoredEntryDates: string[];
   backtestSessions: BacktestSession[];
   onboarding: OnboardingState | null;
   preSession: PreSessionData | null;
@@ -486,6 +489,8 @@ export function getInitialState(): FlyxaStateData {
     journalTitles: {},
     rivals: [],
     deletedTradeIds: [],
+    deletedEntryDates: [],
+    restoredEntryDates: [],
     backtestSessions: [],
     onboarding: null,
     preSession: null,
@@ -517,7 +522,35 @@ function syncAchievements(data: FlyxaStateData, options: { notify?: boolean } = 
 }
 
 function withDerivedEntries(entries: JournalEntry[]): JournalEntry[] {
-  return entries.map(withEntryDerived).sort((a, b) => b.date.localeCompare(a.date));
+  const seenTradeIds = new Set<string>();
+  return entries
+    .map((entry) => {
+      const uniqueTrades = entry.trades.filter((trade) => {
+        if (seenTradeIds.has(trade.id)) return false;
+        seenTradeIds.add(trade.id);
+        return true;
+      });
+      return withEntryDerived({ ...entry, trades: uniqueTrades });
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function filterEntriesByTombstones(
+  entries: JournalEntry[],
+  deletedTradeIds: string[],
+  deletedEntryDates: string[]
+): JournalEntry[] {
+  const deletedTrades = new Set(deletedTradeIds);
+  const deletedDates = new Set(deletedEntryDates);
+
+  return withDerivedEntries(
+    entries
+      .filter((entry) => !deletedDates.has(entry.date))
+      .map((entry) => ({
+        ...entry,
+        trades: entry.trades.filter((trade) => !deletedTrades.has(trade.id)),
+      }))
+  );
 }
 
 function maybeCreateFundedAccount(accounts: Account[], billingAccount: BillingAccount): Account[] {
@@ -554,6 +587,10 @@ const useFlyxaStore = create<FlyxaStore>()(
         set((state) => syncAchievements({
           ...state,
           entries: withDerivedEntries([withEntryDerived(entry), ...state.entries]),
+          deletedEntryDates: state.deletedEntryDates.filter(date => date !== entry.date),
+          restoredEntryDates: state.deletedEntryDates.includes(entry.date)
+            ? Array.from(new Set([...state.restoredEntryDates, entry.date]))
+            : state.restoredEntryDates,
         }));
       },
 
@@ -562,7 +599,17 @@ const useFlyxaStore = create<FlyxaStore>()(
           const entries = withDerivedEntries(
             state.entries.map((entry) => (entry.id === id ? withEntryDerived({ ...entry, ...updates }) : entry))
           );
-          return syncAchievements({ ...state, entries });
+          const updatedEntry = entries.find((entry) => entry.id === id);
+          return syncAchievements({
+            ...state,
+            entries,
+            deletedEntryDates: updatedEntry
+              ? state.deletedEntryDates.filter((date) => date !== updatedEntry.date)
+              : state.deletedEntryDates,
+            restoredEntryDates: updatedEntry && state.deletedEntryDates.includes(updatedEntry.date)
+              ? Array.from(new Set([...state.restoredEntryDates, updatedEntry.date]))
+              : state.restoredEntryDates,
+          });
         });
       },
 
@@ -572,16 +619,25 @@ const useFlyxaStore = create<FlyxaStore>()(
             .find((entry) => entry.id === id)
             ?.trades.map((trade) => trade.id) ?? [];
           const deletedTradeIds = Array.from(new Set([...state.deletedTradeIds, ...removedTradeIds]));
+          const deletedDate = state.entries.find((entry) => entry.id === id)?.date;
+          const deletedEntryDates = deletedDate
+            ? Array.from(new Set([...state.deletedEntryDates, deletedDate]))
+            : state.deletedEntryDates;
           return syncAchievements({
             ...state,
             entries: state.entries.filter((entry) => entry.id !== id),
             deletedTradeIds,
+            deletedEntryDates,
+            restoredEntryDates: deletedDate
+              ? state.restoredEntryDates.filter((date) => date !== deletedDate)
+              : state.restoredEntryDates,
           });
         });
       },
 
       addTrade: (entryId, trade) => {
         set((state) => {
+          const targetEntry = state.entries.find((entry) => entry.id === entryId);
           const entries = withDerivedEntries(
             state.entries.map((entry) => {
               if (entry.id !== entryId) return entry;
@@ -590,23 +646,74 @@ const useFlyxaStore = create<FlyxaStore>()(
             })
           );
           pushToast({ tone: 'green', durationMs: 3000, message: 'Trade scanned and saved' });
-          return syncAchievements({ ...state, entries });
+          return syncAchievements({
+            ...state,
+            entries,
+            deletedTradeIds: state.deletedTradeIds.filter((id) => id !== trade.id),
+            deletedEntryDates: targetEntry
+              ? state.deletedEntryDates.filter((date) => date !== targetEntry.date)
+              : state.deletedEntryDates,
+            restoredEntryDates: targetEntry && state.deletedEntryDates.includes(targetEntry.date)
+              ? Array.from(new Set([...state.restoredEntryDates, targetEntry.date]))
+              : state.restoredEntryDates,
+          });
         });
       },
 
       updateTrade: (entryId, tradeId, updates) => {
         set((state) => {
+          const targetEntry = state.entries.find((entry) => entry.id === entryId);
           const entries = withDerivedEntries(
             state.entries.map((entry) => {
               if (entry.id !== entryId) return entry;
               const trades = entry.trades.map((trade) => {
                 if (trade.id !== tradeId) return trade;
-                return recalcTrade({ ...trade, ...updates });
+                const definedUpdates = Object.fromEntries(
+                  Object.entries(updates).filter(([, value]) => value !== undefined)
+                ) as Partial<Trade>;
+                if (
+                  typeof definedUpdates.contracts === 'number'
+                  && definedUpdates.contracts !== trade.contracts
+                ) {
+                  const incomingOverride = definedUpdates.pnlOverride;
+                  if (
+                    incomingOverride === undefined
+                    || incomingOverride === trade.pnlOverride
+                  ) {
+                    definedUpdates.pnlOverride = scaleContractAmount(
+                      trade.pnlOverride,
+                      trade.contracts,
+                      definedUpdates.contracts
+                    );
+                  }
+                  const incomingCommission = definedUpdates.commission;
+                  if (
+                    incomingCommission === undefined
+                    || incomingCommission === trade.commission
+                  ) {
+                    definedUpdates.commission = scaleContractAmount(
+                      trade.commission,
+                      trade.contracts,
+                      definedUpdates.contracts
+                    );
+                  }
+                }
+                return recalcTrade({ ...trade, ...definedUpdates });
               });
               return withEntryDerived({ ...entry, trades });
             })
           );
-          return syncAchievements({ ...state, entries });
+          return syncAchievements({
+            ...state,
+            entries,
+            deletedTradeIds: state.deletedTradeIds.filter((id) => id !== tradeId),
+            deletedEntryDates: targetEntry
+              ? state.deletedEntryDates.filter((date) => date !== targetEntry.date)
+              : state.deletedEntryDates,
+            restoredEntryDates: targetEntry && state.deletedEntryDates.includes(targetEntry.date)
+              ? Array.from(new Set([...state.restoredEntryDates, targetEntry.date]))
+              : state.restoredEntryDates,
+          });
         });
       },
 
@@ -802,8 +909,24 @@ const useFlyxaStore = create<FlyxaStore>()(
                   : [],
               };
             }) as JournalEntry[];
+          const savedDates = new Set(safeEntries.map((entry) => entry.date));
+          const savedTradeIds = new Set(
+            safeEntries.flatMap((entry) => entry.trades.map((trade) => trade.id))
+          );
+          const restoredDates = safeEntries
+            .map((entry) => entry.date)
+            .filter((date) => state.deletedEntryDates.includes(date));
           return syncAchievements(
-            { ...state, entries: withDerivedEntries(safeEntries) },
+            {
+              ...state,
+              entries: withDerivedEntries(safeEntries),
+              deletedTradeIds: state.deletedTradeIds.filter((id) => !savedTradeIds.has(id)),
+              deletedEntryDates: state.deletedEntryDates.filter((date) => !savedDates.has(date)),
+              restoredEntryDates: Array.from(new Set([
+                ...state.restoredEntryDates,
+                ...restoredDates,
+              ])),
+            },
             { notify: options.notifyAchievements !== false }
           );
         });
@@ -832,8 +955,19 @@ const useFlyxaStore = create<FlyxaStore>()(
           billingAccounts.forEach((account) => {
             nextAccounts = maybeCreateFundedAccount(nextAccounts, account);
           });
+          const deletedTradeIds = Array.from(new Set([
+            ...state.deletedTradeIds,
+            ...(payload.deletedTradeIds ?? []),
+          ]));
+          const deletedEntryDates = Array.from(new Set([
+            ...state.deletedEntryDates,
+            ...(payload.deletedEntryDates ?? []),
+          ]));
+          const incomingEntries = payload.entries
+            ? withDerivedEntries(ensureAccount(payload.entries, entryAccountFallback))
+            : state.entries;
           const merged: FlyxaStateData = {
-            entries: payload.entries ? withDerivedEntries(ensureAccount(payload.entries, entryAccountFallback)) : state.entries,
+            entries: filterEntriesByTombstones(incomingEntries, deletedTradeIds, deletedEntryDates),
             accounts: nextAccounts,
             activeAccountId: accountId,
             achievements: payload.achievements && payload.achievements.length
@@ -851,7 +985,9 @@ const useFlyxaStore = create<FlyxaStore>()(
             journalMoods: payload.journalMoods ?? state.journalMoods,
             journalTitles: payload.journalTitles ?? state.journalTitles,
             rivals: payload.rivals ?? state.rivals,
-            deletedTradeIds: payload.deletedTradeIds ?? state.deletedTradeIds,
+            deletedTradeIds,
+            deletedEntryDates,
+            restoredEntryDates: payload.restoredEntryDates ?? state.restoredEntryDates,
             backtestSessions: payload.backtestSessions ?? state.backtestSessions,
             onboarding: payload.onboarding ?? state.onboarding,
             preSession: payload.preSession ?? state.preSession,
@@ -875,9 +1011,26 @@ const useFlyxaStore = create<FlyxaStore>()(
           ? persisted.activeAccountId
           : (base.activeAccountId !== undefined ? base.activeAccountId : DEFAULT_ACCOUNT_ID);
         const entryAccountFallback = activeAccountId ?? DEFAULT_ACCOUNT_ID;
-        const incomingEntries = withDerivedEntries(ensureAccount(persisted.entries ?? [], entryAccountFallback));
+        const deletedTradeIds = Array.from(new Set([
+          ...(base.deletedTradeIds ?? []),
+          ...(persisted.deletedTradeIds ?? []),
+        ]));
+        const deletedEntryDates = Array.from(new Set([
+          ...(base.deletedEntryDates ?? []),
+          ...(persisted.deletedEntryDates ?? []),
+        ]));
+        const incomingEntries = filterEntriesByTombstones(
+          withDerivedEntries(ensureAccount(persisted.entries ?? [], entryAccountFallback)),
+          deletedTradeIds,
+          deletedEntryDates
+        );
+        const baseEntries = filterEntriesByTombstones(
+          base.entries,
+          deletedTradeIds,
+          deletedEntryDates
+        );
         // Never replace existing entries with fewer — protects against rehydrate wiping data
-        const sanitizedEntries = incomingEntries.length >= base.entries.length ? incomingEntries : base.entries;
+        const sanitizedEntries = incomingEntries.length >= baseEntries.length ? incomingEntries : baseEntries;
         const sanitizedBilling = (persisted.billingAccounts ?? base.billingAccounts).map((account) => ({
           ...account,
           roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
@@ -908,6 +1061,9 @@ const useFlyxaStore = create<FlyxaStore>()(
           journalTitles: (persisted.journalTitles && Object.keys(persisted.journalTitles).length > 0)
             ? persisted.journalTitles
             : base.journalTitles,
+          deletedTradeIds,
+          deletedEntryDates,
+          restoredEntryDates: persisted.restoredEntryDates ?? base.restoredEntryDates,
           // Same protection for preSessionHistory — an empty {} from Supabase should never
           // erase existing local history (older saves may not have this field yet).
           preSessionHistory: (persisted.preSessionHistory && Object.keys(persisted.preSessionHistory).length > 0)
@@ -958,6 +1114,8 @@ const useFlyxaStore = create<FlyxaStore>()(
         journalTitles: state.journalTitles,
         rivals: state.rivals,
         deletedTradeIds: state.deletedTradeIds,
+        deletedEntryDates: state.deletedEntryDates,
+        restoredEntryDates: state.restoredEntryDates,
         backtestSessions: state.backtestSessions,
         onboarding: state.onboarding,
         preSession: state.preSession,

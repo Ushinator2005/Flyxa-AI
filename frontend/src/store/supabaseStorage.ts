@@ -82,6 +82,34 @@ function deletedTradeIdsFromBlob(blob: unknown): Set<string> {
   return new Set((Array.isArray(ids) ? ids : []).filter((id): id is string => typeof id === 'string'));
 }
 
+function deletedEntryDatesFromBlob(blob: unknown): Set<string> {
+  const dates = (blob as { state?: { deletedEntryDates?: unknown[] } } | null)?.state?.deletedEntryDates;
+  return new Set((Array.isArray(dates) ? dates : []).filter((date): date is string => typeof date === 'string'));
+}
+
+function restoredEntryDatesFromBlob(blob: unknown): Set<string> {
+  const dates = (blob as { state?: { restoredEntryDates?: unknown[] } } | null)?.state?.restoredEntryDates;
+  return new Set((Array.isArray(dates) ? dates : []).filter((date): date is string => typeof date === 'string'));
+}
+
+function tradeIdsForDates(blob: unknown, dates: Set<string>): Set<string> {
+  const entries = (blob as { state?: { entries?: unknown[] } } | null)?.state?.entries;
+  const ids = new Set<string>();
+  if (!Array.isArray(entries) || dates.size === 0) return ids;
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.date !== 'string' || !dates.has(record.date) || !Array.isArray(record.trades)) continue;
+    for (const trade of record.trades) {
+      if (!trade || typeof trade !== 'object') continue;
+      const id = (trade as Record<string, unknown>).id;
+      if (typeof id === 'string') ids.add(id);
+    }
+  }
+  return ids;
+}
+
 function removeDeletedTradesFromEntry(entry: Record<string, unknown>, deletedTradeIds: Set<string>): Record<string, unknown> {
   if (deletedTradeIds.size === 0 || !Array.isArray(entry.trades)) return entry;
   return {
@@ -96,7 +124,8 @@ function removeDeletedTradesFromEntry(entry: Record<string, unknown>, deletedTra
 
 function sanitizeStoreBlob(parsed: unknown): unknown {
   const deletedTradeIds = deletedTradeIdsFromBlob(parsed);
-  if (deletedTradeIds.size === 0) return parsed;
+  const deletedEntryDates = deletedEntryDatesFromBlob(parsed);
+  if (deletedTradeIds.size === 0 && deletedEntryDates.size === 0) return parsed;
 
   const base = parsed as { state?: { entries?: unknown[] } };
   const entries = base?.state?.entries;
@@ -110,8 +139,14 @@ function sanitizeStoreBlob(parsed: unknown): unknown {
         entry && typeof entry === 'object'
           ? removeDeletedTradesFromEntry(entry as Record<string, unknown>, deletedTradeIds)
           : entry
+      )).filter(entry => (
+        !entry ||
+        typeof entry !== 'object' ||
+        typeof (entry as Record<string, unknown>).date !== 'string' ||
+        !deletedEntryDates.has((entry as Record<string, unknown>).date as string)
       )),
       deletedTradeIds: Array.from(deletedTradeIds),
+      deletedEntryDates: Array.from(deletedEntryDates),
     },
   };
 }
@@ -131,7 +166,8 @@ function sanitizeStoreValue(value: string): string {
 function mirrorLocalEntriesSafe(
   entries: Record<string, unknown>[],
   userId: string,
-  deletedTradeIds: Set<string> = new Set()
+  deletedTradeIds: Set<string> = new Set(),
+  deletedEntryDates: Set<string> = new Set()
 ): void {
   try {
     // Merge into the existing safe backup rather than overwriting it wholesale.
@@ -143,6 +179,7 @@ function mirrorLocalEntriesSafe(
 
     // Seed with existing safe entries
     for (const entry of existing) {
+      if (typeof entry.date === 'string' && deletedEntryDates.has(entry.date)) continue;
       const cleaned = removeDeletedTradesFromEntry(entry, deletedTradeIds);
       const trades = Array.isArray(cleaned.trades) ? cleaned.trades : [];
       if (trades.length > 0) next[entry.id as string] = cleaned;
@@ -151,6 +188,7 @@ function mirrorLocalEntriesSafe(
     // Merge incoming entries: replace only when the incoming version has at
     // least as many trades as what's already stored.
     for (const entry of entries) {
+      if (typeof entry.date === 'string' && deletedEntryDates.has(entry.date)) continue;
       const id = entry.id as string;
       const stripped = stripBase64Images(entry) as Record<string, unknown>;
       const existingEntry = next[id] as Record<string, unknown> | undefined;
@@ -243,12 +281,13 @@ async function syncPreSessionsToTable(userId: string, sessions: Array<{ id: stri
 async function syncEntriesToTable(
   userId: string,
   entries: Record<string, unknown>[],
-  deletedTradeIds: Set<string>
+  deletedTradeIds: Set<string>,
+  deletedEntryDates: Set<string>
 ): Promise<void> {
   if (entries.length === 0) return;
 
   const existingBackups = await readBackupEntries(userId);
-  const protectedEntries = mergeEntriesWithRecovery(entries, existingBackups, deletedTradeIds);
+  const protectedEntries = mergeEntriesWithRecovery(entries, existingBackups, deletedTradeIds, deletedEntryDates);
   const rows = protectedEntries.map(e => ({
     id: e.id as string,
     user_id: userId,
@@ -275,17 +314,20 @@ async function readBackupEntries(userId: string): Promise<Record<string, unknown
 function mergeEntriesWithRecovery(
   primaryEntries: Record<string, unknown>[],
   recoveryEntries: Record<string, unknown>[],
-  deletedTradeIds: Set<string>
+  deletedTradeIds: Set<string>,
+  deletedEntryDates: Set<string>
 ): Record<string, unknown>[] {
   const merged = new Map<string, Record<string, unknown>>();
 
   for (const entry of primaryEntries) {
+    if (typeof entry.date === 'string' && deletedEntryDates.has(entry.date)) continue;
     if (typeof entry.id === 'string') {
       merged.set(entry.id, removeDeletedTradesFromEntry(entry, deletedTradeIds));
     }
   }
 
   for (const recoveryEntry of recoveryEntries) {
+    if (typeof recoveryEntry.date === 'string' && deletedEntryDates.has(recoveryEntry.date)) continue;
     if (typeof recoveryEntry.id !== 'string') continue;
     const cleanedRecovery = removeDeletedTradesFromEntry(recoveryEntry, deletedTradeIds);
     const existing = merged.get(recoveryEntry.id);
@@ -402,8 +444,37 @@ async function recoverFromJournalEntries(
 }
 
 async function flushSave(userId: string, value: string): Promise<void> {
-  const sanitizedValue = sanitizeStoreValue(value);
-  const parsed = JSON.parse(sanitizedValue) as unknown;
+  let sanitizedValue = sanitizeStoreValue(value);
+  let parsed = JSON.parse(sanitizedValue) as Record<string, unknown>;
+  const { data: existingStore, error: existingStoreError } = await supabase
+    .from('user_store')
+    .select('flyxa_data')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (existingStoreError) throw existingStoreError;
+
+  const remoteBlob = existingStore?.flyxa_data as Record<string, unknown> | null;
+  const restoredEntryDates = restoredEntryDatesFromBlob(parsed);
+  const restoredTradeIds = tradeIdsForDates(parsed, restoredEntryDates);
+  const deletedTradeIds = new Set([
+    ...deletedTradeIdsFromBlob(remoteBlob),
+    ...deletedTradeIdsFromBlob(parsed),
+  ].filter((id) => !restoredTradeIds.has(id)));
+  const deletedEntryDates = new Set([
+    ...deletedEntryDatesFromBlob(remoteBlob),
+    ...deletedEntryDatesFromBlob(parsed),
+  ].filter((date) => !restoredEntryDates.has(date)));
+  parsed = {
+    ...parsed,
+    state: {
+      ...((parsed.state as Record<string, unknown>) ?? {}),
+      deletedTradeIds: Array.from(deletedTradeIds),
+      deletedEntryDates: Array.from(deletedEntryDates),
+      restoredEntryDates: Array.from(restoredEntryDates),
+    },
+  };
+  sanitizedValue = sanitizeStoreValue(JSON.stringify(parsed));
+  parsed = JSON.parse(sanitizedValue) as Record<string, unknown>;
   const sanitized = stripBase64Images(parsed);
   const now = new Date().toISOString();
 
@@ -416,22 +487,23 @@ async function flushSave(userId: string, value: string): Promise<void> {
   try { localStorage.setItem(localSavedAtKey(userId), Date.now().toString()); } catch { /* quota */ }
 
   const entries = extractEntries(sanitizedValue);
-  const deletedTradeIds = deletedTradeIdsFromBlob(sanitized);
-  await syncEntriesToTable(userId, entries, deletedTradeIds);
-  mirrorLocalEntriesSafe(entries, userId, deletedTradeIds);
+  await syncEntriesToTable(userId, entries, deletedTradeIds, deletedEntryDates);
+  mirrorLocalEntriesSafe(entries, userId, deletedTradeIds, deletedEntryDates);
 
   const preSessions = extractPreSessionHistory(sanitizedValue);
   await syncPreSessionsToTable(userId, preSessions);
 }
 
-async function flushSaveWithRetry(userId: string, value: string, attempt = 0): Promise<void> {
+async function flushSaveWithRetry(userId: string, value: string, attempt = 0): Promise<boolean> {
   try {
     await flushSave(userId, value);
+    return true;
   } catch {
     if (attempt < 2) {
       await new Promise<void>(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
       return flushSaveWithRetry(userId, value, attempt + 1);
     }
+    return false;
   }
 }
 
@@ -456,7 +528,13 @@ export async function flushSupabaseStoreNow(): Promise<void> {
 
   latestValue = null;
   pendingValue = null;
-  await flushSaveWithRetry(userId, value);
+  const saved = await flushSaveWithRetry(userId, value);
+  if (!saved) {
+    // Keep the newest snapshot available for the next write/flush attempt.
+    latestValue = value;
+    pendingValue = value;
+    throw new Error('Could not save Flyxa data to Supabase');
+  }
 }
 
 /**
@@ -472,14 +550,87 @@ export function readLocalSafeBackupEntries(userId: string): Record<string, unkno
  * Hard-deletes a journal entry row from store_entries_backup so the recovery
  * logic in mergeEntriesWithRecovery cannot resurrect it after a user delete.
  */
-export async function deleteBackupEntryById(entryId: string): Promise<void> {
+export async function deleteTradingDayEverywhere(
+  date: string,
+  deletedTradeIds: string[],
+  localStateSnapshot?: Record<string, unknown>
+): Promise<void> {
   const userId = await getUserId();
   if (!userId) return;
-  await supabase
+
+  const { data: existing, error: readError } = await supabase
+    .from('user_store')
+    .select('flyxa_data')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (readError) throw readError;
+
+  const currentBlob = (existing?.flyxa_data ?? { state: {}, version: 1 }) as Record<string, unknown>;
+  const cloudState = (currentBlob.state ?? {}) as Record<string, unknown>;
+  const currentState = localStateSnapshot ?? cloudState;
+  const currentEntries = Array.isArray(currentState.entries)
+    ? currentState.entries.filter(
+        (entry): entry is Record<string, unknown> => entry != null && typeof entry === 'object'
+      )
+    : [];
+  const existingDeletedIds = Array.isArray(currentState.deletedTradeIds)
+    ? currentState.deletedTradeIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  const nextDeletedIds = Array.from(new Set([...existingDeletedIds, ...deletedTradeIds]));
+  const existingDeletedDates = new Set([
+    ...deletedEntryDatesFromBlob(currentBlob),
+    ...deletedEntryDatesFromBlob({ state: currentState }),
+  ]);
+  existingDeletedDates.add(date);
+  const nextBlob = {
+    ...currentBlob,
+    state: {
+      ...cloudState,
+      ...currentState,
+      entries: currentEntries.filter(entry => entry.date !== date),
+      deletedTradeIds: nextDeletedIds,
+      deletedEntryDates: Array.from(existingDeletedDates),
+      restoredEntryDates: Array.from(
+        restoredEntryDatesFromBlob({ state: currentState })
+      ).filter((restoredDate) => restoredDate !== date),
+    },
+  };
+  const sanitizedValue = sanitizeStoreValue(JSON.stringify(nextBlob));
+  const sanitizedBlob = JSON.parse(sanitizedValue) as Record<string, unknown>;
+  const now = new Date().toISOString();
+
+  const { error: storeError } = await supabase
+    .from('user_store')
+    .upsert(
+      { user_id: userId, flyxa_data: sanitizedBlob, updated_at: now },
+      { onConflict: 'user_id' }
+    );
+  if (storeError) throw storeError;
+
+  const { error: backupError } = await supabase
     .from('store_entries_backup')
     .delete()
-    .eq('id', entryId)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('date', date);
+  if (backupError) throw backupError;
+
+  try {
+    const safeEntries = readLocalEntriesSafe(userId)
+      .filter(entry => entry.date !== date);
+    const safeMap = Object.fromEntries(
+      safeEntries
+        .filter(entry => typeof entry.id === 'string')
+        .map(entry => [entry.id as string, entry])
+    );
+    localStorage.setItem(localEntriesSafeKey(userId), JSON.stringify(safeMap));
+    localStorage.setItem(localStoreKey(userId), sanitizedValue);
+    localStorage.setItem(localSavedAtKey(userId), Date.now().toString());
+  } catch {
+    // Cloud deletion is authoritative; local cache will reconcile on reload.
+  }
+
+  latestValue = sanitizedValue;
+  pendingValue = sanitizedValue;
 }
 
 export async function clearCurrentUserStoreCache(): Promise<void> {
@@ -590,10 +741,12 @@ export const supabaseZustandStorage: StateStorage = {
           const backupEntries = await readBackupEntries(userId);
           const safeEntries = readLocalEntriesSafe(userId);
           const deletedTradeIds = deletedTradeIdsFromBlob(flyxaData);
+          const deletedEntryDates = deletedEntryDatesFromBlob(flyxaData);
           const recoveredEntries = mergeEntriesWithRecovery(
-            mergeEntriesWithRecovery(remoteRecords, backupEntries, deletedTradeIds),
+            mergeEntriesWithRecovery(remoteRecords, backupEntries, deletedTradeIds, deletedEntryDates),
             safeEntries,
-            deletedTradeIds
+            deletedTradeIds,
+            deletedEntryDates
           );
 
           if (
@@ -732,12 +885,15 @@ export const supabaseZustandStorage: StateStorage = {
 
     const entries = extractEntries(sanitizedValue);
     let deletedTradeIds = new Set<string>();
+    let deletedEntryDates = new Set<string>();
     try {
-      deletedTradeIds = deletedTradeIdsFromBlob(JSON.parse(sanitizedValue) as unknown);
+      const parsed = JSON.parse(sanitizedValue) as unknown;
+      deletedTradeIds = deletedTradeIdsFromBlob(parsed);
+      deletedEntryDates = deletedEntryDatesFromBlob(parsed);
     } catch {
       // sanitizedValue was already validated by extractEntries; keep an empty tombstone set.
     }
-    mirrorLocalEntriesSafe(entries, userId, deletedTradeIds);
+    mirrorLocalEntriesSafe(entries, userId, deletedTradeIds, deletedEntryDates);
 
     saveTimer = setTimeout(() => {
       if (pendingValue) void flushSaveWithRetry(userId, pendingValue);

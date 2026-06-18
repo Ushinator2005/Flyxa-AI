@@ -21,9 +21,10 @@ import { useTrades } from '../hooks/useTrades.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName, normalizeResolvedSymbol } from '../utils/tradeScannerPipeline.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
+import { scaleContractAmount } from '../utils/contractSizing.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
-import { flushSupabaseStoreNow, deleteBackupEntryById } from '../store/supabaseStorage.js';
+import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -535,6 +536,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
   });
   if (!looksModern) return fromLegacyRecords(value, rulesTemplate);
 
+  const seenTradeIds = new Set<string>();
   const normalized = value
     .map(item => {
       const record = item as Record<string, unknown>;
@@ -629,6 +631,10 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           commission: typeof trade.commission === 'number' && Number.isFinite(trade.commission) && trade.commission >= 0 ? trade.commission : undefined,
         };
         return withTradeDerivedValues(normalizedTrade);
+      }).filter((trade) => {
+        if (seenTradeIds.has(trade.id)) return false;
+        seenTradeIds.add(trade.id);
+        return true;
       });
 
       const reflectionRaw = (record.reflection ?? {}) as Record<string, unknown>;
@@ -2100,6 +2106,7 @@ export default function TradeJournal() {
   const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
   const setEntriesInStore = useFlyxaStore(state => state.setEntries);
+  const deleteEntryInStore = useFlyxaStore(state => state.deleteEntry);
   const rulesTemplate = useMemo(() => getRulesTemplate(), []);
   const entries = useMemo(() => normalizeEntries(persistedEntries, rulesTemplate), [persistedEntries, rulesTemplate]);
 
@@ -2251,7 +2258,12 @@ export default function TradeJournal() {
         ...entry,
         trades: entry.trades.map(trade => {
           if (trade.id !== tradeId) return trade;
-          return withTradeDerivedValues({ ...trade, ...fields });
+          const nextFields = { ...fields };
+          if (typeof fields.contracts === 'number' && fields.contracts !== trade.contracts) {
+            nextFields.pnlOverride = scaleContractAmount(trade.pnlOverride, trade.contracts, fields.contracts);
+            nextFields.commission = scaleContractAmount(trade.commission, trade.contracts, fields.contracts);
+          }
+          return withTradeDerivedValues({ ...trade, ...nextFields });
         }),
       };
     }));
@@ -2694,14 +2706,31 @@ export default function TradeJournal() {
     }
   }, [applyScannedTrade, preferences.scannerColors, selectedEntry?.date]);
 
-  const deleteEntry = useCallback(() => {
+  const deleteEntry = useCallback(async () => {
     if (!selectedEntry) return;
-    const entryId = selectedEntry.id;
-    mutateEntries(prev => prev.filter(e => e.id !== entryId));
+    const entryDate = selectedEntry.date;
+    const entriesForDate = useFlyxaStore.getState().entries.filter(entry => entry.date === entryDate);
+    const tradeIds = entriesForDate.flatMap(entry => entry.trades.map(trade => trade.id));
     setDeleteEntryConfirm(false);
-    // Hard-delete the backup row so the recovery logic can't resurrect it.
-    void deleteBackupEntryById(entryId).catch(() => {});
-  }, [mutateEntries, selectedEntry]);
+    entriesForDate.forEach(entry => deleteEntryInStore(entry.id));
+    const localStateSnapshot = JSON.parse(
+      JSON.stringify(useFlyxaStore.getState())
+    ) as Record<string, unknown>;
+
+    try {
+      await deleteTradingDayEverywhere(entryDate, tradeIds, localStateSnapshot);
+      setSelectedEntryId(null);
+      setActiveTradeId(null);
+      pushToast({ tone: 'green', durationMs: 2500, message: 'Trading day deleted' });
+    } catch (error) {
+      console.error(error);
+      pushToast({
+        tone: 'red',
+        durationMs: 4500,
+        message: 'The day was removed locally, but cloud deletion did not finish. Please retry.',
+      });
+    }
+  }, [deleteEntryInStore, selectedEntry]);
 
   const onShotPick = useCallback((index: number) => {
     screenshotSlotRef.current = index;
