@@ -112,6 +112,16 @@ function parseRiskSettingsFromStorage(): Partial<RiskSettings> {
   return {};
 }
 
+function parseMaxWinFromStorage(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('flyxa.risk.maxWin');
+    if (!raw) return null;
+    const val = Number(raw);
+    return Number.isFinite(val) && val > 0 ? val : null;
+  } catch { return null; }
+}
+
 function getEtParts(now: Date) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -256,11 +266,13 @@ export default function FlyxaAIPreSession() {
   const [riskSaveError, setRiskSaveError] = useState('');
   const [riskDraft, setRiskDraft] = useState({
     daily_loss_limit: '',
+    daily_profit_limit: '',
     max_trades_per_day: '',
     max_contracts_per_trade: '',
     account_size: '',
     risk_percentage: '',
   });
+  const [maxWinStored, setMaxWinStored] = useState<number | null>(() => parseMaxWinFromStorage());
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   useEffect(() => {
@@ -348,28 +360,32 @@ export default function FlyxaAIPreSession() {
     const accountSize = Number.isFinite(settings?.account_size) ? settings?.account_size : storedRiskSettings.account_size;
     const riskPct = Number.isFinite(settings?.risk_percentage) ? settings?.risk_percentage : storedRiskSettings.risk_percentage;
 
-    const dailyLossValue = dailyLoss && dailyLoss > 0 ? dailyLoss : 500;
+    const dailyLossValue = dailyLoss != null && dailyLoss >= 0 ? dailyLoss : 500;
     const maxTradesValue = maxTrades && maxTrades > 0 ? maxTrades : 10;
     const maxContractsValue = maxContracts && maxContracts > 0 ? maxContracts : 2;
     const accountSizeValue = accountSize && accountSize > 0 ? accountSize : 10000;
     const riskPctValue = riskPct && riskPct > 0 ? riskPct : 1;
     const riskPerTrade = (accountSizeValue * riskPctValue) / 100;
-    const target = Math.max(riskPerTrade * 3, dailyLossValue * 0.6);
+    const computedTarget = Math.max(riskPerTrade * 3, dailyLossValue * 0.6);
+    const maxWin = maxWinStored ?? computedTarget;
 
     return {
       maxDailyLoss: dailyLossValue,
+      noLossLimit: dailyLossValue === 0,
       maxTrades: maxTradesValue,
       riskPerTrade,
-      target,
+      target: computedTarget,
+      maxWin,
       maxContracts: maxContractsValue,
       riskPct: riskPctValue,
       accountSize: accountSizeValue,
     };
-  }, [settings, storedRiskSettings]);
+  }, [settings, storedRiskSettings, maxWinStored]);
 
   const openRiskEditor = () => {
     setRiskDraft({
-      daily_loss_limit: String(Math.round(riskLimits.maxDailyLoss)),
+      daily_loss_limit: riskLimits.noLossLimit ? '0' : String(Math.round(riskLimits.maxDailyLoss)),
+      daily_profit_limit: maxWinStored ? String(Math.round(maxWinStored)) : '',
       max_trades_per_day: String(riskLimits.maxTrades),
       max_contracts_per_trade: String(riskLimits.maxContracts),
       account_size: String(Math.round(riskLimits.accountSize)),
@@ -384,18 +400,32 @@ export default function FlyxaAIPreSession() {
   };
 
   const saveRiskLimits = async () => {
-    const loss     = Number(riskDraft.daily_loss_limit);
+    const lossRaw  = riskDraft.daily_loss_limit.trim();
+    const loss     = lossRaw === '' ? null : Number(lossRaw);
     const trades   = Number(riskDraft.max_trades_per_day);
 
-    // Only daily loss limit and max trades are required
-    if (!Number.isFinite(loss) || loss <= 0 || !Number.isFinite(trades) || trades <= 0) {
-      setRiskSaveError('Enter a positive number for max loss and max trades.');
+    if (!Number.isFinite(trades) || trades <= 0) {
+      setRiskSaveError('Enter a positive number for max trades.');
+      return;
+    }
+    if (loss !== null && (!Number.isFinite(loss) || loss < 0)) {
+      setRiskSaveError('Max loss must be 0 (no limit) or a positive number.');
       return;
     }
 
-    const next: Record<string, number> = { daily_loss_limit: loss, max_trades_per_day: trades };
+    // Save max win to localStorage (not sent to API)
+    const win = Number(riskDraft.daily_profit_limit);
+    if (Number.isFinite(win) && win > 0) {
+      window.localStorage.setItem('flyxa.risk.maxWin', String(win));
+      setMaxWinStored(win);
+    } else {
+      window.localStorage.removeItem('flyxa.risk.maxWin');
+      setMaxWinStored(null);
+    }
 
-    // Optional fields — include only when a valid positive number is provided
+    const next: Record<string, number> = { max_trades_per_day: trades };
+    if (loss !== null) next.daily_loss_limit = loss;
+
     const contracts = Number(riskDraft.max_contracts_per_trade);
     if (Number.isFinite(contracts) && contracts > 0) next.max_contracts_per_trade = contracts;
 
@@ -861,58 +891,98 @@ export default function FlyxaAIPreSession() {
           {step === 2 && (
             <>
               <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
+                {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <div>
                     <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Today&apos;s risk limits</h2>
-                    <p style={{ fontSize: 11, color: C.t2 }}>Confirm or update before you trade.</p>
+                    <p style={{ fontSize: 11, color: C.t2 }}>Confirm or adjust before you start.</p>
                   </div>
                   <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor}
                     style={{ fontSize: 11, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                     {riskEditOpen ? 'cancel' : 'edit'}
                   </button>
                 </div>
-                <div style={{ padding: '14px 16px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    {[
-                      { label: 'Max daily loss', value: formatCurrency(-riskLimits.maxDailyLoss), color: C.red },
-                      { label: 'Max trades', value: String(riskLimits.maxTrades), color: C.t0 },
-                      { label: 'Max contracts', value: String(riskLimits.maxContracts), color: C.t0 },
-                      { label: 'Daily target', value: formatCurrency(riskLimits.target), color: C.grn },
-                    ].map(stat => (
-                      <div key={stat.label} style={{ padding: '10px 12px', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
-                        <p style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: stat.color, lineHeight: 1, marginBottom: 5 }}>{stat.value}</p>
-                        <p style={{ fontSize: 10, color: C.t2 }}>{stat.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {riskEditOpen && (
-                    <div style={{ marginTop: 12, padding: '12px', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d2 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+
+                {/* Stat row — no inner boxes, just dividers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+                  {[
+                    { label: 'Max loss', value: riskLimits.noLossLimit ? 'No limit' : formatCurrency(-riskLimits.maxDailyLoss), color: riskLimits.noLossLimit ? C.t2 : C.red },
+                    { label: 'Max win', value: formatCurrency(riskLimits.maxWin), color: C.grn },
+                    { label: 'Max trades', value: String(riskLimits.maxTrades), color: C.t1 },
+                    { label: 'Contracts', value: String(riskLimits.maxContracts), color: C.t1 },
+                  ].map((stat, i) => (
+                    <div key={stat.label} style={{ padding: '16px 18px', borderRight: i < 3 ? `1px solid ${C.b0}` : 'none' }}>
+                      <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: stat.color, lineHeight: 1, marginBottom: 6 }}>{stat.value}</p>
+                      <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.03em' }}>{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Edit form */}
+                {riskEditOpen && (
+                  <div style={{ borderTop: `1px solid ${C.b0}`, padding: '16px' }}>
+                    {/* Primary row: Max Loss + Max Win */}
+                    <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Loss &amp; Profit limits</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                      {([
+                        ['daily_loss_limit',   'Max loss',  '$', 'Stop trading at this loss (0 = no limit)'],
+                        ['daily_profit_limit', 'Max win',   '$', 'Stop trading when profit hits this'],
+                      ] as const).map(([field, label, , hint]) => (
+                        <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: C.t1 }}>{label}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, padding: '0 10px' }}>
+                            <span style={{ color: C.t2, fontSize: 12, marginRight: 4 }}>$</span>
+                            <input type="number" min="0" step="1" placeholder="0" value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 14, color: C.t0, padding: '9px 0', minWidth: 0 }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: C.t2 }}>{hint}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Secondary row: Trades + Contracts */}
+                    <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Session limits</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                      {([
+                        ['max_trades_per_day',      'Max trades',  'Max number of trades per session'],
+                        ['max_contracts_per_trade', 'Contracts',   'Max contracts per single trade'],
+                      ] as const).map(([field, label, hint]) => (
+                        <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: C.t1 }}>{label}</span>
+                          <input type="number" min="0" step="1" value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, outline: 'none', fontSize: 14, color: C.t0, padding: '9px 10px' }} />
+                          <span style={{ fontSize: 10, color: C.t2 }}>{hint}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Optional: Account + Risk % */}
+                    <details style={{ marginBottom: 14 }}>
+                      <summary style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>Advanced (optional)</span>
+                      </summary>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
                         {([
-                          ['daily_loss_limit',       'Max loss',     '$', true ],
-                          ['max_trades_per_day',      'Max trades',   '',  true ],
-                          ['max_contracts_per_trade', 'Contracts',    '',  false],
-                          ['account_size',            'Account size', '$', false],
-                          ['risk_percentage',         'Risk %',       '%', false],
-                        ] as const).map(([field, label, suffix, required]) => (
-                          <label key={field} style={{ fontSize: 10, color: C.t2 }}>
-                            {label}{!required && <span style={{ opacity: 0.5 }}> (opt)</span>}
-                            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', borderRadius: 4, border: `1px solid ${C.b0}`, backgroundColor: C.d3, padding: '0 8px' }}>
-                              {suffix === '$' && <span style={{ color: C.t2, fontSize: 11 }}>$</span>}
-                              <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} placeholder={required ? '' : 'skip'} value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 12, color: C.t0, padding: '7px 0', minWidth: 0 }} />
-                              {suffix === '%' && <span style={{ color: C.t2, fontSize: 11 }}>%</span>}
+                          ['account_size',   'Account size', '$', '%'],
+                          ['risk_percentage','Risk per trade','',  '%'],
+                        ] as const).map(([field, label, prefix, suffix]) => (
+                          <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: C.t1 }}>{label}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, padding: '0 10px' }}>
+                              {prefix === '$' && <span style={{ color: C.t2, fontSize: 12, marginRight: 4 }}>$</span>}
+                              <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} placeholder="skip" value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 14, color: C.t0, padding: '9px 0', minWidth: 0 }} />
+                              {suffix === '%' && field === 'risk_percentage' && <span style={{ color: C.t2, fontSize: 12 }}>%</span>}
                             </div>
                           </label>
                         ))}
                       </div>
-                      {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginTop: 6 }}>{riskSaveError}</p>}
-                      <button type="button" onClick={saveRiskLimits} disabled={riskSaving}
-                        style={{ marginTop: 10, width: '100%', padding: '8px 0', borderRadius: 4, border: `1px solid ${C.acc}44`, backgroundColor: `${C.acc}0f`, color: C.acc, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                        {riskSaving ? 'Saving...' : 'Save limits'}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    </details>
+
+                    {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginBottom: 10 }}>{riskSaveError}</p>}
+                    <button type="button" onClick={saveRiskLimits} disabled={riskSaving}
+                      style={{ width: '100%', padding: '10px 0', borderRadius: 5, border: `1px solid ${C.acc}44`, backgroundColor: `${C.acc}10`, color: C.acc, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {riskSaving ? 'Saving...' : 'Save limits'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {priorFlow && (
