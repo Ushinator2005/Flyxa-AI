@@ -10,63 +10,6 @@
   to   { opacity: 1; }
 }
 
-/* ── Rainbow / Pride theme animations ───────────────────────── */
-@keyframes rb-stripe {
-  0%   { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
-}
-
-@keyframes rb-hue {
-  0%   { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
-}
-
-/* Rainbow stripe fixed to the very top of the viewport */
-html[data-theme='rainbow']::before {
-  content: '';
-  display: block;
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(
-    90deg,
-    #E40303, #FF8C00, #FFED00, #008026, #004DFF, #750787,
-    #E40303, #FF8C00, #FFED00, #008026, #004DFF, #750787
-  );
-  background-size: 200% 100%;
-  animation: rb-stripe 5s linear infinite;
-  z-index: 99999;
-  pointer-events: none;
-}
-
-/* Scrollbar gets the full rainbow treatment */
-html[data-theme='rainbow'] ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg,
-    #E40303 0%, #FF8C00 20%, #FFED00 40%,
-    #008026 60%, #004DFF 80%, #750787 100%
-  );
-}
-
-/* Text selection */
-html[data-theme='rainbow'] ::selection {
-  background: rgba(232, 121, 249, 0.35);
-  color: #fff;
-}
-
-/* Accent/amber elements cycle through the hue spectrum */
-html[data-theme='rainbow'] [class*='accent'],
-html[data-theme='rainbow'] [class*='amber'],
-html[data-theme='rainbow'] [class*='rv-badge'],
-html[data-theme='rainbow'] [class*='rv-rank-'] {
-  animation: rb-hue 8s linear infinite;
-}
-
-/* Nav sidebar active indicator */
-html[data-theme='rainbow'] .nav-indicator,
-html[data-theme='rainbow'] [data-active='true'] {
-  animation: rb-hue 8s linear infinite;
-}
-
 .page-transition {
   animation: page-fade-in 0.2s ease-out both;
 }

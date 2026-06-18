@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-type Theme = 'dark' | 'light' | 'rainbow';
+type Theme = 'dark' | 'light';
 
 interface ThemeContextValue {
   theme: Theme;
@@ -17,7 +17,7 @@ function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'dark';
 
   const savedTheme = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'rainbow') {
+  if (savedTheme === 'dark' || savedTheme === 'light') {
     return savedTheme;
   }
 
@@ -29,14 +29,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme === 'rainbow' ? 'dark' : theme;
+    document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
   const value = useMemo<ThemeContextValue>(() => ({
     theme,
     setTheme,
-    toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : t === 'light' ? 'rainbow' : 'dark'),
+    toggleTheme: () => setTheme(currentTheme => currentTheme === 'dark' ? 'light' : 'dark'),
   }), [theme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

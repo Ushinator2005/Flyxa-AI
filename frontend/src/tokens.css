@@ -108,42 +108,6 @@
 
 }
 
-/* ── Rainbow / Pride mode ───────────────────────────────────── */
-html[data-theme='rainbow'] {
-  /* Keep dark surfaces — readability over decoration */
-  --color-bg:           #0a090f;
-  --color-bg-muted:     #100e18;
-  --color-panel:        #161321;
-  --color-panel-raised: #1e1a2e;
-  --color-panel-soft:   rgba(22, 19, 33, 0.92);
-  --color-border:       rgba(180, 120, 255, 0.14);
-  --color-border-sub:   rgba(180, 120, 255, 0.08);
-
-  /* Accent: vivid magenta — hue-rotate animation will cycle the spectrum */
-  --color-amber:        #e879f9;
-  --color-amber-dim:    rgba(232, 121, 249, 0.14);
-  --color-amber-border: rgba(232, 121, 249, 0.28);
-
-  /* Semantic colors keep readable meanings */
-  --color-green:        #34d399;
-  --color-green-dim:    rgba(52, 211, 153, 0.14);
-  --color-green-border: rgba(52, 211, 153, 0.28);
-  --color-red:          #f87171;
-  --color-red-dim:      rgba(248, 113, 113, 0.14);
-  --color-red-border:   rgba(248, 113, 113, 0.28);
-  --color-blue:         #93c5fd;
-  --color-blue-dim:     rgba(147, 197, 253, 0.14);
-  --color-blue-border:  rgba(147, 197, 253, 0.26);
-  --color-purple:       #c084fc;
-  --color-purple-dim:   rgba(192, 132, 252, 0.14);
-  --color-purple-border:rgba(192, 132, 252, 0.28);
-
-  /* Text stays warm-white */
-  --color-text:         #f0ebff;
-  --color-text-muted:   #9c92b8;
-  --color-text-subtle:  #635d7a;
-}
-
 /* ── Light mode overrides ───────────────────────────────────── */
 html[data-theme='light'] {
   --color-bg:           #f4f1ec;
