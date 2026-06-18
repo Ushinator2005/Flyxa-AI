@@ -716,11 +716,37 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  // Auto-correct: move any trade whose date doesn't match its parent entry to the right entry.
-  const hasMismatch = normalized.some(entry => entry.trades.some(trade => trade.date !== entry.date));
-  if (!hasMismatch) return normalized;
-
-  const byDate = new Map<string, JournalEntry>(normalized.map(e => [e.date, { ...e, trades: [] }]));
+  // The journal is day-based: consolidate duplicate rows for the same calendar
+  // date and move trades whose internal date differs from their parent entry.
+  const byDate = new Map<string, JournalEntry>();
+  for (const entry of normalized) {
+    const existing = byDate.get(entry.date);
+    if (!existing) {
+      byDate.set(entry.date, { ...entry, trades: [] });
+    } else {
+      const richer = entry.trades.length > existing.trades.length ? entry : existing;
+      const fallback = richer === entry ? existing : entry;
+      byDate.set(entry.date, {
+        ...fallback,
+        ...richer,
+        date: entry.date,
+        accountIds: Array.from(new Set([
+          ...(existing.accountIds ?? []),
+          ...(entry.accountIds ?? []),
+        ])),
+        screenshots: [0, 1, 2].map(
+          index => richer.screenshots[index] || fallback.screenshots[index] || ''
+        ),
+        scannedImageUrl: richer.scannedImageUrl || fallback.scannedImageUrl,
+        reflection: {
+          pre: richer.reflection.pre || fallback.reflection.pre,
+          post: richer.reflection.post || fallback.reflection.post,
+          lessons: richer.reflection.lessons || fallback.reflection.lessons,
+        },
+        trades: existing.trades,
+      });
+    }
+  }
   for (const entry of normalized) {
     for (const trade of entry.trades) {
       const tradeDate = trade.date ?? entry.date;
