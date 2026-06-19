@@ -160,6 +160,43 @@ function hexToColorName(hex: string): string {
   return 'red';
 }
 
+function sanitizePriceLevels(
+  direction: 'Long' | 'Short' | null,
+  entry_price: number | null,
+  sl_price: number | null,
+  tp_price: number | null,
+  warnings: string[],
+): { sl_price: number | null; tp_price: number | null; warnings: string[] } {
+  if (!direction || entry_price === null || sl_price === null || tp_price === null) {
+    return { sl_price, tp_price, warnings };
+  }
+  const newWarnings = [...warnings];
+  let sl = sl_price;
+  let tp = tp_price;
+
+  if (direction === 'Long') {
+    // Expected: TP > entry > SL
+    if (tp < entry_price && sl > entry_price) {
+      // TP and SL are clearly swapped — auto-correct
+      [sl, tp] = [tp, sl];
+      newWarnings.push('TP/SL were swapped for a Long trade — auto-corrected.');
+    } else if (tp < entry_price || sl > entry_price) {
+      newWarnings.push(`Price levels may be misread: Long trade but entry=${entry_price}, SL=${sl}, TP=${tp}.`);
+    }
+  } else {
+    // Short — Expected: TP < entry < SL
+    if (tp > entry_price && sl < entry_price) {
+      // TP and SL are clearly swapped — auto-correct
+      [sl, tp] = [tp, sl];
+      newWarnings.push('TP/SL were swapped for a Short trade — auto-corrected.');
+    } else if (tp > entry_price || sl < entry_price) {
+      newWarnings.push(`Price levels may be misread: Short trade but entry=${entry_price}, SL=${sl}, TP=${tp}.`);
+    }
+  }
+
+  return { sl_price: sl, tp_price: tp, warnings: newWarnings };
+}
+
 export async function readTradeChart(
   base64Image: string,
   mimeType: string,
@@ -172,7 +209,8 @@ export async function readTradeChart(
   boxBounds?: {
     leftRatio: number;
     rightRatio: number;
-  }
+  },
+  directionHint?: 'Long' | 'Short',
 ): Promise<{
   symbol: string | null;
   direction: 'Long' | 'Short' | null;
@@ -245,9 +283,12 @@ STEP 2 — IDENTIFY entry_price, sl_price, tp_price:
 ${colorSection}
 
 STEP 3 — DETERMINE DIRECTION:
-- If take profit price > entry price → LONG
+${directionHint
+  ? `Pixel-level color analysis of the chart has pre-determined the direction as ${directionHint}. Return direction = "${directionHint}".
+Consistency check (${directionHint === 'Long' ? 'Long: TP > entry > SL' : 'Short: TP < entry < SL'}): if your prices conflict with this, re-examine the price labels first. Keep direction = "${directionHint}" regardless, but add a warning if prices still look inconsistent.`
+  : `- If take profit price > entry price → LONG
 - If take profit price < entry price → SHORT
-Use the prices you found in Step 2 to determine this. Never guess direction from box position alone.
+Use the prices you found in Step 2 to determine this. Never guess direction from box position alone.`}
 
 STEP 4 — FIND THE EXIT (FIRST TOUCH ONLY, INSIDE THE P&L CARD ONLY):
 The P&L card is the colored overlay on the chart — the region covered by the red/pink zone and the teal zone together. You must ONLY read candles whose bodies and wicks fall physically inside this colored overlay. Nothing outside it exists for this analysis.
@@ -326,20 +367,43 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
       const durationSeconds = durationSecondsRaw !== null ? Math.max(0, Math.round(durationSecondsRaw)) : null;
       const timeframeMinutesRaw = parseNullableNumber(parsed.timeframe_minutes);
       const timeframeMinutes = timeframeMinutesRaw !== null ? Math.max(0, Math.round(timeframeMinutesRaw)) : null;
+
+      const direction = parseDirection(parsed.direction);
+      const entryPrice = parseNullableNumber(parsed.entry_price);
+      const parsedConfidence = parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low' as const;
+      const baseWarnings: string[] = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w: unknown) => typeof w === 'string') : [];
+
+      // Price sanity: auto-swap TP/SL if they look reversed for the detected direction
+      const { sl_price, tp_price, warnings: sanityWarnings } = sanitizePriceLevels(
+        direction,
+        entryPrice,
+        parseNullableNumber(parsed.sl_price),
+        parseNullableNumber(parsed.tp_price),
+        baseWarnings,
+      );
+
+      // Confidence gating: a low-confidence exit could flip Win/Loss — clear it so user confirms manually
+      let exitReason = parseExitReason(parsed.exit_reason);
+      const finalWarnings = [...sanityWarnings];
+      if (parsedConfidence === 'low' && exitReason !== null) {
+        finalWarnings.push('Exit outcome cleared (low confidence) — please verify Win/Loss manually.');
+        exitReason = null;
+      }
+
       return {
         symbol: typeof parsed.symbol === 'string' ? parsed.symbol : null,
-        direction: parseDirection(parsed.direction),
-        entry_price: parseNullableNumber(parsed.entry_price),
-        sl_price: parseNullableNumber(parsed.sl_price),
-        tp_price: parseNullableNumber(parsed.tp_price),
-        exit_reason: parseExitReason(parsed.exit_reason),
+        direction,
+        entry_price: entryPrice,
+        sl_price,
+        tp_price,
+        exit_reason: exitReason,
         trade_length_seconds: durationSeconds,
         timeframe_minutes: timeframeMinutes,
         entry_time: entryTime,
         close_time: explicitCloseTime ?? addSecondsToHHMM(entryTime, durationSeconds),
-        confidence: parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low',
+        confidence: parsedConfidence,
         evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
-        warnings: Array.isArray(parsed.warnings) ? parsed.warnings.filter((w: unknown) => typeof w === 'string') : [],
+        warnings: finalWarnings,
       };
     } catch {
       return nullResult(['Failed to parse Gemini response']);
@@ -384,7 +448,7 @@ function addSecondsToHHMM(time: string | null, seconds: number | null): string |
 export async function analyzeChartImage(
   base64Image: string,
   mimeType: string,
-  entryDate: string,
+  _entryDate: string,
   entryTime: string,
   focusImages: Array<{ base64Image: string; mimeType: string; label: string }> = [],
   scannerContext?: Record<string, unknown>
@@ -407,7 +471,11 @@ export async function analyzeChartImage(
     ? { leftRatio: boxLeftRatio, rightRatio: boxRightRatio }
     : undefined;
 
-  const result = await readTradeChart(base64Image, mimeType, focusImages, userColors, boxBounds);
+  const rawDirectionHint = scannerContext?.direction_hint;
+  const directionHint: 'Long' | 'Short' | undefined =
+    rawDirectionHint === 'Long' || rawDirectionHint === 'Short' ? rawDirectionHint : undefined;
+
+  const result = await readTradeChart(base64Image, mimeType, focusImages, userColors, boxBounds, directionHint);
 
   return {
     symbol: result.symbol,
