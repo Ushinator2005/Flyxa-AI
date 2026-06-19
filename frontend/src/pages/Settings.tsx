@@ -604,6 +604,7 @@ export default function Settings() {
   const autoSaveToastReadyRef = useRef(false);
   const confluenceSyncedRef = useRef(false);
   const skipConfluenceOverrideSaveRef = useRef(false);
+  const newTagInputRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importFeedback, setImportFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const deletedSet = new Set(deletedTradeIds);
@@ -2695,12 +2696,13 @@ export default function Settings() {
             />
           </div>
 
-          {/* Category grid */}
+          {/* Category grid — alignItems:start so each column is only as tall as its content */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
             gap: '10px',
             marginBottom: '14px',
+            alignItems: 'start',
           }}>
             {displayGroups.map(group => {
               const isSearching = Boolean(confluenceSearch.trim());
@@ -2708,6 +2710,7 @@ export default function Settings() {
               const unusedItems = isSearching ? [] : group.items.filter(i => i.usageCount === 0);
               const showUnused = expandedUnusedGroups.has(group.key);
               const visibleItems = [...usedItems, ...(showUnused ? unusedItems : [])];
+              const isOther = group.key === 'other';
 
               return (
                 <div
@@ -2728,8 +2731,17 @@ export default function Settings() {
                   style={{
                     minWidth: 0,
                     borderRadius: '8px',
-                    border: dragOverConfluenceGroup === group.key ? `1px solid ${AMBER}` : `1px solid ${BSUB}`,
-                    background: dragOverConfluenceGroup === group.key ? AMBER_DIM : 'rgba(255,255,255,0.018)',
+                    // "Other" gets a dashed border to signal it's a user-defined bucket, not a preset
+                    border: dragOverConfluenceGroup === group.key
+                      ? `1px solid ${AMBER}`
+                      : isOther
+                        ? `1px dashed rgba(255,255,255,0.09)`
+                        : `1px solid ${BSUB}`,
+                    background: dragOverConfluenceGroup === group.key
+                      ? AMBER_DIM
+                      : isOther
+                        ? 'rgba(255,255,255,0.012)'
+                        : 'rgba(255,255,255,0.018)',
                     overflow: 'hidden',
                     transition: 'border-color 0.15s, background 0.15s',
                   }}
@@ -2740,42 +2752,39 @@ export default function Settings() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: '10px',
-                    padding: '10px 12px',
+                    padding: '9px 12px',
                     borderBottom: `1px solid ${BSUB}`,
                     background: 'rgba(255,255,255,0.018)',
                   }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: T1 }}>{group.title}</div>
-                      <div style={{ marginTop: '2px', fontSize: '10px', color: T3 }}>{group.description}</div>
+                      {/* description is a caption — smaller and dimmer than surrounding text */}
+                      <div style={{ marginTop: '2px', fontSize: '9px', color: T3, opacity: 0.65, letterSpacing: '0.02em' }}>{group.description}</div>
                     </div>
-                    <span style={{
-                      flexShrink: 0,
-                      fontSize: '11px',
-                      color: T3,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}>
+                    <span style={{ flexShrink: 0, fontSize: '11px', color: T3, fontVariantNumeric: 'tabular-nums' }}>
                       {group.items.length}
                     </span>
                   </div>
 
                   {/* Rows */}
                   <div>
-                    {visibleItems.length === 0 && (
+                    {visibleItems.length === 0 && !isSearching && (
                       <div style={{
-                        minHeight: '40px',
+                        minHeight: '36px',
                         display: 'flex',
                         alignItems: 'center',
                         padding: '0 12px',
                         fontSize: '11px',
                         color: T3,
                       }}>
-                        {isSearching ? 'No matches' : 'Drop tags here'}
+                        Drop tags here
                       </div>
                     )}
                     {visibleItems.map(({ option, index, usageCount }) => {
                       const isHovered = hoveredConfluenceRow === index;
                       const isEditing = editingConfluenceIndex === index;
                       const showControls = isHovered || isEditing;
+                      const isUnused = usageCount === 0;
                       return (
                         <div
                           key={`${option}-${index}`}
@@ -2796,11 +2805,12 @@ export default function Settings() {
                             gridTemplateColumns: '14px minmax(0,1fr) 52px 28px',
                             alignItems: 'center',
                             gap: '6px',
-                            minHeight: '36px',
-                            padding: '4px 8px 4px 10px',
+                            // unused archive rows are slightly more compact — they're not actively used
+                            minHeight: isUnused ? '30px' : '36px',
+                            padding: isUnused ? '3px 8px 3px 10px' : '4px 8px 4px 10px',
                             borderTop: `1px solid ${BSUB}`,
                             cursor: isEditing ? 'default' : 'grab',
-                            opacity: draggingConfluenceIndex === index ? 0.45 : (usageCount === 0 && !isHovered ? 0.55 : 1),
+                            opacity: draggingConfluenceIndex === index ? 0.45 : (isUnused && !isHovered ? 0.5 : 1),
                             transition: 'opacity 0.12s',
                           }}
                         >
@@ -2820,39 +2830,24 @@ export default function Settings() {
                                 if (e.key === 'Escape') setEditingConfluenceIndex(null);
                               }}
                               style={{
-                                width: '100%',
-                                minWidth: 0,
-                                height: '26px',
-                                padding: '0 8px',
-                                borderRadius: '5px',
-                                border: `1px solid ${AMBER}`,
-                                background: AMBER_DIM,
-                                color: T1,
-                                fontSize: '12px',
-                                fontFamily: SANS,
-                                outline: 'none',
+                                width: '100%', minWidth: 0, height: '26px', padding: '0 8px',
+                                borderRadius: '5px', border: `1px solid ${AMBER}`,
+                                background: AMBER_DIM, color: T1, fontSize: '12px',
+                                fontFamily: SANS, outline: 'none',
                               }}
                             />
                           ) : (
                             <button
                               type="button"
                               onClick={() => startEditingConfluence(index, option)}
-                              title={`Rename ${option}`}
+                              title={option}
                               style={{
-                                width: '100%',
-                                minWidth: 0,
-                                border: 'none',
-                                background: 'transparent',
-                                color: T1,
-                                padding: 0,
-                                fontFamily: SANS,
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                textAlign: 'left',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                cursor: 'text',
+                                width: '100%', minWidth: 0, border: 'none',
+                                background: 'transparent', color: T1, padding: 0,
+                                fontFamily: SANS, fontSize: isUnused ? '11px' : '12px',
+                                fontWeight: 500, textAlign: 'left',
+                                overflow: 'hidden', textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap', cursor: 'text',
                               }}
                             >
                               {option}
@@ -2860,12 +2855,7 @@ export default function Settings() {
                           )}
 
                           {/* Edit + Delete — visible on hover only */}
-                          <div style={{
-                            display: 'flex',
-                            gap: '3px',
-                            justifyContent: 'flex-end',
-                            visibility: showControls ? 'visible' : 'hidden',
-                          }}>
+                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', visibility: showControls ? 'visible' : 'hidden' }}>
                             <button
                               type="button"
                               title={`Rename ${option}`}
@@ -2908,12 +2898,11 @@ export default function Settings() {
                             </button>
                           </div>
 
-                          {/* Usage count — plain muted text, color only if high */}
+                          {/* Usage count — plain text, green only when high */}
                           <span
-                            title={`${usageCount} trade${usageCount === 1 ? '' : 's'} tagged with ${option}`}
+                            title={`${usageCount} trade${usageCount === 1 ? '' : 's'} tagged`}
                             style={{
-                              fontSize: '11px',
-                              fontVariantNumeric: 'tabular-nums',
+                              fontSize: '11px', fontVariantNumeric: 'tabular-nums',
                               textAlign: 'right',
                               color: usageCount >= 5 ? '#86efac' : T3,
                               fontWeight: usageCount >= 5 ? 600 : 400,
@@ -2925,6 +2914,30 @@ export default function Settings() {
                       );
                     })}
 
+                    {/* Ghost "add" row — empty space becomes an affordance */}
+                    {!isSearching && confluenceOptions.length < 64 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          newTagInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                          newTagInputRef.current?.focus();
+                        }}
+                        style={{
+                          width: '100%', padding: '6px 12px',
+                          border: 'none',
+                          borderTop: visibleItems.length > 0 ? `1px dashed rgba(255,255,255,0.05)` : 'none',
+                          background: 'transparent', color: T3, fontSize: '10px',
+                          cursor: 'pointer', textAlign: 'left', fontFamily: SANS,
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T2; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; }}
+                      >
+                        <Plus size={10} />
+                        Add tag
+                      </button>
+                    )}
+
                     {/* Show / hide unused toggle */}
                     {!isSearching && unusedItems.length > 0 && (
                       <button
@@ -2935,19 +2948,12 @@ export default function Settings() {
                           return next;
                         })}
                         style={{
-                          width: '100%',
-                          padding: '6px 12px',
+                          width: '100%', padding: '5px 12px',
                           border: 'none',
                           borderTop: `1px dashed rgba(255,255,255,0.06)`,
-                          background: 'transparent',
-                          color: T3,
-                          fontSize: '10px',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          fontFamily: SANS,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '5px',
+                          background: 'transparent', color: T3, fontSize: '10px',
+                          cursor: 'pointer', textAlign: 'left', fontFamily: SANS,
+                          display: 'flex', alignItems: 'center', gap: '5px',
                         }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T2; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; }}
@@ -2964,6 +2970,7 @@ export default function Settings() {
           {/* Add tag row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '8px', alignItems: 'center' }}>
             <input
+              ref={newTagInputRef}
               placeholder={confluenceOptions.length >= 64 ? 'Max 64 tags reached' : 'New confluence tag…'}
               value={newConfluenceDraft}
               maxLength={64}
@@ -2975,16 +2982,9 @@ export default function Settings() {
                 }
               }}
               style={{
-                flex: 1,
-                height: '36px',
-                padding: '0 12px',
-                borderRadius: '6px',
-                border: `1px solid ${BORDER}`,
-                background: S2,
-                color: T1,
-                fontSize: '12px',
-                fontFamily: SANS,
-                outline: 'none',
+                flex: 1, height: '36px', padding: '0 12px', borderRadius: '6px',
+                border: `1px solid ${BORDER}`, background: S2, color: T1,
+                fontSize: '12px', fontFamily: SANS, outline: 'none',
                 opacity: confluenceOptions.length >= 64 ? 0.45 : 1,
               }}
             />
@@ -2993,21 +2993,12 @@ export default function Settings() {
               disabled={!newConfluenceDraft.trim() || confluenceOptions.length >= 64}
               onClick={handleAddConfluence}
               style={{
-                height: '36px',
-                padding: '0 14px',
-                borderRadius: '6px',
-                border: `1px solid ${AMBER}`,
-                background: AMBER_DIM,
-                color: AMBER,
-                fontSize: '12px',
-                fontWeight: 700,
-                fontFamily: SANS,
+                height: '36px', padding: '0 14px', borderRadius: '6px',
+                border: `1px solid ${AMBER}`, background: AMBER_DIM, color: AMBER,
+                fontSize: '12px', fontWeight: 700, fontFamily: SANS,
                 cursor: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 'not-allowed' : 'pointer',
                 opacity: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 0.45 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                flexShrink: 0,
+                display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0,
               }}
             >
               <Plus size={13} />
@@ -3015,10 +3006,36 @@ export default function Settings() {
             </button>
           </div>
 
+          {/* Tag count progress bar */}
           {confluenceOptions.length > 0 && (
-            <p style={{ marginTop: '10px', fontSize: '11px', color: T3 }}>
-              {confluenceOptions.length} of 64 tags. New tags are grouped automatically; dragged tags stay where you place them.
-            </p>
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '5px', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: T3 }}>
+                  New tags auto-categorize; drag to move between groups.
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  fontVariantNumeric: 'tabular-nums',
+                  flexShrink: 0,
+                  fontWeight: confluenceOptions.length >= 56 ? 600 : 400,
+                  color: confluenceOptions.length >= 60 ? '#fca5a5' : T2,
+                }}>
+                  {confluenceOptions.length}/64
+                </span>
+              </div>
+              <div style={{ height: '3px', borderRadius: '2px', background: BSUB, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: '2px',
+                  width: `${(confluenceOptions.length / 64) * 100}%`,
+                  background: confluenceOptions.length >= 60
+                    ? '#f87171'
+                    : confluenceOptions.length >= 48
+                      ? AMBER
+                      : 'rgba(74,222,128,0.55)',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+            </div>
           )}
         </SectionPanel>
       </section>

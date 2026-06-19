@@ -949,7 +949,7 @@ export default function Analytics() {
                     strokeOpacity={0.6}
                     label={(props: any) => {
                       const vb = props?.viewBox;
-                      if (!vb) return null;
+                      if (!vb) return <g/>;
                       // Near bottom (little room below) → label above; otherwise below
                       const yOff = (vb.height ?? 100) < 50 ? -14 : 13;
                       return (
@@ -969,7 +969,7 @@ export default function Analytics() {
                     strokeOpacity={0.6}
                     label={(props: any) => {
                       const vb = props?.viewBox;
-                      if (!vb) return null;
+                      if (!vb) return <g/>;
                       // Near bottom (little room below) → label above; otherwise below
                       const yOff = (vb.height ?? 100) < 50 ? -14 : 13;
                       return (
@@ -1244,7 +1244,7 @@ export default function Analytics() {
                   strokeWidth={1.5}
                   label={(props: any) => {
                     const vb = props?.viewBox;
-                    if (!vb) return null;
+                    if (!vb) return <g/>;
                     return (
                       <text x={vb.x} y={14}
                         fill="rgba(148,163,184,0.9)" fontSize={9} fontWeight={600}
@@ -1261,7 +1261,7 @@ export default function Analytics() {
                 strokeDasharray="4 4"
                 label={(props: any) => {
                   const vb = props?.viewBox;
-                  if (!vb) return null;
+                  if (!vb) return <g/>;
                   return (
                     <text x={vb.x} y={14}
                       fill="var(--accent)" fontSize={10} fontWeight={700}
@@ -1277,7 +1277,7 @@ export default function Analytics() {
                 stroke="transparent"
                 label={(props: any) => {
                   const vb = props?.viewBox;
-                  if (!vb) return null;
+                  if (!vb) return <g/>;
                   return (
                     <text x={vb.x} y={14}
                       fill={DASHBOARD_RED} fontSize={10} fontWeight={700}
@@ -1292,7 +1292,7 @@ export default function Analytics() {
                 stroke="transparent"
                 label={(props: any) => {
                   const vb = props?.viewBox;
-                  if (!vb) return null;
+                  if (!vb) return <g/>;
                   return (
                     <text x={vb.x} y={14}
                       fill={DASHBOARD_GREEN} fontSize={10} fontWeight={700}
