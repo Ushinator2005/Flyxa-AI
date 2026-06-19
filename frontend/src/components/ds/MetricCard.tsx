@@ -10,6 +10,7 @@ export interface MetricCardProps {
   sub?: React.ReactNode;
   accent?: MetricAccent;
   valueTone?: MetricValueTone;
+  size?: 'default' | 'compact';
   className?: string;
 }
 
@@ -19,10 +20,10 @@ const VALUE_TONE_COLOR: Record<MetricValueTone, string> = {
   neutral:  'var(--color-text)',
 };
 
-export function MetricCard({ label, value, sub, accent = 'none', valueTone, className = '' }: MetricCardProps) {
+export function MetricCard({ label, value, sub, accent = 'none', valueTone, size = 'default', className = '' }: MetricCardProps) {
   return (
     <div
-      className={['ds-metric', className].filter(Boolean).join(' ')}
+      className={['ds-metric', size === 'compact' ? 'ds-metric-compact' : '', className].filter(Boolean).join(' ')}
       data-accent={accent === 'none' ? undefined : accent}
     >
       <p className="ds-metric-label">{label}</p>

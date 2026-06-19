@@ -25,7 +25,7 @@ import { formatCurrency } from '../utils/calculations.js';
 import { getSessionKeyForTime, timeToMinutes } from '../utils/sessionTimes.js';
 import { getTradeRiskReward } from '../utils/tradeAnalytics.js';
 import { formatRiskRewardRatio } from '../utils/riskReward.js';
-import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
+import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
 
 type PeriodKey = '1W' | '1M' | '3M' | 'YTD' | 'ALL';
 
@@ -198,25 +198,7 @@ function formatTimeBucketLabel(totalMinutes: number): string {
 }
 
 function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const entry of rawValues) {
-    if (typeof entry !== 'string') continue;
-    const canonical = normalizeConfluenceTag(entry.trim().replace(/\s+/g, ' '));
-    if (!canonical) continue;
-    const key = canonical.toLowerCase();
-    if (deduped.has(key)) continue;
-    deduped.add(key);
-    normalized.push(canonical);
-  }
-
-  return normalized;
+  return normalizeConfluenceTags(value);
 }
 
 
@@ -650,7 +632,7 @@ export default function Analytics() {
       if (!confluences.length) return;
 
       confluences.forEach(confluence => {
-        const key = confluence.toLowerCase();
+        const key = normalizeConfluenceKey(confluence);
         const current = grouped.get(key) ?? {
           label: confluence,
           trades: 0,
@@ -834,26 +816,35 @@ export default function Analytics() {
         </SectionPanel>
       ) : null}
 
+      {/* Row 1 — headline metrics */}
       <div data-tour-id="analytics-metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="Net P&L"
           value={formatSignedCurrency(metrics.netPnL)}
           sub={netPnLChange === null ? `Live for ${periodSubtitle}` : `${netPnLChange >= 0 ? '+' : ''}${netPnLChange.toFixed(1)}% vs previous period`}
           valueTone={metrics.netPnL >= 0 ? 'positive' : 'negative'}
-          accent={metrics.netPnL >= 0 ? 'green' : 'red'}
         />
         <MetricCard
-          label="Expectancy"
+          label={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              Expectancy
+              <InfoTooltip text="Average dollar profit per trade, factoring in both win rate and win/loss size. Positive expectancy means the strategy has an edge over time." />
+            </span>
+          }
           value={metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--'}
           sub="avg edge per trade"
           valueTone={metrics.expectedValue >= 0 ? 'positive' : 'negative'}
         />
         <MetricCard
-          label="Max Drawdown"
+          label={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              Max Drawdown
+              <InfoTooltip text="The largest peak-to-trough decline in cumulative P&L during the selected period. Measures the worst losing run you experienced." />
+            </span>
+          }
           value={maxDrawdown > 0 ? `-${formatCurrency(maxDrawdown)}` : '$0'}
           sub="peak-to-trough loss"
           valueTone={maxDrawdown > 0 ? 'negative' : 'neutral'}
-          accent={maxDrawdown > 0 ? 'red' : 'none'}
         />
         <MetricCard
           label={
@@ -865,7 +856,6 @@ export default function Analytics() {
           value={metrics.profitFactor >= 999 ? '∞' : metrics.profitFactor.toFixed(2)}
           sub={metrics.profitFactor >= 1 ? 'Above breakeven' : 'Below breakeven'}
           valueTone={metrics.profitFactor >= 1 ? 'positive' : 'negative'}
-          accent={metrics.profitFactor >= 1 ? 'amber' : 'red'}
         />
         <MetricCard
           label="Total Trades"
@@ -874,12 +864,13 @@ export default function Analytics() {
         />
       </div>
 
+      {/* Row 2 — supporting detail (compact tier) */}
       {filteredTrades.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricCard label="Avg P/L" value={formatSignedCurrency(metrics.avgPnL)} sub={`${metrics.totalTrades} trade${metrics.totalTrades === 1 ? '' : 's'} average`} valueTone={metrics.avgPnL >= 0 ? 'positive' : 'negative'} />
-          <MetricCard label="Avg Win" value={metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'} sub={`${metrics.wins.length} winning trade${metrics.wins.length !== 1 ? 's' : ''}`} valueTone="positive" accent="green" />
-          <MetricCard label="Avg Loss" value={metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'} sub={`${metrics.losses.length} losing trade${metrics.losses.length !== 1 ? 's' : ''}`} valueTone="negative" accent="red" />
-          <MetricCard label="Avg RR" value={metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'} sub={metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'} />
+          <MetricCard size="compact" label="Avg P/L" value={formatSignedCurrency(metrics.avgPnL)} sub={`${metrics.totalTrades} trade${metrics.totalTrades === 1 ? '' : 's'} average`} valueTone={metrics.avgPnL >= 0 ? 'positive' : 'negative'} />
+          <MetricCard size="compact" label="Avg Win" value={metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'} sub={`${metrics.wins.length} winning trade${metrics.wins.length !== 1 ? 's' : ''}`} valueTone="positive" />
+          <MetricCard size="compact" label="Avg Loss" value={metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'} sub={`${metrics.losses.length} losing trade${metrics.losses.length !== 1 ? 's' : ''}`} valueTone="negative" />
+          <MetricCard size="compact" label="Avg RR" value={metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'} sub={metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'} />
         </div>
       )}
 
@@ -949,7 +940,7 @@ export default function Analytics() {
                     return [formatCurrency(value), 'Breakeven'];
                   }}
                 />
-                <ReferenceLine y={0} stroke="var(--accent)" strokeDasharray="4 4" />
+                <ReferenceLine y={0} stroke="var(--accent)" strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.85} />
                 {curveStats && curveStats.peak !== 0 && (
                   <ReferenceLine
                     y={curveStats.peak}
@@ -1105,7 +1096,7 @@ export default function Analytics() {
                   <div
                     className="h-2.5 rounded-full"
                     style={{
-                      width: `${Math.max(6, row.ratio * 100)}%`,
+                      width: `${row.ratio * 90}%`,
                       backgroundColor: row.pnl >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
                     }}
                   />
@@ -1128,7 +1119,7 @@ export default function Analytics() {
                   <div
                     className="h-2.5 rounded-full"
                     style={{
-                      width: `${Math.max(6, row.ratio * 100)}%`,
+                      width: `${row.ratio * 90}%`,
                       backgroundColor: row.pnl >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
                     }}
                   />
@@ -1142,7 +1133,23 @@ export default function Analytics() {
         </section>
 
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h3 className="text-sm font-semibold text-[var(--app-text)]">Win/loss streak</h3>
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold text-[var(--app-text)]">Win/loss streak</h3>
+            <span className="flex items-center gap-2.5 text-[10px] text-[var(--app-text-subtle)]">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-2.5 w-1.5 rounded-full" style={{ backgroundColor: DASHBOARD_GREEN }} />
+                Win
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-2.5 w-1.5 rounded-full" style={{ backgroundColor: DASHBOARD_RED }} />
+                Loss
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-2.5 w-1.5 rounded-full bg-slate-600" />
+                Breakeven
+              </span>
+            </span>
+          </div>
           <p className="mt-3 text-xs text-[var(--app-text-muted)]">Last 20 trades</p>
 
           <div className="mt-4 flex flex-wrap gap-2">

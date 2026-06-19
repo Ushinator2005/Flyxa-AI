@@ -167,6 +167,17 @@
 .ds-metric[data-accent='blue']  { --ds-metric-accent: var(--color-blue); }
 .ds-metric[data-accent='purple']{ --ds-metric-accent: var(--color-purple); }
 
+/* compact variant — supporting-detail tier (row 2 of stat bar) */
+.ds-metric.ds-metric-compact {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+.ds-metric.ds-metric-compact .ds-metric-value {
+  font-size: var(--text-xl);
+}
+.ds-metric.ds-metric-compact .ds-metric-label {
+  color: var(--color-text-muted);
+}
+
 /* ── PageHeader ──────────────────────────────────────────────── */
 .ds-page-header {
   display: flex;
