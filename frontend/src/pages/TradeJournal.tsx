@@ -2191,16 +2191,16 @@ export default function TradeJournal() {
   const optimisticEntryRef = useRef<JournalEntry | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
-  // Browser extension bridge — App.tsx receives the CustomEvent (works on any
-  // page), converts it to a File, stores it here, then navigates to /journal.
-  // On mount we consume the pending file and fire the scanner immediately.
+  // Browser extension bridge — App.tsx dispatches flyxa:scan_ready after
+  // navigating here. We listen persistently so it fires whether we were
+  // already on /journal or just navigated here from another page.
   useEffect(() => {
-    const w = window as unknown as Record<string, unknown>;
-    const pending = w.__flyxaPendingExtScan as File | undefined;
-    if (pending instanceof File) {
-      delete w.__flyxaPendingExtScan;
-      void handleScanFile(pending);
-    }
+    const handler = (e: Event) => {
+      const file = (e as CustomEvent<{ file: File }>).detail?.file;
+      if (file instanceof File) void handleScanFile(file);
+    };
+    window.addEventListener('flyxa:scan_ready', handler);
+    return () => window.removeEventListener('flyxa:scan_ready', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [scanError, setScanError] = useState('');
