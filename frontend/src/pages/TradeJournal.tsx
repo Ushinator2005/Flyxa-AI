@@ -3441,6 +3441,8 @@ export default function TradeJournal() {
                       onClick={async () => {
                         const ids = Array.from(selectedTradeIds);
                         const willBeEmpty = selectedEntry.trades.length === ids.length;
+                        const entryDate   = selectedEntry.date;
+                        const entryId     = selectedEntry.id;
                         for (const id of ids) {
                           await deleteTradeEverywhere(id);
                         }
@@ -3448,11 +3450,17 @@ export default function TradeJournal() {
                         setBulkDeleteConfirm(false);
                         setDeleteTradeId(null);
                         if (willBeEmpty) {
+                          // All trades removed — remove the now-empty day entry too
+                          useFlyxaStore.getState().entries
+                            .filter(e => e.date === entryDate)
+                            .forEach(e => deleteEntryInStore(e.id));
+                          void flushSupabaseStoreNow().catch(() => {});
                           const next = entries
-                            .filter(e => e.id !== selectedEntry.id)
+                            .filter(e => e.id !== entryId)
                             .sort((a, b) => b.date.localeCompare(a.date))
                             .find(e => e.trades.length > 0);
                           if (next) { setSelectedEntryId(next.id); setActiveTradeId(next.trades[0].id); }
+                          else { setSelectedEntryId(null); setActiveTradeId(null); }
                         }
                       }}
                     >
@@ -3471,16 +3479,24 @@ export default function TradeJournal() {
                         <button
                           type="button"
                           className="tj-mini-btn red"
-                          onClick={() => {
+                          onClick={async () => {
                             const willBeEmpty = selectedEntry.trades.length === 1;
-                            void deleteTradeEverywhere(trade.id);
+                            const entryDate   = selectedEntry.date;
+                            const entryId     = selectedEntry.id;
+                            await deleteTradeEverywhere(trade.id);
                             setDeleteTradeId(null);
                             if (willBeEmpty) {
+                              // Last trade gone — remove the now-empty day entry too
+                              useFlyxaStore.getState().entries
+                                .filter(e => e.date === entryDate)
+                                .forEach(e => deleteEntryInStore(e.id));
+                              void flushSupabaseStoreNow().catch(() => {});
                               const next = entries
-                                .filter(e => e.id !== selectedEntry.id)
+                                .filter(e => e.id !== entryId)
                                 .sort((a, b) => b.date.localeCompare(a.date))
                                 .find(e => e.trades.length > 0);
                               if (next) { setSelectedEntryId(next.id); setActiveTradeId(next.trades[0].id); }
+                              else { setSelectedEntryId(null); setActiveTradeId(null); }
                             }
                           }}
                         >
