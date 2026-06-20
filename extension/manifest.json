@@ -2,12 +2,11 @@
   "manifest_version": 3,
   "name": "Flyxa — Chart Scanner",
   "version": "1.0.0",
-  "description": "One-click capture of TradingView charts into the Flyxa trade scanner.",
+  "description": "One-click capture of any trading chart into the Flyxa trade scanner.",
 
   "permissions": ["tabs", "activeTab", "storage", "scripting"],
 
   "host_permissions": [
-    "*://*.tradingview.com/*",
     "http://localhost:5173/*",
     "https://*.flyxa.app/*"
   ],
