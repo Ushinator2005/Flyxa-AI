@@ -45,42 +45,92 @@ async function captureAndSend() {
     badge('🔍', '#8b5cf6');
 
     // 2. Detect chart bounds — find the largest visible <canvas> on the page.
-    //    Trading platforms (TradingView, Tradovate, FTMO, TopstepX, etc.) all
-    //    render charts into <canvas> elements; picking the largest one reliably
-    //    isolates the chart from toolbars, sidebars, and order panels.
+    //    Trading platforms embed charts in several ways:
+    //      • Direct <canvas>  — TradingView standalone, Tradovate web
+    //      • Cross-origin <iframe> containing a canvas — TopstepX, Apex,
+    //        FTMO, and any platform embedding TradingView or another provider
+    //      • Same-origin <iframe> — some prop firms
+    //      • <svg>             — lightweight chart libraries
+    //    We cascade through these in order and pick the largest visible element.
     const [detectionResult] = await chrome.scripting.executeScript({
       target: { tabId: activeTab.id },
       world: 'MAIN',
       func: () => {
         const W = window.innerWidth;
         const H = window.innerHeight;
-        const canvases = Array.from(document.querySelectorAll('canvas'));
-        let best = null;
-        let bestArea = 0;
+        const info = { viewportW: W, viewportH: H, dpr: window.devicePixelRatio || 1 };
 
-        for (const c of canvases) {
-          const r = c.getBoundingClientRect();
-          // Require meaningful size and at least partially within the viewport
-          if (r.width < 200 || r.height < 150) continue;
-          if (r.right < 0 || r.bottom < 0 || r.left > W || r.top > H) continue;
-          // Clip rect to the visible viewport
+        // Clamp a DOMRect to the visible viewport; return null if too small.
+        function clip(r, minW = 200, minH = 150) {
           const x = Math.max(0, r.left);
           const y = Math.max(0, r.top);
-          const w = Math.min(r.right, W) - x;
+          const w = Math.min(r.right,  W) - x;
           const h = Math.min(r.bottom, H) - y;
-          const area = w * h;
-          if (area > bestArea) {
-            bestArea = area;
-            best = { x, y, w, h };
-          }
+          return (w >= minW && h >= minH) ? { x, y, w, h } : null;
         }
 
-        return {
-          bounds: best,       // CSS-pixel rect of the largest chart canvas
-          viewportW: W,
-          viewportH: H,
-          dpr: window.devicePixelRatio || 1,
-        };
+        // Pick the largest clipped rect from a NodeList/Array.
+        function largest(els, minW = 200, minH = 150) {
+          let best = null, bestArea = 0;
+          for (const el of els) {
+            const rect = clip(el.getBoundingClientRect(), minW, minH);
+            if (!rect) continue;
+            const area = rect.w * rect.h;
+            if (area > bestArea) { bestArea = area; best = rect; }
+          }
+          return best;
+        }
+
+        // ── 1. Canvases in the main document ──────────────────────────────────
+        const mainCanvas = largest(document.querySelectorAll('canvas'));
+        if (mainCanvas) return { ...info, bounds: mainCanvas };
+
+        // ── 2. Canvases inside same-origin iframes ────────────────────────────
+        for (const iframe of document.querySelectorAll('iframe')) {
+          try {
+            const doc = iframe.contentDocument;
+            if (!doc) continue;
+            const ir = iframe.getBoundingClientRect();
+            let best = null, bestArea = 0;
+            for (const c of doc.querySelectorAll('canvas')) {
+              // getBoundingClientRect() inside an iframe is relative to the
+              // iframe's own viewport; add the iframe's offset to convert.
+              const cr = c.getBoundingClientRect();
+              const rect = clip({
+                left:   ir.left + cr.left,
+                top:    ir.top  + cr.top,
+                right:  ir.left + cr.right,
+                bottom: ir.top  + cr.bottom,
+              });
+              if (!rect) continue;
+              const area = rect.w * rect.h;
+              if (area > bestArea) { bestArea = area; best = rect; }
+            }
+            if (best) return { ...info, bounds: best };
+          } catch { /* cross-origin iframe — cannot access DOM */ }
+        }
+
+        // ── 3. Largest visible iframe (cross-origin embedded chart) ───────────
+        // TopstepX, Apex, FTMO embed TradingView (tradingview.com) in a
+        // cross-origin iframe — we can read the iframe element's rect from
+        // the parent document even if we can't touch its DOM.
+        // Require the iframe to cover ≥ 20% of the viewport so we don't grab
+        // an ad or a tiny widget.
+        const bigIframes = Array.from(document.querySelectorAll('iframe')).filter(f => {
+          const r = f.getBoundingClientRect();
+          const vw = Math.min(r.right, W) - Math.max(0, r.left);
+          const vh = Math.min(r.bottom, H) - Math.max(0, r.top);
+          return vw > 0 && vh > 0 && vw * vh >= W * H * 0.20;
+        });
+        const iframeBounds = largest(bigIframes, 300, 200);
+        if (iframeBounds) return { ...info, bounds: iframeBounds };
+
+        // ── 4. SVG charts (some lightweight libs) ─────────────────────────────
+        const svgBounds = largest(document.querySelectorAll('svg'));
+        if (svgBounds) return { ...info, bounds: svgBounds };
+
+        // ── 5. Nothing found — caller will use full screenshot ─────────────────
+        return { ...info, bounds: null };
       },
     });
 
