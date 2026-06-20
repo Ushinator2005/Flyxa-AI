@@ -2973,80 +2973,47 @@ export default function TradeJournal() {
           const RF_GREEN = '#34d399';
           const RF_RED = '#f87171';
           const RF_AMBER = '#f59e0b';
-          const BAR_H = 44; // total SVG height
-          const ZERO_Y = BAR_H / 2; // zero-line sits at vertical centre
-          const BAR_MAX = ZERO_Y - 5; // max bar arm height (px)
-          const n = recentForm.tradeBars.length;
-          const BAR_W = 14;
-          const GAP = n > 1 ? (240 - n * BAR_W) / (n - 1) : 0;
+          const winColor = recentForm.winsLast10 > recentForm.lossesLast10 ? RF_GREEN
+            : recentForm.winsLast10 < recentForm.lossesLast10 ? RF_RED : 'var(--txt-2)';
           return (
-            <div style={{ padding: '10px 14px 10px', borderBottom: '1px solid var(--border)' }}>
-              {/* Header row */}
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
-                  Recent Form
-                </span>
-                {recentForm.streak >= 2 && recentForm.streakType && (
-                  <span style={{
-                    fontSize: '9px',
-                    fontWeight: 600,
-                    fontFamily: 'var(--font-mono)',
-                    color: recentForm.streakType === 'win' ? RF_GREEN : RF_RED,
-                    opacity: 0.85,
-                  }}>
-                    {recentForm.streak}{recentForm.streakType === 'win' ? 'W' : 'L'} streak
-                  </span>
-                )}
+            <div style={{ padding: '10px 14px 12px', borderBottom: '1px solid var(--border)' }}>
+              {/* Label */}
+              <div style={{ fontSize: '9px', fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--txt-3)', marginBottom: '8px' }}>
+                Last {recentForm.last10.length} trades
               </div>
 
-              {/* Bar chart — one bar per trade, split above/below zero line */}
-              <svg viewBox={`0 0 240 ${BAR_H}`} width="100%" height={BAR_H} style={{ display: 'block', overflow: 'visible' }}>
-                {/* Zero line */}
-                <line x1={0} y1={ZERO_Y} x2={240} y2={ZERO_Y} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+              {/* Result tiles — uniform height, colour = W/L/BE */}
+              <div style={{ display: 'flex', gap: '3px', marginBottom: '10px' }}>
                 {recentForm.tradeBars.map((bar, i) => {
-                  const x = i * (BAR_W + GAP);
                   const color = bar.result === 'win' ? RF_GREEN : bar.result === 'loss' ? RF_RED : RF_AMBER;
-                  const armH = Math.max(2, Math.abs(bar.ratio) * BAR_MAX);
-                  const isPos = bar.net >= 0;
-                  const rectY = isPos ? ZERO_Y - armH : ZERO_Y;
-                  const pnlLabel = bar.net >= 0
-                    ? `+${formatSignedCurrency(bar.net)}`
-                    : formatSignedCurrency(bar.net);
+                  const pnlStr = bar.net >= 0 ? `+${formatSignedCurrency(bar.net)}` : formatSignedCurrency(bar.net);
                   return (
-                    <g key={i}>
-                      <title>{`${bar.result.toUpperCase()} · ${pnlLabel}`}</title>
-                      <rect
-                        x={x}
-                        y={rectY}
-                        width={BAR_W}
-                        height={armH}
-                        rx={2}
-                        fill={color}
-                        fillOpacity={0.75}
-                      />
-                      {/* Cap dot */}
-                      <circle
-                        cx={x + BAR_W / 2}
-                        cy={isPos ? ZERO_Y - armH : ZERO_Y + armH}
-                        r={1.5}
-                        fill={color}
-                      />
-                    </g>
+                    <div
+                      key={i}
+                      title={`${bar.result.toUpperCase()}  ${pnlStr}`}
+                      style={{
+                        flex: 1,
+                        height: '16px',
+                        borderRadius: '2px',
+                        background: color,
+                        opacity: 0.6,
+                      }}
+                    />
                   );
                 })}
-              </svg>
+              </div>
 
-              {/* Stats grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1px', marginTop: '8px', borderRadius: '5px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+              {/* Three stats — plain, no borders */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
                 {[
                   {
                     label: 'Record',
-                    value: `${recentForm.winsLast10}W–${recentForm.lossesLast10}L`,
-                    color: recentForm.winsLast10 > recentForm.lossesLast10 ? RF_GREEN : recentForm.winsLast10 < recentForm.lossesLast10 ? RF_RED : 'var(--txt-2)',
+                    value: `${recentForm.winsLast10}–${recentForm.lossesLast10}`,
+                    color: winColor,
                   },
                   {
-                    label: 'Win Rate',
-                    value: recentForm.winRateLast10 !== null ? `${recentForm.winRateLast10.toFixed(0)}%` : '--',
+                    label: 'Win rate',
+                    value: recentForm.winRateLast10 !== null ? `${recentForm.winRateLast10.toFixed(0)}%` : '–',
                     color: recentForm.winRateLast10 !== null && recentForm.winRateLast10 >= 50 ? RF_GREEN : RF_RED,
                   },
                   {
@@ -3055,8 +3022,8 @@ export default function TradeJournal() {
                     color: recentForm.netLast10 >= 0 ? RF_GREEN : RF_RED,
                   },
                 ].map(({ label, value, color }) => (
-                  <div key={label} style={{ padding: '5px 7px', background: 'rgba(255,255,255,0.025)' }}>
-                    <div style={{ fontSize: '8.5px', color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>{label}</div>
+                  <div key={label}>
+                    <div style={{ fontSize: '8.5px', color: 'var(--txt-3)', marginBottom: '2px' }}>{label}</div>
                     <div style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)', color }}>{value}</div>
                   </div>
                 ))}
