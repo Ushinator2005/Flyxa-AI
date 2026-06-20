@@ -3024,7 +3024,7 @@ export default function TradeJournal() {
                 ].map(({ label, value, color }) => (
                   <div key={label}>
                     <div style={{ fontSize: '8.5px', color: 'var(--txt-3)', marginBottom: '2px' }}>{label}</div>
-                    <div style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)', color }}>{value}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 400, fontFamily: 'var(--font-mono)', color, WebkitFontSmoothing: 'antialiased' }}>{value}</div>
                   </div>
                 ))}
               </div>
