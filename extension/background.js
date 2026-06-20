@@ -2,14 +2,16 @@
  * Flyxa Chart Scanner — Background Service Worker
  *
  * Handles two triggers:
- *  - Toolbar icon click (chrome.action.onClicked)
- *  - Keyboard shortcut Ctrl+Shift+L (chrome.commands.onCommand)
+ *  - Toolbar icon click  (chrome.action.onClicked)
+ *  - Keyboard shortcut   Ctrl+Shift+L  (chrome.commands.onCommand)
  *
  * Flow:
  *  1. Capture the visible tab as a PNG data URL
- *  2. Store it in session storage (auto-cleared when browser closes)
- *  3. Find or open the Flyxa tab
- *  4. Tell the Flyxa content script to inject the screenshot into the page
+ *  2. Find or open the Flyxa tab at /scanner
+ *  3. Wait for the page to finish loading
+ *  4. Inject a script directly into the page's main JS context that
+ *     dispatches flyxa:ext_screenshot — React's listener in App.tsx
+ *     receives it and fires the scanner automatically
  */
 
 const FLYXA_URLS = [
@@ -35,39 +37,50 @@ chrome.commands.onCommand.addListener((command) => {
 
 async function captureAndSend() {
   try {
-    // 1. Capture the active tab in the current window
+    // 1. Capture whatever is currently visible in the active tab
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
 
-    // 2. Store in session storage (survives navigation, cleared on browser close)
-    await chrome.storage.session.set({
-      pendingScreenshot: dataUrl,
-      capturedAt: Date.now(),
-    });
-
-    // 3. Find or open Flyxa, always landing on /journal so the listener is mounted
+    // 2. Find or open the Flyxa tab, always at /scanner
     const flyxaTab = await findFlyxaTab();
     let tabId;
 
     if (flyxaTab) {
-      // Navigate to /journal (React Router handles this; content script stays injected)
       await chrome.tabs.update(flyxaTab.id, { active: true, url: FLYXA_OPEN_URL });
       if (flyxaTab.windowId) {
         await chrome.windows.update(flyxaTab.windowId, { focused: true });
       }
       tabId = flyxaTab.id;
     } else {
-      // Open a new Flyxa tab directly at /journal
       const newTab = await chrome.tabs.create({ url: FLYXA_OPEN_URL });
       tabId = newTab.id;
     }
 
-    // 4. Send message to content script — give React time to mount, then retry
-    await sendWithRetry(tabId, { type: 'INJECT_SCREENSHOT' });
+    // 3. Wait for the page to fully load (React needs to be mounted)
+    await waitForTabReady(tabId);
+
+    // Give React a moment to finish mounting after the load event
+    await sleep(350);
+
+    // 4. Inject directly into the page's main JS world — no content script
+    //    message passing, no timing guesses. The dataUrl is passed as an arg
+    //    so it doesn't need to cross any storage boundary.
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      args: [dataUrl],
+      func: (base64) => {
+        window.dispatchEvent(
+          new CustomEvent('flyxa:ext_screenshot', { detail: { base64 } })
+        );
+      },
+    });
 
   } catch (err) {
     console.error('[Flyxa extension] captureAndSend failed:', err);
   }
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function findFlyxaTab() {
   const allTabs = await chrome.tabs.query({});
@@ -76,18 +89,31 @@ async function findFlyxaTab() {
   ) ?? null;
 }
 
-async function sendWithRetry(tabId, message, retries = 2, delayMs = 900) {
-  for (let attempt = 0; attempt < retries; attempt++) {
-    await sleep(attempt === 0 ? 600 : delayMs);
-    try {
-      await chrome.tabs.sendMessage(tabId, message);
-      return; // success
-    } catch {
-      if (attempt === retries - 1) {
-        console.error('[Flyxa extension] Could not reach content script after', retries, 'attempts');
+/**
+ * Resolves when the tab's status becomes 'complete'.
+ * If it's already complete, resolves immediately.
+ */
+function waitForTabReady(tabId, timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError) { reject(chrome.runtime.lastError); return; }
+      if (tab.status === 'complete') { resolve(); return; }
+
+      const timer = setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        reject(new Error('Tab load timed out'));
+      }, timeout);
+
+      function listener(updatedTabId, info) {
+        if (updatedTabId === tabId && info.status === 'complete') {
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
       }
-    }
-  }
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  });
 }
 
 function sleep(ms) {
