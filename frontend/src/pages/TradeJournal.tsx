@@ -2191,23 +2191,16 @@ export default function TradeJournal() {
   const optimisticEntryRef = useRef<JournalEntry | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
-  // Browser extension bridge — listen for one-click chart captures from
-  // the Flyxa Chrome extension (content.js dispatches this CustomEvent)
+  // Browser extension bridge — App.tsx receives the CustomEvent (works on any
+  // page), converts it to a File, stores it here, then navigates to /journal.
+  // On mount we consume the pending file and fire the scanner immediately.
   useEffect(() => {
-    const handler = (e: Event) => {
-      const base64 = (e as CustomEvent<{ base64: string }>).detail?.base64;
-      if (!base64) return;
-      const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
-      fetch(dataUrl)
-        .then(r => r.blob())
-        .then(blob => {
-          const file = new File([blob], 'chart.png', { type: 'image/png' });
-          void handleScanFile(file);
-        })
-        .catch(err => console.error('[Flyxa] Extension screenshot error:', err));
-    };
-    window.addEventListener('flyxa:ext_screenshot', handler);
-    return () => window.removeEventListener('flyxa:ext_screenshot', handler);
+    const w = window as unknown as Record<string, unknown>;
+    const pending = w.__flyxaPendingExtScan as File | undefined;
+    if (pending instanceof File) {
+      delete w.__flyxaPendingExtScan;
+      void handleScanFile(pending);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [scanError, setScanError] = useState('');

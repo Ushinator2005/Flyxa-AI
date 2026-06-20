@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext.js';
 import Layout from './components/layout/Layout.js';
 import LoadingSpinner from './components/common/LoadingSpinner.js';
@@ -219,11 +219,34 @@ function ProtectedLayout() {
 export default function App() {
   const { user, loading, isPasswordRecovery } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
   const hasWarned80 = useRef(false);
   const hasWarnedHit = useRef(false);
   const dailyLoss = useDailyLossUsed();
   const isTradeCheckRoute = location.pathname === '/trade-check';
+
+  // Browser extension bridge — receives chart captures from the Flyxa Chrome
+  // extension on ANY page, converts the base64 PNG to a File, stores it on
+  // window so TradeJournal can pick it up, then navigates there.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const base64 = (e as CustomEvent<{ base64: string }>).detail?.base64;
+      if (!base64) return;
+      try {
+        const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
+        const blob = await fetch(dataUrl).then(r => r.blob());
+        const file = new File([blob], 'chart.png', { type: 'image/png' });
+        // Stash the file where TradeJournal's mount effect can find it
+        (window as unknown as Record<string, unknown>).__flyxaPendingExtScan = file;
+        navigate('/journal');
+      } catch (err) {
+        console.error('[Flyxa] Extension screenshot error:', err);
+      }
+    };
+    window.addEventListener('flyxa:ext_screenshot', handler);
+    return () => window.removeEventListener('flyxa:ext_screenshot', handler);
+  }, [navigate]);
 
   // Silently poll Finnhub every 5 min; write AI-confirmed breaking news to
   // flyxa_breaking_cache_v1 so the Dashboard bubble fires without the user

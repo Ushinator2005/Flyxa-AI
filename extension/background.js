@@ -44,24 +44,24 @@ async function captureAndSend() {
       capturedAt: Date.now(),
     });
 
-    // 3. Find or open Flyxa
+    // 3. Find or open Flyxa, always landing on /journal so the listener is mounted
     const flyxaTab = await findFlyxaTab();
     let tabId;
 
     if (flyxaTab) {
-      // Focus the existing tab
-      await chrome.tabs.update(flyxaTab.id, { active: true });
+      // Navigate to /journal (React Router handles this; content script stays injected)
+      await chrome.tabs.update(flyxaTab.id, { active: true, url: FLYXA_OPEN_URL });
       if (flyxaTab.windowId) {
         await chrome.windows.update(flyxaTab.windowId, { focused: true });
       }
       tabId = flyxaTab.id;
     } else {
-      // Open a new Flyxa tab
+      // Open a new Flyxa tab directly at /journal
       const newTab = await chrome.tabs.create({ url: FLYXA_OPEN_URL });
       tabId = newTab.id;
     }
 
-    // 4. Send message to content script — retry once if tab is still loading
+    // 4. Send message to content script — give React time to mount, then retry
     await sendWithRetry(tabId, { type: 'INJECT_SCREENSHOT' });
 
   } catch (err) {
