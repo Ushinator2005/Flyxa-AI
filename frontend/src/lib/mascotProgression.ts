@@ -85,6 +85,10 @@ export function getRivalMetricValue(rival: Rival, metric: LeaderboardMetric): nu
     case 'processScore': return rival.mascot.stats.processScore;
     case 'winRate': return rival.mascot.stats.winRate ?? 0;
     case 'avgR': return rival.mascot.stats.avgR ?? 0;
+    case 'netPnl': return rival.mascot.stats.netPnl ?? 0;
+    case 'consistency': return rival.mascot.stats.periods?.allTime?.consistency ?? 0;
+    case 'riskAdjusted': return rival.mascot.stats.periods?.allTime?.riskAdjusted ?? 0;
+    case 'journalStreak': return rival.mascot.stats.dailyJournalStreak;
   }
 }
 
@@ -92,5 +96,6 @@ export function getRivalMetricValue(rival: Rival, metric: LeaderboardMetric): nu
 export function rivalHasMetricData(rival: Rival, metric: LeaderboardMetric): boolean {
   if (metric === 'winRate') return rival.mascot.stats.winRate != null;
   if (metric === 'avgR') return rival.mascot.stats.avgR != null;
+  if (metric === 'netPnl') return rival.mascot.stats.netPnl != null;
   return true;
 }

@@ -5,6 +5,12 @@ import type { Trade as StoreTrade } from '../store/types.js';
 import { tradesApi } from '../services/api.js';
 import { persistDeletedTradeId } from '../utils/deletedTrades.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
+import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import {
+  evaluateTradeViolations,
+  limitsFromPreSession,
+  violationBehaviorFlags,
+} from '../utils/performanceLoop.js';
 
 function normalizeEmotion(value: unknown): ApiTrade['emotional_state'] {
   if (typeof value !== 'string') return null;
@@ -128,25 +134,7 @@ function deriveFollowedPlan(trade: StoreTrade): boolean | null {
 }
 
 function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-  rawValues.forEach((entry) => {
-    if (typeof entry !== 'string') return;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) return;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) return;
-    deduped.add(key);
-    normalized.push(cleaned);
-  });
-
-  return normalized;
+  return normalizeConfluenceTags(value);
 }
 
 function normalizeAccountIds(value: unknown, fallback?: string): string[] {
@@ -216,6 +204,7 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     account: data.accountId ?? data.account_id ?? data.accountIds?.[0] ?? accountId,
     accountIds: normalizeAccountIds(data.accountIds ?? data.account_ids, data.accountId ?? data.account_id ?? accountId),
     behavioralFlags: Array.isArray(data.behavioral_flags) ? data.behavioral_flags : [],
+    performanceViolations: Array.isArray(data.performance_violations) ? data.performance_violations : [],
     createdAt: data.created_at ?? new Date().toISOString(),
   };
 }
@@ -276,6 +265,7 @@ export function toApiTrade(trade: StoreTrade): ApiTrade {
     followed_plan: typeof followedPlan === 'boolean' ? followedPlan : null,
     plan_score: typeof planScore === 'number' ? planScore : null,
     behavioral_flags: Array.isArray((trade as RichStoreTrade).behavioralFlags) ? (trade as RichStoreTrade).behavioralFlags : [],
+    performance_violations: Array.isArray((trade as RichStoreTrade).performanceViolations) ? (trade as RichStoreTrade).performanceViolations : [],
     session,
     created_at: trade.createdAt,
   };
@@ -297,6 +287,7 @@ export function evictTradeFromCache(_userId: string, _tradeId: string) {
 }
 
 let legacyTradesRestorePromise: Promise<void> | null = null;
+let confluenceMigrationPersisted = false;
 
 export function useTrades() {
   const entries = useFlyxaStore((state) => state.entries);
@@ -331,6 +322,17 @@ export function useTrades() {
   const fetchTrades = useCallback(async () => {
     return;
   }, []);
+
+  useEffect(() => {
+    if (confluenceMigrationPersisted || entries.length === 0) return;
+    confluenceMigrationPersisted = true;
+    // Re-save the normalized store once so legacy case variants and
+    // Orderblock aliases are migrated in cloud storage, not only in memory.
+    setEntries(entries, { notifyAchievements: false });
+    void flushSupabaseStoreNow().catch(() => {
+      confluenceMigrationPersisted = false;
+    });
+  }, [entries, setEntries]);
 
   useEffect(() => {
     if (entries.length > 0 || legacyTradesRestorePromise) return;
@@ -378,7 +380,35 @@ export function useTrades() {
       addEntry(entry);
     }
 
-    const trade = toStoreTrade(data, entry.id, accountId);
+    const state = useFlyxaStore.getState();
+    const account = state.accounts.find(item => item.id === accountId);
+    const draftApi = {
+      ...data,
+      id: data.id ?? crypto.randomUUID(),
+      pnl: Number(data.pnl ?? 0),
+      commission: Number(data.commission ?? 0),
+      contract_size: Number(data.contract_size ?? 1),
+      trade_date: tradeDate,
+      trade_time: data.trade_time ?? '09:30',
+    } as ApiTrade;
+    const earlierDayTrades = entries
+      .filter(candidate => candidate.date === tradeDate)
+      .flatMap(candidate => candidate.trades)
+      .map(toApiTrade)
+      .filter(candidate => candidate.id !== draftApi.id);
+    const violations = evaluateTradeViolations(
+      draftApi,
+      earlierDayTrades,
+      limitsFromPreSession(state.preSession, { dailyLossLimit: account?.dailyLossLimit ?? 0 }),
+      state.preSession,
+    );
+    const enrichedData: Partial<ApiTrade> = {
+      ...data,
+      id: draftApi.id,
+      performance_violations: violations,
+      behavioral_flags: [...new Set([...(data.behavioral_flags ?? []), ...violationBehaviorFlags(violations)])],
+    };
+    const trade = toStoreTrade(enrichedData, entry.id, accountId);
     addTrade(entry.id, trade);
     await flushSupabaseStoreNow();
     return toApiTrade(trade);
@@ -421,11 +451,31 @@ export function useTrades() {
     };
 
     updateTradeInStore(entry.id, id, patch);
-    const updatedEntry = useFlyxaStore.getState().entries.find((candidate) => candidate.id === entry.id);
-    const updatedTrade = updatedEntry?.trades.find((trade) => trade.id === id);
+    const state = useFlyxaStore.getState();
+    let updatedEntry = state.entries.find((candidate) => candidate.id === entry.id);
+    let updatedTrade = updatedEntry?.trades.find((trade) => trade.id === id);
     if (!updatedTrade) {
       throw new Error('Trade update failed');
     }
+    const account = state.accounts.find(item => item.id === updatedTrade?.account);
+    const earlierDayTrades = state.entries
+      .filter(candidate => candidate.date === updatedTrade?.date)
+      .flatMap(candidate => candidate.trades)
+      .filter(candidate => candidate.id !== id)
+      .map(toApiTrade);
+    const violations = evaluateTradeViolations(
+      toApiTrade(updatedTrade),
+      earlierDayTrades,
+      limitsFromPreSession(state.preSession, { dailyLossLimit: account?.dailyLossLimit ?? 0 }),
+      state.preSession,
+    );
+    updateTradeInStore(entry.id, id, {
+      performanceViolations: violations,
+      behavioralFlags: [...new Set([...(updatedTrade.behavioralFlags ?? []), ...violationBehaviorFlags(violations)])],
+    });
+    updatedEntry = useFlyxaStore.getState().entries.find(candidate => candidate.id === entry.id);
+    updatedTrade = updatedEntry?.trades.find(trade => trade.id === id);
+    if (!updatedTrade) throw new Error('Trade violation update failed');
     return toApiTrade(updatedTrade);
   }, [entries, updateTradeInStore]);
 

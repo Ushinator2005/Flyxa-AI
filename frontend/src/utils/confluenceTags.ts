@@ -11,7 +11,10 @@ const CONFLUENCE_ALIASES: Array<[canonical: string, aliases: string[]]> = [
   ['Market structure shift', ['mss', 'ms shift', 'structure shift', 'msb', 'market structure break', 'market structure']],
   ['Break of structure',     ['bos', 'break of str', 'structure break', 'break of struc']],
   ['Change of character',    ['choch', 'cho ch', 'choc', 'change of char']],
-  ['Order block',            ['ob', 'ob retest', 'order block retest', 'ob tap', 'order block tap', 'obs', 'mitigation block']],
+  ['LTF Orderblock',         ['orderblock', 'order block', 'ob', 'ob retest', 'order block retest', 'orderblock retest', 'ob tap', 'order block tap', 'orderblock tap', 'obs', 'mitigation block']],
+  ['Displacement',           ['dis placement']],
+  ['IFVG',                   ['iifvg']],
+  ['Rebalance',              ['reabalance']],
   ['Breaker block',          ['breaker', 'bb', 'breaker ob']],
   ['Fair value gap',         ['fvg', 'imbalance', 'imb', 'fair value gaps', 'price gap', 'inefficiency', 'gap']],
   ['Rejection block',        ['rej block', 'rejection ob']],
@@ -34,18 +37,47 @@ const CONFLUENCE_ALIASES: Array<[canonical: string, aliases: string[]]> = [
 const CONFLUENCE_CANONICAL_MAP = (() => {
   const map = new Map<string, string>();
   for (const [canonical, aliases] of CONFLUENCE_ALIASES) {
-    map.set(canonical.toLowerCase(), canonical);
+    map.set(normalizeConfluenceKey(canonical), canonical);
     for (const alias of aliases) {
-      map.set(alias.toLowerCase(), canonical);
+      map.set(normalizeConfluenceKey(alias), canonical);
     }
   }
   return map;
 })();
 
+/** Stable identity key: ignores case and every whitespace character. */
+export function normalizeConfluenceKey(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, '');
+}
+
 /** Resolves a raw tag to its canonical display name, or returns it unchanged if unknown. */
 export function normalizeConfluenceTag(raw: string): string {
-  const trimmed = raw.trim();
-  return CONFLUENCE_CANONICAL_MAP.get(trimmed.toLowerCase()) ?? trimmed;
+  const trimmed = raw.trim().replace(/\s+/g, ' ');
+  return CONFLUENCE_CANONICAL_MAP.get(normalizeConfluenceKey(trimmed)) ?? trimmed;
+}
+
+/** Canonicalizes and deduplicates tags case-insensitively. */
+export function normalizeConfluenceTags(value: unknown, max = Number.POSITIVE_INFINITY): string[] {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of rawValues) {
+    if (typeof value !== 'string') continue;
+    const canonical = normalizeConfluenceTag(value);
+    if (!canonical) continue;
+    const key = normalizeConfluenceKey(canonical);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(canonical.slice(0, 64));
+    if (normalized.length >= max) break;
+  }
+
+  return normalized;
 }
 
 export { CONFLUENCE_ALIASES };

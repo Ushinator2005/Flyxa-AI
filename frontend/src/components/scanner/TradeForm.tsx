@@ -7,6 +7,7 @@ import { formatRiskRewardRatio } from '../../utils/riskReward.js';
 import { lookupContract, FuturesContract } from '../../constants/futuresContracts.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import DatePicker from '../common/DatePicker.js';
+import { normalizeConfluenceKey, normalizeConfluenceTags } from '../../utils/confluenceTags.js';
 
 interface Props {
   initialData?: Partial<Trade>;
@@ -34,26 +35,7 @@ const PROCESS_BLOCK = 'FLYXA_PROCESS_GRADE';
 const REFLECTION_BLOCK = 'FLYXA_REFLECTION';
 
 function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const entry of rawValues) {
-    if (typeof entry !== 'string') continue;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) continue;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) continue;
-    deduped.add(key);
-    normalized.push(cleaned.slice(0, 64));
-    if (normalized.length >= 12) break;
-  }
-
-  return normalized;
+  return normalizeConfluenceTags(value, 12);
 }
 
 function normalizeAccountIds(value: unknown, fallback?: string): string[] {
@@ -413,7 +395,7 @@ export default function TradeForm({
   const rr = calcRR();
   const confluences = normalizeConfluences(form.confluences);
   const availableConfluenceOptions = confluenceOptions.filter(
-    option => !confluences.some(confluence => confluence.toLowerCase() === option.toLowerCase())
+    option => !confluences.some(confluence => normalizeConfluenceKey(confluence) === normalizeConfluenceKey(option))
   );
 
   const addConfluence = () => {

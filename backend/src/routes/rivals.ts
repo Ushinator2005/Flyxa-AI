@@ -6,6 +6,19 @@ import { AuthenticatedRequest } from '../types/index';
 const router = Router();
 
 type RequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
+type LeaderboardPeriod = 'week' | 'month' | 'season' | 'allTime';
+type RivalPeriodStats = {
+  netPnl: number;
+  winRate: number;
+  tradeCount: number;
+  tradingDays: number;
+  greenDays: number;
+  maxDrawdown: number;
+  consistency: number;
+  ruleAdherence: number;
+  riskAdjusted: number;
+  equityCurve: number[];
+};
 type RivalStats = {
   dailyJournalStreak: number;
   dailyJournalScore: number;
@@ -14,6 +27,9 @@ type RivalStats = {
   processScore: number;
   winRate: number | null;
   avgR: number | null;
+  netPnl: number | null;
+  periods?: Partial<Record<LeaderboardPeriod, RivalPeriodStats>>;
+  previousPeriods?: Partial<Record<Exclude<LeaderboardPeriod, 'allTime'>, RivalPeriodStats>>;
 };
 
 const EMPTY_STATS: RivalStats = {
@@ -24,6 +40,7 @@ const EMPTY_STATS: RivalStats = {
   processScore: 0,
   winRate: null,
   avgR: null,
+  netPnl: null,
 };
 
 function extractErrorMessage(error: unknown): string {
@@ -77,6 +94,132 @@ function nullableNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : null;
 }
 
+function isMissingCommissionColumnError(error: unknown): boolean {
+  const message = extractErrorMessage(error);
+  return message.includes("'commission'") &&
+    message.includes("'trades'") &&
+    message.includes('schema cache');
+}
+
+type PerformanceBundle = {
+  periods: Record<LeaderboardPeriod, RivalPeriodStats>;
+  previousPeriods: Record<Exclude<LeaderboardPeriod, 'allTime'>, RivalPeriodStats>;
+};
+
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function periodBounds(period: Exclude<LeaderboardPeriod, 'allTime'>, previous = false): [string, string] {
+  const now = new Date();
+  now.setUTCHours(0, 0, 0, 0);
+  let start = new Date(now);
+  let end = new Date(now);
+  if (period === 'week') {
+    const mondayOffset = (now.getUTCDay() + 6) % 7;
+    start.setUTCDate(now.getUTCDate() - mondayOffset - (previous ? 7 : 0));
+    end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+  } else if (period === 'month') {
+    start.setUTCDate(now.getUTCDate() - (previous ? 59 : 29));
+    end.setUTCDate(now.getUTCDate() - (previous ? 30 : 0));
+  } else {
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (previous ? 1 : 0), 1));
+    end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (previous ? 0 : -1), 0));
+  }
+  return [isoDate(start), isoDate(end)];
+}
+
+function emptyPeriodStats(): RivalPeriodStats {
+  return { netPnl: 0, winRate: 0, tradeCount: 0, tradingDays: 0, greenDays: 0, maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [] };
+}
+
+function summarizeTrades(trades: Array<Record<string, unknown>>, bounds?: [string, string]): RivalPeriodStats {
+  const filtered = trades
+    .filter(trade => {
+      const date = String(trade.trade_date ?? '');
+      return !bounds || (date >= bounds[0] && date <= bounds[1]);
+    })
+    .sort((a, b) => `${a.trade_date ?? ''} ${a.trade_time ?? ''}`.localeCompare(`${b.trade_date ?? ''} ${b.trade_time ?? ''}`));
+  if (filtered.length === 0) return emptyPeriodStats();
+  const daily = new Map<string, number>();
+  let cumulative = 0;
+  let peak = 0;
+  let maxDrawdown = 0;
+  let wins = 0;
+  let evaluated = 0;
+  let followed = 0;
+  const equityCurve: number[] = [];
+  for (const trade of filtered) {
+    const pnl = Number(trade.pnl);
+    const commission = Number(trade.commission ?? 0);
+    const net = (Number.isFinite(pnl) ? pnl : 0) - (Number.isFinite(commission) ? commission : 0);
+    cumulative += net;
+    if (net > 0) wins += 1;
+    peak = Math.max(peak, cumulative);
+    maxDrawdown = Math.max(maxDrawdown, peak - cumulative);
+    const date = String(trade.trade_date ?? '');
+    daily.set(date, (daily.get(date) ?? 0) + net);
+    if (typeof trade.followed_plan === 'boolean') {
+      evaluated += 1;
+      if (trade.followed_plan) followed += 1;
+    }
+    equityCurve.push(Math.round(cumulative * 100) / 100);
+  }
+  const greenDays = [...daily.values()].filter(value => value > 0).length;
+  const positiveShare = daily.size ? greenDays / daily.size : 0;
+  const drawdownPenalty = Math.min(1, maxDrawdown / Math.max(Math.abs(cumulative), 1));
+  return {
+    netPnl: Math.round(cumulative * 100) / 100,
+    winRate: Math.round((wins / filtered.length) * 100),
+    tradeCount: filtered.length,
+    tradingDays: daily.size,
+    greenDays,
+    maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+    consistency: Math.round(Math.max(0, Math.min(100, positiveShare * 75 + (1 - drawdownPenalty) * 25))),
+    ruleAdherence: evaluated ? Math.round((followed / evaluated) * 100) : 0,
+    riskAdjusted: Math.round((cumulative / Math.max(maxDrawdown, 1)) * 100) / 100,
+    equityCurve: equityCurve.slice(-24),
+  };
+}
+
+async function getPerformanceByUserIds(userIds: string[]): Promise<Map<string, PerformanceBundle>> {
+  const result = new Map<string, PerformanceBundle>();
+  if (userIds.length === 0) return result;
+  let { data, error } = await supabase
+    .from('trades')
+    .select('user_id, pnl, commission, trade_date, trade_time, followed_plan')
+    .in('user_id', userIds);
+
+  if (error && isMissingCommissionColumnError(error)) {
+    const fallback = await supabase
+      .from('trades')
+      .select('user_id, pnl, trade_date, trade_time, followed_plan')
+      .in('user_id', userIds);
+    data = fallback.data as typeof data;
+    error = fallback.error;
+  }
+
+  if (error) throw error;
+  for (const userId of userIds) {
+    const trades = (data ?? []).filter(trade => String(trade.user_id) === userId) as Array<Record<string, unknown>>;
+    result.set(userId, {
+      periods: {
+        allTime: summarizeTrades(trades),
+        week: summarizeTrades(trades, periodBounds('week')),
+        month: summarizeTrades(trades, periodBounds('month')),
+        season: summarizeTrades(trades, periodBounds('season')),
+      },
+      previousPeriods: {
+        week: summarizeTrades(trades, periodBounds('week', true)),
+        month: summarizeTrades(trades, periodBounds('month', true)),
+        season: summarizeTrades(trades, periodBounds('season', true)),
+      },
+    });
+  }
+  return result;
+}
+
 function normalizeStats(value: unknown): RivalStats {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   return {
@@ -87,6 +230,7 @@ function normalizeStats(value: unknown): RivalStats {
     processScore: clampScore(raw.processScore),
     winRate: nullableNumber(raw.winRate),
     avgR: nullableNumber(raw.avgR),
+    netPnl: nullableNumber(raw.netPnl),
   };
 }
 
@@ -117,8 +261,15 @@ function toRivalProfile(profile: {
   avatar_color: string | null;
   avatar_url?: string | null;
   stats?: unknown;
-}) {
+}, performance?: PerformanceBundle) {
   const username = profile.username;
+  const stats = normalizeStats(profile.stats ?? EMPTY_STATS);
+  if (performance) {
+    stats.netPnl = performance.periods.allTime.netPnl;
+    stats.winRate = performance.periods.allTime.winRate;
+    stats.periods = performance.periods;
+    stats.previousPeriods = performance.previousPeriods;
+  }
   return {
     userId: profile.user_id,
     username,
@@ -126,15 +277,20 @@ function toRivalProfile(profile: {
     avatarInitials: initialsFromUsername(username),
     avatarColor: profile.avatar_color || '#f59e0b',
     avatarUrl: profile.avatar_url || null,
-    stats: normalizeStats(profile.stats ?? EMPTY_STATS),
+    stats,
   };
+}
+
+async function toRivalProfileWithPnl(profile: Parameters<typeof toRivalProfile>[0]) {
+  const performance = await getPerformanceByUserIds([profile.user_id]);
+  return toRivalProfile(profile, performance.get(profile.user_id));
 }
 
 // GET /profile
 router.get('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const profile = await getProfileByUserId(req.userId!);
-    res.json(profile ? toRivalProfile(profile) : null);
+    res.json(profile ? await toRivalProfileWithPnl(profile) : null);
   } catch (err) {
     next(withRivalsSetupHint(err));
   }
@@ -197,7 +353,7 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
       return;
     }
 
-    res.json(toRivalProfile(data));
+    res.json(await toRivalProfileWithPnl(data));
   } catch (err) {
     next(withRivalsSetupHint(err));
   }
@@ -224,7 +380,7 @@ router.put('/profile/stats', authMiddleware, async (req: AuthenticatedRequest, r
       return;
     }
 
-    res.json(toRivalProfile(data));
+    res.json(await toRivalProfileWithPnl(data));
   } catch (err) {
     next(withRivalsSetupHint(err));
   }
@@ -240,7 +396,7 @@ router.get('/search', authMiddleware, async (req: AuthenticatedRequest, res: Res
     }
 
     const profile = await getProfileByUsername(username);
-    res.json(profile && profile.user_id !== req.userId ? toRivalProfile(profile) : null);
+    res.json(profile && profile.user_id !== req.userId ? await toRivalProfileWithPnl(profile) : null);
   } catch (err) {
     next(withRivalsSetupHint(err));
   }
@@ -263,12 +419,17 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response,
 
     const profilesById = new Map<string, ReturnType<typeof toRivalProfile>>();
     if (otherUserIds.length > 0) {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('rival_profiles')
-        .select('user_id, username, display_name, avatar_color, avatar_url, stats')
-        .in('user_id', otherUserIds);
+      const [{ data: profiles, error: profilesError }, performanceByUserId] = await Promise.all([
+        supabase
+          .from('rival_profiles')
+          .select('user_id, username, display_name, avatar_color, avatar_url, stats')
+          .in('user_id', otherUserIds),
+        getPerformanceByUserIds(otherUserIds),
+      ]);
       if (profilesError) throw profilesError;
-      for (const profile of profiles ?? []) profilesById.set(profile.user_id, toRivalProfile(profile));
+      for (const profile of profiles ?? []) {
+        profilesById.set(profile.user_id, toRivalProfile(profile, performanceByUserId.get(profile.user_id)));
+      }
     }
 
     res.json((requests ?? []).map(request => {
@@ -325,7 +486,7 @@ router.post('/requests', authMiddleware, async (req: AuthenticatedRequest, res: 
       direction: 'outgoing',
       createdAt: data.created_at,
       respondedAt: data.responded_at,
-      profile: toRivalProfile(recipient),
+      profile: await toRivalProfileWithPnl(recipient),
     });
   } catch (err) {
     next(withRivalsSetupHint(err));
@@ -385,7 +546,7 @@ router.put('/requests/:id', authMiddleware, async (req: AuthenticatedRequest, re
       direction: data.requester_id === req.userId ? 'outgoing' : 'incoming',
       createdAt: data.created_at,
       respondedAt: data.responded_at,
-      profile: profile ? toRivalProfile(profile) : null,
+      profile: profile ? await toRivalProfileWithPnl(profile) : null,
     });
   } catch (err) {
     next(withRivalsSetupHint(err));

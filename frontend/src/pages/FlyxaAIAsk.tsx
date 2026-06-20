@@ -8,6 +8,7 @@ import type { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { deriveTradeSessionLabel } from '../utils/sessionTimes.js';
+import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
@@ -16,10 +17,14 @@ function formatSignedCurrency(value: number) {
   return `${value >= 0 ? '+' : '-'}${formatCurrency(Math.abs(value))}`;
 }
 function normalizeConfluences(value: unknown): string[] {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
-  if (typeof value === 'string') { try { const p = JSON.parse(value); return Array.isArray(p) ? p.filter((v): v is string => typeof v === 'string') : []; } catch { return []; } }
-  return [];
+  if (typeof value === 'string') {
+    try {
+      return normalizeConfluenceTags(JSON.parse(value));
+    } catch {
+      return normalizeConfluenceTags(value);
+    }
+  }
+  return normalizeConfluenceTags(value);
 }
 
 // ─── Colours ──────────────────────────────────────────────────────────────────

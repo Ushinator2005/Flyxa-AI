@@ -14,6 +14,7 @@ import {
 } from '../services/claude';
 import { analyzeChartImage } from '../services/gemini';
 import { AuthenticatedRequest, Trade } from '../types/index';
+import { normalizeConfluences } from '../utils/confluenceTags';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -133,17 +134,6 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
       .order('created_at', { ascending: true });
 
     type HistTrade = { id: string; pnl: number; emotional_state: string; confluences: string[]; followed_plan: boolean | null; session: string; trade_date: string; created_at: string };
-    const normalizeConfluenceList = (value: unknown): string[] => {
-      const raw = Array.isArray(value)
-        ? value
-        : typeof value === 'string'
-          ? value.split(',')
-          : [];
-      return Array.from(new Set(raw
-        .map(item => typeof item === 'string' ? item.trim().replace(/\s+/g, ' ') : '')
-        .filter(Boolean)
-      ));
-    };
     const normalizeHistTrade = (value: unknown): HistTrade | null => {
       if (!value || typeof value !== 'object') return null;
       const trade = value as Partial<Trade> & Record<string, unknown>;
@@ -159,7 +149,7 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
         id,
         pnl,
         emotional_state: emotion,
-        confluences: normalizeConfluenceList(trade.confluences),
+        confluences: normalizeConfluences(trade.confluences),
         followed_plan: typeof trade.followed_plan === 'boolean' ? trade.followed_plan : null,
         session: typeof trade.session === 'string' && trade.session.trim() ? trade.session.trim() : 'Other',
         trade_date: typeof trade.trade_date === 'string' ? trade.trade_date : '',
@@ -204,7 +194,7 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
     })();
 
     // ── Confluences in this trade ─────────────────────────────────────────────
-    const tradeConfs = normalizeConfluenceList(focusTrade.confluences);
+    const tradeConfs = normalizeConfluences(focusTrade.confluences);
     const confStats = tradeConfs.length ? tradeConfs.map(c => {
       const ts = history.filter(t => Array.isArray(t.confluences) && t.confluences.includes(c));
       return ts.length >= 2 ? `${c}: ${ts.length} uses, ${winRate(ts)}% WR, $${netPnl(ts)} net` : null;

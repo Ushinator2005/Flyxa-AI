@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
+import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import './FlyxaAIWeeklyReport.css';
 
 // ─── Design tokens ───────────────────────────────────────────────
@@ -131,7 +132,7 @@ function computeWeekStats(trades: Trade[], offset: number): WeekStats {
 
   const confMap = new Map<string, { wins: number; total: number }>();
   wt.forEach(t => {
-    (Array.isArray(t.confluences) ? t.confluences : []).forEach(c => {
+    normalizeConfluenceTags(t.confluences).forEach(c => {
       if (!c) return;
       const e = confMap.get(c) ?? { wins: 0, total: 0 };
       e.total++; if (Number(t.pnl ?? 0) > 0) e.wins++;

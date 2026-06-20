@@ -1,4 +1,5 @@
 import { Trade } from '../types/index.js';
+import { normalizeConfluenceTags } from './confluenceTags.js';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 export interface AskDataRow {
@@ -370,7 +371,7 @@ function analyzeConfluences(trades: Trade[]): Omit<AskResponse, 'question'> {
   };
   const confMap: Record<string, Trade[]> = {};
   for (const t of withConf) {
-    for (const c of (t.confluences ?? [])) {
+    for (const c of normalizeConfluenceTags(t.confluences)) {
       (confMap[c] ??= []).push(t);
     }
   }
@@ -704,7 +705,7 @@ export function computeAllStats(trades: Trade[]): Record<string, unknown> {
   // ── Top confluences ──
   const confMap: Record<string, Trade[]> = {};
   for (const t of trades) {
-    for (const c of (t.confluences ?? [])) {
+    for (const c of normalizeConfluenceTags(t.confluences)) {
       const key = c.trim();
       if (key) (confMap[key] ??= []).push(t);
     }

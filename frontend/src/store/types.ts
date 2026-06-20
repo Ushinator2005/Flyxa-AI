@@ -39,6 +39,7 @@ export interface Trade {
   reflection: TradeReflection;
   confluences?: string[];
   behavioralFlags?: string[];
+  performanceViolations?: PerformanceViolation[];
   timeframe?: string;
   account: string;
   accountIds?: string[];
@@ -242,6 +243,9 @@ export interface PreSessionData {
     source: string;
     rule: string;
   }>;
+  prescriptions?: PerformancePrescription[];
+  violations?: PerformanceViolation[];
+  outcome?: PerformanceOutcome;
   commitment?: {
     committedAt: string;
     emotion: string;
@@ -263,6 +267,44 @@ export interface PreSessionData {
   sessionMaxLoss?: number | null;
   dailyTarget?: number | null;
   postSessionNote?: string;
+}
+
+export type PerformanceRuleType =
+  | 'daily_loss_limit'
+  | 'max_trades'
+  | 'max_contracts'
+  | 'post_loss_pause'
+  | 'plan_only';
+
+export interface PerformancePrescription {
+  id: string;
+  type: PerformanceRuleType;
+  value: number | boolean;
+  label: string;
+  reason: string;
+  sourcePattern: string;
+  createdAt: string;
+}
+
+export interface PerformanceViolation {
+  id: string;
+  ruleId: string;
+  type: PerformanceRuleType | 'revenge_trade' | 'plan_deviation';
+  severity: 'warning' | 'critical';
+  evidence: string;
+  cost: number;
+  tradeId?: string;
+  occurredAt: string;
+}
+
+export interface PerformanceOutcome {
+  evaluatedAt: string;
+  rulesFollowed: number;
+  totalRules: number;
+  adherencePct: number;
+  violations: PerformanceViolation[];
+  estimatedCost: number;
+  netPnl: number;
 }
 
 export interface ChartHistoryRecord {

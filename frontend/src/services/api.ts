@@ -289,6 +289,9 @@ export interface RivalProfileResponse {
     processScore: number;
     winRate?: number | null;
     avgR?: number | null;
+    netPnl?: number | null;
+    periods?: import('../types/rivals.js').MascotStats['periods'];
+    previousPeriods?: import('../types/rivals.js').MascotStats['previousPeriods'];
   };
 }
 

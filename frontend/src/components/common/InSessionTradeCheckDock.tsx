@@ -4,9 +4,9 @@ import { ExternalLink, GripHorizontal, Minus, ShieldCheck, X } from 'lucide-reac
 
 const STORAGE_KEY      = 'flyxa.trade-check-dock.position';
 const PROMPT_KEY       = 'flyxa.session-done-prompt';
-const W = 186;
-const H_FULL = 210;
-const H_MIN = 28;
+const W = 300;
+const H_FULL = 380;
+const H_MIN = 34;
 
 declare global {
   interface Window {
@@ -39,12 +39,42 @@ function fmtMoney(v: number) {
   return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+// Opens a Document Picture-in-Picture window — a native OS floating window
+// the user can drag to any monitor (including a chart screen on a second display).
+// Returns true if PiP opened/focused, false if not supported or user declined.
+async function tryOpenPip(
+  pipRef: { current: Window | null },
+): Promise<boolean> {
+  if (!window.documentPictureInPicture) return false;
+  try {
+    if (pipRef.current && !pipRef.current.closed) {
+      pipRef.current.focus();
+      return true;
+    }
+    const pipWindow = await window.documentPictureInPicture.requestWindow({ width: W, height: H_FULL });
+    pipRef.current = pipWindow;
+    pipWindow.document.title = 'Flyxa Trade Lens';
+    pipWindow.document.body.style.cssText = 'margin:0;background:transparent;overflow:hidden';
+    const iframe = pipWindow.document.createElement('iframe');
+    iframe.title = 'Flyxa Trade Lens';
+    iframe.src = '/trade-check';
+    iframe.style.cssText = 'width:100vw;height:100vh;border:0;display:block;background:transparent';
+    pipWindow.document.body.appendChild(iframe);
+    pipWindow.addEventListener('pagehide', () => { pipRef.current = null; }, { once: true });
+    return true;
+  } catch {
+    pipRef.current = null;
+    return false;
+  }
+}
+
 export default function InSessionTradeCheckDock() {
   const navigate = useNavigate();
   const [open, setOpen]           = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [position, setPosition]   = useState<DockPosition>(() => getInitialPosition());
   const [logPrompt, setLogPrompt] = useState<{ tradeCount: number; pnl: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const pipWindowRef = useRef<Window | null>(null);
   const skipFirstPersistRef = useRef(true);
   const dragRef = useRef<{
@@ -55,14 +85,21 @@ export default function InSessionTradeCheckDock() {
     originY: number;
   } | null>(null);
 
-  // Open dock via custom event
+  // Open dock via custom event.
+  // Opens as a popup window (real OS window, draggable to any monitor).
+  // If the popup is already open, window.open with the same name focuses it.
+  // Falls back to inline dock only if the browser blocks popups.
   useEffect(() => {
     const handler = () => {
-      void openPictureInPicture().then((opened) => {
-        if (opened) return;
-        setOpen(true);
-        setMinimized(false);
-      });
+      const child = window.open(
+        '/trade-check',
+        'flyxa-trade-check',
+        `popup=yes,width=${W},height=${H_FULL}`,
+      );
+      if (child) { child.focus(); return; }
+      // Popup blocked — show inline dock
+      setOpen(true);
+      setMinimized(false);
     };
     window.addEventListener('flyxa:open-trade-check', handler);
     return () => window.removeEventListener('flyxa:open-trade-check', handler);
@@ -153,7 +190,10 @@ export default function InSessionTradeCheckDock() {
       });
     };
     const onPointerUp = (event: PointerEvent) => {
-      if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+      if (dragRef.current?.pointerId === event.pointerId) {
+        dragRef.current = null;
+        setIsDragging(false);
+      }
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
@@ -165,33 +205,15 @@ export default function InSessionTradeCheckDock() {
     };
   }, [minimized]);
 
-  async function openPictureInPicture(): Promise<boolean> {
-    if (!window.documentPictureInPicture) return false;
-    try {
-      if (pipWindowRef.current && !pipWindowRef.current.closed) {
-        pipWindowRef.current.focus();
-        return true;
-      }
-      const pipWindow = await window.documentPictureInPicture.requestWindow({ width: W, height: H_FULL });
-      pipWindowRef.current = pipWindow;
-      pipWindow.document.title = 'Flyxa Trade Lens';
-      pipWindow.document.body.style.cssText = 'margin:0;background:transparent;overflow:hidden';
-      const iframe = pipWindow.document.createElement('iframe');
-      iframe.title = 'Flyxa Trade Lens';
-      iframe.src = '/trade-check';
-      iframe.style.cssText = 'width:100vw;height:100vh;border:0;display:block;background:transparent';
-      pipWindow.document.body.appendChild(iframe);
-      pipWindow.addEventListener('pagehide', () => { pipWindowRef.current = null; }, { once: true });
-      return true;
-    } catch {
-      pipWindowRef.current = null;
-      return false;
-    }
-  }
-
-  const openExternal = () => {
+  const openExternal = async () => {
+    const opened = await tryOpenPip(pipWindowRef);
+    if (opened) return;
+    // Fallback: regular popup window (can be moved to any monitor manually)
     const child = window.open('/trade-check', 'flyxa-trade-check', `popup=yes,width=${W},height=${H_FULL},left=80,top=80,resizable=yes`);
-    child?.focus();
+    if (child) { child.focus(); return; }
+    // Popup blocked — keep the inline dock visible
+    setOpen(true);
+    setMinimized(false);
   };
 
   return (
@@ -220,7 +242,10 @@ export default function InSessionTradeCheckDock() {
             role="button"
             tabIndex={0}
             onPointerDown={(e) => {
+              // Don't hijack clicks on the action buttons inside the header
+              if ((e.target as Element).closest('button')) return;
               e.currentTarget.setPointerCapture(e.pointerId);
+              setIsDragging(true);
               dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originX: position.x, originY: position.y };
             }}
             style={{
@@ -254,11 +279,17 @@ export default function InSessionTradeCheckDock() {
           </div>
 
           {!minimized && (
-            <iframe
-              title="In-session Trade Lens"
-              src="/trade-check"
-              style={{ display: 'block', width: '100%', height: H_FULL - H_MIN, border: 'none', background: 'transparent' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <iframe
+                title="In-session Trade Lens"
+                src="/trade-check"
+                style={{ display: 'block', width: '100%', height: H_FULL - H_MIN, border: 'none', background: 'transparent' }}
+              />
+              {/* Transparent shield — blocks iframe from swallowing pointer events during drag */}
+              {isDragging && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+              )}
+            </div>
           )}
         </div>
       )}

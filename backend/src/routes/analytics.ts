@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../services/supabase';
 import { AuthenticatedRequest, Trade } from '../types/index';
+import { normalizeConfluenceKey, normalizeConfluences } from '../utils/confluenceTags';
 
 const router = Router();
 
@@ -19,28 +20,6 @@ function calcConsecutive(trades: Trade[]): { wins: number; losses: number } {
     }
   }
   return { wins: maxWins, losses: maxLosses };
-}
-
-function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const entry of rawValues) {
-    if (typeof entry !== 'string') continue;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) continue;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) continue;
-    deduped.add(key);
-    normalized.push(cleaned);
-  }
-
-  return normalized;
 }
 
 // GET /summary
@@ -247,7 +226,7 @@ router.get('/by-confluence', authMiddleware, async (req: AuthenticatedRequest, r
       if (!confluences.length) continue;
 
       for (const confluence of confluences) {
-        const key = confluence.toLowerCase();
+        const key = normalizeConfluenceKey(confluence);
         if (!confluenceStats[key]) {
           confluenceStats[key] = {
             label: confluence,

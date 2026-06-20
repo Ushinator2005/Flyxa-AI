@@ -83,6 +83,7 @@ export interface Trade {
   followed_plan?: boolean | null;
   plan_score?: number | null;
   behavioral_flags?: string[];
+  performance_violations?: import('../store/types.js').PerformanceViolation[];
   session: 'Asia' | 'London' | 'Pre Market' | 'New York' | 'Other';
   created_at: string;
 }

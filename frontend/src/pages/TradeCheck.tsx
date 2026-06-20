@@ -205,6 +205,12 @@ export default function TradeCheck() {
     else if (!preSession)
       flags.push(flag('caution', 'No pre-session brief'));
 
+    const prescriptions = preSession?.prescriptions ?? [];
+    if (prescriptions.some(rule => rule.type === 'post_loss_pause' && rule.value === true) && consec >= 1)
+      flags.push(flag('blocked', 'Active rule: pause after a loss'));
+    if (prescriptions.some(rule => rule.type === 'plan_only' && rule.value === true))
+      flags.push(flag('caution', 'Active rule: written-plan setups only'));
+
     // Yesterday's self-set rule
     if (priorFlow?.tomorrowRule) {
       const rule = priorFlow.tomorrowRule.toLowerCase();
@@ -228,13 +234,15 @@ export default function TradeCheck() {
   // Reminders for active phase — pulled from pre-session data + emotion
   const reminders = useMemo<string[]>(() => {
     const list: string[] = [];
+    const activePlan = activePreSession?.sessionPlan ?? [];
+    activePlan.slice(0, 2).forEach(item => list.push(item.rule));
     if (priorFlow?.tomorrowRule) list.push(priorFlow.tomorrowRule);
     list.push('Respect your TP — no early exits');
     list.push("Don't move SL into a loss");
     if (isTilt(emotion)) list.push(`${emotion} state — pause before exiting`);
     else list.push('Stick to the plan, no improvising');
     return list.slice(0, 3);
-  }, [priorFlow, emotion]);
+  }, [activePreSession?.sessionPlan, priorFlow, emotion]);
 
   // Post-trade session health score
   const healthResult = useMemo(() => {
@@ -758,4 +766,3 @@ function actionBtn(variant: 'primary' | 'ghost'): React.CSSProperties {
     cursor: 'pointer',
   };
 }
-

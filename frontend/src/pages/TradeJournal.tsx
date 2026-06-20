@@ -3042,9 +3042,11 @@ export default function TradeJournal() {
                     color: recentForm.winRateLast10 !== null && recentForm.winRateLast10 >= 50 ? RF_GREEN : RF_RED,
                   },
                   {
-                    label: 'Net P&L',
-                    value: formatSignedCurrency(recentForm.netLast10),
-                    color: recentForm.netLast10 >= 0 ? RF_GREEN : RF_RED,
+                    label: 'Streak',
+                    value: recentForm.streak > 0
+                      ? `${recentForm.streak}${recentForm.streakType === 'win' ? 'W' : 'L'}`
+                      : '–',
+                    color: recentForm.streakType === 'win' ? RF_GREEN : RF_RED,
                   },
                 ].map(({ label, value, color }) => (
                   <div key={label}>

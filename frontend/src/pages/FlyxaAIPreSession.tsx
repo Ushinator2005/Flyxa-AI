@@ -11,6 +11,7 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { saveGuardSessionTrades } from '../hooks/useGuardSessionTrades.js';
+import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -484,6 +485,15 @@ export default function FlyxaAIPreSession() {
     [lastSession, recentBehavior.revengeTagged]
   );
 
+  const prescriptions = useMemo(
+    () => generateNextSessionPrescriptions(accountTrades, {
+      dailyLossLimit: riskLimits.noLossLimit ? 0 : riskLimits.maxDailyLoss,
+      maxTrades: riskLimits.maxTrades,
+      maxContracts: riskLimits.maxContracts,
+    }),
+    [accountTrades, riskLimits.maxContracts, riskLimits.maxDailyLoss, riskLimits.maxTrades, riskLimits.noLossLimit],
+  );
+
   const sessionPlan = useMemo<SessionPlanRow[]>(() => {
     const topEdge = confirmedEdgePatterns[0];
     const topRisk = activeRiskPatterns[0];
@@ -516,6 +526,15 @@ export default function FlyxaAIPreSession() {
         source: 'Avoid today' as const,
         rule: `Plan adherence is ${recentBehavior.planAdherence}%. Every entry must clear your written plan before execution.`,
       }] : []),
+      ...prescriptions.map(item => ({
+        id: item.id,
+        source: (item.type === 'post_loss_pause' || item.type === 'plan_only'
+          ? 'Avoid today'
+          : item.type === 'max_trades' || item.type === 'daily_loss_limit'
+            ? 'Hard stop'
+            : 'Primary focus') as SessionPlanRow['source'],
+        rule: `${item.label}. ${item.reason}`,
+      })),
       // Hard stop: always data-driven
       {
         id: 'hard-stop',
@@ -524,8 +543,8 @@ export default function FlyxaAIPreSession() {
           ? `Stop after ${riskLimits.maxTrades} trades or when you feel the session is done.`
           : `Stop at ${formatCurrency(-riskLimits.maxDailyLoss)} loss or after ${riskLimits.maxTrades} trades — whichever comes first.`,
       },
-    ];
-  }, [activeRiskPatterns, confirmedEdgePatterns, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
+    ].slice(0, 4);
+  }, [activeRiskPatterns, confirmedEdgePatterns, prescriptions, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
 
   const rthTiming = useMemo(() => getRthTiming(now), [now]);
   const emotionLogged = emotion.trim().length > 0;
@@ -605,6 +624,7 @@ export default function FlyxaAIPreSession() {
       startedAt: updates.startedAt ?? storedPreSession?.startedAt ?? null,
       readiness,
       sessionPlan,
+      prescriptions,
       commitment: storedPreSession?.commitment,
       sessionMaxLoss: 'sessionMaxLoss' in updates ? updates.sessionMaxLoss : (isFinite(parsedLoss) && parsedLoss > 0 ? parsedLoss : null),
       dailyTarget: 'dailyTarget' in updates ? updates.dailyTarget : (isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : null),
@@ -678,6 +698,7 @@ export default function FlyxaAIPreSession() {
       startedAt: committedAt,
       readiness,
       sessionPlan,
+      prescriptions,
       commitment: {
         committedAt,
         emotion,
@@ -686,6 +707,7 @@ export default function FlyxaAIPreSession() {
         checklistState,
         readiness,
         sessionPlan,
+        prescriptions,
       },
       sessionMaxLoss: isFinite(parsedLoss) && parsedLoss > 0 ? parsedLoss : null,
       dailyTarget: isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : null,

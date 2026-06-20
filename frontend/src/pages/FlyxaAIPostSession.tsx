@@ -9,6 +9,7 @@ import type { PreSessionData } from '../store/types.js';
 import { buildDailyFlowInsight } from '../utils/dailyFlow.js';
 import DatePicker from '../components/common/DatePicker.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
+import { limitsFromPreSession, summarizePerformanceOutcome } from '../utils/performanceLoop.js';
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -166,6 +167,25 @@ export default function FlyxaAIPostSession() {
     if (!withPlan.length) return null;
     return Math.round(withPlan.filter(t => t.followed_plan === true).length / withPlan.length * 100);
   }, [dayTrades]);
+
+  const performanceOutcome = useMemo(() => summarizePerformanceOutcome(
+    dayTrades,
+    ps?.prescriptions ?? [],
+    limitsFromPreSession(ps, { dailyLossLimit: ps?.sessionMaxLoss ?? 0 }),
+    ps,
+  ), [dayTrades, ps]);
+
+  useEffect(() => {
+    if (!ps || dayTrades.length === 0) return;
+    const previous = ps.outcome;
+    if (
+      previous &&
+      previous.adherencePct === performanceOutcome.adherencePct &&
+      previous.violations.length === performanceOutcome.violations.length &&
+      previous.netPnl === performanceOutcome.netPnl
+    ) return;
+    setPreSessionForDate(selectedDate, { ...ps, violations: performanceOutcome.violations, outcome: performanceOutcome });
+  }, [dayTrades.length, performanceOutcome, ps, selectedDate, setPreSessionForDate]);
 
   const biasAdherence = useMemo(() => {
     if (!Object.keys(bias).length) return [];
@@ -385,6 +405,7 @@ export default function FlyxaAIPostSession() {
                     { label: 'NET P&L', value: dayTrades.length ? fmtSigned(netPnl) : '--', color: reviewColor },
                     { label: 'TRADES', value: String(dayTrades.length), color: C.t0 },
                     { label: 'PLAN', value: planAdherence !== null ? `${planAdherence}%` : '--', color: planAdherence !== null ? adherenceColor(planAdherence) : C.t2 },
+                    { label: 'LOOP', value: `${performanceOutcome.adherencePct}%`, color: adherenceColor(performanceOutcome.adherencePct) },
                   ] as { label: string; value: string; color: string; wide?: boolean }[]).map((stat, i) => (
                     <div key={stat.label} style={{ flex: stat.wide ? 1.6 : 1, padding: '9px 12px', borderLeft: i === 0 ? 'none' : `1px solid ${C.b0}`, minWidth: 0 }}>
                       <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', marginBottom: 4 }}>{stat.label}</p>
@@ -545,6 +566,32 @@ export default function FlyxaAIPostSession() {
                 </>
               )}
             </div>
+
+            {dayTrades.length > 0 && ps?.prescriptions && ps.prescriptions.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p style={SECTION_LABEL}>Performance loop</p>
+                <div className="rounded-[8px] overflow-hidden" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
+                    {[
+                      { label: 'Rules followed', value: `${performanceOutcome.rulesFollowed}/${performanceOutcome.totalRules}`, color: adherenceColor(performanceOutcome.adherencePct) },
+                      { label: 'Violations', value: String(performanceOutcome.violations.length), color: performanceOutcome.violations.length ? C.red : C.grn },
+                      { label: 'Estimated cost', value: fmtCurrency(performanceOutcome.estimatedCost), color: performanceOutcome.estimatedCost > 0 ? C.red : C.grn },
+                    ].map((item, index) => (
+                      <div key={item.label} style={{ padding: '13px 15px', borderLeft: index ? `1px solid ${C.b0}` : 'none' }}>
+                        <p style={SECTION_LABEL}>{item.label}</p>
+                        <p style={{ marginTop: 7, color: item.color, fontFamily: C.mono, fontSize: 16, fontWeight: 700 }}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {performanceOutcome.violations.slice(0, 3).map((item, index) => (
+                    <div key={item.id} style={{ padding: '10px 15px', borderTop: `1px solid ${C.b0}`, display: 'flex', gap: 10 }}>
+                      <span style={{ color: item.severity === 'critical' ? C.red : C.amb, fontSize: 9, fontWeight: 700, minWidth: 52, textTransform: 'uppercase' }}>{item.severity}</span>
+                      <p style={{ margin: 0, color: C.t1, fontSize: 11, lineHeight: 1.45 }}>{item.evidence}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ACTUAL EXECUTION */}
             <div className="flex flex-col gap-2">

@@ -14,6 +14,7 @@ import {
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account } from '../store/types.js';
 import { supabase } from '../services/api.js';
+import { normalizeConfluenceTag, normalizeConfluenceTags } from '../utils/confluenceTags.js';
 
 export { ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID } from '../utils/tradingAccounts.js';
 const DEFAULT_TIMEZONE = 'America/New_York';
@@ -57,7 +58,7 @@ const DEFAULT_CONFLUENCE_OPTIONS = [
   'HTF bias',
   'Session high/low sweep',
   'Market structure shift',
-  'Order block retest',
+  'LTF Orderblock',
   'Volume confirmation',
 ];
 
@@ -65,26 +66,13 @@ type TradeAccountMap = Record<string, string | string[]>;
 
 function normalizeConfluenceOption(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const trimmed = value.trim().replace(/\s+/g, ' ');
+  const trimmed = normalizeConfluenceTag(value);
   if (!trimmed) return null;
   return trimmed.slice(0, 64);
 }
 
 function normalizeConfluenceOptions(values: unknown): string[] {
-  const source = Array.isArray(values) ? values : [];
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const value of source) {
-    const cleaned = normalizeConfluenceOption(value);
-    if (!cleaned) continue;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) continue;
-    deduped.add(key);
-    normalized.push(cleaned);
-    if (normalized.length >= 64) break;
-  }
-
+  const normalized = normalizeConfluenceTags(values, 64);
   return normalized.length ? normalized : [...DEFAULT_CONFLUENCE_OPTIONS];
 }
 

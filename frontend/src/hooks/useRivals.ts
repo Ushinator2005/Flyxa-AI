@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Rival } from '../types/rivals.js';
+import type { LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
 import { getMascotStage, getMascotXP } from '../lib/mascotProgression.js';
 import { useActiveAccountEntries } from '../store/selectors.js';
 import useFlyxaStore from '../store/flyxaStore.js';
@@ -141,6 +141,63 @@ function computeProcessScore(entries: DailyJournalEntry[], dailyJournalStreak: n
   );
 }
 
+function periodBounds(period: Exclude<LeaderboardPeriod, 'allTime'>, previous = false): [string, string] {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let start = new Date(now);
+  let end = new Date(now);
+  if (period === 'week') {
+    const mondayOffset = (now.getDay() + 6) % 7;
+    start.setDate(now.getDate() - mondayOffset - (previous ? 7 : 0));
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+  } else if (period === 'month') {
+    start.setDate(now.getDate() - (previous ? 59 : 29));
+    end.setDate(now.getDate() - (previous ? 30 : 0));
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth() - (previous ? 1 : 0), 1);
+    end = new Date(now.getFullYear(), now.getMonth() - (previous ? 0 : -1), 0);
+  }
+  return [isoDate(start), isoDate(end)];
+}
+
+function computePeriodStats(trades: Trade[], bounds?: [string, string]): RivalPeriodStats {
+  const filtered = trades
+    .filter(trade => !bounds || (trade.date >= bounds[0] && trade.date <= bounds[1]))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const daily = new Map<string, number>();
+  let cumulative = 0;
+  let peak = 0;
+  let maxDrawdown = 0;
+  const equityCurve = filtered.map(trade => {
+    const value = trade.pnl - (trade.commission ?? 0);
+    cumulative += value;
+    peak = Math.max(peak, cumulative);
+    maxDrawdown = Math.max(maxDrawdown, peak - cumulative);
+    daily.set(trade.date, (daily.get(trade.date) ?? 0) + value);
+    return Math.round(cumulative * 100) / 100;
+  });
+  const wins = filtered.filter(trade => trade.pnl - (trade.commission ?? 0) > 0).length;
+  const evaluated = filtered.filter(trade => trade.reflection?.followedPlan != null);
+  const greenDays = [...daily.values()].filter(value => value > 0).length;
+  const netPnl = Math.round(cumulative * 100) / 100;
+  const positiveShare = daily.size ? greenDays / daily.size : 0;
+  const drawdownPenalty = Math.min(1, maxDrawdown / Math.max(Math.abs(netPnl), 1));
+  const consistency = Math.round(Math.max(0, Math.min(100, positiveShare * 75 + (1 - drawdownPenalty) * 25)));
+  return {
+    netPnl,
+    winRate: filtered.length ? Math.round((wins / filtered.length) * 100) : 0,
+    tradeCount: filtered.length,
+    tradingDays: daily.size,
+    greenDays,
+    maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+    consistency,
+    ruleAdherence: evaluated.length ? Math.round((evaluated.filter(trade => trade.reflection.followedPlan).length / evaluated.length) * 100) : 0,
+    riskAdjusted: Math.round((netPnl / Math.max(maxDrawdown, 1)) * 100) / 100,
+    equityCurve,
+  };
+}
+
 function normalizeRivalStats(rival: Rival): Rival {
   const raw = rival.mascot.stats as MascotStats & {
     discipline?: number;
@@ -166,6 +223,9 @@ function normalizeRivalStats(rival: Rival): Rival {
         processScore,
         winRate: raw.winRate ?? null,
         avgR: raw.avgR ?? null,
+        netPnl: raw.netPnl ?? null,
+        periods: raw.periods ?? {},
+        previousPeriods: raw.previousPeriods ?? {},
       },
     },
   };
@@ -174,7 +234,7 @@ function normalizeRivalStats(rival: Rival): Rival {
 function rivalFromRequest(request: RivalRequestResponse): Rival | null {
   if (request.status !== 'accepted' || !request.profile) return null;
   const profile = request.profile;
-  const stats = profile.stats ?? { dailyJournalStreak: 0, dailyJournalScore: 0, tradingJournalScore: 0, backtestSessions: 0, processScore: 0, winRate: null, avgR: null };
+  const stats = profile.stats ?? { dailyJournalStreak: 0, dailyJournalScore: 0, tradingJournalScore: 0, backtestSessions: 0, processScore: 0, winRate: null, avgR: null, netPnl: null };
   return normalizeRivalStats({
     id: `rival-user-${profile.userId}`,
     userId: profile.userId,
@@ -293,6 +353,24 @@ export function useRivals() {
     const avgR = allTrades.length > 0
       ? Math.round(((winTrades.reduce((sum, t) => sum + t.rr, 0) - lossTrades.length) / allTrades.length) * 100) / 100
       : null;
+    const netPnl = Math.round(
+      entries.flatMap(entry => entry.trades)
+        .reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0) * 100
+    ) / 100;
+    const allSavedTrades = entries.flatMap(entry => entry.trades);
+    const localPeriods = {
+      allTime: computePeriodStats(allSavedTrades),
+      week: computePeriodStats(allSavedTrades, periodBounds('week')),
+      month: computePeriodStats(allSavedTrades, periodBounds('month')),
+      season: computePeriodStats(allSavedTrades, periodBounds('season')),
+    };
+    const localPreviousPeriods = {
+      week: computePeriodStats(allSavedTrades, periodBounds('week', true)),
+      month: computePeriodStats(allSavedTrades, periodBounds('month', true)),
+      season: computePeriodStats(allSavedTrades, periodBounds('season', true)),
+    };
+    const periods = { ...localPeriods, ...(profile?.stats?.periods ?? {}) };
+    const previousPeriods = { ...localPreviousPeriods, ...(profile?.stats?.previousPeriods ?? {}) };
 
     const me: Rival = {
       id: 'rival-me',
@@ -314,6 +392,9 @@ export function useRivals() {
           processScore,
           winRate,
           avgR,
+          netPnl: periods.allTime.netPnl ?? netPnl,
+          periods,
+          previousPeriods,
         },
         xp: 0,
       },
@@ -321,7 +402,7 @@ export function useRivals() {
 
     me.mascot.xp = getMascotXP(me.mascot.streakDays, me.mascot.stats);
     return me;
-  }, [backtestSessions.length, dailyJournalEntries, entries, profile?.avatarUrl]);
+  }, [backtestSessions.length, dailyJournalEntries, entries, profile?.avatarUrl, profile?.stats]);
 
   const myStatsSignature = useMemo(() => JSON.stringify(myRival.mascot.stats), [myRival.mascot.stats]);
 

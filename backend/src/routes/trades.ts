@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../services/supabase';
 import { AuthenticatedRequest } from '../types/index';
+import { normalizeConfluences } from '../utils/confluenceTags';
 
 const router = Router();
 
@@ -51,29 +52,6 @@ function isMissingColumnError(error: unknown, column: string): boolean {
   return message.includes(`'${column}'`) &&
     message.includes("'trades'") &&
     message.includes('schema cache');
-}
-
-function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const entry of rawValues) {
-    if (typeof entry !== 'string') continue;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) continue;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) continue;
-    deduped.add(key);
-    normalized.push(cleaned.slice(0, 64));
-    if (normalized.length >= 12) break;
-  }
-
-  return normalized;
 }
 
 function normalizeStringArray(value: unknown, fallback: string[] = [], maxItems = 12): string[] {

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { normalizeConfluenceTag } from '../utils/confluenceTags.js';
+import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { supabaseZustandStorage } from './supabaseStorage.js';
 import { lookupContract } from '../constants/futuresContracts.js';
@@ -175,25 +175,7 @@ function pointValue(symbol: string): number {
 }
 
 function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-  rawValues.forEach((entry) => {
-    if (typeof entry !== 'string') return;
-    const cleaned = normalizeConfluenceTag(entry.trim().replace(/\s+/g, ' '));
-    if (!cleaned) return;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) return;
-    deduped.add(key);
-    normalized.push(cleaned);
-  });
-
-  return normalized;
+  return normalizeConfluenceTags(value);
 }
 
 function computeResult(grossPnl: number, exit: number | null, commission = 0): TradeResult {

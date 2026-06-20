@@ -6,6 +6,7 @@ import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
 
 type InsightType = 'risk' | 'pattern' | 'psychology' | 'edge';
 type TagTone = 'positive' | 'negative' | 'neutral';
@@ -247,25 +248,7 @@ function formatSignedCompactCurrency(value: number) {
 }
 
 function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const entry of rawValues) {
-    if (typeof entry !== 'string') continue;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) continue;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) continue;
-    deduped.add(key);
-    normalized.push(cleaned);
-  }
-
-  return normalized;
+  return normalizeConfluenceTags(value);
 }
 
 function tradeR(trade?: Partial<Trade> | null): number {
@@ -681,11 +664,11 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
   periodTrades.forEach(trade => {
     const tradeConfluences = normalizeConfluences(trade.confluences);
     if (!tradeConfluences.length) return;
-    const tradeConfluenceSet = new Set(tradeConfluences.map(confluence => confluence.toLowerCase()));
+    const tradeConfluenceSet = new Set(tradeConfluences.map(normalizeConfluenceKey));
     const currentPnl = Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
 
     tradeConfluenceSet.forEach(confluenceKey => {
-      const label = tradeConfluences.find(confluence => confluence.toLowerCase() === confluenceKey) ?? confluenceKey;
+      const label = tradeConfluences.find(confluence => normalizeConfluenceKey(confluence) === confluenceKey) ?? confluenceKey;
       const current = confluenceGroups.get(confluenceKey) ?? {
         label,
         trades: 0,
