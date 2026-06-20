@@ -60,7 +60,8 @@ async function captureAndSend() {
         const H = window.innerHeight;
         const info = { viewportW: W, viewportH: H, dpr: window.devicePixelRatio || 1 };
 
-        // Clamp a DOMRect to the visible viewport; return null if too small.
+        // Clamp a {left,top,right,bottom} rect to the visible viewport.
+        // Returns null if the visible portion is too small.
         function clip(r, minW = 200, minH = 150) {
           const x = Math.max(0, r.left);
           const y = Math.max(0, r.top);
@@ -69,7 +70,7 @@ async function captureAndSend() {
           return (w >= minW && h >= minH) ? { x, y, w, h } : null;
         }
 
-        // Pick the largest clipped rect from a NodeList/Array.
+        // Pick the largest clipped rect from a NodeList/Array of elements.
         function largest(els, minW = 200, minH = 150) {
           let best = null, bestArea = 0;
           for (const el of els) {
@@ -81,9 +82,64 @@ async function captureAndSend() {
           return best;
         }
 
+        // Compute the union bounding box of raw DOMRect objects and return
+        // a clipped {x,y,w,h} or null. topPad expands the top edge upward
+        // (used to capture the HTML chart header that sits above canvas elements).
+        function unionBounds(rects, topPad = 0) {
+          if (!rects.length) return null;
+          let minX = W, minY = H, maxX = 0, maxY = 0;
+          for (const r of rects) {
+            minX = Math.min(minX, r.left);
+            minY = Math.min(minY, r.top);
+            maxX = Math.max(maxX, r.right);
+            maxY = Math.max(maxY, r.bottom);
+          }
+          return clip({ left: minX, top: Math.max(0, minY - topPad), right: maxX, bottom: maxY }, 200, 150);
+        }
+
+        // Given all canvases in a document (possibly an iframe's doc) and
+        // an origin offset, return the full chart bounds including price-axis
+        // and time-axis canvases that sit adjacent to the main chart canvas.
+        function canvasUnion(canvases, offsetX = 0, offsetY = 0) {
+          // Find the main (largest) canvas — the candlestick area
+          let mainR = null, mainArea = 0;
+          for (const c of canvases) {
+            const r = c.getBoundingClientRect();
+            if (r.width < 200 || r.height < 150) continue;
+            if (r.width * r.height > mainArea) { mainArea = r.width * r.height; mainR = r; }
+          }
+          if (!mainR) return null;
+
+          // Collect ALL canvases within 150 px of the main canvas — this picks
+          // up TradingView's separate price-axis canvas (right) and time-axis
+          // canvas (bottom) without grabbing unrelated UI canvases far away.
+          const TOL = 150;
+          const nearby = canvases
+            .map(c => c.getBoundingClientRect())
+            .filter(r =>
+              r.width >= 10 && r.height >= 10 &&
+              r.left   < mainR.right  + TOL && r.right  > mainR.left   - TOL &&
+              r.top    < mainR.bottom + TOL && r.bottom > mainR.top    - TOL
+            )
+            .map(r => ({
+              left:   r.left   + offsetX,
+              top:    r.top    + offsetY,
+              right:  r.right  + offsetX,
+              bottom: r.bottom + offsetY,
+            }));
+
+          // 60 px top padding captures the HTML header (ticker + timeframe)
+          // that sits above the canvas stack and is not itself a canvas.
+          return unionBounds(nearby, 60);
+        }
+
         // ── 1. Canvases in the main document ──────────────────────────────────
-        const mainCanvas = largest(document.querySelectorAll('canvas'));
-        if (mainCanvas) return { ...info, bounds: mainCanvas };
+        // TradingView standalone uses three sibling canvases: main chart area,
+        // right price-axis, and bottom time-axis. Taking the union ensures all
+        // three — and their price/time labels — are included in the crop.
+        const mainDocCanvases = Array.from(document.querySelectorAll('canvas'));
+        const mainDocBounds = canvasUnion(mainDocCanvases);
+        if (mainDocBounds) return { ...info, bounds: mainDocBounds };
 
         // ── 2. Canvases inside same-origin iframes ────────────────────────────
         for (const iframe of document.querySelectorAll('iframe')) {
@@ -91,31 +147,21 @@ async function captureAndSend() {
             const doc = iframe.contentDocument;
             if (!doc) continue;
             const ir = iframe.getBoundingClientRect();
-            let best = null, bestArea = 0;
-            for (const c of doc.querySelectorAll('canvas')) {
-              // getBoundingClientRect() inside an iframe is relative to the
-              // iframe's own viewport; add the iframe's offset to convert.
-              const cr = c.getBoundingClientRect();
-              const rect = clip({
-                left:   ir.left + cr.left,
-                top:    ir.top  + cr.top,
-                right:  ir.left + cr.right,
-                bottom: ir.top  + cr.bottom,
-              });
-              if (!rect) continue;
-              const area = rect.w * rect.h;
-              if (area > bestArea) { bestArea = area; best = rect; }
-            }
-            if (best) return { ...info, bounds: best };
+            const iCanvases = Array.from(doc.querySelectorAll('canvas'));
+            // getBoundingClientRect() inside an iframe is relative to the
+            // iframe's viewport; add the iframe's own offset to convert to
+            // main-document coordinates.
+            const bounds = canvasUnion(iCanvases, ir.left, ir.top);
+            if (bounds) return { ...info, bounds };
           } catch { /* cross-origin iframe — cannot access DOM */ }
         }
 
         // ── 3. Largest visible iframe (cross-origin embedded chart) ───────────
         // TopstepX, Apex, FTMO embed TradingView (tradingview.com) in a
-        // cross-origin iframe — we can read the iframe element's rect from
-        // the parent document even if we can't touch its DOM.
-        // Require the iframe to cover ≥ 20% of the viewport so we don't grab
-        // an ad or a tiny widget.
+        // cross-origin iframe. We cannot touch its DOM, so we use the iframe
+        // element's own bounding rect and add generous padding so price labels
+        // (right) and time labels (bottom) that may sit just outside the iframe
+        // boundary are always captured.
         const bigIframes = Array.from(document.querySelectorAll('iframe')).filter(f => {
           const r = f.getBoundingClientRect();
           const vw = Math.min(r.right, W) - Math.max(0, r.left);
@@ -124,17 +170,15 @@ async function captureAndSend() {
         });
         const iframeBounds = largest(bigIframes, 300, 200);
         if (iframeBounds) {
-          // Add 80 px right-side padding so overlaid price labels from the host
-          // page (TopstepX, Apex, etc.) that sit just outside the iframe edge
-          // are included in the crop.
-          const padR = 80;
+          const padR = 120; // right: price-axis labels
+          const padB = 80;  // bottom: time-axis labels
           return {
             ...info,
             bounds: {
               x: iframeBounds.x,
               y: iframeBounds.y,
               w: Math.min(W - iframeBounds.x, iframeBounds.w + padR),
-              h: iframeBounds.h,
+              h: Math.min(H - iframeBounds.y, iframeBounds.h + padB),
             },
           };
         }
