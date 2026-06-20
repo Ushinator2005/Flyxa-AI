@@ -22,6 +22,7 @@ import { lookupContract } from '../constants/futuresContracts.js';
 import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName, normalizeResolvedSymbol } from '../utils/tradeScannerPipeline.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { scaleContractAmount } from '../utils/contractSizing.js';
+import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
@@ -297,25 +298,7 @@ function parsePrice(value: unknown): number | undefined {
 }
 
 function normalizeConfluences(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
-
-  const deduped = new Set<string>();
-  const normalized: string[] = [];
-  rawValues.forEach((entry) => {
-    if (typeof entry !== 'string') return;
-    const cleaned = entry.trim().replace(/\s+/g, ' ');
-    if (!cleaned) return;
-    const key = cleaned.toLowerCase();
-    if (deduped.has(key)) return;
-    deduped.add(key);
-    normalized.push(cleaned);
-  });
-
-  return normalized;
+  return normalizeConfluenceTags(value);
 }
 
 function getTradeEntry(trade: JournalTrade): number | undefined {
@@ -1630,7 +1613,7 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
   const suggestions = confluenceDraft.trim().length > 0
     ? confluenceOptions.filter(opt =>
         opt.toLowerCase().includes(confluenceDraft.toLowerCase()) &&
-        !confluences.includes(opt)
+        !confluences.some(confluence => normalizeConfluenceKey(confluence) === normalizeConfluenceKey(opt))
       )
     : [];
 
@@ -2143,18 +2126,31 @@ export default function TradeJournal() {
     const sorted = [...allTrades].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
     const last10 = sorted.slice(-10);
 
-    // Sparkline: cumulative P&L starting from 0 before first trade
-    const cumPnl = [0];
-    last10.forEach(t => { cumPnl.push(cumPnl[cumPnl.length - 1] + t.pnl - (t.commission ?? 0)); });
-    const SW = 240, SH = 48, SP = 4;
-    const minV = Math.min(...cumPnl);
-    const maxV = Math.max(...cumPnl);
-    const vRange = maxV - minV || 1;
-    const toX = (i: number) => SP + (i / Math.max(cumPnl.length - 1, 1)) * (SW - 2 * SP);
-    const toY = (v: number) => SH - SP - ((v - minV) / vRange) * (SH - 2 * SP);
-    const sparkPoints = cumPnl.map((v, i) => ({ x: toX(i), y: toY(v) }));
-    const sparkZeroY = Math.max(SP, Math.min(SH - SP, toY(0)));
-    const sparkPositive = cumPnl[cumPnl.length - 1] >= 0;
+    // Per-trade bar data — ratio in [-1, +1] relative to largest trade
+    const maxAbsPnl = Math.max(...last10.map(t => Math.abs(t.pnl - (t.commission ?? 0))), 1);
+    const tradeBars = last10.map(t => {
+      const net = t.pnl - (t.commission ?? 0);
+      return { result: t.result as TradeResult, net, ratio: net / maxAbsPnl };
+    });
+
+    // Current W/L streak (most-recent first)
+    let streak = 0;
+    let streakType: 'win' | 'loss' | null = null;
+    for (let i = last10.length - 1; i >= 0; i--) {
+      const r = last10[i].result;
+      if (i === last10.length - 1) {
+        streakType = r === 'win' ? 'win' : r === 'loss' ? 'loss' : null;
+        streak = streakType ? 1 : 0;
+      } else if (streakType && r === streakType) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    const winsLast10 = last10.filter(t => t.result === 'win').length;
+    const lossesLast10 = last10.filter(t => t.result === 'loss').length;
+    const netLast10 = last10.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
 
     // 7-day rolling stats
     const now = new Date();
@@ -2168,15 +2164,16 @@ export default function TradeJournal() {
 
     return {
       last10,
-      winsLast10: last10.filter(t => t.result === 'win').length,
-      lossesLast10: last10.filter(t => t.result !== 'win').length,
-      sparkPoints,
-      sparkZeroY,
-      sparkPositive,
+      tradeBars,
+      winsLast10,
+      lossesLast10,
+      netLast10,
+      winRateLast10: last10.length > 0 ? (winsLast10 / last10.length) * 100 : null,
+      streak,
+      streakType,
       total7d,
       winRate7d: total7d > 0 ? (wins7d / total7d) * 100 : null,
       netPnl7d: total7d > 0 ? netPnl7d : null,
-      avgPnl7d: total7d > 0 ? netPnl7d / total7d : null,
     };
   }, [entries]);
 
@@ -2972,62 +2969,101 @@ export default function TradeJournal() {
         </div>
 
         {/* Recent Form */}
-        {recentForm.last10.length > 0 && (
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border)' }}>
-            {/* Sparkline */}
-            {recentForm.sparkPoints.length >= 2 && (
-              <svg viewBox="0 0 240 36" width="100%" height={36} style={{ display: 'block', overflow: 'visible' }}>
-                <defs>
-                  <linearGradient id="rfSparkGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0.18} />
-                    <stop offset="100%" stopColor={recentForm.sparkPositive ? '#34d399' : '#f87171'} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <line x1={4} y1={recentForm.sparkZeroY} x2={236} y2={recentForm.sparkZeroY} stroke="rgba(255,255,255,0.08)" strokeWidth={1} strokeDasharray="3,3" />
-                <polygon
-                  points={[
-                    `${recentForm.sparkPoints[0].x.toFixed(1)},${recentForm.sparkZeroY.toFixed(1)}`,
-                    ...recentForm.sparkPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`),
-                    `${recentForm.sparkPoints[recentForm.sparkPoints.length - 1].x.toFixed(1)},${recentForm.sparkZeroY.toFixed(1)}`,
-                  ].join(' ')}
-                  fill="url(#rfSparkGrad)"
-                />
-                <polyline
-                  points={recentForm.sparkPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
-                  fill="none"
-                  stroke={recentForm.sparkPositive ? '#34d399' : '#f87171'}
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-                <circle
-                  cx={recentForm.sparkPoints[recentForm.sparkPoints.length - 1].x}
-                  cy={recentForm.sparkPoints[recentForm.sparkPoints.length - 1].y}
-                  r={2.5}
-                  fill={recentForm.sparkPositive ? '#34d399' : '#f87171'}
-                />
+        {recentForm.last10.length > 0 && (() => {
+          const RF_GREEN = '#34d399';
+          const RF_RED = '#f87171';
+          const RF_AMBER = '#f59e0b';
+          const BAR_H = 44; // total SVG height
+          const ZERO_Y = BAR_H / 2; // zero-line sits at vertical centre
+          const BAR_MAX = ZERO_Y - 5; // max bar arm height (px)
+          const n = recentForm.tradeBars.length;
+          const BAR_W = 14;
+          const GAP = n > 1 ? (240 - n * BAR_W) / (n - 1) : 0;
+          return (
+            <div style={{ padding: '10px 14px 10px', borderBottom: '1px solid var(--border)' }}>
+              {/* Header row */}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
+                  Recent Form
+                </span>
+                {recentForm.streak >= 2 && recentForm.streakType && (
+                  <span style={{
+                    fontSize: '9px',
+                    fontWeight: 600,
+                    fontFamily: 'var(--font-mono)',
+                    color: recentForm.streakType === 'win' ? RF_GREEN : RF_RED,
+                    opacity: 0.85,
+                  }}>
+                    {recentForm.streak}{recentForm.streakType === 'win' ? 'W' : 'L'} streak
+                  </span>
+                )}
+              </div>
+
+              {/* Bar chart — one bar per trade, split above/below zero line */}
+              <svg viewBox={`0 0 240 ${BAR_H}`} width="100%" height={BAR_H} style={{ display: 'block', overflow: 'visible' }}>
+                {/* Zero line */}
+                <line x1={0} y1={ZERO_Y} x2={240} y2={ZERO_Y} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+                {recentForm.tradeBars.map((bar, i) => {
+                  const x = i * (BAR_W + GAP);
+                  const color = bar.result === 'win' ? RF_GREEN : bar.result === 'loss' ? RF_RED : RF_AMBER;
+                  const armH = Math.max(2, Math.abs(bar.ratio) * BAR_MAX);
+                  const isPos = bar.net >= 0;
+                  const rectY = isPos ? ZERO_Y - armH : ZERO_Y;
+                  const pnlLabel = bar.net >= 0
+                    ? `+${formatSignedCurrency(bar.net)}`
+                    : formatSignedCurrency(bar.net);
+                  return (
+                    <g key={i}>
+                      <title>{`${bar.result.toUpperCase()} · ${pnlLabel}`}</title>
+                      <rect
+                        x={x}
+                        y={rectY}
+                        width={BAR_W}
+                        height={armH}
+                        rx={2}
+                        fill={color}
+                        fillOpacity={0.75}
+                      />
+                      {/* Cap dot */}
+                      <circle
+                        cx={x + BAR_W / 2}
+                        cy={isPos ? ZERO_Y - armH : ZERO_Y + armH}
+                        r={1.5}
+                        fill={color}
+                      />
+                    </g>
+                  );
+                })}
               </svg>
-            )}
-            {/* Single compact stat line */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(52,211,153,0.8)' }}>{recentForm.winsLast10}W</span>
-              <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
-              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(248,113,113,0.8)' }}>{recentForm.lossesLast10}L</span>
-              {recentForm.winRate7d !== null && (
-                <>
-                  <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
-                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: recentForm.winRate7d >= 50 ? 'rgba(52,211,153,0.8)' : 'rgba(248,113,113,0.8)' }}>{recentForm.winRate7d.toFixed(0)}% WR</span>
-                </>
-              )}
-              {recentForm.netPnl7d !== null && (
-                <>
-                  <span style={{ fontSize: 9, color: 'var(--txt-3)' }}>·</span>
-                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: recentForm.netPnl7d >= 0 ? 'rgba(52,211,153,0.8)' : 'rgba(248,113,113,0.8)' }}>{formatSignedCurrency(recentForm.netPnl7d)}</span>
-                </>
-              )}
+
+              {/* Stats grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1px', marginTop: '8px', borderRadius: '5px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+                {[
+                  {
+                    label: 'Record',
+                    value: `${recentForm.winsLast10}W–${recentForm.lossesLast10}L`,
+                    color: recentForm.winsLast10 > recentForm.lossesLast10 ? RF_GREEN : recentForm.winsLast10 < recentForm.lossesLast10 ? RF_RED : 'var(--txt-2)',
+                  },
+                  {
+                    label: 'Win Rate',
+                    value: recentForm.winRateLast10 !== null ? `${recentForm.winRateLast10.toFixed(0)}%` : '--',
+                    color: recentForm.winRateLast10 !== null && recentForm.winRateLast10 >= 50 ? RF_GREEN : RF_RED,
+                  },
+                  {
+                    label: 'Net P&L',
+                    value: formatSignedCurrency(recentForm.netLast10),
+                    color: recentForm.netLast10 >= 0 ? RF_GREEN : RF_RED,
+                  },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ padding: '5px 7px', background: 'rgba(255,255,255,0.025)' }}>
+                    <div style={{ fontSize: '8.5px', color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>{label}</div>
+                    <div style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)', color }}>{value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <div className="tj-search-row" data-tour-id="scanner-search">
           <Search size={13} color="var(--txt-3)" />
