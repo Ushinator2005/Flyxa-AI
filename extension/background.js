@@ -17,7 +17,7 @@ const FLYXA_URLS = [
   'https://flyxa.app',
 ];
 
-const FLYXA_OPEN_URL = 'http://localhost:5173/journal';
+const FLYXA_OPEN_URL = 'http://localhost:5173/scanner';
 
 // ─── Entry points ─────────────────────────────────────────────────────────────
 

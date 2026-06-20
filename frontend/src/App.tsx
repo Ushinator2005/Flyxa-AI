@@ -228,7 +228,7 @@ export default function App() {
 
   // Browser extension bridge — receives chart captures from the Flyxa Chrome
   // extension on ANY page, converts the base64 PNG to a File, navigates to
-  // /journal, then fires flyxa:scan_ready so TradeJournal auto-scans.
+  // /scanner, then fires flyxa:scan_ready so TradeJournal auto-scans.
   useEffect(() => {
     const handler = async (e: Event) => {
       const base64 = (e as CustomEvent<{ base64: string }>).detail?.base64;
@@ -237,11 +237,11 @@ export default function App() {
         const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
         const blob = await fetch(dataUrl).then(r => r.blob());
         const file = new File([blob], 'chart.png', { type: 'image/png' });
-        const alreadyOnJournal = window.location.pathname === '/journal';
-        navigate('/journal');
-        // Delay just enough for TradeJournal to mount if we navigated to it,
-        // or fire immediately if we were already there.
-        const delay = alreadyOnJournal ? 0 : 600;
+        const path = window.location.pathname;
+        const alreadyOnScanner = path === '/scanner' || path === '/journal';
+        navigate('/scanner');
+        // Give TradeJournal time to mount if we navigated away from another page.
+        const delay = alreadyOnScanner ? 0 : 600;
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('flyxa:scan_ready', { detail: { file } }));
         }, delay);
