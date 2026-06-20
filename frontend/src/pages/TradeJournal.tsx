@@ -2190,6 +2190,26 @@ export default function TradeJournal() {
   // propagates it, preventing a render where selectedEntry is briefly null.
   const optimisticEntryRef = useRef<JournalEntry | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+
+  // Browser extension bridge — listen for one-click chart captures from
+  // the Flyxa Chrome extension (content.js dispatches this CustomEvent)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const base64 = (e as CustomEvent<{ base64: string }>).detail?.base64;
+      if (!base64) return;
+      const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
+      fetch(dataUrl)
+        .then(r => r.blob())
+        .then(blob => {
+          const file = new File([blob], 'chart.png', { type: 'image/png' });
+          void handleScanFile(file);
+        })
+        .catch(err => console.error('[Flyxa] Extension screenshot error:', err));
+    };
+    window.addEventListener('flyxa:ext_screenshot', handler);
+    return () => window.removeEventListener('flyxa:ext_screenshot', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [scanError, setScanError] = useState('');
   const [scanPreviewUrl, setScanPreviewUrl] = useState('');
   const [deleteTradeId, setDeleteTradeId] = useState<string | null>(null);
