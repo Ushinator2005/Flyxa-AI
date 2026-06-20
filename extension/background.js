@@ -3,16 +3,16 @@
  *
  * Full flow when Ctrl+Shift+L is pressed (or toolbar icon clicked):
  *
- *  1. Capture the visible tab as a full-page PNG
- *  2. Inject capture-overlay.js into the chart tab — the user sees the
- *     screenshot with a selection rectangle and can drag to pick just
- *     the chart area, then press Enter (or click "Scan chart")
- *  3. Poll for the confirmed, cropped image
+ *  1. Capture the visible tab as a full-page PNG                    (📷)
+ *  2. Inject a detection script to find the largest canvas element —
+ *     the trading chart — and record its bounding rect              (🔍)
+ *  3. Crop the screenshot to the chart bounds using OffscreenCanvas
+ *     in the service worker (no user interaction required)
  *  4. Show a preview toast in the bottom-right of the chart tab
  *  5. Open / focus Flyxa at /scanner
  *  6. Wait for the page to load, then dispatch flyxa:ext_screenshot
- *     directly into React's JS context — App.tsx fires the scanner
- *     with the same UI as a drag-and-drop
+ *     directly into React's JS context — TradeJournal picks it up
+ *     and fires the same scanning UI as a drag-and-drop             (✓)
  */
 
 const FLYXA_URLS = [
@@ -42,43 +42,65 @@ async function captureAndSend() {
     const fullDataUrl = await chrome.tabs.captureVisibleTab(activeTab.windowId, { format: 'png' });
     if (!fullDataUrl) throw new Error('captureVisibleTab returned empty');
 
-    // 2. Stash the screenshot in a global on the page, then inject the overlay
-    await chrome.scripting.executeScript({
+    badge('🔍', '#8b5cf6');
+
+    // 2. Detect chart bounds — find the largest visible <canvas> on the page.
+    //    Trading platforms (TradingView, Tradovate, FTMO, TopstepX, etc.) all
+    //    render charts into <canvas> elements; picking the largest one reliably
+    //    isolates the chart from toolbars, sidebars, and order panels.
+    const [detectionResult] = await chrome.scripting.executeScript({
       target: { tabId: activeTab.id },
       world: 'MAIN',
-      args: [fullDataUrl],
-      func: (data) => {
-        // Clear any previous state
-        delete window.__flyxaCapture;
-        delete window.__flyxaCancelled;
-        window.__flyxaScreenshot = data;
+      func: () => {
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const canvases = Array.from(document.querySelectorAll('canvas'));
+        let best = null;
+        let bestArea = 0;
+
+        for (const c of canvases) {
+          const r = c.getBoundingClientRect();
+          // Require meaningful size and at least partially within the viewport
+          if (r.width < 200 || r.height < 150) continue;
+          if (r.right < 0 || r.bottom < 0 || r.left > W || r.top > H) continue;
+          // Clip rect to the visible viewport
+          const x = Math.max(0, r.left);
+          const y = Math.max(0, r.top);
+          const w = Math.min(r.right, W) - x;
+          const h = Math.min(r.bottom, H) - y;
+          const area = w * h;
+          if (area > bestArea) {
+            bestArea = area;
+            best = { x, y, w, h };
+          }
+        }
+
+        return {
+          bounds: best,       // CSS-pixel rect of the largest chart canvas
+          viewportW: W,
+          viewportH: H,
+          dpr: window.devicePixelRatio || 1,
+        };
       },
     });
 
-    await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      world: 'MAIN',
-      files: ['capture-overlay.js'],
-    });
+    const detection = detectionResult?.result ?? null;
 
-    badge('✂️', '#f59e0b');
-
-    // 3. Poll until the user confirms or cancels (max 60 seconds)
-    const croppedDataUrl = await pollForCapture(activeTab.id, 60_000);
-    if (!croppedDataUrl) {
-      badge('', '');
-      return; // user pressed Esc
-    }
+    // 3. Crop to chart bounds using OffscreenCanvas in the service worker.
+    //    Falls back to the full screenshot if no canvas was detected.
+    const croppedDataUrl = detection?.bounds
+      ? await cropScreenshot(fullDataUrl, detection.bounds, detection.viewportW, detection.viewportH, detection.dpr)
+      : fullDataUrl;
 
     // 4. Show preview toast in the bottom-right of the chart tab
     await chrome.scripting.executeScript({
       target: { tabId: activeTab.id },
       world: 'MAIN',
-      args: [croppedDataUrl],
+      args: [croppedDataUrl, !!detection?.bounds],
       func: showPreviewToast,
     });
 
-    badge('🔍', '#8b5cf6');
+    badge('⚡', '#34d399');
 
     // 5. Find or open Flyxa at /scanner
     const flyxaTab = await findFlyxaTab();
@@ -94,9 +116,7 @@ async function captureAndSend() {
 
     // 6. Wait for the page to finish loading, then inject the event
     await waitForTabReady(tabId);
-    await sleep(400); // let React finish mounting
-
-    badge('⚡', '#34d399');
+    await sleep(800); // give React time to mount and register listeners
 
     await chrome.scripting.executeScript({
       target: { tabId },
@@ -119,9 +139,50 @@ async function captureAndSend() {
   }
 }
 
+// ─── Crop using OffscreenCanvas in the service worker ─────────────────────────
+// Service workers have access to OffscreenCanvas and createImageBitmap, so we
+// can crop entirely in the background without injecting anything extra into the
+// chart page.
+
+async function cropScreenshot(fullDataUrl, bounds, viewportW, viewportH, dpr) {
+  try {
+    const response = await fetch(fullDataUrl);
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob);
+
+    // captureVisibleTab returns an image at physical pixel resolution.
+    // Scale factors map CSS pixels → physical pixels in the captured image.
+    const scaleX = bitmap.width  / (viewportW * dpr);
+    const scaleY = bitmap.height / (viewportH * dpr);
+
+    const sx = Math.round(bounds.x * dpr * scaleX);
+    const sy = Math.round(bounds.y * dpr * scaleY);
+    const sw = Math.round(bounds.w * dpr * scaleX);
+    const sh = Math.round(bounds.h * dpr * scaleY);
+
+    if (sw < 10 || sh < 10) return fullDataUrl; // safety: too small
+
+    const canvas = new OffscreenCanvas(sw, sh);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    const outBlob = await canvas.convertToBlob({ type: 'image/png' });
+
+    // FileReader works in service workers to convert blob → data URL
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(outBlob);
+    });
+  } catch (e) {
+    console.warn('[Flyxa] Crop failed, using full screenshot:', e);
+    return fullDataUrl;
+  }
+}
+
 // ─── Preview toast (injected into chart tab) ──────────────────────────────────
 
-function showPreviewToast(base64) {
+function showPreviewToast(base64, chartDetected) {
   document.getElementById('flyxa-toast')?.remove();
 
   const toast = document.createElement('div');
@@ -146,10 +207,12 @@ function showPreviewToast(base64) {
   });
 
   const info = document.createElement('div');
+  const label = chartDetected ? 'Chart captured' : 'Screen captured';
+  const sub   = chartDetected ? 'Scanning trade…' : 'No chart canvas found — using full screen';
   info.innerHTML = [
     '<div style="color:#34d399;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:5px;">Flyxa</div>',
-    '<div style="color:#fff;font-size:12px;font-weight:600;line-height:1.3;margin-bottom:3px;">Chart captured</div>',
-    '<div style="color:rgba(255,255,255,0.45);font-size:11px;">Scanning trade…</div>',
+    `<div style="color:#fff;font-size:12px;font-weight:600;line-height:1.3;margin-bottom:3px;">${label}</div>`,
+    `<div style="color:rgba(255,255,255,0.45);font-size:11px;">${sub}</div>`,
   ].join('');
 
   toast.appendChild(img);
@@ -171,26 +234,6 @@ function showPreviewToast(base64) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function pollForCapture(tabId, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await sleep(300);
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'MAIN',
-      func: () => {
-        if (window.__flyxaCancelled) { delete window.__flyxaCancelled; return { cancelled: true }; }
-        if (window.__flyxaCapture)  { const d = window.__flyxaCapture; delete window.__flyxaCapture; return { data: d }; }
-        return null;
-      },
-    });
-    const val = result?.result;
-    if (val?.cancelled) return null;
-    if (val?.data)      return val.data;
-  }
-  return null;
-}
 
 async function findFlyxaTab() {
   const tabs = await chrome.tabs.query({});

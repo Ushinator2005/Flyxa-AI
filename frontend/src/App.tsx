@@ -228,7 +228,12 @@ export default function App() {
 
   // Browser extension bridge — receives chart captures from the Flyxa Chrome
   // extension on ANY page, converts the base64 PNG to a File, navigates to
-  // /scanner, then fires flyxa:scan_ready so TradeJournal auto-scans.
+  // /scanner, then makes the file available for TradeJournal to pick up.
+  //
+  // Two-path delivery:
+  //   • window.__flyxaPendingFile  — for when TradeJournal hasn't mounted yet
+  //     (new tab or navigation from another page); the component reads this on mount.
+  //   • flyxa:scan_ready event     — for when TradeJournal is already mounted.
   useEffect(() => {
     const handler = async (e: Event) => {
       const base64 = (e as CustomEvent<{ base64: string }>).detail?.base64;
@@ -237,14 +242,11 @@ export default function App() {
         const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
         const blob = await fetch(dataUrl).then(r => r.blob());
         const file = new File([blob], 'chart.png', { type: 'image/png' });
-        const path = window.location.pathname;
-        const alreadyOnScanner = path === '/scanner' || path === '/journal';
+        // Store for TradeJournal to consume on mount (race-condition-safe)
+        (window as unknown as Record<string, unknown>).__flyxaPendingFile = file;
         navigate('/scanner');
-        // Give TradeJournal time to mount if we navigated away from another page.
-        const delay = alreadyOnScanner ? 0 : 600;
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('flyxa:scan_ready', { detail: { file } }));
-        }, delay);
+        // Also fire immediately for already-mounted case
+        window.dispatchEvent(new CustomEvent('flyxa:scan_ready', { detail: { file } }));
       } catch (err) {
         console.error('[Flyxa] Extension screenshot error:', err);
       }

@@ -2191,18 +2191,7 @@ export default function TradeJournal() {
   const optimisticEntryRef = useRef<JournalEntry | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
-  // Browser extension bridge — App.tsx dispatches flyxa:scan_ready after
-  // navigating here. We listen persistently so it fires whether we were
-  // already on /journal or just navigated here from another page.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const file = (e as CustomEvent<{ file: File }>).detail?.file;
-      if (file instanceof File) void handleScanFile(file);
-    };
-    window.addEventListener('flyxa:scan_ready', handler);
-    return () => window.removeEventListener('flyxa:scan_ready', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Extension bridge effects are declared after handleScanFile (see below).
   const [scanError, setScanError] = useState('');
   const [scanPreviewUrl, setScanPreviewUrl] = useState('');
   const [deleteTradeId, setDeleteTradeId] = useState<string | null>(null);
@@ -2741,6 +2730,29 @@ export default function TradeJournal() {
       }
     }
   }, [applyScannedTrade, preferences.scannerColors, selectedEntry?.date]);
+
+  // ── Browser extension bridge ─────────────────────────────────────────────────
+  // Ref always tracks the latest handleScanFile so the mount effect below never
+  // holds a stale closure regardless of when deps change after first mount.
+  const _extScanRef = useRef(handleScanFile);
+  useEffect(() => { _extScanRef.current = handleScanFile; });
+
+  // On mount: consume a file that App.tsx stored before we navigated here
+  // (window.__flyxaPendingFile). Also listen for the event for the
+  // already-mounted case where App.tsx fires flyxa:scan_ready immediately.
+  useEffect(() => {
+    const pending = (window as unknown as Record<string, unknown>).__flyxaPendingFile;
+    if (pending instanceof File) {
+      delete (window as unknown as Record<string, unknown>).__flyxaPendingFile;
+      void _extScanRef.current(pending);
+    }
+    const handler = (e: Event) => {
+      const file = (e as CustomEvent<{ file: File }>).detail?.file;
+      if (file instanceof File) void _extScanRef.current(file);
+    };
+    window.addEventListener('flyxa:scan_ready', handler);
+    return () => window.removeEventListener('flyxa:scan_ready', handler);
+  }, []);
 
   const deleteEntry = useCallback(async () => {
     if (!selectedEntry) return;
