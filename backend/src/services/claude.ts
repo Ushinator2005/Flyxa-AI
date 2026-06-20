@@ -3,6 +3,7 @@ import { Trade, ExtractedTradeData } from '../types/index';
 import dotenv from 'dotenv';
 import { inflateSync } from 'zlib';
 import sharp from 'sharp';
+import { normalizeConfluenceKey, normalizeConfluences } from '../utils/confluenceTags';
 
 dotenv.config({ override: true });
 
@@ -31,7 +32,7 @@ const MANUAL_READING_PROCESS = `Read the chart in this exact order:
    - PINK (light red/rose) zone = stop loss risk area
 
 3. CRITICAL — Identify the three price levels attached to the P&L box boundaries:
-   - Configured entry-color pill/box label on the right-side price axis = entry price. On the right axis you may see several labels: a GREEN one (live price — ignore it), a RED one (stop loss), black/white horizontal-line labels (ignore them), and an entry label using the user's scanner entry-zone color. Read the number printed inside the configured entry-color pill exactly — it is the entry price. If no configured-color entry pill is visible, a grey TradingView entry pill is an acceptable fallback. Do not read axis gridline text, do not use black/white key-level labels, and do not interpolate between gridlines.
+   - Configured entry-color label on the right-side price axis = entry price. Labels may be rounded pills, sharp rectangles, colored tags, or any other shape — shape varies by platform (TradingView, TopstepX, Apex, FTMO, etc.). What matters is the background color. On the right axis you may see several labels: a GREEN one (live price — ignore it), a RED one (stop loss), black/white horizontal-line labels (ignore them), and an entry label using the user's scanner entry-zone color. Read the number printed inside the configured entry-color label exactly — it is the entry price. If no configured-color entry label is visible, a grey entry label is an acceptable fallback. Do not read axis gridline text, do not use black/white key-level labels, and do not interpolate between gridlines.
    - RED label on the right-side price axis = stop loss (the OUTERMOST far edge of the pink zone — the edge furthest from entry, NOT any intermediate level inside the pink zone).
    - The TAKE PROFIT is the OUTERMOST far edge of the teal zone (the edge furthest from entry).
 
@@ -937,13 +938,13 @@ STEP 2 — Examine the trade-box-focus image.
 AUTHORITY RULE: The dedicated crops (entry-label-focus, entry-color-label-focus when present, stop-label-focus, target-label-focus) are
   the ONLY authoritative source for each price. Read the digits in THAT crop for THAT field only.
   Never substitute a value from the general price axis or from any other crop into a different field.
-  If entry-color-label-focus clearly shows the configured entry-color position pill, it overrides entry-label-focus for entry_price.
+  If entry-color-label-focus clearly shows the configured entry-color position label (any shape), it overrides entry-label-focus for entry_price.
 
 STEP 3 — For the ENTRY price:
   Look at the entry-label-focus crop. If entry-color-label-focus is attached, examine it too.
   Read every digit left to right. Do not guess. Do not round.
-  Cross-check: the entry price should be the TradingView position label using the configured entry-zone color (${entryColor}). If this crop contains a black/white horizontal-line label and a separate configured-color or grey position label is visible elsewhere, do NOT use the black/white value as entry_price.
-  IMPORTANT: Black or white right-axis labels such as horizontal key levels are not entry labels. The configured entry-color pill wins; grey is only a fallback.
+  Cross-check: the entry price should be the position label using the configured entry-zone color (${entryColor}). The label may be a rounded pill, sharp rectangle, or any colored tag — shape does not matter, only background color does. If this crop contains a black/white horizontal-line label and a separate configured-color or grey position label is visible elsewhere, do NOT use the black/white value as entry_price.
+  IMPORTANT: Black or white right-axis labels such as horizontal key levels are not entry labels. The configured entry-color label wins; grey is only a fallback.
 
 STEP 4 — For the STOP-LOSS price:
   Look at the stop-label-focus crop. It is centred on the stop level.
@@ -983,8 +984,8 @@ async function extractExactPriceLevels(
   images: ChartImageInput[],
   scannerContext?: ScannerContext
 ): Promise<ExactPriceRead> {
-  const systemPrompt = `You are a price-axis OCR engine. You read exact numerical values from TradingView
-chart screenshots with zero tolerance for errors. You never estimate or interpolate.
+  const systemPrompt = `You are a price-axis OCR engine. You read exact numerical values from trading platform
+chart screenshots (TradingView, TopstepX, Apex, FTMO, Tradovate, etc.) with zero tolerance for errors. You never estimate or interpolate.
 You never round to a "nice" number. You read the digits that are literally printed
 on screen. Return only valid JSON.`;
 
@@ -2282,10 +2283,9 @@ export async function generateWeeklyReport(
   const netPnL = trades.reduce((sum, t) => sum + t.pnl, 0);
   const winRate = trades.length > 0 ? (wins.length / trades.length * 100).toFixed(1) : '0';
   const confluenceBuckets = trades.reduce<Record<string, { count: number; pnl: number }>>((acc, trade) => {
-    const tags = Array.isArray(trade.confluences) ? trade.confluences : [];
+    const tags = normalizeConfluences(trade.confluences);
     tags.forEach(tag => {
-      if (typeof tag !== 'string' || !tag.trim()) return;
-      const key = tag.trim().toLowerCase();
+      const key = normalizeConfluenceKey(tag);
       if (!acc[key]) {
         acc[key] = { count: 0, pnl: 0 };
       }

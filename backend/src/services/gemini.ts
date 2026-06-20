@@ -234,41 +234,43 @@ export async function readTradeChart(
         return `
 PRICE LEVEL IDENTIFICATION — FOLLOW THESE STEPS EXACTLY:
 
-Step 1. Look at the right-hand price axis of the chart. You will see small rectangular pill-shaped labels, each with a colored background and a price number printed inside.
-IMPORTANT: The ENTRY label should match the user's configured Entry zone color when they have changed it. Use grey only as a fallback for default TradingView position-tool labels. Never use a black/white horizontal-line label as entry when a colored or grey entry pill is visible.
+Step 1. Look at the right-hand price axis of the chart. You will see colored price labels — these may be rounded pills, sharp rectangles, or any other colored tag shape depending on the trading platform (TradingView standalone, TopstepX, Apex, FTMO, Tradovate, etc.). Shape does not matter — only the background color and the number inside matter.
+IMPORTANT: The ENTRY label should match the user's configured Entry zone color when they have changed it. Use grey only as a fallback for default position-tool labels. Never use a black/white horizontal-line label as entry when a colored or grey entry label is visible.
 If an attached crop is labelled price-label-focus, use it to read all visible right-axis labels. If an attached crop is labelled entry-color-label-focus, use it to resolve the entry label only.
+FALLBACK — if no colored labels are visible on the right axis at all: trace each zone boundary (entry line, outer edge of pink zone, outer edge of teal zone) horizontally to the price axis gridlines and read the nearest grid price.
 
 Step 2. The user has set these three zone colors in their settings:
   • Entry zone color   = ${entryName} (${userColors.entry})
   • Stop Loss color    = ${slName} (${userColors.stopLoss})
   • Take Profit color  = ${tpName} (${userColors.takeProfit})
 
-Step 3. Find the right-axis labels attached to the TradingView position tool:
-  • Pill with ${entryName} background  → that price number is entry_price
-  • Grey pill/box at the entry boundary → entry_price ONLY if no ${entryName} entry pill is visible
-  • Pill with ${slName} background     → that price number is sl_price
-  • Pill with ${tpName} background     → that price number is tp_price
+Step 3. Find the right-axis price labels attached to the position tool:
+  • Label with ${entryName} background  → that price number is entry_price
+  • Grey label at the entry boundary    → entry_price ONLY if no ${entryName} entry label is visible
+  • Label with ${slName} background     → that price number is sl_price
+  • Label with ${tpName} background     → that price number is tp_price
 
 Step 4. IGNORE everything else on the chart completely:
   • Horizontal lines (black, white, or any color) drawn across the chart = key levels, NOT trade prices
   • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price
   • The live floating price label on the far right (the highlight showing current price) = ignore
   • Any price label whose background color does NOT match the configured position-tool colors = ignore, except grey is allowed as an entry fallback
-  • Do not use a nearby black horizontal-line label when a configured-color or grey entry pill exists. The entry pill is the source of truth.
+  • Do not use a nearby black horizontal-line label when a configured-color or grey entry label exists. The entry label is the source of truth.
 `;
       })()
     : `
 PRICE LEVEL IDENTIFICATION:
-Look at the right-hand price axis. Find the three colored pill labels:
-  • Grey background pill = entry_price
-  • Red or pink background pill = sl_price
-  • Teal or green background pill = tp_price
-Ignore all horizontal lines across the chart and any other price labels. In particular, never use a black/white right-axis key-level label as entry_price when a grey entry pill is visible.
+Look at the right-hand price axis. Find the three colored price labels (any shape — pill, rectangle, tag):
+  • Grey background label = entry_price
+  • Red or pink background label = sl_price
+  • Teal or green background label = tp_price
+Ignore all horizontal lines across the chart and any other price labels. In particular, never use a black/white right-axis key-level label as entry_price when a grey entry label is visible.
+FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
 `;
 
-  const systemPrompt = `You are a TradingView futures chart reader. Your ONLY job is to extract exact trade data from a P&L card screenshot.
+  const systemPrompt = `You are a professional futures chart reader. Your ONLY job is to extract exact trade data from a P&L card screenshot — the chart may come from TradingView, TopstepX, Apex Trader, FTMO, Tradovate, or any other platform.
 You may receive the full chart plus labelled scanner crops. The crop labels are included as text immediately before each image.
-Use price-label-focus as the primary OCR view for right-axis price labels. Use entry-color-label-focus as the primary OCR view for the entry pill. If entry-label-focus, stop-label-focus, or target-label-focus show black/white horizontal-line labels, treat them as crop hints only and ignore those black/white values as trade prices.
+Use price-label-focus as the primary OCR view for right-axis price labels. Use entry-color-label-focus as the primary OCR view for the entry price label. If entry-label-focus, stop-label-focus, or target-label-focus show black/white horizontal-line labels, treat them as crop hints only and ignore those black/white values as trade prices.
 
 STEP 1 — READ THE TICKER:
 Look at the top-left corner of the chart for the instrument header.

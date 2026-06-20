@@ -123,7 +123,21 @@ async function captureAndSend() {
           return vw > 0 && vh > 0 && vw * vh >= W * H * 0.20;
         });
         const iframeBounds = largest(bigIframes, 300, 200);
-        if (iframeBounds) return { ...info, bounds: iframeBounds };
+        if (iframeBounds) {
+          // Add 80 px right-side padding so overlaid price labels from the host
+          // page (TopstepX, Apex, etc.) that sit just outside the iframe edge
+          // are included in the crop.
+          const padR = 80;
+          return {
+            ...info,
+            bounds: {
+              x: iframeBounds.x,
+              y: iframeBounds.y,
+              w: Math.min(W - iframeBounds.x, iframeBounds.w + padR),
+              h: iframeBounds.h,
+            },
+          };
+        }
 
         // ── 4. SVG charts (some lightweight libs) ─────────────────────────────
         const svgBounds = largest(document.querySelectorAll('svg'));
