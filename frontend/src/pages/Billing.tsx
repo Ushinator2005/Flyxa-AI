@@ -19,6 +19,7 @@ import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
 import type { TradingAccount } from '../types/index.js';
 import DatePicker from '../components/common/DatePicker.js';
 import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
+import * as XLSX from 'xlsx';
 
 type AccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
 
@@ -533,21 +534,19 @@ export default function Billing() {
     setImportFeedback(`${imported.length} account${imported.length === 1 ? '' : 's'} imported.`);
   };
 
-  const downloadCsvTemplate = () => {
-    const header = 'Firm,Account Size,Status,Purchase Date,Price Paid,Discount Code,Payout Received,Notes';
-    const firms = FIRM_OPTIONS.filter(f => f !== 'Other').join(' / ');
-    const statusList = STATUS_OPTIONS.join(' / ');
-    const hint = `# Firm options: ${firms} / Other — Status options: ${statusList} — Date format: YYYY-MM-DD`;
-    const example1 = 'Apex Funded,$50000,Passed,2024-03-15,167,SAVE10,3200,First funded account';
-    const example2 = 'FTMO,€25000,Blown,2024-06-01,250,,0,Failed drawdown';
-    const csv = [hint, header, example1, example2].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'flyxa-accounts-template.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+  const downloadExcelTemplate = () => {
+    const headers = ['Firm', 'Account Size', 'Status', 'Purchase Date', 'Price Paid', 'Discount Code', 'Payout Received', 'Notes'];
+    const example1 = ['Apex Funded', '$50,000', 'Passed', '2024-03-15', 167, 'SAVE10', 3200, 'First funded account'];
+    const example2 = ['FTMO', '€25,000', 'Blown', '2024-06-01', 250, '', 0, 'Failed drawdown'];
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2]);
+
+    // Column widths
+    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 11 }, { wch: 15 }, { wch: 17 }, { wch: 30 }];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Accounts');
+    XLSX.writeFile(wb, 'flyxa-accounts-template.xlsx');
   };
 
   const parseBillingCsv = (text: string): ParsedCsvRow[] => {
@@ -665,24 +664,113 @@ export default function Billing() {
     notes: row.notes,
   });
 
-  const handleCsvFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const parseExcelWorkbook = (buffer: ArrayBuffer): ParsedCsvRow[] => {
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+    if (raw.length < 2) throw new Error('Spreadsheet must have a header row and at least one data row.');
+
+    const headers = (raw[0] as unknown[]).map(h => String(h).toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const col = (name: string) => headers.indexOf(name.replace(/[^a-z0-9]/g, '').toLowerCase());
+
+    const colFirm     = col('firm');
+    const colSize     = col('accountsize');
+    const colStatus   = col('status');
+    const colDate     = col('purchasedate');
+    const colPrice    = col('pricepaid');
+    const colDiscount = col('discountcode');
+    const colPayout   = col('payoutreceived');
+    const colNotes    = col('notes');
+
+    if (colFirm === -1) throw new Error('Could not find a "Firm" column in the spreadsheet header.');
+
+    const rows: ParsedCsvRow[] = [];
+
+    for (let i = 1; i < raw.length; i++) {
+      const rowData = raw[i] as unknown[];
+      const get = (idx: number): string => {
+        if (idx < 0 || idx >= rowData.length) return '';
+        const v = rowData[idx];
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        return String(v ?? '').trim();
+      };
+
+      const rawFirm   = get(colFirm);
+      const rawSize   = get(colSize);
+      const rawPrice  = get(colPrice);
+
+      if (!rawFirm && !rawSize && !rawPrice) continue;
+
+      const warnings: string[] = [];
+
+      const firmMatch = FIRM_OPTIONS.find(f => f.toLowerCase() === rawFirm.toLowerCase()) ?? 'Other';
+      if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}" — set to Other`);
+
+      const rawStatus = get(colStatus);
+      const statusMatch = STATUS_OPTIONS.find(s => s.toLowerCase() === rawStatus.toLowerCase()) as AccountStatus | undefined;
+      const status: AccountStatus = statusMatch ?? 'Eval 1';
+      if (!statusMatch && rawStatus) warnings.push(`Unknown status "${rawStatus}" — defaulted to Eval 1`);
+
+      const rawDate = get(colDate);
+      const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
+      const purchaseDate = dateValid ? rawDate : getTodayInputDate();
+      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — used today');
+
+      const pricePaid      = parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0;
+      const rawPayout      = get(colPayout);
+      const payoutReceived = parseFloat(rawPayout.replace(/[^0-9.-]/g, '')) || 0;
+
+      rows.push({
+        firm: firmMatch,
+        size: get(colSize),
+        status,
+        purchaseDate,
+        pricePaid,
+        discountCode: get(colDiscount),
+        payoutReceived,
+        notes: get(colNotes),
+        warning: warnings.length > 0 ? warnings.join('; ') : undefined,
+      });
+    }
+
+    if (rows.length === 0) throw new Error('No valid rows found in the spreadsheet.');
+    return rows;
+  };
+
+  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     event.target.value = '';
-    const reader = new FileReader();
-    reader.onload = e => {
-      const text = e.target?.result as string;
-      try {
-        setCsvParseError('');
-        const rows = parseBillingCsv(text);
-        setCsvParsedRows(rows);
-        setIsImportCsvModalOpen(true);
-      } catch (err) {
-        setCsvParseError(err instanceof Error ? err.message : 'Failed to parse CSV.');
-        setCsvParsedRows([]);
-      }
-    };
-    reader.readAsText(file);
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    setCsvParseError('');
+
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const rows = parseExcelWorkbook(e.target?.result as ArrayBuffer);
+          setCsvParsedRows(rows);
+          setIsImportCsvModalOpen(true);
+        } catch (err) {
+          setCsvParseError(err instanceof Error ? err.message : 'Failed to parse spreadsheet.');
+          setCsvParsedRows([]);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const rows = parseBillingCsv(e.target?.result as string);
+          setCsvParsedRows(rows);
+          setIsImportCsvModalOpen(true);
+        } catch (err) {
+          setCsvParseError(err instanceof Error ? err.message : 'Failed to parse CSV.');
+          setCsvParsedRows([]);
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   const confirmCsvImport = () => {
@@ -1088,20 +1176,20 @@ export default function Billing() {
             {viewMode === 'table' ? <LayoutGrid size={14} /> : <List size={14} />}
             {viewMode === 'table' ? 'Pipeline' : 'Ledger'}
           </button>
-          <button type="button" className="billing-command-btn" onClick={downloadCsvTemplate}>
+          <button type="button" className="billing-command-btn" onClick={downloadExcelTemplate}>
             <Download size={14} />
             Download Template
           </button>
           <button type="button" className="billing-command-btn" onClick={() => { setCsvParseError(''); csvFileInputRef.current?.click(); }}>
             <Plus size={14} />
-            Import from CSV
+            Import from Excel
           </button>
           <input
             ref={csvFileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.xls,.csv"
             style={{ display: 'none' }}
-            onChange={handleCsvFileChange}
+            onChange={handleFileImport}
           />
           <button type="button" className="billing-command-btn" onClick={openImportModal}>
             <Download size={14} />
