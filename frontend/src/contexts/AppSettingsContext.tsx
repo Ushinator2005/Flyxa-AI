@@ -241,11 +241,14 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
 
 async function saveAppSettingsToSupabase(userId: string, row: AppSettingsRow): Promise<void> {
   try {
-    await supabase.from('user_store').upsert(
+    const { error } = await supabase.from('user_store').upsert(
       { user_id: userId, app_settings: row, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     );
-  } catch { /* silently fail */ }
+    if (error) console.error('[Settings] Failed to save app settings:', error.message);
+  } catch (err) {
+    console.error('[Settings] Failed to save app settings:', err);
+  }
 }
 
 function migrateFromLocalStorage(userId: string): AppSettingsRow {
@@ -259,6 +262,19 @@ function migrateFromLocalStorage(userId: string): AppSettingsRow {
   };
 }
 
+function isValidHex(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9A-Fa-f]{6}$/.test(value);
+}
+
+function parseScannerColors(raw: unknown): AppPreferences['scannerColors'] {
+  const src = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
+  return {
+    entry:      isValidHex(src.entry)      ? src.entry      : DEFAULT_PREFERENCES.scannerColors.entry,
+    stopLoss:   isValidHex(src.stopLoss)   ? src.stopLoss   : DEFAULT_PREFERENCES.scannerColors.stopLoss,
+    takeProfit: isValidHex(src.takeProfit) ? src.takeProfit : DEFAULT_PREFERENCES.scannerColors.takeProfit,
+  };
+}
+
 function parsePreferences(parsed: Partial<AppPreferences> | undefined): AppPreferences {
   if (!parsed) return DEFAULT_PREFERENCES;
   const rawTimezone = parsed.timezone ?? DEFAULT_TIMEZONE;
@@ -267,10 +283,7 @@ function parsePreferences(parsed: Partial<AppPreferences> | undefined): AppPrefe
     ...parsed,
     timezone: SUPPORTED_TIMEZONE_SET.has(rawTimezone) ? rawTimezone : DEFAULT_TIMEZONE,
     sessionTimes: normalizeSessionTimes(parsed.sessionTimes),
-    scannerColors: {
-      ...DEFAULT_PREFERENCES.scannerColors,
-      ...(typeof parsed.scannerColors === 'object' && parsed.scannerColors !== null ? parsed.scannerColors as object : {}),
-    },
+    scannerColors: parseScannerColors(parsed.scannerColors),
   };
 }
 
