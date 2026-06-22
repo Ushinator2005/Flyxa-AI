@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   CreditCard,
   Download,
@@ -75,6 +75,18 @@ interface BillingFormState {
   ruleSourceUrl: string;
   responsibleTradingDiscount: number;
   responsibleTradingBenefit: string;
+}
+
+interface ParsedCsvRow {
+  firm: string;
+  size: string;
+  status: AccountStatus;
+  purchaseDate: string;
+  pricePaid: number;
+  discountCode: string;
+  payoutReceived: number;
+  notes: string;
+  warning?: string;
 }
 
 type ViewMode = 'table' | 'pipeline';
@@ -400,6 +412,10 @@ export default function Billing() {
   const [livePricesByFirm, setLivePricesByFirm] = useState<Record<string, BillingLivePricesResponse>>({});
   const [livePricingLoadingFirm, setLivePricingLoadingFirm] = useState<string | null>(null);
   const [livePricingError, setLivePricingError] = useState<string | null>(null);
+  const [isImportCsvModalOpen, setIsImportCsvModalOpen] = useState(false);
+  const [csvParsedRows, setCsvParsedRows] = useState<ParsedCsvRow[]>([]);
+  const [csvParseError, setCsvParseError] = useState('');
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   const importCandidates = useMemo(() => {
     const importedSourceIds = new Set(accounts.map(account => account.sourceAccountId).filter(Boolean));
@@ -515,6 +531,166 @@ export default function Billing() {
     setIsImportModalOpen(false);
     setSelectedImportIds([]);
     setImportFeedback(`${imported.length} account${imported.length === 1 ? '' : 's'} imported.`);
+  };
+
+  const downloadCsvTemplate = () => {
+    const header = 'Firm,Account Size,Status,Purchase Date,Price Paid,Discount Code,Payout Received,Notes';
+    const firms = FIRM_OPTIONS.filter(f => f !== 'Other').join(' / ');
+    const statusList = STATUS_OPTIONS.join(' / ');
+    const hint = `# Firm options: ${firms} / Other — Status options: ${statusList} — Date format: YYYY-MM-DD`;
+    const example1 = 'Apex Funded,$50000,Passed,2024-03-15,167,SAVE10,3200,First funded account';
+    const example2 = 'FTMO,€25000,Blown,2024-06-01,250,,0,Failed drawdown';
+    const csv = [hint, header, example1, example2].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'flyxa-accounts-template.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseBillingCsv = (text: string): ParsedCsvRow[] => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
+
+    const parseFields = (line: string): string[] => {
+      const fields: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (ch === ',' && !inQuotes) {
+          fields.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      fields.push(current.trim());
+      return fields;
+    };
+
+    const headerFields = parseFields(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const col = (name: string) => headerFields.indexOf(name.replace(/[^a-z0-9]/g, '').toLowerCase());
+    const iCol = col('firm');
+    if (iCol === -1) throw new Error('Could not find a "Firm" column in the CSV header.');
+
+    const colFirm          = iCol;
+    const colSize          = col('accountsize');
+    const colStatus        = col('status');
+    const colDate          = col('purchasedate');
+    const colPrice         = col('pricepaid');
+    const colDiscount      = col('discountcode');
+    const colPayout        = col('payoutreceived');
+    const colNotes         = col('notes');
+
+    const rows: ParsedCsvRow[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const fields = parseFields(lines[i]);
+      const get = (idx: number) => (idx >= 0 && idx < fields.length ? fields[idx] : '');
+
+      const rawFirm    = get(colFirm);
+      const rawSize    = get(colSize);
+      const rawStatus  = get(colStatus);
+      const rawDate    = get(colDate);
+      const rawPrice   = get(colPrice);
+      const rawDisc    = get(colDiscount);
+      const rawPayout  = get(colPayout);
+      const rawNotes   = get(colNotes);
+
+      if (!rawFirm && !rawSize && !rawPrice) continue; // skip blank rows
+
+      const warnings: string[] = [];
+
+      // Firm normalisation
+      const firmMatch = FIRM_OPTIONS.find(
+        f => f.toLowerCase() === rawFirm.toLowerCase()
+      ) ?? 'Other';
+      if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}" — set to Other`);
+
+      // Status normalisation
+      const statusMatch = STATUS_OPTIONS.find(
+        s => s.toLowerCase() === rawStatus.toLowerCase()
+      ) as AccountStatus | undefined;
+      const status: AccountStatus = statusMatch ?? 'Eval 1';
+      if (!statusMatch && rawStatus) warnings.push(`Unknown status "${rawStatus}" — defaulted to Eval 1`);
+
+      // Date validation
+      const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
+      const purchaseDate = dateValid ? rawDate : getTodayInputDate();
+      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — used today');
+
+      // Numeric fields
+      const pricePaid      = parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0;
+      const payoutReceived = parseFloat(rawPayout.replace(/[^0-9.-]/g, '')) || 0;
+
+      // Size — keep raw but strip leading/trailing spaces
+      const size = rawSize || '';
+
+      rows.push({
+        firm: firmMatch,
+        size,
+        status,
+        purchaseDate,
+        pricePaid,
+        discountCode: rawDisc,
+        payoutReceived,
+        notes: rawNotes,
+        warning: warnings.length > 0 ? warnings.join('; ') : undefined,
+      });
+    }
+
+    if (rows.length === 0) throw new Error('No valid rows found in the CSV file.');
+    return rows;
+  };
+
+  const csvRowToBillingAccount = (row: ParsedCsvRow): BillingAccount => ({
+    id: createId(),
+    firm: row.firm,
+    accountType: '',
+    size: row.size,
+    listPrice: 0,
+    discountCode: row.discountCode,
+    discountPct: 0,
+    actualPrice: row.pricePaid,
+    purchaseDate: row.purchaseDate,
+    status: row.status,
+    payoutReceived: row.payoutReceived,
+    payouts: [],
+    notes: row.notes,
+  });
+
+  const handleCsvFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target?.result as string;
+      try {
+        setCsvParseError('');
+        const rows = parseBillingCsv(text);
+        setCsvParsedRows(rows);
+        setIsImportCsvModalOpen(true);
+      } catch (err) {
+        setCsvParseError(err instanceof Error ? err.message : 'Failed to parse CSV.');
+        setCsvParsedRows([]);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmCsvImport = () => {
+    const newAccounts = csvParsedRows.map(csvRowToBillingAccount);
+    setAccounts(current => [...newAccounts, ...current]);
+    setIsImportCsvModalOpen(false);
+    setCsvParsedRows([]);
+    setImportFeedback(`${newAccounts.length} account${newAccounts.length === 1 ? '' : 's'} imported from CSV.`);
   };
 
   const openEditModal = (account: BillingAccount) => {
@@ -912,6 +1088,21 @@ export default function Billing() {
             {viewMode === 'table' ? <LayoutGrid size={14} /> : <List size={14} />}
             {viewMode === 'table' ? 'Pipeline' : 'Ledger'}
           </button>
+          <button type="button" className="billing-command-btn" onClick={downloadCsvTemplate}>
+            <Download size={14} />
+            Download Template
+          </button>
+          <button type="button" className="billing-command-btn" onClick={() => { setCsvParseError(''); csvFileInputRef.current?.click(); }}>
+            <Plus size={14} />
+            Import from CSV
+          </button>
+          <input
+            ref={csvFileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={handleCsvFileChange}
+          />
           <button type="button" className="billing-command-btn" onClick={openImportModal}>
             <Download size={14} />
             Import Accounts
@@ -924,6 +1115,9 @@ export default function Billing() {
       </section>
       {importFeedback && (
         <div style={{ margin: '-6px 0 14px', fontSize: 11, color: 'var(--green)' }}>{importFeedback}</div>
+      )}
+      {csvParseError && (
+        <div style={{ margin: '-6px 0 14px', fontSize: 11, color: 'var(--red)' }}>{csvParseError}</div>
       )}
 
       <section className="billing-desk">
@@ -1378,6 +1572,73 @@ export default function Billing() {
                   Import selected
                 </button>
               </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* ── CSV import preview modal ──────────────────────────────── */}
+      {isImportCsvModalOpen && (
+        <div role="presentation" onClick={() => setIsImportCsvModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.65)', display: 'grid', placeItems: 'center', zIndex: 122, padding: 16 }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Import accounts from CSV"
+            onClick={event => event.stopPropagation()}
+            style={{ width: '100%', maxWidth: 780, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 24px 60px rgba(0,0,0,0.6)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          >
+            <header style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)' }}>Import accounts from CSV</h2>
+                <p style={{ margin: '5px 0 0', color: 'var(--txt-3)', fontSize: 11 }}>{csvParsedRows.length} row{csvParsedRows.length === 1 ? '' : 's'} detected. Review before importing.</p>
+              </div>
+              <button type="button" onClick={() => setIsImportCsvModalOpen(false)} style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--txt-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }} aria-label="Close CSV import modal">
+                <X size={14} />
+              </button>
+            </header>
+
+            <div style={{ overflowX: 'auto', maxHeight: '55vh' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface-2)', position: 'sticky', top: 0 }}>
+                    {['Firm', 'Size', 'Status', 'Purchase Date', 'Price Paid', 'Payout', 'Notes', ''].map(h => (
+                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--txt-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvParsedRows.map((row, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: row.warning ? 'rgba(var(--amber-rgb, 255, 180, 0), 0.05)' : undefined }}>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt)', fontWeight: 500 }}>{row.firm}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.size}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)' }}>{row.status}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.purchaseDate}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>${row.pricePaid.toFixed(2)}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.payoutReceived > 0 ? `$${row.payoutReceived.toFixed(2)}` : '—'}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.notes || '—'}</td>
+                      <td style={{ padding: '9px 12px' }}>
+                        {row.warning && (
+                          <span title={row.warning} style={{ color: 'var(--amber)', cursor: 'help', fontSize: 13 }}>⚠</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {csvParsedRows.some(r => r.warning) && (
+              <div style={{ padding: '8px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface-2)', fontSize: 10, color: 'var(--amber)' }}>
+                ⚠ Rows with warnings will still be imported. Hover the ⚠ icon to see details. You can edit any account after import.
+              </div>
+            )}
+
+            <footer style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+              <button type="button" onClick={() => setIsImportCsvModalOpen(false)} className="billing-command-btn">Cancel</button>
+              <button type="button" onClick={confirmCsvImport} className="billing-command-btn primary">
+                <Download size={13} />
+                Import {csvParsedRows.length} account{csvParsedRows.length === 1 ? '' : 's'}
+              </button>
             </footer>
           </div>
         </div>
