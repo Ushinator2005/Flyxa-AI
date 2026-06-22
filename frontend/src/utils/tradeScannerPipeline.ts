@@ -280,6 +280,14 @@ function findLargestComponent(mask: Uint8Array, width: number, height: number): 
   return best
 }
 
+// Rejects components whose matching pixels are too sparse relative to their
+// bounding box — this filters out clusters of candlestick bodies (low density)
+// while accepting solid filled zone rectangles (high density).
+function hasSufficientFillDensity(component: ComponentBounds, minDensity = 0.15): boolean {
+  const area = (component.xMax - component.xMin + 1) * (component.yMax - component.yMin + 1)
+  return area > 0 && component.count / area >= minDensity
+}
+
 function toRatioBounds(bounds: ComponentBounds, width: number, height: number): Omit<ComponentBounds, 'count'> {
   return {
     xMin: bounds.xMin / width,
@@ -329,7 +337,11 @@ function detectTradeBoxContext(
     ? makeZoneMatcher(entryHex, isNeutralOverlay)
     : null
 
-  for (let y = 0; y < height; y += 1) {
+  // Skip the top 5 % of the image — chart headers (ticker, OHLCV row,
+  // indicator values) often contain teal/green text that would otherwise
+  // be mistaken for a TP zone, corrupting the direction hint and entry ratio.
+  const yStart = Math.round(height * 0.05)
+  for (let y = yStart; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       if (x > width * 0.88) continue
       const index = (y * width + x) * 4
@@ -347,6 +359,8 @@ function detectTradeBoxContext(
   const redBox = findLargestComponent(redMask, width, height)
   const greenBox = findLargestComponent(greenMask, width, height)
   if (!redBox || !greenBox || redBox.count < 200 || greenBox.count < 200) return null
+  // Reject components that look like scattered candle bodies rather than solid zone fills
+  if (!hasSufficientFillDensity(redBox) || !hasSufficientFillDensity(greenBox)) return null
 
   const entryBox = entryMask ? findLargestComponent(entryMask, width, height) : null
   const hasEntryBox = entryBox !== null && entryBox.count >= 150

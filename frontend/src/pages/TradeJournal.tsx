@@ -2723,7 +2723,7 @@ export default function TradeJournal() {
       if (lowered.includes('503') || lowered.includes('high demand') || lowered.includes('service unavailable')) {
         setScanError('Scanner AI is temporarily busy. Please retry in 10-20 seconds.');
       } else if (lowered.includes('failed to fetch')) {
-        setScanError('Could not reach the scanner service. Check that backend is running on http://localhost:3001, then scan again.');
+        setScanError('Could not reach the scanner service. Please try again in a moment.');
       } else {
         setScanError(message);
       }
