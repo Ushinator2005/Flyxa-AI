@@ -648,21 +648,39 @@ export default function Billing() {
     return rows;
   };
 
-  const csvRowToBillingAccount = (row: ParsedCsvRow): BillingAccount => ({
-    id: createId(),
-    firm: row.firm,
-    accountType: '',
-    size: row.size,
-    listPrice: 0,
-    discountCode: row.discountCode,
-    discountPct: 0,
-    actualPrice: row.pricePaid,
-    purchaseDate: row.purchaseDate,
-    status: row.status,
-    payoutReceived: row.payoutReceived,
-    payouts: [],
-    notes: row.notes,
-  });
+  const lookupCatalogPrice = (firm: string, size: string): { price: number; canonicalSize: string } => {
+    const firmPrices = FIRM_PRICES[firm];
+    if (!firmPrices) return { price: 0, canonicalSize: size };
+    // Exact match first
+    if (firmPrices[size] !== undefined) return { price: firmPrices[size], canonicalSize: size };
+    // Numeric match — strip currency symbols and commas
+    const sizeNum = parseFloat(size.replace(/[^0-9.]/g, ''));
+    if (!sizeNum) return { price: 0, canonicalSize: size };
+    for (const [key, price] of Object.entries(firmPrices)) {
+      const keyNum = parseFloat(key.replace(/[^0-9.]/g, ''));
+      if (keyNum === sizeNum) return { price, canonicalSize: key };
+    }
+    return { price: 0, canonicalSize: size };
+  };
+
+  const csvRowToBillingAccount = (row: ParsedCsvRow): BillingAccount => {
+    const { price: catalogPrice, canonicalSize } = lookupCatalogPrice(row.firm, row.size);
+    return {
+      id: createId(),
+      firm: row.firm,
+      accountType: '',
+      size: canonicalSize,
+      listPrice: catalogPrice,
+      discountCode: row.discountCode,
+      discountPct: 0,
+      actualPrice: row.pricePaid > 0 ? row.pricePaid : catalogPrice,
+      purchaseDate: row.purchaseDate,
+      status: row.status,
+      payoutReceived: row.payoutReceived,
+      payouts: [],
+      notes: row.notes,
+    };
+  };
 
   const parseExcelWorkbook = (buffer: ArrayBuffer): ParsedCsvRow[] => {
     const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
