@@ -238,6 +238,20 @@ export interface TradingAccount {
   targetBalance?: number;
   archived?: boolean;
   isDefault?: boolean;
+  firmRuleVersionId?: string;
+  evaluationProgram?: string;
+  evaluationPath?: 'standard' | 'no_activation_fee';
+  dailyLossMode?: 'none' | 'purchase_fixed' | 'personal';
+  dailyLossLimit?: number;
+  maxDrawdown?: number;
+  profitTarget?: number | null;
+  minimumTradingDays?: number;
+  maxContracts?: number;
+  maxMicros?: number;
+  consistencyLimitPct?: number | null;
+  drawdownType?: 'static' | 'trailing';
+  ruleVerifiedAt?: string;
+  ruleSourceUrl?: string;
 }
 
 export interface AppPreferences {

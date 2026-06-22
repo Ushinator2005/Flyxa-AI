@@ -368,12 +368,20 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         type: account.status === 'Live' ? 'live' : account.status === 'Funded' ? 'live' : 'eval',
         phase: account.status === 'Funded' ? 'funded' : 'eval',
         balance: sb,
-        dailyLossLimit: 2500,
-        maxDrawdown: 3000,
-        profitTarget: null,
+        dailyLossLimit: account.dailyLossLimit ?? 0,
+        maxDrawdown: account.maxDrawdown ?? 3000,
+        profitTarget: account.profitTarget ?? null,
         startingBalance: sb,
         isActive: true,
         color: account.color,
+        firmRuleVersionId: account.firmRuleVersionId,
+        evaluationTemplateId: account.firmRuleVersionId,
+        evaluationPath: account.evaluationPath,
+        dailyLossMode: account.dailyLossMode,
+        minimumTradingDays: account.minimumTradingDays,
+        maxContracts: account.maxContracts,
+        consistencyLimitPct: account.consistencyLimitPct,
+        drawdownType: account.drawdownType,
       };
     });
     hydrateSharedData({ accounts: mapped });

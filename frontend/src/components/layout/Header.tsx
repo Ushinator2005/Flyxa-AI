@@ -32,6 +32,7 @@ const pageNames: Record<string, string> = {
   '/rivals': 'Rivals',
   '/session': 'Session',
   '/billing': 'Billing',
+  '/evaluation-coach': 'Evaluation Coach',
   '/settings': 'Settings',
   '/trade-check': 'Trade Lens',
 };
@@ -133,69 +134,113 @@ export default function Header() {
             <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.5 }} />
           </button>
 
-          {open && (
-            <div style={{
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              right: 0,
-              minWidth: 200,
-              background: 'var(--app-panel)',
-              border: '1px solid var(--app-border)',
-              borderRadius: 8,
-              padding: '4px 0',
-              zIndex: 9999,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-            }}>
+          {open && (() => {
+            const activeAccounts = visibleAccounts.filter(a => a.status !== 'Blown' && a.status !== 'Passed');
+            const closedAccounts = visibleAccounts.filter(a => a.status === 'Blown' || a.status === 'Passed');
+            const statusPill = (status: string) => {
+              const color = accountStatusColor(status);
+              return (
+                <span style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase' as const,
+                  color,
+                  background: color + '18',
+                  border: `1px solid ${color}40`,
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  flexShrink: 0,
+                  fontFamily: 'var(--font-sans)',
+                }}>{status}</span>
+              );
+            };
+            const rowBtn = (id: string, name: string, firm: string, status: string, isSelected: boolean, blown: boolean) => (
               <button
+                key={id}
                 type="button"
-                onClick={() => { setSelectedAccountId(ALL_ACCOUNTS_ID); setOpen(false); }}
+                onClick={() => { setSelectedAccountId(id); setOpen(false); }}
                 style={{
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '7px 12px',
-                  fontSize: 12,
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  padding: '8px 12px',
                   fontFamily: 'var(--font-sans)',
-                  color: selectedAccountId === ALL_ACCOUNTS_ID ? 'var(--app-text)' : 'var(--app-text-muted)',
-                  background: selectedAccountId === ALL_ACCOUNTS_ID ? 'var(--app-panel-strong)' : 'transparent',
+                  background: isSelected ? 'rgba(255,255,255,0.045)' : 'transparent',
                   border: 'none',
+                  borderLeft: isSelected ? '2px solid #f59e0b' : '2px solid transparent',
                   cursor: 'pointer',
                   textAlign: 'left',
+                  opacity: blown ? 0.5 : 1,
                 }}
               >
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--app-text-subtle)', flexShrink: 0 }} />
-                All Accounts
-                {selectedAccountId === ALL_ACCOUNTS_ID && <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--amber)' }}>✓</span>}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: isSelected ? 'var(--app-text)' : 'var(--app-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                  {firm && <div style={{ fontSize: 10, color: 'var(--app-text-subtle)', marginTop: 1 }}>{firm}</div>}
+                </div>
+                {statusPill(status)}
               </button>
-
-              {visibleAccounts.map(account => (
+            );
+            return (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                right: 0,
+                width: 260,
+                background: 'var(--app-panel)',
+                border: '1px solid var(--app-border)',
+                borderRadius: 8,
+                padding: '4px 0',
+                zIndex: 9999,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                maxHeight: 380,
+                overflowY: 'auto',
+              }}>
+                {/* All Accounts */}
                 <button
-                  key={account.id}
                   type="button"
-                  onClick={() => { setSelectedAccountId(account.id); setOpen(false); }}
+                  onClick={() => { setSelectedAccountId(ALL_ACCOUNTS_ID); setOpen(false); }}
                   style={{
                     width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '7px 12px',
-                    fontSize: 12,
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    padding: '8px 12px',
                     fontFamily: 'var(--font-sans)',
-                    color: selectedAccountId === account.id ? 'var(--app-text)' : 'var(--app-text-muted)',
-                    background: selectedAccountId === account.id ? 'var(--app-panel-strong)' : 'transparent',
+                    color: selectedAccountId === ALL_ACCOUNTS_ID ? 'var(--app-text)' : 'var(--app-text-muted)',
+                    background: selectedAccountId === ALL_ACCOUNTS_ID ? 'rgba(255,255,255,0.045)' : 'transparent',
                     border: 'none',
+                    borderLeft: selectedAccountId === ALL_ACCOUNTS_ID ? '2px solid #f59e0b' : '2px solid transparent',
                     cursor: 'pointer',
                     textAlign: 'left',
+                    fontSize: 12,
+                    fontWeight: 500,
                   }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: accountStatusColor(account.status), flexShrink: 0 }} />
-                  <span style={{ flex: 1 }}>{account.name}</span>
-                  {selectedAccountId === account.id && <span style={{ fontSize: 10, color: 'var(--amber)' }}>✓</span>}
+                  All Accounts
+                  <span style={{ fontSize: 9, color: 'var(--app-text-subtle)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>{activeAccounts.length} active</span>
                 </button>
-              ))}
-            </div>
-          )}
+
+                {/* Active accounts */}
+                {activeAccounts.length > 0 && (
+                  <div style={{ borderTop: '1px solid var(--app-border)', marginTop: 2, paddingTop: 2 }}>
+                    {activeAccounts.map(a => rowBtn(a.id, a.name, a.broker ?? '', a.status, selectedAccountId === a.id, false))}
+                  </div>
+                )}
+
+                {/* Blown / Passed accounts */}
+                {closedAccounts.length > 0 && (
+                  <div style={{ borderTop: '1px solid var(--app-border)', marginTop: 4, paddingTop: 4 }}>
+                    <div style={{ padding: '2px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--app-text-subtle)' }}>Closed</div>
+                    {closedAccounts.map(a => rowBtn(a.id, a.name, a.broker ?? '', a.status, selectedAccountId === a.id, true))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <button

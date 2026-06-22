@@ -16,6 +16,7 @@ import marketDataRouter from './routes/marketData';
 import billingRouter from './routes/billing';
 import rivalsRouter from './routes/rivals';
 import accountRouter from './routes/account';
+import propFirmRulesRouter from './routes/propFirmRules';
 
 dotenv.config({ override: true });
 
@@ -126,6 +127,7 @@ app.use('/api/market-data', marketDataRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/rivals', rivalsRouter);
 app.use('/api/account', accountRouter);
+app.use('/api/prop-firm-rules', propFirmRulesRouter);
 
 // Error handler
 app.use(errorHandler);

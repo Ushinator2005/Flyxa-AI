@@ -15,6 +15,7 @@ import { billingApi, type BillingLivePricesResponse } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
 import DatePicker from '../components/common/DatePicker.js';
+import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
 
 type AccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
 
@@ -38,6 +39,15 @@ interface BillingAccount {
   payoutReceived: number;
   payouts: PayoutEntry[];
   notes: string;
+  pricingPath?: 'standard' | 'no_activation_fee';
+  activationFee?: number;
+  dailyLossMode?: 'none' | 'purchase_fixed';
+  optionalDailyLossLimit?: number | null;
+  firmRuleVersionId?: string;
+  ruleVerifiedAt?: string;
+  ruleSourceUrl?: string;
+  responsibleTradingDiscount?: number;
+  responsibleTradingBenefit?: string;
 }
 
 interface BillingFormState {
@@ -52,6 +62,15 @@ interface BillingFormState {
   payoutReceived: number;
   payouts: PayoutEntry[];
   notes: string;
+  pricingPath: 'standard' | 'no_activation_fee';
+  activationFee: number;
+  dailyLossMode: 'none' | 'purchase_fixed';
+  optionalDailyLossLimit: number | null;
+  firmRuleVersionId: string;
+  ruleVerifiedAt: string;
+  ruleSourceUrl: string;
+  responsibleTradingDiscount: number;
+  responsibleTradingBenefit: string;
 }
 
 type ViewMode = 'table' | 'pipeline';
@@ -97,7 +116,6 @@ const FIRM_ACCOUNT_TYPES: Record<string, Array<{ type: string; sizes: string[] }
   ],
   Topstep: [
     { type: 'Trading Combine', sizes: ['$50,000', '$100,000', '$150,000'] },
-    { type: 'Express Funded Account', sizes: ['$50,000', '$100,000', '$150,000'] },
   ],
 };
 
@@ -134,11 +152,6 @@ const FIRM_PRICES: Record<string, Record<string, number>> = {
     '$150,000': 340,
     '$200,000': 430,
   },
-  Topstep: {
-    '$50,000': 99,
-    '$100,000': 149,
-    '$150,000': 199,
-  },
 };
 
 /** Normalise legacy 'Active' status from old data to 'Eval 1'. */
@@ -169,6 +182,15 @@ function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
     notes: typeof (raw as unknown as { notes?: string }).notes === 'string'
       ? ((raw as unknown as { notes: string }).notes)
       : '',
+    pricingPath: raw.pricingPath,
+    activationFee: raw.activationFee,
+    dailyLossMode: raw.dailyLossMode,
+    optionalDailyLossLimit: raw.optionalDailyLossLimit,
+    firmRuleVersionId: raw.firmRuleVersionId,
+    ruleVerifiedAt: raw.ruleVerifiedAt,
+    ruleSourceUrl: raw.ruleSourceUrl,
+    responsibleTradingDiscount: raw.responsibleTradingDiscount,
+    responsibleTradingBenefit: raw.responsibleTradingBenefit,
   };
 }
 
@@ -186,6 +208,19 @@ function toNumber(value: unknown, fallback = 0): number {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function sizeLabelToNumber(size: string): number {
+  const parsed = Number(size.replace(/[^\d.]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getTopstepTemplate(size: string, path: 'standard' | 'no_activation_fee'): EvaluationTemplate | undefined {
+  return getEvaluationTemplates().find(template => (
+    template.firm === 'Topstep'
+    && template.accountSize === sizeLabelToNumber(size)
+    && template.path === path
+  ));
 }
 
 function computeActualPrice(listPrice: number, discountPct: number): number {
@@ -266,6 +301,15 @@ function getDefaultFormState(): BillingFormState {
     payoutReceived: 0,
     payouts: [],
     notes: '',
+    pricingPath: 'no_activation_fee',
+    activationFee: 0,
+    dailyLossMode: 'none',
+    optionalDailyLossLimit: null,
+    firmRuleVersionId: '',
+    ruleVerifiedAt: '',
+    ruleSourceUrl: '',
+    responsibleTradingDiscount: 0,
+    responsibleTradingBenefit: '',
   };
 }
 
@@ -363,12 +407,17 @@ export default function Billing() {
   };
 
   const openEditModal = (account: BillingAccount) => {
+    const inferredPath = account.pricingPath
+      ?? (account.activationFee === 149 ? 'standard' : 'no_activation_fee');
+    const topstepTemplate = account.firm === 'Topstep'
+      ? getTopstepTemplate(account.size, inferredPath)
+      : undefined;
     setEditingId(account.id);
     setForm({
       firm: account.firm,
       accountType: account.accountType ?? getDefaultAccountType(account.firm),
       size: account.size,
-      listPrice: account.listPrice,
+      listPrice: topstepTemplate?.monthlyPrice ?? account.listPrice,
       discountCode: account.discountCode,
       discountPct: account.discountPct,
       purchaseDate: account.purchaseDate,
@@ -376,6 +425,15 @@ export default function Billing() {
       payoutReceived: account.payoutReceived,
       payouts: account.payouts ?? [],
       notes: account.notes ?? '',
+      pricingPath: inferredPath,
+      activationFee: topstepTemplate?.activationFee ?? account.activationFee ?? 0,
+      dailyLossMode: account.dailyLossMode ?? 'none',
+      optionalDailyLossLimit: topstepTemplate?.optionalDailyLossLimit ?? account.optionalDailyLossLimit ?? null,
+      firmRuleVersionId: topstepTemplate?.id ?? account.firmRuleVersionId ?? '',
+      ruleVerifiedAt: topstepTemplate?.verifiedAt ?? account.ruleVerifiedAt ?? '',
+      ruleSourceUrl: topstepTemplate?.sourceUrl ?? account.ruleSourceUrl ?? '',
+      responsibleTradingDiscount: topstepTemplate?.responsibleTradingDiscount ?? account.responsibleTradingDiscount ?? 0,
+      responsibleTradingBenefit: topstepTemplate?.responsibleTradingBenefit ?? account.responsibleTradingBenefit ?? '',
     });
     setIsModalOpen(true);
     void fetchLivePricesForFirm(account.firm);
@@ -386,9 +444,15 @@ export default function Billing() {
     setEditingId(null);
   };
 
+  const responsibleDiscount = form.firm === 'Topstep'
+    && form.pricingPath === 'no_activation_fee'
+    && form.dailyLossMode === 'purchase_fixed'
+    ? form.responsibleTradingDiscount
+    : 0;
+  const priceAfterResponsibleDiscount = Math.max(0, toNumber(form.listPrice, 0) - responsibleDiscount);
   const actualPricePreview = useMemo(
-    () => computeActualPrice(Math.max(0, toNumber(form.listPrice, 0)), clampPercentage(form.discountPct)),
-    [form.discountPct, form.listPrice]
+    () => computeActualPrice(priceAfterResponsibleDiscount, clampPercentage(form.discountPct)),
+    [form.discountPct, priceAfterResponsibleDiscount]
   );
   const savingsPreview = useMemo(
     () => Math.max(0, Math.max(0, toNumber(form.listPrice, 0)) - actualPricePreview),
@@ -501,7 +565,12 @@ export default function Billing() {
   const saveAccount = () => {
     const listPrice = Math.max(0, toNumber(form.listPrice, 0));
     const discountPct = clampPercentage(form.discountPct);
-    const actualPrice = computeActualPrice(listPrice, discountPct);
+    const catalogDiscount = form.firm === 'Topstep'
+      && form.pricingPath === 'no_activation_fee'
+      && form.dailyLossMode === 'purchase_fixed'
+      ? form.responsibleTradingDiscount
+      : 0;
+    const actualPrice = computeActualPrice(Math.max(0, listPrice - catalogDiscount), discountPct);
     const payouts = showPayoutSection ? form.payouts : [];
     const payoutReceived = payouts.reduce((sum, p) => sum + Math.max(0, p.amount), 0)
       || (showPayoutSection ? Math.max(0, toNumber(form.payoutReceived, 0)) : 0);
@@ -520,6 +589,15 @@ export default function Billing() {
       payoutReceived,
       payouts,
       notes: form.notes.trim(),
+      pricingPath: form.firm === 'Topstep' ? form.pricingPath : undefined,
+      activationFee: form.firm === 'Topstep' ? form.activationFee : undefined,
+      dailyLossMode: form.firm === 'Topstep' ? form.dailyLossMode : undefined,
+      optionalDailyLossLimit: form.firm === 'Topstep' ? form.optionalDailyLossLimit : undefined,
+      firmRuleVersionId: form.firm === 'Topstep' ? form.firmRuleVersionId : undefined,
+      ruleVerifiedAt: form.firm === 'Topstep' ? form.ruleVerifiedAt : undefined,
+      ruleSourceUrl: form.firm === 'Topstep' ? form.ruleSourceUrl : undefined,
+      responsibleTradingDiscount: form.firm === 'Topstep' ? catalogDiscount : undefined,
+      responsibleTradingBenefit: form.firm === 'Topstep' ? form.responsibleTradingBenefit : undefined,
     };
 
     setAccounts(current => editingId
@@ -544,13 +622,24 @@ export default function Billing() {
     const nextAccountType = getDefaultAccountType(firm);
     const nextSizes = getSizesForFirm(firm, nextAccountType);
     const nextSize = nextSizes[0] ?? form.size;
-    const nextListPrice = getPreferredListPrice(firm, nextSize, form.listPrice);
+    const topstepTemplate = firm === 'Topstep' ? getTopstepTemplate(nextSize, 'no_activation_fee') : undefined;
+    const nextListPrice = topstepTemplate?.monthlyPrice ?? getPreferredListPrice(firm, nextSize, form.listPrice);
     setForm(current => ({
       ...current, firm,
       accountType: nextAccountType,
       size: nextSizes.length > 0 ? nextSize : current.size,
       listPrice: nextListPrice,
+      pricingPath: firm === 'Topstep' ? 'no_activation_fee' : current.pricingPath,
+      activationFee: topstepTemplate?.activationFee ?? 0,
+      dailyLossMode: firm === 'Topstep' ? 'none' : current.dailyLossMode,
+      optionalDailyLossLimit: topstepTemplate?.optionalDailyLossLimit ?? null,
+      firmRuleVersionId: topstepTemplate?.id ?? '',
+      ruleVerifiedAt: topstepTemplate?.verifiedAt ?? '',
+      ruleSourceUrl: topstepTemplate?.sourceUrl ?? '',
+      responsibleTradingDiscount: topstepTemplate?.responsibleTradingDiscount ?? 0,
+      responsibleTradingBenefit: topstepTemplate?.responsibleTradingBenefit ?? '',
     }));
+    if (firm === 'Topstep') return;
     void fetchLivePricesForFirm(firm).then(payload => {
       const livePrice = payload?.prices?.[nextSize];
       if (!isFiniteNumber(livePrice)) return;
@@ -563,19 +652,40 @@ export default function Billing() {
   const applyAccountType = (accountType: string) => {
     const nextSizes = getSizesForFirm(form.firm, accountType);
     const nextSize = nextSizes[0] ?? form.size;
-    const nextListPrice = getPreferredListPrice(form.firm, nextSize, form.listPrice);
+    const topstepTemplate = form.firm === 'Topstep' ? getTopstepTemplate(nextSize, form.pricingPath) : undefined;
+    const nextListPrice = topstepTemplate?.monthlyPrice ?? getPreferredListPrice(form.firm, nextSize, form.listPrice);
     setForm(current => ({
       ...current,
       accountType,
       size: nextSizes.length > 0 ? nextSize : current.size,
       listPrice: nextListPrice,
+      activationFee: topstepTemplate?.activationFee ?? current.activationFee,
+      optionalDailyLossLimit: topstepTemplate?.optionalDailyLossLimit ?? current.optionalDailyLossLimit,
+      firmRuleVersionId: topstepTemplate?.id ?? current.firmRuleVersionId,
+      ruleVerifiedAt: topstepTemplate?.verifiedAt ?? current.ruleVerifiedAt,
+      ruleSourceUrl: topstepTemplate?.sourceUrl ?? current.ruleSourceUrl,
+      responsibleTradingDiscount: topstepTemplate?.responsibleTradingDiscount ?? current.responsibleTradingDiscount,
+      responsibleTradingBenefit: topstepTemplate?.responsibleTradingBenefit ?? current.responsibleTradingBenefit,
     }));
   };
 
   const applySize = (size: string) => {
     const selectedFirm = form.firm;
-    const lookupPrice = getPreferredListPrice(selectedFirm, size, form.listPrice);
-    setForm(current => ({ ...current, size, listPrice: lookupPrice }));
+    const topstepTemplate = selectedFirm === 'Topstep' ? getTopstepTemplate(size, form.pricingPath) : undefined;
+    const lookupPrice = topstepTemplate?.monthlyPrice ?? getPreferredListPrice(selectedFirm, size, form.listPrice);
+    setForm(current => ({
+      ...current,
+      size,
+      listPrice: lookupPrice,
+      activationFee: topstepTemplate?.activationFee ?? current.activationFee,
+      optionalDailyLossLimit: topstepTemplate?.optionalDailyLossLimit ?? current.optionalDailyLossLimit,
+      firmRuleVersionId: topstepTemplate?.id ?? current.firmRuleVersionId,
+      ruleVerifiedAt: topstepTemplate?.verifiedAt ?? current.ruleVerifiedAt,
+      ruleSourceUrl: topstepTemplate?.sourceUrl ?? current.ruleSourceUrl,
+      responsibleTradingDiscount: topstepTemplate?.responsibleTradingDiscount ?? current.responsibleTradingDiscount,
+      responsibleTradingBenefit: topstepTemplate?.responsibleTradingBenefit ?? current.responsibleTradingBenefit,
+    }));
+    if (selectedFirm === 'Topstep') return;
     void fetchLivePricesForFirm(selectedFirm).then(payload => {
       const livePrice = payload?.prices?.[size];
       if (!isFiniteNumber(livePrice)) return;
@@ -583,6 +693,22 @@ export default function Billing() {
         current.firm === selectedFirm && current.size === size ? { ...current, listPrice: livePrice } : current
       ));
     });
+  };
+
+  const applyTopstepPath = (pricingPath: 'standard' | 'no_activation_fee') => {
+    const template = getTopstepTemplate(form.size, pricingPath);
+    setForm(current => ({
+      ...current,
+      pricingPath,
+      listPrice: template?.monthlyPrice ?? current.listPrice,
+      activationFee: template?.activationFee ?? current.activationFee,
+      optionalDailyLossLimit: template?.optionalDailyLossLimit ?? current.optionalDailyLossLimit,
+      firmRuleVersionId: template?.id ?? current.firmRuleVersionId,
+      ruleVerifiedAt: template?.verifiedAt ?? current.ruleVerifiedAt,
+      ruleSourceUrl: template?.sourceUrl ?? current.ruleSourceUrl,
+      responsibleTradingDiscount: template?.responsibleTradingDiscount ?? current.responsibleTradingDiscount,
+      responsibleTradingBenefit: template?.responsibleTradingBenefit ?? current.responsibleTradingBenefit,
+    }));
   };
 
   const addPayout = () => {
@@ -633,6 +759,15 @@ export default function Billing() {
         .billing-status-toggle.is-active { background: var(--amber); color: var(--bg); }
         .billing-modal-field { width: 100%; height: 38px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface-2); color: var(--txt); font-size: 13px; padding: 0 12px; outline: none; }
         .billing-modal-field:focus { border-color: var(--amber-border); }
+        .billing-number-sharp {
+          font-family: var(--font-sans) !important;
+          font-weight: 500 !important;
+          font-variant-numeric: tabular-nums lining-nums;
+          letter-spacing: -0.01em;
+          text-shadow: none !important;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
         .billing-modal-textarea { width: 100%; border-radius: 5px; border: 1px solid var(--border); background: var(--surface-2); color: var(--txt); font-size: 13px; padding: 10px 12px; outline: none; resize: vertical; min-height: 64px; font-family: inherit; box-sizing: border-box; }
         .billing-modal-textarea:focus { border-color: var(--amber-border); }
         .billing-filter-wrap { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; height: 30px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface-2); }
@@ -840,7 +975,9 @@ export default function Billing() {
                             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
                               <div style={{ minWidth: 0 }}>
                                 <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{a.firm}</p>
-                                <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.accountType}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {a.accountType}{a.firm === 'Topstep' && a.pricingPath ? ` · ${a.pricingPath === 'no_activation_fee' ? 'No activation fee' : 'Standard'}` : ''}
+                                </p>
                               </div>
                               <button
                                 type="button"
@@ -922,7 +1059,15 @@ export default function Billing() {
                           <td style={cellStyle}>
                             <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{account.firm}</p>
                           </td>
-                          <td style={{ ...cellStyle, fontSize: 12, color: 'var(--txt-2)', whiteSpace: 'nowrap' }}>{account.accountType}</td>
+                          <td style={{ ...cellStyle, fontSize: 12, color: 'var(--txt-2)', whiteSpace: 'nowrap' }}>
+                            <span style={{ display: 'block' }}>{account.accountType}</span>
+                            {account.firm === 'Topstep' && account.pricingPath && (
+                              <span style={{ display: 'block', marginTop: 3, fontSize: 9, color: 'var(--txt-3)' }}>
+                                {account.pricingPath === 'no_activation_fee' ? 'No Activation Fee' : `Standard · ${formatCurrency(account.activationFee ?? 149)} activation`}
+                                {account.dailyLossMode === 'purchase_fixed' ? ` · ${formatCurrency(account.optionalDailyLossLimit ?? 0)} DLL` : ''}
+                              </span>
+                            )}
+                          </td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt)', whiteSpace: 'nowrap' }}>{account.size}</td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>{formatDateLabel(account.purchaseDate)}</td>
                           <td style={cellStyle}>
@@ -1085,6 +1230,16 @@ export default function Billing() {
                 )}
               </div>
 
+              {form.firm === 'Topstep' && form.accountType === 'Trading Combine' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Pricing Path</label>
+                  <select className="billing-modal-field" value={form.pricingPath} onChange={e => applyTopstepPath(e.target.value as 'standard' | 'no_activation_fee')}>
+                    <option value="standard">Standard · lower monthly price · $149 activation</option>
+                    <option value="no_activation_fee">No Activation Fee · higher monthly price</option>
+                  </select>
+                </div>
+              )}
+
               {/* Size */}
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Account Size</label>
@@ -1097,18 +1252,68 @@ export default function Billing() {
                 )}
               </div>
 
+              {form.firm === 'Topstep' && form.accountType === 'Trading Combine' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Daily Loss Limit at Purchase</label>
+                  <select className="billing-modal-field" value={form.dailyLossMode} onChange={e => setFormField('dailyLossMode', e.target.value as 'none' | 'purchase_fixed')}>
+                    <option value="none">Not added</option>
+                    <option value="purchase_fixed">Added · {formatCurrency(form.optionalDailyLossLimit ?? 0)} fixed limit</option>
+                  </select>
+                </div>
+              )}
+
+              {form.firm === 'Topstep' && form.accountType === 'Trading Combine' && (
+                <div style={{ border: '1px solid var(--green-border)', background: 'var(--green-dim)', borderRadius: 6, padding: '11px 13px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                    <strong style={{ fontSize: 11, color: 'var(--txt)' }}>Verified Topstep product</strong>
+                    <span style={{ fontSize: 9, color: 'var(--green)' }}>
+                      {form.ruleVerifiedAt ? `Checked ${formatDateLabel(form.ruleVerifiedAt.slice(0, 10))}` : 'Verified catalog'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8, marginTop: 10 }}>
+                    <div>
+                      <span style={{ display: 'block', fontSize: 9, color: 'var(--txt-3)' }}>Monthly</span>
+                      <strong className="billing-number-sharp" style={{ fontSize: 12 }}>
+                        {formatCurrency(priceAfterResponsibleDiscount)}
+                        {responsibleDiscount > 0 && <span style={{ marginLeft: 6, color: 'var(--txt-3)', fontSize: 9, textDecoration: 'line-through' }}>{formatCurrency(form.listPrice)}</span>}
+                      </strong>
+                    </div>
+                    <div><span style={{ display: 'block', fontSize: 9, color: 'var(--txt-3)' }}>Activation</span><strong className="billing-number-sharp" style={{ fontSize: 12 }}>{form.activationFee ? formatCurrency(form.activationFee) : '$0'}</strong></div>
+                    <div><span style={{ display: 'block', fontSize: 9, color: 'var(--txt-3)' }}>Fixed DLL</span><strong className="billing-number-sharp" style={{ fontSize: 12 }}>{form.dailyLossMode === 'purchase_fixed' ? formatCurrency(form.optionalDailyLossLimit ?? 0) : 'Not added'}</strong></div>
+                  </div>
+                  {responsibleDiscount > 0 && (
+                    <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--green-border)', display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                      <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(34,197,94,.28)', color: 'var(--green)', fontSize: 9, fontWeight: 600 }}>
+                        Save {formatCurrency(responsibleDiscount)}/month
+                      </span>
+                      {form.responsibleTradingBenefit && (
+                        <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(34,197,94,.28)', color: 'var(--green)', fontSize: 9, fontWeight: 600 }}>
+                          Double payout caps
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {form.ruleSourceUrl && (
+                    <a href={form.ruleSourceUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 9, color: '#60a5fa', fontSize: 9, textDecoration: 'none' }}>
+                      Open official Topstep rules
+                    </a>
+                  )}
+                </div>
+              )}
+
               {/* List price */}
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>List Price (before discount)</label>
                 <div style={{ position: 'relative' }}>
                   <span aria-hidden="true" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>$</span>
-                  <input className="billing-modal-field" type="number" min={0} step="0.01" value={Number.isFinite(form.listPrice) ? form.listPrice : 0} onChange={e => setFormField('listPrice', Math.max(0, toNumber(e.target.value, 0)))} style={{ fontFamily: 'var(--font-mono)', textAlign: 'right', paddingLeft: 28 }} />
+                  <input className="billing-modal-field billing-number-sharp" type="number" min={0} step="0.01" value={Number.isFinite(form.listPrice) ? form.listPrice : 0} onChange={e => setFormField('listPrice', Math.max(0, toNumber(e.target.value, 0)))} style={{ textAlign: 'right', paddingLeft: 28 }} />
                 </div>
                 <p style={{ margin: '8px 0 0', fontSize: 11, color: livePricingLoadingFirm === form.firm ? 'var(--txt-2)' : livePricingError && !currentLivePricing ? 'var(--red)' : selectedSizeIsFallback ? 'var(--amber)' : currentLivePricing?.live ? 'var(--green)' : 'var(--txt-3)' }}>
                   {livePricingLoadingFirm === form.firm ? 'Syncing live prices...'
                     : livePricingError && !currentLivePricing ? `Live pricing unavailable. Using fallback values.`
                     : selectedSizeIsFallback ? `Using fallback value${currentPricingSourceLabel ? ` · ${currentPricingSourceLabel}` : ''}.`
                     : currentLivePricing?.live ? `Live price synced${currentPricingSourceLabel ? ` · ${currentPricingSourceLabel}` : ''}.`
+                    : form.firm === 'Topstep' ? 'Price supplied by the verified Topstep product catalog.'
                     : currentLivePricing?.note ?? 'Using configured fallback values.'}
                 </p>
               </div>
@@ -1117,19 +1322,19 @@ export default function Billing() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Discount Code</label>
-                  <input className="billing-modal-field" value={form.discountCode} onChange={e => setFormField('discountCode', e.target.value.toUpperCase())} placeholder="e.g. APEX20" style={{ fontFamily: 'var(--font-mono)' }} />
+                  <input className="billing-modal-field" value={form.discountCode} onChange={e => setFormField('discountCode', e.target.value.toUpperCase())} placeholder="e.g. APEX20" />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Discount %</label>
                   <div style={{ position: 'relative' }}>
-                    <input className="billing-modal-field" type="number" min={0} max={100} step="0.1" value={Number.isFinite(form.discountPct) ? form.discountPct : 0} onChange={e => setFormField('discountPct', clampPercentage(toNumber(e.target.value, 0)))} style={{ fontFamily: 'var(--font-mono)', paddingRight: 30 }} />
+                    <input className="billing-modal-field billing-number-sharp" type="number" min={0} max={100} step="0.1" value={Number.isFinite(form.discountPct) ? form.discountPct : 0} onChange={e => setFormField('discountPct', clampPercentage(toNumber(e.target.value, 0)))} style={{ paddingRight: 30 }} />
                     <span aria-hidden="true" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>%</span>
                   </div>
                 </div>
               </div>
               <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Actual price paid</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--txt)' }}>
+                <span className="billing-number-sharp" style={{ fontSize: 16, color: 'var(--txt)' }}>
                   {formatCurrency(actualPricePreview)}
                   {savingsPreview > 0 && <span style={{ fontSize: 11, color: 'var(--green)', marginLeft: 8 }}>({formatCurrency(savingsPreview)} saved)</span>}
                 </span>

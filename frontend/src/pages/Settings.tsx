@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, GripVertical, Monitor, Palette, Pencil, Plus, RotateCcw, Scan, Search, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
@@ -13,6 +14,7 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceKey, normalizeConfluenceTag } from '../utils/confluenceTags.js';
+import { getEvaluationTemplates } from '../utils/evaluationCoach.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
@@ -20,6 +22,7 @@ const DEFAULT_TIMEZONE = 'America/New_York';
 const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Passed', 'Blown'];
 const ACCOUNT_TABLE_GRID_COLUMNS = 'minmax(0,1fr) minmax(0,1fr) 120px 120px 170px 150px 90px';
 const ACCOUNT_TABLE_COLUMN_GAP = '16px';
+const moneyValue = (value: number) => value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const PROFILE_IMAGE_BUCKET = 'trade-screenshots';
 const TIMEZONE_REGION_PRIORITY = ['America', 'Europe', 'Asia', 'Pacific'];
 const SESSION_TIME_FIELDS = [
@@ -571,6 +574,9 @@ export default function Settings() {
     status: 'Eval' as TradingAccountStatus,
     startingBalance: '' as string,
     targetBalance: '' as string,
+    evaluationProgram: 'Trading Combine',
+    evaluationPath: 'no_activation_fee' as 'standard' | 'no_activation_fee',
+    dailyLossMode: 'none' as 'none' | 'purchase_fixed',
   });
   const [draftTargetBalances, setDraftTargetBalances] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<string>('profile');
@@ -962,6 +968,9 @@ export default function Settings() {
       status: 'Eval',
       startingBalance: '',
       targetBalance: '',
+      evaluationProgram: 'Trading Combine',
+      evaluationPath: 'no_activation_fee',
+      dailyLossMode: 'none',
     });
   }
 
@@ -974,6 +983,18 @@ export default function Settings() {
     if (!newAccount.name.trim()) return;
     const parsedBalance = parseFloat(newAccount.startingBalance);
     const parsedTarget = parseFloat(newAccount.targetBalance);
+    const isTopstepEvaluation = newAccount.status === 'Eval'
+      && newAccount.broker.trim().toLowerCase() === 'topstep';
+    const selectedTemplate = isTopstepEvaluation
+      ? getEvaluationTemplates().find(template => (
+        template.firm === 'Topstep'
+        && template.accountSize === parsedBalance
+        && template.path === newAccount.evaluationPath
+      ))
+      : undefined;
+    const dailyLossLimit = newAccount.dailyLossMode === 'purchase_fixed'
+      ? selectedTemplate?.optionalDailyLossLimit ?? 0
+      : selectedTemplate?.dailyLossLimit ?? 0;
     addAccount({
       name: newAccount.name.trim(),
       broker: newAccount.broker.trim(),
@@ -981,7 +1002,23 @@ export default function Settings() {
       status: newAccount.status,
       color: DEFAULT_ACCOUNT_COLOR,
       startingBalance: Number.isFinite(parsedBalance) && parsedBalance > 0 ? parsedBalance : undefined,
-      targetBalance: Number.isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : undefined,
+      targetBalance: selectedTemplate
+        ? selectedTemplate.accountSize + selectedTemplate.profitTarget
+        : Number.isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : undefined,
+      firmRuleVersionId: selectedTemplate?.id,
+      evaluationProgram: selectedTemplate?.program,
+      evaluationPath: selectedTemplate?.path === 'no_activation_fee' ? 'no_activation_fee' : selectedTemplate ? 'standard' : undefined,
+      dailyLossMode: selectedTemplate ? newAccount.dailyLossMode : undefined,
+      dailyLossLimit,
+      maxDrawdown: selectedTemplate?.maxDrawdown,
+      profitTarget: selectedTemplate?.profitTarget ?? null,
+      minimumTradingDays: selectedTemplate?.minimumTradingDays,
+      maxContracts: selectedTemplate?.maxContracts,
+      maxMicros: selectedTemplate?.maxMicros,
+      consistencyLimitPct: selectedTemplate?.consistencyLimitPct,
+      drawdownType: selectedTemplate?.drawdownType,
+      ruleVerifiedAt: selectedTemplate?.verifiedAt,
+      ruleSourceUrl: selectedTemplate?.sourceUrl,
     });
     closeAddAccountModal();
   }
@@ -3143,8 +3180,8 @@ export default function Settings() {
         </div>
       )}
 
-      {showAddAccountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      {showAddAccountModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
           <button
             type="button"
             aria-label="Close add account modal"
@@ -3208,18 +3245,26 @@ export default function Settings() {
 
               <label>
                 <FieldLabel>Firm</FieldLabel>
-                <input
-                  style={{
-                    ...tableInputStyle,
-                    background: S2,
-                    border: `1px solid ${BORDER}`,
-                    borderRadius: '6px',
-                    padding: '10px 12px',
-                  }}
-                  placeholder="e.g. Apex Trader Funding"
+                <StyledSelect
                   value={newAccount.broker}
-                  onChange={e => setNewAccount(current => ({ ...current, broker: e.target.value }))}
-                />
+                  onChange={value => {
+                    const isTopstep = value === 'Topstep';
+                    setNewAccount(current => ({
+                      ...current,
+                      broker: value,
+                      type: isTopstep ? 'Futures' : current.type,
+                      status: isTopstep ? 'Eval' : current.status,
+                      startingBalance: isTopstep ? '50000' : current.startingBalance,
+                    }));
+                  }}
+                >
+                  <option value="">Select firm</option>
+                  <option value="Topstep">Topstep</option>
+                  <option value="Apex Trader Funding">Apex Trader Funding</option>
+                  <option value="MyFundedFutures">MyFundedFutures</option>
+                  <option value="FTMO">FTMO</option>
+                  <option value="Other">Other / broker account</option>
+                </StyledSelect>
               </label>
 
               <label>
@@ -3240,7 +3285,43 @@ export default function Settings() {
                 />
               </label>
 
-              <label>
+              {newAccount.broker === 'Topstep' && newAccount.status === 'Eval' && (
+                <>
+                  <label>
+                    <FieldLabel>Program</FieldLabel>
+                    <StyledSelect value={newAccount.evaluationProgram} onChange={value => setNewAccount(current => ({ ...current, evaluationProgram: value }))}>
+                      <option value="Trading Combine">Trading Combine</option>
+                    </StyledSelect>
+                  </label>
+
+                  <label>
+                    <FieldLabel>Pricing path</FieldLabel>
+                    <StyledSelect value={newAccount.evaluationPath} onChange={value => setNewAccount(current => ({ ...current, evaluationPath: value as 'standard' | 'no_activation_fee' }))}>
+                      <option value="standard">Standard · $149 activation</option>
+                      <option value="no_activation_fee">No Activation Fee</option>
+                    </StyledSelect>
+                  </label>
+
+                  <label>
+                    <FieldLabel>Account size</FieldLabel>
+                    <StyledSelect value={newAccount.startingBalance} onChange={value => setNewAccount(current => ({ ...current, startingBalance: value }))}>
+                      <option value="50000">$50,000</option>
+                      <option value="100000">$100,000</option>
+                      <option value="150000">$150,000</option>
+                    </StyledSelect>
+                  </label>
+
+                  <label>
+                    <FieldLabel>Fixed daily loss limit</FieldLabel>
+                    <StyledSelect value={newAccount.dailyLossMode} onChange={value => setNewAccount(current => ({ ...current, dailyLossMode: value as 'none' | 'purchase_fixed' }))}>
+                      <option value="none">Not added at purchase</option>
+                      <option value="purchase_fixed">Added at purchase</option>
+                    </StyledSelect>
+                  </label>
+                </>
+              )}
+
+              {!(newAccount.broker === 'Topstep' && newAccount.status === 'Eval') && <label>
                 <FieldLabel>Starting balance ($)</FieldLabel>
                 <input
                   type="number"
@@ -3257,9 +3338,9 @@ export default function Settings() {
                   value={newAccount.startingBalance}
                   onChange={e => setNewAccount(current => ({ ...current, startingBalance: e.target.value }))}
                 />
-              </label>
+              </label>}
 
-              <label>
+              {!(newAccount.broker === 'Topstep' && newAccount.status === 'Eval') && <label>
                 <FieldLabel>Target balance ($)</FieldLabel>
                 <input
                   type="number"
@@ -3276,8 +3357,31 @@ export default function Settings() {
                   value={newAccount.targetBalance}
                   onChange={e => setNewAccount(current => ({ ...current, targetBalance: e.target.value }))}
                 />
-              </label>
+              </label>}
             </div>
+
+            {newAccount.broker === 'Topstep' && newAccount.status === 'Eval' && (() => {
+              const template = getEvaluationTemplates().find(item => item.firm === 'Topstep'
+                && item.accountSize === Number(newAccount.startingBalance)
+                && item.path === newAccount.evaluationPath);
+              if (!template) return null;
+              const configuredDailyLoss = newAccount.dailyLossMode === 'purchase_fixed'
+                ? template.optionalDailyLossLimit
+                : null;
+              return (
+                <div style={{ marginTop: 14, padding: '12px 14px', border: `1px solid ${BORDER}`, background: S2, borderRadius: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                    <strong style={{ fontSize: 11, color: T1 }}>Rules that will be applied</strong>
+                    <span style={{ fontSize: 9, color: '#34d399' }}>Verified {template.verifiedAt ? new Date(template.verifiedAt).toLocaleDateString() : ''}</span>
+                  </div>
+                  <p style={{ margin: '8px 0 0', fontSize: 10, color: T3, lineHeight: 1.6 }}>
+                    {moneyValue(template.profitTarget)} target · {moneyValue(template.maxDrawdown)} trailing MLL · {template.maxContracts} contracts · {template.maxMicros} micros · {template.consistencyLimitPct}% consistency · minimum {template.minimumTradingDays} days
+                    {configuredDailyLoss ? ` · ${moneyValue(configuredDailyLoss)} fixed daily loss limit` : ''}
+                  </p>
+                  {template.sourceUrl && <a href={template.sourceUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 7, color: '#60a5fa', fontSize: 9 }}>Check official Topstep source</a>}
+                </div>
+              );
+            })()}
 
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -3299,6 +3403,7 @@ export default function Settings() {
             </div>
           </div>
         </div>
+        , document.body
       )}
     </div>
   );

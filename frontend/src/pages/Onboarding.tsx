@@ -2,8 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ProfitabilityStatus, useOnboarding } from '../contexts/OnboardingContext.js';
+import useFlyxaStore from '../store/flyxaStore.js';
+import { getEvaluationTemplates } from '../utils/evaluationCoach.js';
 
-type ConversationStep = 'boot' | 'goal' | 'trader' | 'rules' | 'summary' | 'done';
+type ConversationStep = 'boot' | 'goal' | 'trader' | 'rules' | 'summary' | 'account-setup' | 'done';
+type AccountKind = 'eval' | 'live' | 'paper';
 type Sender = 'flyxa' | 'user';
 
 interface ChatMessage {
@@ -160,6 +163,7 @@ function OptionBubbleGroup({
 export default function Onboarding() {
   const navigate = useNavigate();
   const { completeOnboarding, saveSurvey } = useOnboarding();
+  const addAccount = useFlyxaStore(state => state.addAccount);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
 
@@ -173,6 +177,12 @@ export default function Onboarding() {
   const [selectedGoal, setSelectedGoal] = useState('');
   const [selectedTrader, setSelectedTrader] = useState<ProfitabilityStatus | null>(null);
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
+  const [accountKind, setAccountKind] = useState<AccountKind>('eval');
+  const [accountFirm, setAccountFirm] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [accountSize, setAccountSize] = useState(50000);
+  const [evaluationPath, setEvaluationPath] = useState<'standard' | 'no_activation_fee'>('no_activation_fee');
+  const [dailyLossMode, setDailyLossMode] = useState<'none' | 'purchase_fixed'>('none');
 
   const canContinueRules = selectedRules.length > 0;
 
@@ -285,7 +295,8 @@ export default function Onboarding() {
     for (const bullet of FINAL_BULLETS) {
       await sendFlyxa(`- ${bullet}`);
     }
-    setStep('done');
+    await sendFlyxa("One last step — set up your first trading account.");
+    setStep('account-setup');
     setBusy(false);
   };
 
@@ -299,6 +310,38 @@ export default function Onboarding() {
     };
     saveSurvey(payload);
     completeOnboarding(payload);
+
+    const firm = accountFirm.trim() || 'My Firm';
+    const name = accountName.trim() || (firm + ' Account');
+    const template = accountKind === 'eval' && firm.toLowerCase() === 'topstep'
+      ? getEvaluationTemplates().find(item => item.firm === 'Topstep' && item.accountSize === accountSize && item.path === evaluationPath)
+      : undefined;
+    const configuredDailyLoss = dailyLossMode === 'purchase_fixed'
+      ? template?.optionalDailyLossLimit ?? 0
+      : template?.dailyLossLimit ?? 0;
+    addAccount({
+      id: crypto.randomUUID(),
+      name,
+      firm,
+      size: accountSize,
+      type: accountKind,
+      phase: accountKind === 'eval' ? 'eval' : 'funded',
+      balance: accountSize,
+      startingBalance: accountSize,
+      dailyLossLimit: configuredDailyLoss,
+      maxDrawdown: template?.maxDrawdown ?? 0,
+      profitTarget: template?.profitTarget ?? null,
+      minimumTradingDays: template?.minimumTradingDays,
+      maxContracts: template?.maxContracts,
+      consistencyLimitPct: template?.consistencyLimitPct,
+      drawdownType: template?.drawdownType,
+      evaluationTemplateId: template?.id,
+      firmRuleVersionId: template?.id,
+      evaluationPath: template?.path === 'no_activation_fee' ? 'no_activation_fee' : template ? 'standard' : undefined,
+      dailyLossMode: template ? dailyLossMode : undefined,
+      isActive: true,
+    });
+
     navigate('/', { replace: true });
   };
 
@@ -367,8 +410,126 @@ export default function Onboarding() {
       );
     }
 
+    if (step === 'account-setup') {
+      const sizes = [25000, 50000, 100000, 150000, 200000];
+      const kindOptions: Array<{ label: string; value: AccountKind }> = [
+        { label: 'Evaluation', value: 'eval' },
+        { label: 'Live / Funded', value: 'live' },
+        { label: 'Paper', value: 'paper' },
+      ];
+      return (
+        <div className="mx-auto max-w-xl rounded-2xl border border-slate-700 bg-slate-900/85 p-4 space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Account type</p>
+            <div className="flex flex-wrap gap-2">
+              {kindOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setAccountKind(opt.value)}
+                  className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-all ${
+                    accountKind === opt.value
+                      ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100'
+                      : 'border-slate-700 bg-slate-900/75 text-slate-300 hover:border-cyan-500/50'
+                  }`}
+                >{opt.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">Firm name</label>
+              <select
+                className="input-field"
+                value={accountFirm}
+                onChange={e => {
+                  setAccountFirm(e.target.value);
+                  if (e.target.value === 'Topstep') {
+                    setAccountKind('eval');
+                    setAccountSize(50000);
+                  }
+                }}
+              >
+                <option value="">Select firm</option>
+                <option value="Topstep">Topstep</option>
+                <option value="Apex Trader Funding">Apex Trader Funding</option>
+                <option value="MyFundedFutures">MyFundedFutures</option>
+                <option value="FTMO">FTMO</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">Account name</label>
+              <input
+                className="input-field"
+                value={accountName}
+                onChange={e => setAccountName(e.target.value)}
+                placeholder="e.g. Phase 1"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Account size</p>
+            <div className="flex flex-wrap gap-2">
+              {sizes.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setAccountSize(s)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                    accountSize === s
+                      ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100'
+                      : 'border-slate-700 bg-slate-900/75 text-slate-300 hover:border-cyan-500/50'
+                  }`}
+                >${(s / 1000).toFixed(0)}K</button>
+              ))}
+            </div>
+          </div>
+          {accountFirm === 'Topstep' && accountKind === 'eval' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400">Pricing path</label>
+                <select className="input-field" value={evaluationPath} onChange={e => setEvaluationPath(e.target.value as 'standard' | 'no_activation_fee')}>
+                  <option value="standard">Standard · $149 activation</option>
+                  <option value="no_activation_fee">No Activation Fee</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400">Daily loss protection</label>
+                <select className="input-field" value={dailyLossMode} onChange={e => setDailyLossMode(e.target.value as 'none' | 'purchase_fixed')}>
+                  <option value="none">Not added</option>
+                  <option value="purchase_fixed">Fixed limit added at purchase</option>
+                </select>
+              </div>
+            </div>
+          )}
+          {accountFirm === 'Topstep' && accountKind === 'eval' && (() => {
+            const template = getEvaluationTemplates().find(item => item.firm === 'Topstep' && item.accountSize === accountSize && item.path === evaluationPath);
+            if (!template) return null;
+            return (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] leading-5 text-slate-300">
+                <strong className="text-emerald-300">Verified Topstep rules:</strong>{' '}
+                ${template.profitTarget.toLocaleString()} target, ${template.maxDrawdown.toLocaleString()} trailing MLL,
+                {' '}{template.maxContracts} contracts, {template.consistencyLimitPct}% consistency, minimum {template.minimumTradingDays} days.
+                {dailyLossMode === 'purchase_fixed' ? ` Fixed $${template.optionalDailyLossLimit?.toLocaleString()} daily loss limit enabled.` : ''}
+              </div>
+            );
+          })()}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => setStep('done')}
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-400/70 bg-cyan-500/20 px-5 py-2 text-sm font-semibold text-cyan-100 transition-all hover:scale-[1.02] hover:bg-cyan-500/26"
+            >
+              Create account <ChevronRight size={13} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return null;
-  }, [busy, canContinueRules, lockedSingle, otherGoalText, selectedRules, showOtherInput, step]);
+  }, [accountFirm, accountKind, accountName, accountSize, busy, canContinueRules, dailyLossMode, evaluationPath, lockedSingle, otherGoalText, selectedRules, showOtherInput, step]);
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#020617,#020a15)] px-4 py-8">

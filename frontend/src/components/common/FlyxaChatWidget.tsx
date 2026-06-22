@@ -4,6 +4,7 @@ import { aiApi } from '../../services/api.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
 import { useActiveAccountEntries, useAllTrades, useDashboardStats } from '../../store/selectors.js';
 import './FlyxaChatWidget.css';
+import { inferEvaluationTemplate } from '../../utils/evaluationCoach.js';
 
 type ChatMessage = {
   id: string;
@@ -18,9 +19,9 @@ const initialMessage: ChatMessage = {
 };
 
 const QUICK_PROMPTS = [
-  'Where should I log my daily routine?',
-  'How do I review my tilt patterns?',
-  'Show me where to edit risk rules.',
+  'How much can I lose on this account?',
+  'What do I still need to pass?',
+  'Which rule is closest to being breached?',
 ] as const;
 
 function formatCurrency(value: number): string {
@@ -66,6 +67,9 @@ export default function FlyxaChatWidget() {
   const aiContext = useMemo(() => {
     const recent = [...allTrades].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)).slice(-20);
     const psych = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
+    const evaluationTemplate = account && (account.type === 'eval' || account.phase === 'eval')
+      ? inferEvaluationTemplate(account)
+      : null;
 
     return `
 You are Flyxa AI, a personal trading coach for this specific trader.
@@ -78,6 +82,25 @@ TRADER DATA (last 30 days):
   Account: ${account?.name ?? 'Unknown'} (${account?.type ?? 'unknown'})
   Daily Loss Limit: ${formatCurrency(account?.dailyLossLimit ?? 0)}
   Active Account ID: ${activeAccountId ?? 'all'}
+
+${evaluationTemplate ? `ACTIVE PROP-FIRM RULE SET:
+  Firm: ${evaluationTemplate.firm}
+  Program: ${evaluationTemplate.program ?? 'Evaluation'}
+  Product path: ${evaluationTemplate.path === 'no_activation_fee' ? 'No Activation Fee' : 'Standard'}
+  Account size: ${formatCurrency(evaluationTemplate.accountSize)}
+  Profit target: ${formatCurrency(account?.profitTarget ?? evaluationTemplate.profitTarget)}
+  Maximum Loss Limit: ${formatCurrency(account?.maxDrawdown || evaluationTemplate.maxDrawdown)}
+  Drawdown behavior: ${account?.drawdownType ?? evaluationTemplate.drawdownType}
+  Daily Loss Limit: ${(account?.dailyLossLimit ?? 0) > 0 ? formatCurrency(account?.dailyLossLimit ?? 0) : 'Not enabled; optional purchase limit is ' + formatCurrency(evaluationTemplate.optionalDailyLossLimit ?? 0)}
+  Maximum contracts: ${account?.maxContracts ?? evaluationTemplate.maxContracts}
+  Maximum micros: ${evaluationTemplate.maxMicros ?? 'Not specified'}
+  Consistency objective: ${account?.consistencyLimitPct ?? evaluationTemplate.consistencyLimitPct ?? 'None'}%
+  Minimum trading days: ${account?.minimumTradingDays ?? evaluationTemplate.minimumTradingDays}
+  Activation fee: ${formatCurrency(evaluationTemplate.activationFee ?? 0)}
+  Rule version: ${evaluationTemplate.version ?? 1}
+  Verified at: ${evaluationTemplate.verifiedAt ?? 'Bundled catalog'}
+  Official source: ${evaluationTemplate.sourceUrl ?? 'Not available'}
+` : ''}
 
 RECENT TRADES (last 20):
 ${recent.map(trade =>
@@ -96,11 +119,14 @@ ${psych.map(entry =>
 CURRENT TRADING RULES:
 ${riskRules.map(rule => `  ${rule.label}: ${rule.value} ${rule.unit}`).join('\n')}
 
-Use this data to give specific, personalised coaching advice.
+Use the active prop-firm rule set as the source of truth for rule questions.
+If a rule is missing or uncertain, say so and ask the trader to verify the firm dashboard.
+Never invent a prop-firm limit. Do not recommend trades or autonomous execution.
+Use this data to give specific, personalised process and risk coaching.
 Reference actual trades by date and symbol when relevant.
 Do not give generic advice - be specific to this trader's patterns.
 `.trim();
-  }, [account?.dailyLossLimit, account?.name, account?.type, activeAccountId, allTrades, entries, riskRules, stats.avgRR, stats.netPnL, stats.totalTrades, stats.winRate]);
+  }, [account, activeAccountId, allTrades, entries, riskRules, stats.avgRR, stats.netPnL, stats.totalTrades, stats.winRate]);
 
   const sendMessage = async (rawInput?: string) => {
     const question = (rawInput ?? input).trim();

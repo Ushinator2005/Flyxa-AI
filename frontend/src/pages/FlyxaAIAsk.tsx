@@ -9,6 +9,7 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { deriveTradeSessionLabel } from '../utils/sessionTimes.js';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { getEvaluationTemplates, inferEvaluationTemplate } from '../utils/evaluationCoach.js';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
@@ -51,7 +52,7 @@ function inlineChips(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*|-?\$[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?%|\b\d+\.\d+x\b|\b\d+(?:\.\d+)?R\b)/);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} style={{ color: C.t0, fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+      return <strong key={i} style={{ color: C.acc, fontWeight: 650 }}>{part.slice(2, -2)}</strong>;
     }
     if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part) || /^\d+(?:\.\d+)?R$/.test(part)) {
       let display = part;
@@ -71,10 +72,10 @@ function inlineChips(text: string): React.ReactNode {
       }
       return (
         <span key={i} style={{
-          color: C.acc,
+          color: C.t0,
           fontWeight: 500,
           fontVariantNumeric: 'tabular-nums',
-          fontFamily: C.sans,
+          fontFamily: C.mono,
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale',
         }}>{display}</span>
@@ -452,6 +453,7 @@ export default function FlyxaAIAsk() {
 
   const storeEntries = useFlyxaStore(state => state.entries);
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
+  const activeAccount = useFlyxaStore(state => state.accounts.find(account => account.id === state.activeAccountId) ?? state.accounts[0]);
 
   const focusedTradeId = searchParams.get('tradeId');
   const focusedEntry = useMemo(() => {
@@ -542,7 +544,21 @@ export default function FlyxaAIAsk() {
     setLoading(true);
     setInput('');
 
-    const stats = computeAllStats(trades);
+    const activeRule = activeAccount && (activeAccount.type === 'eval' || activeAccount.phase === 'eval')
+      ? inferEvaluationTemplate(activeAccount)
+      : null;
+    const stats = {
+      ...computeAllStats(trades),
+      activeAccount: activeAccount ? {
+        id: activeAccount.id,
+        name: activeAccount.name,
+        firm: activeAccount.firm,
+        size: activeAccount.size,
+        phase: activeAccount.phase,
+      } : null,
+      activePropFirmRule: activeRule,
+      availableTopstepRules: getEvaluationTemplates().filter(template => template.firm === 'Topstep'),
+    };
     const sampleSize = trades.length;
 
     try {

@@ -351,3 +351,40 @@ export const billingApi = {
   getLivePrices: (firm: string) =>
     api.get<BillingLivePricesResponse>(`/api/billing/live-prices?firm=${encodeURIComponent(firm)}`),
 };
+
+export interface PropFirmRuleRecordResponse {
+  id: string;
+  firm: string;
+  program: string;
+  path: 'standard' | 'no_activation_fee';
+  accountSize: number;
+  profitTarget: number;
+  maximumLossLimit: number;
+  dailyLossLimit: number | null;
+  optionalDailyLossLimit: number | null;
+  responsibleTradingDiscount: number;
+  responsibleTradingBenefit: string;
+  maximumContracts: number;
+  maximumMicros: number;
+  consistencyTargetPct: number;
+  minimumTradingDays: number;
+  drawdownType: 'trailing';
+  activationFee: number;
+  monthlyPrice: number;
+  version: number;
+  status: 'verified' | 'draft' | 'retired';
+  effectiveFrom: string;
+  verifiedAt: string;
+  sourceUrl: string;
+  secondarySourceUrls: string[];
+  note: string;
+}
+
+export const propFirmRulesApi = {
+  getTopstep: () => api.get<{
+    rules: PropFirmRuleRecordResponse[];
+    source: string;
+    fallback: boolean;
+    note?: string;
+  }>('/api/prop-firm-rules?firm=Topstep'),
+};

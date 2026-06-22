@@ -4,8 +4,8 @@ import { ExternalLink, GripHorizontal, Minus, ShieldCheck, X } from 'lucide-reac
 
 const STORAGE_KEY      = 'flyxa.trade-check-dock.position';
 const PROMPT_KEY       = 'flyxa.session-done-prompt';
-const W = 300;
-const H_FULL = 380;
+const W = 260;
+const H_FULL = 260;
 const H_MIN = 34;
 
 declare global {

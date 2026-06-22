@@ -11,8 +11,10 @@ import UsernamePrompt from '../common/UsernamePrompt.js';
 import ErrorBoundary from '../common/ErrorBoundary.js';
 import GlobalMessagesPanel from '../messages/GlobalMessagesPanel.js';
 import { useRisk } from '../../contexts/RiskContext.js';
+import { useEvaluationAgent } from '../../hooks/useEvaluationAgent.js';
 
 export default function Layout() {
+  useEvaluationAgent();
   const { riskLevel, dailyStatus } = useRisk();
   const location = useLocation();
   const isJournalWorkspace = location.pathname === '/scanner' || location.pathname === '/market-news';
@@ -20,6 +22,7 @@ export default function Layout() {
     || location.pathname === '/backtest'
     || location.pathname === '/trading-plan'
     || location.pathname === '/billing'
+    || location.pathname === '/evaluation-coach'
     || location.pathname === '/market-news'
     || location.pathname === '/goals'
     || location.pathname === '/'

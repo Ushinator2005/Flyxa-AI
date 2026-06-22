@@ -2564,6 +2564,47 @@ export async function answerTradeDataQuery(
   const trimmed = question.trim();
   if (!trimmed) throw new Error('Question is required');
 
+  const normalizedQuestion = trimmed.toLowerCase();
+  const asksTopstepRules = normalizedQuestion.includes('topstep')
+    && /(rule|rules|target|drawdown|loss limit|contract|pass|activation)/.test(normalizedQuestion);
+  if (asksTopstepRules) {
+    const available = Array.isArray(stats.availableTopstepRules)
+      ? stats.availableTopstepRules as Array<Record<string, unknown>>
+      : [];
+    const activeRule = stats.activePropFirmRule && typeof stats.activePropFirmRule === 'object'
+      ? stats.activePropFirmRule as Record<string, unknown>
+      : null;
+    const size = normalizedQuestion.includes('150k') || normalizedQuestion.includes('150,000')
+      ? 150_000
+      : normalizedQuestion.includes('100k') || normalizedQuestion.includes('100,000')
+        ? 100_000
+        : normalizedQuestion.includes('50k') || normalizedQuestion.includes('50,000')
+          ? 50_000
+          : Number(activeRule?.accountSize ?? 0);
+    const requestedPath = /no activation|no-activation|activation fee path/.test(normalizedQuestion)
+      ? 'no_activation_fee'
+      : normalizedQuestion.includes('standard')
+        ? 'standard'
+        : String(activeRule?.path ?? '');
+    const matching = available.find(rule => (
+      Number(rule.accountSize) === size
+      && (!requestedPath || rule.path === requestedPath)
+    )) ?? available.find(rule => Number(rule.accountSize) === size) ?? activeRule;
+
+    if (matching) {
+      const usd = (value: unknown) => Number(value ?? 0).toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      });
+      const path = matching.path === 'no_activation_fee' ? 'No Activation Fee' : 'Standard';
+      const dailyLoss = Number(matching.dailyLossLimit ?? 0) > 0
+        ? `${usd(matching.dailyLossLimit)} fixed daily loss limit`
+        : `no mandatory daily loss limit; Topstep offers an optional ${usd(matching.optionalDailyLossLimit)} fixed limit at purchase`;
+      return `A Topstep ${Number(matching.accountSize) / 1000}K Trading Combine on the ${path} path requires ${usd(matching.profitTarget)} in profit, has a ${usd(matching.maxDrawdown)} real-time trailing Maximum Loss Limit, and allows up to ${matching.maxContracts} mini contracts or ${matching.maxMicros} micros. It uses a ${matching.consistencyLimitPct}% consistency objective and can be passed in a minimum of ${matching.minimumTradingDays} trading days. This configuration has ${dailyLoss}; the activation fee is ${usd(matching.activationFee)}. Flyxa has this as verified rule version ${matching.version ?? 1}, last checked ${String(matching.verifiedAt ?? 'from the bundled catalog')}, but you should still compare it with your Topstep dashboard because account terms can change.`;
+    }
+  }
+
   const statsJson = JSON.stringify(stats, null, 2);
 
   const response = await anthropic.messages.create({
@@ -2578,6 +2619,8 @@ The user just asked you a question about their trading. You have been given thei
 3. Give a direct, precise, data-driven answer using their actual figures — never invent numbers.
 4. Proactively surface any important pattern you notice (good or bad) that's relevant to their question.
 5. End with one specific, actionable recommendation.
+6. Prop-firm rules may be present under activePropFirmRule and availableTopstepRules. Use them directly and never claim rule information is unavailable when those fields contain a matching rule.
+7. Never invent a prop-firm rule. If no matching structured rule exists, say it is not in Flyxa's verified catalog.
 
 Style rules:
 - Plain conversational English. No bullet lists. No markdown headers.

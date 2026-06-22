@@ -20,36 +20,22 @@ type TradeDir   = 'long' | 'short';
 type Outcome    = 'win' | 'loss' | 'be';
 
 const C = {
-  text:   'rgba(232,227,220,0.65)',
-  muted:  'rgba(138,129,120,0.48)',
-  subtle: 'rgba(92,87,81,0.42)',
-  amber:  'rgba(245,158,11,0.85)',
-  green:  'rgba(52,211,153,0.85)',
-  red:    'rgba(248,113,113,0.85)',
-  border: 'rgba(255,255,255,0.04)',
+  bg:     '#0c0c0e',
+  text:   'rgba(232,227,220,0.92)',
+  muted:  'rgba(180,174,165,0.70)',
+  subtle: 'rgba(138,129,120,0.50)',
+  amber:  '#f59e0b',
+  green:  '#34d399',
+  red:    '#f87171',
+  border: 'rgba(255,255,255,0.07)',
   sans:   'var(--font-sans)',
   mono:   'var(--font-mono)',
 } as const;
 
-const EMOTIONS: Array<{ full: string; short: string }> = [
-  { full: 'Calm',          short: 'Clm'  },
-  { full: 'Focused',       short: 'Foc'  },
-  { full: 'Rushed',        short: 'Rush' },
-  { full: 'FOMO',          short: 'FOMO' },
-  { full: 'Revenge',       short: 'Rev'  },
-  { full: 'Anxious',       short: 'Anx'  },
-  { full: 'Overconfident', short: 'OC'   },
-];
-
 function todayKey() { return new Date().toISOString().slice(0, 10); }
-
 
 function fmtMoney(v: number) {
   return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function isTilt(v: string) {
-  return /revenge|fomo|rushed|anxious|overconfident|angry|frustrated|tilt/i.test(v);
 }
 
 // A win OR a break-even resets the consecutive loss streak.
@@ -105,7 +91,6 @@ export default function TradeCheck() {
   const activePreSession                                      = useFlyxaStore(state => state.preSession);
   const preSessionHistory                                    = useFlyxaStore(state => state.preSessionHistory);
 
-  const [emotion, setEmotion]             = useState('Calm');
   const [phase, setPhase]                 = useState<Phase>('idle');
   const [direction, setDirection]         = useState<TradeDir | null>(null);
   const [outcome, setOutcome]             = useState<Outcome | null>(null);
@@ -193,10 +178,6 @@ export default function TradeCheck() {
     else if (consec === 1)
       flags.push(flag('caution', 'Post-loss — confirm thesis'));
 
-    // Emotion
-    if (isTilt(emotion))
-      flags.push(flag(emotion === 'Revenge' || emotion === 'FOMO' ? 'blocked' : 'caution', `${emotion} detected`));
-
     // Pre-session brief
     if (preSession?.readiness?.status === 'Stand Down')
       flags.push(flag('blocked', 'Pre-session: stand down'));
@@ -216,8 +197,7 @@ export default function TradeCheck() {
       const rule = priorFlow.tomorrowRule.toLowerCase();
       const blocked =
         (rule.includes('max 2 trades') && tradeCount >= 2) ||
-        (rule.includes('stop after 2 losses') && consec >= 2) ||
-        (rule.includes('after any frustration') && isTilt(emotion));
+        (rule.includes('stop after 2 losses') && consec >= 2);
       flags.push(flag(blocked ? 'blocked' : 'caution', `Rule: ${priorFlow.tomorrowRule}`));
     }
 
@@ -229,9 +209,9 @@ export default function TradeCheck() {
       : flags.some(f => f.status === 'caution') ? 'caution' : 'clear';
 
     return { status, flags, sessionPnl, sessionLoss, tradeCount, lossPct: Math.round(lossPct), lossLimit, profitTarget };
-  }, [sessionTrades, dailyStatus, riskSettings, emotion, preSessionHistory, priorFlow, riskLevel]);
+  }, [sessionTrades, dailyStatus, riskSettings, preSessionHistory, priorFlow, riskLevel]);
 
-  // Reminders for active phase — pulled from pre-session data + emotion
+  // Reminders for active phase — pulled from pre-session data
   const reminders = useMemo<string[]>(() => {
     const list: string[] = [];
     const activePlan = activePreSession?.sessionPlan ?? [];
@@ -239,10 +219,9 @@ export default function TradeCheck() {
     if (priorFlow?.tomorrowRule) list.push(priorFlow.tomorrowRule);
     list.push('Respect your TP — no early exits');
     list.push("Don't move SL into a loss");
-    if (isTilt(emotion)) list.push(`${emotion} state — pause before exiting`);
-    else list.push('Stick to the plan, no improvising');
+    list.push('Stick to the plan, no improvising');
     return list.slice(0, 3);
-  }, [activePreSession?.sessionPlan, priorFlow, emotion]);
+  }, [activePreSession?.sessionPlan, priorFlow]);
 
   // Post-trade session health score
   const healthResult = useMemo(() => {
@@ -255,7 +234,6 @@ export default function TradeCheck() {
     if (consec >= 3) score -= 50;
     else if (consec >= 2) score -= 35;
     else if (consec === 1) score -= 12;
-    if (isTilt(emotion)) score -= 18;
     score = Math.max(0, Math.min(100, score));
 
     const color = score >= 65 ? C.green : score >= 40 ? C.amber : C.red;
@@ -266,7 +244,7 @@ export default function TradeCheck() {
       'Consider stepping down.';
 
     return { score, color, msg };
-  }, [phase, outcome, sessionTrades, gate.lossPct, gate.status, emotion]);
+  }, [phase, outcome, sessionTrades, gate.lossPct, gate.status]);
 
   const maxTrades = dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day ?? 0;
 
@@ -372,25 +350,37 @@ export default function TradeCheck() {
 
   // ── Render ────────────────────────────────────────────────────────
   return (
-    <main style={{ background: 'transparent', color: C.text, fontFamily: C.sans, padding: '7px 8px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <main style={{ background: C.bg, color: C.text, fontFamily: C.sans, padding: '8px', display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
 
       {/* ══ IDLE ════════════════════════════════════════════════════ */}
       {phase === 'idle' && (
         <>
-          {/* Verdict row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <sc.Icon size={11} color={sc.color} />
-              <span style={{ fontSize: 13, fontWeight: 760, color: sc.color, lineHeight: 1, letterSpacing: '-0.01em' }}>{sc.label}</span>
+          {/* Status badge */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '6px 8px',
+            background: `${sc.color}0e`,
+            border: `1px solid ${sc.color}28`,
+            borderRadius: 5,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: '50%',
+                background: sc.color,
+                display: 'inline-block', flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: sc.color, lineHeight: 1, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                {sc.label}
+              </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               {gate.sessionPnl !== 0 && (
                 <span style={{ fontSize: 10, fontFamily: C.mono, fontWeight: 700, color: gate.sessionPnl > 0 ? C.green : C.red }}>
                   {gate.sessionPnl > 0 ? '+' : ''}{fmtMoney(gate.sessionPnl)}
                 </span>
               )}
               <button type="button" onClick={openLimitEditor}
-                style={{ fontSize: 8, fontWeight: 600, color: C.amber, background: 'none', border: 'none', cursor: 'pointer', padding: 0, letterSpacing: '0.04em' }}>
+                style={{ fontSize: 8.5, fontWeight: 600, color: C.amber, background: 'none', border: `1px solid ${C.amber}30`, cursor: 'pointer', padding: '2px 6px', letterSpacing: '0.05em', borderRadius: 3, fontFamily: C.sans }}>
                 edit
               </button>
             </div>
@@ -402,9 +392,9 @@ export default function TradeCheck() {
               {/* Loss bar */}
               {gate.lossLimit > 0 && (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                    <span style={{ fontSize: 7.5, color: C.subtle, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Loss</span>
-                    <span style={{ fontSize: 8.5, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.muted }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                    <span style={{ fontSize: 8.5, color: C.subtle, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Loss</span>
+                    <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.muted }}>
                       {fmtMoney(gate.sessionLoss)}<span style={{ opacity: 0.45 }}> / {fmtMoney(gate.lossLimit)}</span>
                     </span>
                   </div>
@@ -412,10 +402,11 @@ export default function TradeCheck() {
                     <div style={{ height: '100%', borderRadius: 2,
                       width: `${Math.min(100, gate.lossPct)}%`,
                       background: gate.lossPct >= 100 ? C.red
-                        : gate.sessionPnl > 0 ? 'rgba(52,211,153,0.70)'
+                        : gate.sessionPnl > 0 ? C.green
                         : gate.lossPct >= 80 ? C.red
-                        : gate.sessionPnl < 0 ? 'rgba(248,113,113,0.70)'
+                        : gate.sessionPnl < 0 ? 'rgba(248,113,113,0.65)'
                         : 'rgba(255,255,255,0.10)',
+                      boxShadow: gate.lossPct >= 80 ? `0 0 6px ${C.red}80` : undefined,
                       transition: 'width 0.4s ease, background 0.3s ease' }} />
                   </div>
                 </div>
@@ -424,9 +415,9 @@ export default function TradeCheck() {
               {/* Trade segments */}
               {maxTrades > 0 && (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                    <span style={{ fontSize: 7.5, color: C.subtle, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Trades</span>
-                    <span style={{ fontSize: 8.5, fontFamily: C.mono, color: gate.tradeCount >= maxTrades ? C.red : C.muted }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                    <span style={{ fontSize: 8.5, color: C.subtle, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Trades</span>
+                    <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.tradeCount >= maxTrades ? C.red : C.muted }}>
                       {gate.tradeCount}<span style={{ opacity: 0.45 }}> / {maxTrades}</span>
                     </span>
                   </div>
@@ -454,9 +445,9 @@ export default function TradeCheck() {
               {/* Profit target bar */}
               {gate.profitTarget !== null && gate.profitTarget > 0 && (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                    <span style={{ fontSize: 7.5, color: C.subtle, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Target</span>
-                    <span style={{ fontSize: 8.5, fontFamily: C.mono, color: gate.sessionPnl >= gate.profitTarget ? C.green : C.muted }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                    <span style={{ fontSize: 8.5, color: C.subtle, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Target</span>
+                    <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.sessionPnl >= gate.profitTarget ? C.green : C.muted }}>
                       {fmtMoney(Math.max(0, gate.sessionPnl))}<span style={{ opacity: 0.45 }}> / {fmtMoney(gate.profitTarget)}</span>
                     </span>
                   </div>
@@ -464,6 +455,7 @@ export default function TradeCheck() {
                     <div style={{ height: '100%', borderRadius: 2,
                       width: `${Math.min(100, Math.max(0, (gate.sessionPnl / gate.profitTarget) * 100))}%`,
                       background: gate.sessionPnl >= gate.profitTarget ? C.green : 'rgba(52,211,153,0.38)',
+                      boxShadow: gate.sessionPnl >= gate.profitTarget ? `0 0 6px ${C.green}80` : undefined,
                       transition: 'width 0.4s ease' }} />
                   </div>
                 </div>
@@ -471,15 +463,15 @@ export default function TradeCheck() {
 
               {/* No limits set hint */}
               {gate.lossLimit === 0 && maxTrades === 0 && gate.profitTarget === null && (
-                <span style={{ fontSize: 8.5, color: C.subtle }}>no limits set</span>
+                <span style={{ fontSize: 10, color: C.subtle }}>no limits set — <button type="button" onClick={openLimitEditor} style={{ background: 'none', border: 'none', color: C.amber, cursor: 'pointer', fontSize: 10, padding: 0, fontFamily: C.sans }}>add limits</button></span>
               )}
             </>
           )}
 
           {/* Limit editor (inline) */}
           {showLimits && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                 {([
                   { key: 'loss',      label: 'Loss $',        required: true  },
                   { key: 'trades',    label: 'Max trades',    required: true  },
@@ -487,25 +479,25 @@ export default function TradeCheck() {
                   { key: 'contracts', label: 'Max contracts', required: false },
                 ] as const).map(({ key, label, required }) => (
                   <div key={key}>
-                    <p style={{ margin: '0 0 2px', fontSize: 7.5, color: C.subtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                    <p style={{ margin: '0 0 3px', fontSize: 8.5, color: C.subtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                       {label}{!required && <span style={{ opacity: 0.6 }}> opt</span>}
                     </p>
                     <input type="number" min="0" step={key === 'riskPct' ? '0.1' : '1'}
                       placeholder={required ? '—' : 'skip'} value={limitDraft[key]}
                       onChange={e => setLimitDraft(prev => ({ ...prev, [key]: e.target.value }))}
                       style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${C.border}`, borderRadius: 3, padding: '3px 5px',
-                        color: C.text, fontSize: 10, fontFamily: C.mono, outline: 'none' }} />
+                        border: `1px solid ${C.border}`, borderRadius: 4, padding: '4px 6px',
+                        color: C.text, fontSize: 11, fontFamily: C.mono, outline: 'none' }} />
                   </div>
                 ))}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                 <button type="button" onClick={() => { void saveLimits(); }} disabled={limitSaving}
-                  style={{ height: 22, borderRadius: 3, fontSize: 9, fontWeight: 700, border: `1px solid ${C.amber}30`, background: `${C.amber}10`, color: C.amber, cursor: 'pointer' }}>
+                  style={{ height: 28, borderRadius: 4, fontSize: 10, fontWeight: 700, border: `1px solid ${C.amber}35`, background: `${C.amber}12`, color: C.amber, cursor: 'pointer' }}>
                   {limitSaving ? 'Saving…' : 'Save'}
                 </button>
                 <button type="button" onClick={() => setShowLimits(false)}
-                  style={{ height: 22, borderRadius: 3, fontSize: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.subtle, cursor: 'pointer' }}>
+                  style={{ height: 28, borderRadius: 4, fontSize: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.subtle, cursor: 'pointer' }}>
                   Cancel
                 </button>
               </div>
@@ -514,32 +506,18 @@ export default function TradeCheck() {
 
           {/* Top flag */}
           {gate.flags.length > 0 && (
-            <div style={{ borderLeft: `2px solid ${gate.flags[0].status === 'blocked' ? C.red : C.amber}`, paddingLeft: 6, paddingTop: 1, paddingBottom: 1 }}>
-              <span style={{ fontSize: 9, fontWeight: 600, color: gate.flags[0].status === 'blocked' ? C.red : C.amber, display: 'block', lineHeight: 1.3, letterSpacing: '0.01em' }}>
+            <div style={{
+              borderLeft: `2px solid ${gate.flags[0].status === 'blocked' ? C.red : C.amber}`,
+              paddingLeft: 7, paddingTop: 4, paddingBottom: 4,
+              background: gate.flags[0].status === 'blocked' ? `${C.red}0a` : `${C.amber}0a`,
+              borderRadius: '0 4px 4px 0',
+            }}>
+              <span style={{ fontSize: 9.5, fontWeight: 650, color: gate.flags[0].status === 'blocked' ? C.red : C.amber, display: 'block', lineHeight: 1.35, letterSpacing: '0.01em' }}>
                 {gate.flags[0].label}
               </span>
-              {gate.flags.length > 1 && <span style={{ fontSize: 8, color: C.subtle }}>+{gate.flags.length - 1}</span>}
+              {gate.flags.length > 1 && <span style={{ fontSize: 8.5, color: C.subtle }}>+{gate.flags.length - 1} more</span>}
             </div>
           )}
-
-          {/* Emotion pills */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 2 }}>
-            {EMOTIONS.map(({ full, short }) => {
-              const on   = emotion === full;
-              const tilt = isTilt(full);
-              return (
-                <button key={full} type="button" title={full} onClick={() => setEmotion(full)}
-                  style={{ height: 20, borderRadius: 3, fontSize: 8, fontWeight: on ? 700 : 500,
-                    cursor: 'pointer', padding: 0, overflow: 'hidden', transition: 'all 0.12s',
-                    border: on ? `1px solid ${tilt ? 'rgba(248,113,113,0.45)' : 'rgba(52,211,153,0.38)'}` : `1px solid ${C.border}`,
-                    background: on ? (tilt ? 'rgba(248,113,113,0.10)' : 'rgba(52,211,153,0.07)') : 'rgba(255,255,255,0.02)',
-                    color: on ? (tilt ? C.red : C.green) : C.subtle,
-                  }}>
-                  {short}
-                </button>
-              );
-            })}
-          </div>
 
           {/* Enter trade */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
@@ -553,9 +531,9 @@ export default function TradeCheck() {
               type="button"
               onClick={handleNewSession}
               style={{
-                background: 'none', border: `1px solid rgba(255,255,255,0.07)`,
-                borderRadius: 4, color: C.subtle, fontSize: 8, fontWeight: 600,
-                cursor: 'pointer', padding: '4px 0', letterSpacing: '0.06em',
+                background: 'none', border: `1px solid rgba(255,255,255,0.08)`,
+                borderRadius: 5, color: C.subtle, fontSize: 9, fontWeight: 600,
+                cursor: 'pointer', padding: '5px 0', letterSpacing: '0.06em',
                 textTransform: 'uppercase', width: '100%',
               }}
             >
@@ -568,11 +546,21 @@ export default function TradeCheck() {
       {/* ══ ACTIVE ══════════════════════════════════════════════════ */}
       {phase === 'active' && direction && (
         <>
-          {/* Direction + abort */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Direction banner */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '6px 8px',
+            background: direction === 'long' ? `${C.green}0e` : `${C.red}0e`,
+            border: `1px solid ${direction === 'long' ? `${C.green}28` : `${C.red}28`}`,
+            borderRadius: 5,
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: direction === 'long' ? C.green : C.red, boxShadow: `0 0 6px ${direction === 'long' ? C.green : C.red}99`, display: 'inline-block', flexShrink: 0 }} />
-              <span style={{ fontSize: 13, fontWeight: 750, letterSpacing: '0.04em', color: direction === 'long' ? C.green : C.red }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: '50%',
+                background: direction === 'long' ? C.green : C.red,
+                display: 'inline-block', flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: direction === 'long' ? C.green : C.red, textTransform: 'uppercase' }}>
                 {direction === 'long' ? 'LONG' : 'SHORT'}
               </span>
               <span style={{ fontSize: 9, color: C.subtle }}>in trade</span>
@@ -581,7 +569,7 @@ export default function TradeCheck() {
               type="button"
               title="Abort — back to Lens"
               onClick={() => { setPhase('idle'); setPendingClose(null); }}
-              style={{ background: 'none', border: 'none', color: C.subtle, fontSize: 10, cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
+              style={{ background: 'none', border: 'none', color: C.subtle, fontSize: 12, cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
             >✕</button>
           </div>
 
@@ -590,9 +578,9 @@ export default function TradeCheck() {
             <p style={KICKER}>Reminders</p>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {reminders.map((r, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, padding: '4px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
-                  <span style={{ color: C.subtle, fontSize: 9, lineHeight: '14px', flexShrink: 0, marginTop: 1 }}>–</span>
-                  <span style={{ fontSize: 9.5, color: 'rgba(232,227,220,0.50)', lineHeight: 1.4 }}>{r}</span>
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                  <span style={{ color: C.amber, fontSize: 9, lineHeight: '15px', flexShrink: 0 }}>–</span>
+                  <span style={{ fontSize: 10, color: 'rgba(232,227,220,0.58)', lineHeight: 1.45 }}>{r}</span>
                 </div>
               ))}
             </div>
@@ -600,7 +588,7 @@ export default function TradeCheck() {
 
           {/* Close trade — Win/Loss/BE OR amount entry */}
           {pendingClose === null ? (
-            <div style={{ marginTop: 4 }}>
+            <div style={{ marginTop: 2 }}>
               <p style={KICKER}>Close trade</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
                 <button type="button" onClick={() => setPendingClose({ outcome: 'win',  amount: '' })} style={outcomeBtn(C.green)}>Win</button>
@@ -609,14 +597,14 @@ export default function TradeCheck() {
               </div>
             </div>
           ) : (
-            <div style={{ marginTop: 4 }}>
+            <div style={{ marginTop: 2 }}>
               <p style={KICKER}>{pendingClose.outcome === 'win' ? 'Win amount' : 'Loss amount'}</p>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', flexShrink: 0, color: pendingClose.outcome === 'win' ? C.green : C.red }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', flexShrink: 0, color: pendingClose.outcome === 'win' ? C.green : C.red, textTransform: 'uppercase' }}>
                   {pendingClose.outcome === 'win' ? 'WIN' : 'LOSS'}
                 </span>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.04)', border: `1px solid ${pendingClose.outcome === 'win' ? C.green : C.red}28`, borderRadius: 3, padding: '0 6px' }}>
-                  <span style={{ fontSize: 10, color: C.subtle, marginRight: 2, flexShrink: 0 }}>$</span>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.04)', border: `1px solid ${pendingClose.outcome === 'win' ? C.green : C.red}28`, borderRadius: 4, padding: '0 6px' }}>
+                  <span style={{ fontSize: 11, color: C.subtle, marginRight: 2, flexShrink: 0 }}>$</span>
                   <input
                     type="number"
                     min="0"
@@ -628,26 +616,21 @@ export default function TradeCheck() {
                     // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
                     style={{
-                      width: '100%',
-                      background: 'transparent',
-                      border: 'none',
-                      color: C.text,
-                      fontSize: 11,
-                      fontFamily: C.mono,
-                      padding: '4px 0',
-                      outline: 'none',
+                      width: '100%', background: 'transparent', border: 'none',
+                      color: C.text, fontSize: 12, fontFamily: C.mono,
+                      padding: '5px 0', outline: 'none',
                     }}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={handleConfirmClose}
-                  style={{ height: 26, width: 28, borderRadius: 3, fontSize: 12, flexShrink: 0, border: `1px solid ${pendingClose.outcome === 'win' ? C.green : C.red}30`, background: `${pendingClose.outcome === 'win' ? C.green : C.red}10`, color: pendingClose.outcome === 'win' ? C.green : C.red, cursor: 'pointer' }}
+                  style={{ height: 26, width: 26, borderRadius: 4, fontSize: 12, flexShrink: 0, border: `1px solid ${pendingClose.outcome === 'win' ? C.green : C.red}35`, background: `${pendingClose.outcome === 'win' ? C.green : C.red}12`, color: pendingClose.outcome === 'win' ? C.green : C.red, cursor: 'pointer' }}
                 >✓</button>
                 <button
                   type="button"
                   onClick={() => setPendingClose(null)}
-                  style={{ height: 26, width: 24, borderRadius: 3, fontSize: 10, flexShrink: 0, border: '1px solid rgba(255,255,255,0.06)', background: 'transparent', color: C.subtle, cursor: 'pointer' }}
+                  style={{ height: 26, width: 22, borderRadius: 4, fontSize: 10, flexShrink: 0, border: '1px solid rgba(255,255,255,0.07)', background: 'transparent', color: C.subtle, cursor: 'pointer' }}
                 >✕</button>
               </div>
             </div>
@@ -661,35 +644,43 @@ export default function TradeCheck() {
         const wins = sessionTrades.filter(t => t.outcome === 'win').length;
         const losses = sessionTrades.filter(t => t.outcome === 'loss').length;
         const bes = sessionTrades.filter(t => t.outcome === 'be').length;
+        const outColor = outcome === 'win' ? C.green : outcome === 'loss' ? C.red : C.amber;
         return (
           <>
-            {/* Outcome + amount */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 17, fontWeight: 780, lineHeight: 1, letterSpacing: '-0.02em', color: outcome === 'win' ? C.green : outcome === 'loss' ? C.red : C.amber }}>
-                {outcome === 'win' ? 'WIN' : outcome === 'loss' ? 'LOSS' : 'BE'}
-              </span>
-              {last && last.amount > 0 && (
-                <span style={{ fontSize: 10, fontFamily: C.mono, fontWeight: 700, color: outcome === 'win' ? C.green : outcome === 'loss' ? C.red : C.amber }}>
-                  {outcome === 'win' ? '+' : outcome === 'loss' ? '−' : ''}{fmtMoney(last.amount)}
+            {/* Outcome card */}
+            <div style={{
+              padding: '7px 9px',
+              background: `${outColor}0d`,
+              border: `1px solid ${outColor}28`,
+              borderRadius: 5,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                <span style={{ fontSize: 17, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em', color: outColor }}>
+                  {outcome === 'win' ? 'WIN' : outcome === 'loss' ? 'LOSS' : 'BE'}
                 </span>
-              )}
-              <span style={{ fontSize: 9, color: C.subtle, marginLeft: 'auto' }}>
-                {direction === 'long' ? '↑ long' : '↓ short'}
-              </span>
+                {last && last.amount > 0 && (
+                  <span style={{ fontSize: 11, fontFamily: C.mono, fontWeight: 700, color: outColor }}>
+                    {outcome === 'win' ? '+' : outcome === 'loss' ? '−' : ''}{fmtMoney(last.amount)}
+                  </span>
+                )}
+                <span style={{ fontSize: 9, color: C.subtle, marginLeft: 'auto' }}>
+                  {direction === 'long' ? '↑ long' : '↓ short'}
+                </span>
+              </div>
             </div>
 
-            {/* Session summary — cross-referenced with pre-session limits */}
+            {/* Session summary */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, color: C.subtle }}>
+              <span style={{ fontSize: 9.5, color: C.subtle, fontFamily: C.mono }}>
                 {wins}W {losses}L{bes > 0 ? ` ${bes}BE` : ''}
               </span>
               {gate.sessionPnl !== 0 && (
-                <span style={{ fontSize: 9, fontFamily: C.mono, fontWeight: 600, color: gate.sessionPnl > 0 ? C.green : C.red }}>
+                <span style={{ fontSize: 9.5, fontFamily: C.mono, fontWeight: 600, color: gate.sessionPnl > 0 ? C.green : C.red }}>
                   {gate.sessionPnl > 0 ? '+' : ''}{fmtMoney(gate.sessionPnl)} net
                 </span>
               )}
               {gate.lossLimit > 0 && (
-                <span style={{ fontSize: 9, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.subtle }}>
+                <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.subtle }}>
                   {gate.lossPct}% of limit
                 </span>
               )}
@@ -701,13 +692,13 @@ export default function TradeCheck() {
                 <span style={{ ...KICKER, margin: 0 }}>Session health</span>
                 <span style={{ fontSize: 9.5, fontFamily: C.mono, fontWeight: 700, color: healthResult.color }}>{healthResult.score}</span>
               </div>
-              <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: 2, width: `${healthResult.score}%`, background: healthResult.color, transition: 'width 0.5s cubic-bezier(0.16,1,0.3,1)' }} />
+              <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 2, width: `${healthResult.score}%`, background: healthResult.color, boxShadow: `0 0 8px ${healthResult.color}70`, transition: 'width 0.5s cubic-bezier(0.16,1,0.3,1)' }} />
               </div>
             </div>
 
             {/* Recommendation */}
-            <p style={{ margin: 0, fontSize: 10.5, fontWeight: 640, lineHeight: 1.4, letterSpacing: '0.005em', color: healthResult.color }}>
+            <p style={{ margin: 0, fontSize: 10.5, fontWeight: 650, lineHeight: 1.4, letterSpacing: '0.005em', color: healthResult.color }}>
               {healthResult.msg}
             </p>
 
@@ -727,8 +718,8 @@ export default function TradeCheck() {
 
 const KICKER: React.CSSProperties = {
   margin: '0 0 4px',
-  fontSize: 8,
-  color: 'rgba(92,87,81,0.42)',
+  fontSize: 8.5,
+  color: 'rgba(138,129,120,0.48)',
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
   fontWeight: 600,
@@ -736,33 +727,33 @@ const KICKER: React.CSSProperties = {
 
 function dirBtn(color: string, disabled: boolean): React.CSSProperties {
   return {
-    height: 26, borderRadius: 4, fontSize: 10, fontWeight: 700,
-    border: `1px solid ${color}${disabled ? '18' : '28'}`,
-    background: `${color}${disabled ? '04' : '08'}`,
-    color: disabled ? `${color}44` : color,
+    height: 28, borderRadius: 4, fontSize: 11, fontWeight: 700,
+    border: `1px solid ${color}${disabled ? '18' : '38'}`,
+    background: disabled ? 'rgba(255,255,255,0.02)' : `${color}12`,
+    color: disabled ? `${color}30` : color,
     cursor: disabled ? 'not-allowed' : 'pointer',
-    letterSpacing: '0.04em',
-    transition: 'all 0.1s',
+    letterSpacing: '0.06em',
+    transition: 'all 0.12s',
   };
 }
 
 function outcomeBtn(color: string): React.CSSProperties {
   return {
-    height: 26, borderRadius: 4, fontSize: 10, fontWeight: 700,
-    border: `1px solid ${color}28`,
-    background: `${color}08`,
+    height: 28, borderRadius: 4, fontSize: 11, fontWeight: 700,
+    border: `1px solid ${color}32`,
+    background: `${color}0e`,
     color, cursor: 'pointer',
     letterSpacing: '0.04em',
-    transition: 'all 0.1s',
+    transition: 'all 0.12s',
   };
 }
 
 function actionBtn(variant: 'primary' | 'ghost'): React.CSSProperties {
   return {
-    height: 24, borderRadius: 4, fontSize: 9.5, fontWeight: 650,
-    border: variant === 'primary' ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.04)',
-    background: variant === 'primary' ? 'rgba(255,255,255,0.04)' : 'transparent',
-    color: variant === 'primary' ? 'rgba(138,129,120,0.8)' : 'rgba(92,87,81,0.65)',
+    height: 26, borderRadius: 4, fontSize: 9.5, fontWeight: 650,
+    border: variant === 'primary' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.05)',
+    background: variant === 'primary' ? 'rgba(255,255,255,0.06)' : 'transparent',
+    color: variant === 'primary' ? 'rgba(210,204,195,0.85)' : 'rgba(138,129,120,0.65)',
     cursor: 'pointer',
   };
 }

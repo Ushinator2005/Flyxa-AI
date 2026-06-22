@@ -111,6 +111,15 @@ export interface Account {
   isActive: boolean;
   color?: string;
   payouts?: Payout[];
+  evaluationTemplateId?: string;
+  minimumTradingDays?: number;
+  maxContracts?: number;
+  consistencyLimitPct?: number | null;
+  drawdownType?: 'static' | 'trailing';
+  evaluationStartedAt?: string;
+  firmRuleVersionId?: string;
+  evaluationPath?: 'standard' | 'no_activation_fee';
+  dailyLossMode?: 'none' | 'purchase_fixed' | 'personal';
 }
 
 export interface Achievement {
@@ -200,6 +209,15 @@ export interface BillingAccount {
   payouts?: BillingPayout[];
   notes?: string;
   roi?: number;
+  pricingPath?: 'standard' | 'no_activation_fee';
+  activationFee?: number;
+  dailyLossMode?: 'none' | 'purchase_fixed';
+  optionalDailyLossLimit?: number | null;
+  firmRuleVersionId?: string;
+  ruleVerifiedAt?: string;
+  ruleSourceUrl?: string;
+  responsibleTradingDiscount?: number;
+  responsibleTradingBenefit?: string;
 }
 
 export interface ScannerColors {

@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Brain, BarChart2, Target,
   FileText, Crosshair, Swords, Trophy,
-  Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck,
+  Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
@@ -37,6 +37,7 @@ const primaryNavItems: NavItemDef[] = [
   { path: '/',             icon: LayoutDashboard, label: 'Dashboard',    extraActivePaths: [] },
   { path: '/scanner',      icon: ScanLine,        label: 'Trade Scanner' },
   { path: '/pre-session',  icon: ClipboardCheck,  label: 'Session',      extraActivePaths: ['/post-session'] },
+  { path: '/evaluation-coach', icon: ShieldCheck,  label: 'Evaluation'   },
   { path: '/analytics',    icon: BarChart2,       label: 'Analytics'     },
   { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
   { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
