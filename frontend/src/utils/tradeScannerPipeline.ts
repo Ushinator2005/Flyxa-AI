@@ -26,6 +26,7 @@ export interface ScannerContext {
   target_line_ratio?: number
   red_box?: Omit<ComponentBounds, 'count'>
   green_box?: Omit<ComponentBounds, 'count'>
+  entry_box?: Omit<ComponentBounds, 'count'>
 }
 
 const SYMBOL_MAP: Record<string, string> = {
@@ -171,6 +172,12 @@ function isRedOverlay(r: number, g: number, b: number): boolean {
   return r > g + 12 && r > b + 6 && r > 150
 }
 
+function isNeutralOverlay(r: number, g: number, b: number): boolean {
+  const mx = Math.max(r, g, b)
+  const mn = Math.min(r, g, b)
+  return (mx - mn) < 30 && mx > 65 && mx < 215
+}
+
 function hexToRgbParts(hex: string): { r: number; g: number; b: number } | null {
   const cleaned = hex.replace('#', '')
   if (cleaned.length !== 6) return null
@@ -212,6 +219,15 @@ function makeZoneMatcher(
   if (cg > cr - 20 && cb > cr - 20 && cg > 60 && cb > 60 && cr < 80) {
     // Teal/cyan (e.g. #1A6B5A — low R, similar G+B)
     return (pr, pg, pb) => pg > pr + 15 && pb > pr + 10 && pg > 50
+  }
+  // Neutral/grey — low saturation (all channels similar)
+  const sat = Math.max(cr, cg, cb) - Math.min(cr, cg, cb)
+  if (sat < 35) {
+    return (pr, pg, pb) => {
+      const mx = Math.max(pr, pg, pb)
+      const mn = Math.min(pr, pg, pb)
+      return (mx - mn) < 30 && mx > 65 && mx < 215
+    }
   }
   return fallback
 }
@@ -283,6 +299,7 @@ function detectTradeBoxContext(
   image: HTMLImageElement,
   stopHex?: string,
   tpHex?: string,
+  entryHex?: string,
 ): ScannerContext | null {
   const targetWidth = Math.min(640, image.naturalWidth || image.width)
   const scale = targetWidth / (image.naturalWidth || image.width)
@@ -300,6 +317,7 @@ function detectTradeBoxContext(
   const { data } = context.getImageData(0, 0, width, height)
   const redMask = new Uint8Array(width * height)
   const greenMask = new Uint8Array(width * height)
+  const entryMask = entryHex ? new Uint8Array(width * height) : null
 
   const matchStop = stopHex
     ? makeZoneMatcher(stopHex, isRedOverlay)
@@ -307,6 +325,9 @@ function detectTradeBoxContext(
   const matchTp = tpHex
     ? makeZoneMatcher(tpHex, isGreenOverlay)
     : isGreenOverlay
+  const matchEntry = entryHex
+    ? makeZoneMatcher(entryHex, isNeutralOverlay)
+    : null
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -319,12 +340,16 @@ function detectTradeBoxContext(
 
       if (matchStop(r, g, b)) redMask[pixelIndex] = 1
       if (matchTp(r, g, b)) greenMask[pixelIndex] = 1
+      if (matchEntry && entryMask && matchEntry(r, g, b)) entryMask[pixelIndex] = 1
     }
   }
 
   const redBox = findLargestComponent(redMask, width, height)
   const greenBox = findLargestComponent(greenMask, width, height)
   if (!redBox || !greenBox || redBox.count < 200 || greenBox.count < 200) return null
+
+  const entryBox = entryMask ? findLargestComponent(entryMask, width, height) : null
+  const hasEntryBox = entryBox !== null && entryBox.count >= 150
 
   const boxLeftRatio = Math.min(redBox.xMin, greenBox.xMin) / width
   const boxRightRatio = Math.max(redBox.xMax, greenBox.xMax) / width
@@ -339,11 +364,16 @@ function detectTradeBoxContext(
   let targetLineRatio: number | undefined
 
   if (directionHint === 'Long') {
-    entryLineRatio = greenBox.yMax / height
+    // Use center of detected entry box if available, otherwise infer from TP zone edge
+    entryLineRatio = hasEntryBox
+      ? ((entryBox!.yMin + entryBox!.yMax) / 2) / height
+      : greenBox.yMax / height
     stopLineRatio = redBox.yMax / height
     targetLineRatio = greenBox.yMin / height
   } else if (directionHint === 'Short') {
-    entryLineRatio = redBox.yMax / height
+    entryLineRatio = hasEntryBox
+      ? ((entryBox!.yMin + entryBox!.yMax) / 2) / height
+      : redBox.yMax / height
     stopLineRatio = redBox.yMin / height
     targetLineRatio = greenBox.yMax / height
   }
@@ -363,6 +393,7 @@ function detectTradeBoxContext(
     target_line_ratio: targetLineRatio,
     red_box: toRatioBounds(redBox, width, height),
     green_box: toRatioBounds(greenBox, width, height),
+    entry_box: hasEntryBox ? toRatioBounds(entryBox!, width, height) : undefined,
   }
 }
 
@@ -444,7 +475,7 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
 
 export async function buildScannerAssets(
   file: File,
-  colors?: { stopLoss?: string; takeProfit?: string },
+  colors?: { entry?: string; stopLoss?: string; takeProfit?: string },
 ): Promise<{
   focusImages: File[]
   scannerContext: Record<string, unknown> | null
@@ -452,7 +483,7 @@ export async function buildScannerAssets(
 }> {
   const image = await loadImage(file)
   const sourceType = file.type || 'image/png'
-  const scannerContext = detectTradeBoxContext(image, colors?.stopLoss, colors?.takeProfit)
+  const scannerContext = detectTradeBoxContext(image, colors?.stopLoss, colors?.takeProfit, colors?.entry)
   const focusCrops = buildDynamicFocusCrops(scannerContext)
 
   const focusImages = await Promise.all(

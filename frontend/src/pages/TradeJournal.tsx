@@ -2646,8 +2646,12 @@ export default function TradeJournal() {
       });
       setScanPreviewUrl(fileDataUrl);
 
-      const { focusImages, scannerContext, uploadImage } = await buildScannerAssets(file);
       const colors = preferences.scannerColors;
+      const { focusImages, scannerContext, uploadImage } = await buildScannerAssets(file, {
+        entry: colors?.entry,
+        stopLoss: colors?.stopLoss,
+        takeProfit: colors?.takeProfit,
+      });
       const context = {
         ...(scannerContext ?? {}),
         scanner_colors: {
@@ -2748,7 +2752,10 @@ export default function TradeJournal() {
     }
     const handler = (e: Event) => {
       const file = (e as CustomEvent<{ file: File }>).detail?.file;
-      if (file instanceof File) void _extScanRef.current(file);
+      if (!(file instanceof File)) return;
+      // Clear the pending file so a subsequent mount can't trigger a second scan
+      delete (window as unknown as Record<string, unknown>).__flyxaPendingFile;
+      void _extScanRef.current(file);
     };
     window.addEventListener('flyxa:scan_ready', handler);
     return () => window.removeEventListener('flyxa:scan_ready', handler);

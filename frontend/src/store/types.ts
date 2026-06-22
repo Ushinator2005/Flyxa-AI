@@ -196,6 +196,7 @@ export interface BillingPayout {
 
 export interface BillingAccount {
   id: string;
+  sourceAccountId?: string;
   firm: string;
   accountType?: string;
   size: string;

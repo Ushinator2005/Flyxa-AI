@@ -19,7 +19,7 @@ const FLYXA_URLS = [
   'http://localhost:5173',
   'https://flyxa.app',
 ];
-const FLYXA_SCANNER_URL = 'http://localhost:5173/scanner';
+const FLYXA_PROD_SCANNER_URL = 'https://flyxa.app/scanner';
 
 // ─── Entry points ─────────────────────────────────────────────────────────────
 
@@ -215,11 +215,13 @@ async function captureAndSend() {
     let tabId;
 
     if (flyxaTab) {
-      await chrome.tabs.update(flyxaTab.id, { active: true, url: FLYXA_SCANNER_URL });
+      // Navigate to /scanner on whatever origin the tab is already on (localhost or flyxa.app)
+      const origin = new URL(flyxaTab.url).origin;
+      await chrome.tabs.update(flyxaTab.id, { active: true, url: `${origin}/scanner` });
       if (flyxaTab.windowId) await chrome.windows.update(flyxaTab.windowId, { focused: true });
       tabId = flyxaTab.id;
     } else {
-      tabId = (await chrome.tabs.create({ url: FLYXA_SCANNER_URL })).id;
+      tabId = (await chrome.tabs.create({ url: FLYXA_PROD_SCANNER_URL })).id;
     }
 
     // 6. Wait for the page to finish loading, then inject the event

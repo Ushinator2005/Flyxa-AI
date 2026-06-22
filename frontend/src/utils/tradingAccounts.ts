@@ -44,6 +44,20 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
     ...(account.targetBalance !== undefined ? { targetBalance: account.targetBalance } : {}),
     ...(account.archived === true ? { archived: true } : {}),
     ...(account.isDefault === true ? { isDefault: true } : {}),
+    ...(account.firmRuleVersionId !== undefined ? { firmRuleVersionId: account.firmRuleVersionId } : {}),
+    ...(account.evaluationProgram !== undefined ? { evaluationProgram: account.evaluationProgram } : {}),
+    ...(account.evaluationPath !== undefined ? { evaluationPath: account.evaluationPath } : {}),
+    ...(account.dailyLossMode !== undefined ? { dailyLossMode: account.dailyLossMode } : {}),
+    ...(account.dailyLossLimit !== undefined ? { dailyLossLimit: account.dailyLossLimit } : {}),
+    ...(account.maxDrawdown !== undefined ? { maxDrawdown: account.maxDrawdown } : {}),
+    ...(account.profitTarget !== undefined ? { profitTarget: account.profitTarget } : {}),
+    ...(account.minimumTradingDays !== undefined ? { minimumTradingDays: account.minimumTradingDays } : {}),
+    ...(account.maxContracts !== undefined ? { maxContracts: account.maxContracts } : {}),
+    ...(account.maxMicros !== undefined ? { maxMicros: account.maxMicros } : {}),
+    ...(account.consistencyLimitPct !== undefined ? { consistencyLimitPct: account.consistencyLimitPct } : {}),
+    ...(account.drawdownType !== undefined ? { drawdownType: account.drawdownType } : {}),
+    ...(account.ruleVerifiedAt !== undefined ? { ruleVerifiedAt: account.ruleVerifiedAt } : {}),
+    ...(account.ruleSourceUrl !== undefined ? { ruleSourceUrl: account.ruleSourceUrl } : {}),
   }));
 
   const withoutDuplicates = normalizedAccounts.filter((account, index, collection) => (

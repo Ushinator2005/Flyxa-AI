@@ -243,10 +243,12 @@ export default function App() {
         const dataUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
         const blob = await fetch(dataUrl).then(r => r.blob());
         const file = new File([blob], 'chart.png', { type: 'image/png' });
-        // Store for TradeJournal to consume on mount (race-condition-safe)
+        // Store for TradeJournal to consume on mount (race-condition-safe).
+        // Navigation is handled by background.js before it fires this event,
+        // so we must NOT navigate here — doing so would remount TradeJournal
+        // and cause a second scan to trigger from __flyxaPendingFile.
         (window as unknown as Record<string, unknown>).__flyxaPendingFile = file;
-        navigate('/scanner');
-        // Also fire immediately for already-mounted case
+        // Fire immediately for the already-mounted case
         window.dispatchEvent(new CustomEvent('flyxa:scan_ready', { detail: { file } }));
       } catch (err) {
         console.error('[Flyxa] Extension screenshot error:', err);

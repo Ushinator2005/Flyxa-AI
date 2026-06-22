@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   CreditCard,
+  Download,
   LayoutGrid,
   List,
   MessageSquare,
@@ -12,8 +13,10 @@ import {
   X,
 } from 'lucide-react';
 import { billingApi, type BillingLivePricesResponse } from '../services/api.js';
+import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
+import type { TradingAccount } from '../types/index.js';
 import DatePicker from '../components/common/DatePicker.js';
 import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
 
@@ -27,6 +30,7 @@ interface PayoutEntry {
 
 interface BillingAccount {
   id: string;
+  sourceAccountId?: string;
   firm: string;
   accountType: string;
   size: string;
@@ -164,6 +168,7 @@ function normalizeStatus(raw: unknown): AccountStatus {
 function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
   return {
     id: raw.id,
+    sourceAccountId: raw.sourceAccountId,
     firm: raw.firm,
     accountType: typeof (raw as unknown as { accountType?: string }).accountType === 'string'
       ? (raw as unknown as { accountType: string }).accountType
@@ -284,6 +289,38 @@ function createId() {
   return `billing-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function formatAccountSize(size?: number): string {
+  if (!size || !Number.isFinite(size)) return 'Custom';
+  return `$${Math.round(size).toLocaleString('en-US')}`;
+}
+
+function billingStatusFromTradingAccount(status: TradingAccount['status']): AccountStatus {
+  if (status === 'Funded' || status === 'Live') return 'Funded';
+  if (status === 'Passed') return 'Passed';
+  if (status === 'Blown') return 'Blown';
+  return 'Eval 1';
+}
+
+function normalizeFirmName(account: TradingAccount): string {
+  const broker = account.broker?.trim();
+  if (!broker) return 'Other';
+  return FIRM_OPTIONS.find(firm => firm.toLowerCase() === broker.toLowerCase()) ?? broker;
+}
+
+function accountTypeFromTradingAccount(account: TradingAccount, firm: string): string {
+  if (account.evaluationProgram?.trim()) return account.evaluationProgram.trim();
+  if (firm === 'Topstep') return 'Trading Combine';
+  if (account.status === 'Funded' || account.status === 'Live') return 'Funded';
+  return getDefaultAccountType(firm);
+}
+
+function catalogPriceForTradingAccount(account: TradingAccount, firm: string, size: string): number {
+  if (firm === 'Topstep') {
+    return getTopstepTemplate(size, account.evaluationPath ?? 'no_activation_fee')?.monthlyPrice ?? 0;
+  }
+  return FIRM_PRICES[firm]?.[size] ?? 0;
+}
+
 function getDefaultFormState(): BillingFormState {
   const defaultFirm = 'Apex Funded';
   const defaultAccountType = getDefaultAccountType(defaultFirm);
@@ -345,6 +382,7 @@ function getStatusDotColor(status: AccountStatus): string {
 }
 
 export default function Billing() {
+  const { accounts: tradingAccounts } = useAppSettings();
   const storeBillingAccounts = useFlyxaStore(state => state.billingAccounts);
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
   const [accounts, setAccounts] = useState<BillingAccount[]>(
@@ -354,11 +392,22 @@ export default function Billing() {
   const [firmFilter, setFirmFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
+  const [importFeedback, setImportFeedback] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<BillingFormState>(getDefaultFormState);
   const [livePricesByFirm, setLivePricesByFirm] = useState<Record<string, BillingLivePricesResponse>>({});
   const [livePricingLoadingFirm, setLivePricingLoadingFirm] = useState<string | null>(null);
   const [livePricingError, setLivePricingError] = useState<string | null>(null);
+
+  const importCandidates = useMemo(() => {
+    const importedSourceIds = new Set(accounts.map(account => account.sourceAccountId).filter(Boolean));
+    return tradingAccounts.filter(account => (
+      account.id !== DEFAULT_ACCOUNT_ID
+      && !importedSourceIds.has(account.id)
+    ));
+  }, [accounts, tradingAccounts]);
 
   useEffect(() => {
     hydrateSharedData({ billingAccounts: accounts as unknown as StoreBillingAccount[] });
@@ -404,6 +453,68 @@ export default function Billing() {
           : current
       ));
     });
+  };
+
+  const openImportModal = () => {
+    setSelectedImportIds(importCandidates.map(account => account.id));
+    setImportFeedback(null);
+    setIsImportModalOpen(true);
+  };
+
+  const importSelectedAccounts = () => {
+    const selectedIds = new Set(selectedImportIds);
+    const selectedAccounts = importCandidates.filter(account => selectedIds.has(account.id));
+    if (selectedAccounts.length === 0) return;
+
+    const imported = selectedAccounts.map((account): BillingAccount => {
+      const firm = normalizeFirmName(account);
+      const size = formatAccountSize(account.startingBalance);
+      const pricingPath = firm === 'Topstep' ? account.evaluationPath ?? 'no_activation_fee' : undefined;
+      const template = firm === 'Topstep' && pricingPath ? getTopstepTemplate(size, pricingPath) : undefined;
+      const listPrice = catalogPriceForTradingAccount(account, firm, size);
+      const responsibleDiscount = firm === 'Topstep'
+        && pricingPath === 'no_activation_fee'
+        && account.dailyLossMode === 'purchase_fixed'
+        ? template?.responsibleTradingDiscount ?? 0
+        : 0;
+      const createdDate = account.createdAt ? new Date(account.createdAt) : null;
+      const purchaseDate = createdDate && !Number.isNaN(createdDate.getTime())
+        ? createdDate.toISOString().slice(0, 10)
+        : getTodayInputDate();
+
+      return {
+        id: createId(),
+        sourceAccountId: account.id,
+        firm,
+        accountType: accountTypeFromTradingAccount(account, firm),
+        size,
+        listPrice,
+        discountCode: '',
+        discountPct: 0,
+        actualPrice: Math.max(0, listPrice - responsibleDiscount),
+        purchaseDate,
+        status: billingStatusFromTradingAccount(account.status),
+        payoutReceived: 0,
+        payouts: [],
+        notes: `Imported from account: ${account.name}${listPrice === 0 ? '. Add the purchase price to complete billing.' : ''}`,
+        pricingPath,
+        activationFee: template?.activationFee,
+        dailyLossMode: firm === 'Topstep'
+          ? account.dailyLossMode === 'purchase_fixed' ? 'purchase_fixed' : 'none'
+          : undefined,
+        optionalDailyLossLimit: template?.optionalDailyLossLimit,
+        firmRuleVersionId: account.firmRuleVersionId || template?.id,
+        ruleVerifiedAt: account.ruleVerifiedAt || template?.verifiedAt,
+        ruleSourceUrl: account.ruleSourceUrl || template?.sourceUrl,
+        responsibleTradingDiscount: responsibleDiscount || undefined,
+        responsibleTradingBenefit: responsibleDiscount > 0 ? template?.responsibleTradingBenefit : undefined,
+      };
+    });
+
+    setAccounts(current => [...imported, ...current]);
+    setIsImportModalOpen(false);
+    setSelectedImportIds([]);
+    setImportFeedback(`${imported.length} account${imported.length === 1 ? '' : 's'} imported.`);
   };
 
   const openEditModal = (account: BillingAccount) => {
@@ -577,6 +688,7 @@ export default function Billing() {
 
     const next: BillingAccount = {
       id: editingId ?? createId(),
+      sourceAccountId: editingId ? accounts.find(account => account.id === editingId)?.sourceAccountId : undefined,
       firm: form.firm.trim() || 'Other',
       accountType: form.accountType.trim() || getDefaultAccountType(form.firm.trim() || 'Other'),
       size: form.size.trim() || 'Custom',
@@ -800,12 +912,19 @@ export default function Billing() {
             {viewMode === 'table' ? <LayoutGrid size={14} /> : <List size={14} />}
             {viewMode === 'table' ? 'Pipeline' : 'Ledger'}
           </button>
+          <button type="button" className="billing-command-btn" onClick={openImportModal}>
+            <Download size={14} />
+            Import Accounts
+          </button>
           <button type="button" className="billing-command-btn primary" onClick={openAddModal}>
             <Plus size={14} />
             Add Account
           </button>
         </div>
       </section>
+      {importFeedback && (
+        <div style={{ margin: '-6px 0 14px', fontSize: 11, color: 'var(--green)' }}>{importFeedback}</div>
+      )}
 
       <section className="billing-desk">
         <article className="billing-hero-panel">
@@ -1191,6 +1310,78 @@ export default function Billing() {
           ))
         )}
       </section>
+
+      {isImportModalOpen && (
+        <div role="presentation" onClick={() => setIsImportModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.65)', display: 'grid', placeItems: 'center', zIndex: 121, padding: 16 }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Import accounts into billing"
+            onClick={event => event.stopPropagation()}
+            style={{ width: '100%', maxWidth: 560, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 24px 60px rgba(0,0,0,0.6)', overflow: 'hidden' }}
+          >
+            <header style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)' }}>Import existing accounts</h2>
+                <p style={{ margin: '5px 0 0', color: 'var(--txt-3)', fontSize: 11 }}>Bring account details into Billing. Existing imports are automatically excluded.</p>
+              </div>
+              <button type="button" onClick={() => setIsImportModalOpen(false)} style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--txt-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} aria-label="Close import modal">
+                <X size={14} />
+              </button>
+            </header>
+
+            <div style={{ padding: 16, maxHeight: '55vh', overflowY: 'auto' }}>
+              {importCandidates.length === 0 ? (
+                <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, color: 'var(--txt-2)', fontSize: 13 }}>All existing accounts are already in Billing.</p>
+                  <p style={{ margin: '6px 0 0', color: 'var(--txt-3)', fontSize: 11 }}>Add another trading account first, then return here to import it.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {importCandidates.map(account => {
+                    const checked = selectedImportIds.includes(account.id);
+                    return (
+                      <label key={account.id} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) auto', gap: 12, alignItems: 'center', border: checked ? '1px solid var(--amber-border)' : '1px solid var(--border)', background: checked ? 'var(--amber-dim)' : 'var(--surface-2)', borderRadius: 7, padding: '12px 13px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setSelectedImportIds(current => (
+                            current.includes(account.id)
+                              ? current.filter(id => id !== account.id)
+                              : [...current, account.id]
+                          ))}
+                          style={{ accentColor: 'var(--amber)' }}
+                        />
+                        <span style={{ minWidth: 0 }}>
+                          <strong style={{ display: 'block', color: 'var(--txt)', fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name}</strong>
+                          <span style={{ display: 'block', marginTop: 3, color: 'var(--txt-3)', fontSize: 10 }}>
+                            {account.broker || 'Firm not set'} · {account.evaluationProgram || account.type}
+                          </span>
+                        </span>
+                        <span style={{ textAlign: 'right' }}>
+                          <strong style={{ display: 'block', color: 'var(--txt-2)', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{formatAccountSize(account.startingBalance)}</strong>
+                          <span style={{ display: 'block', marginTop: 3, color: account.status === 'Blown' ? 'var(--red)' : account.status === 'Funded' || account.status === 'Live' ? 'var(--green)' : 'var(--txt-3)', fontSize: 10 }}>{account.status}{account.archived ? ' · Archived' : ''}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <footer style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ color: 'var(--txt-3)', fontSize: 11 }}>{selectedImportIds.length} selected</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setIsImportModalOpen(false)} className="billing-command-btn">Cancel</button>
+                <button type="button" onClick={importSelectedAccounts} className="billing-command-btn primary" disabled={selectedImportIds.length === 0} style={selectedImportIds.length === 0 ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}>
+                  <Download size={13} />
+                  Import selected
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {/* ── Add / Edit modal ─────────────────────────────────────── */}
       {isModalOpen && (
