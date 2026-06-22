@@ -52,34 +52,25 @@ function inlineChips(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*|-?\$[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?%|\b\d+\.\d+x\b|\b\d+(?:\.\d+)?R\b)/);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} style={{ color: C.acc, fontWeight: 650 }}>{part.slice(2, -2)}</strong>;
+      // Bold by weight only — no colour change so it doesn't fragment prose
+      return <strong key={i} style={{ fontWeight: 600, color: 'inherit' }}>{part.slice(2, -2)}</strong>;
     }
     if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part) || /^\d+(?:\.\d+)?%$/.test(part) || /^\d+\.\d+x$/.test(part) || /^\d+(?:\.\d+)?R$/.test(part)) {
       let display = part;
-      // Reformat dollar amounts with proper comma separators (e.g. $4016 → $4,016)
       if (/^-?\$[\d,]+(?:\.\d+)?$/.test(part)) {
         const isNeg = part.startsWith('-');
         const raw = parseFloat(part.replace(/[$,]/g, ''));
         if (!isNaN(raw)) {
           const absVal = Math.abs(raw);
-          const hasDecimals = part.includes('.');
           const formatted = absVal.toLocaleString('en-US', {
-            minimumFractionDigits: hasDecimals ? 2 : 0,
+            minimumFractionDigits: part.includes('.') ? 2 : 0,
             maximumFractionDigits: 2,
           });
           display = (isNeg ? '-$' : '$') + formatted;
         }
       }
-      return (
-        <span key={i} style={{
-          color: C.t0,
-          fontWeight: 500,
-          fontVariantNumeric: 'tabular-nums',
-          fontFamily: C.mono,
-          WebkitFontSmoothing: 'antialiased',
-          MozOsxFontSmoothing: 'grayscale',
-        }}>{display}</span>
-      );
+      // Numbers: same font/colour as body, just tabular alignment
+      return <span key={i} style={{ fontVariantNumeric: 'tabular-nums' }}>{display}</span>;
     }
     return part;
   });
