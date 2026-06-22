@@ -369,8 +369,10 @@ export function useRivals() {
       month: computePeriodStats(allSavedTrades, periodBounds('month', true)),
       season: computePeriodStats(allSavedTrades, periodBounds('season', true)),
     };
-    const periods = { ...localPeriods, ...(profile?.stats?.periods ?? {}) };
-    const previousPeriods = { ...localPreviousPeriods, ...(profile?.stats?.previousPeriods ?? {}) };
+    // Local computation always wins — backend is a mirror for others to read.
+    // Spreading local LAST ensures stale backend values never override fresh local data.
+    const periods = { ...(profile?.stats?.periods ?? {}), ...localPeriods };
+    const previousPeriods = { ...(profile?.stats?.previousPeriods ?? {}), ...localPreviousPeriods };
 
     const me: Rival = {
       id: 'rival-me',
