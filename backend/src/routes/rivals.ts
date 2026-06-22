@@ -20,6 +20,7 @@ type RivalPeriodStats = {
   equityCurve: number[];
 };
 type RivalStats = {
+  lifetimeXp: number;
   dailyJournalStreak: number;
   dailyJournalScore: number;
   tradingJournalScore: number;
@@ -33,6 +34,7 @@ type RivalStats = {
 };
 
 const EMPTY_STATS: RivalStats = {
+  lifetimeXp: 0,
   dailyJournalStreak: 0,
   dailyJournalScore: 0,
   tradingJournalScore: 0,
@@ -134,6 +136,47 @@ function emptyPeriodStats(): RivalPeriodStats {
   return { netPnl: 0, winRate: 0, tradeCount: 0, tradingDays: 0, greenDays: 0, maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [] };
 }
 
+function normalizePeriodStats(value: unknown): RivalPeriodStats | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const finiteNumber = (field: string, fallback = 0) => {
+    const numeric = typeof raw[field] === 'number' ? raw[field] : Number(raw[field]);
+    return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : fallback;
+  };
+  const equityCurve = Array.isArray(raw.equityCurve)
+    ? raw.equityCurve
+      .map(point => Number(point))
+      .filter(Number.isFinite)
+      .slice(-24)
+      .map(point => Math.round(point * 100) / 100)
+    : [];
+  return {
+    netPnl: finiteNumber('netPnl'),
+    winRate: clampScore(raw.winRate),
+    tradeCount: nonNegativeInt(raw.tradeCount),
+    tradingDays: nonNegativeInt(raw.tradingDays),
+    greenDays: nonNegativeInt(raw.greenDays),
+    maxDrawdown: Math.max(0, finiteNumber('maxDrawdown')),
+    consistency: clampScore(raw.consistency),
+    ruleAdherence: clampScore(raw.ruleAdherence),
+    riskAdjusted: finiteNumber('riskAdjusted'),
+    equityCurve,
+  };
+}
+
+function normalizePeriods(
+  value: unknown,
+  allowedPeriods: LeaderboardPeriod[]
+): Partial<Record<LeaderboardPeriod, RivalPeriodStats>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const raw = value as Record<string, unknown>;
+  return Object.fromEntries(
+    allowedPeriods
+      .map(period => [period, normalizePeriodStats(raw[period])] as const)
+      .filter((entry): entry is readonly [LeaderboardPeriod, RivalPeriodStats] => entry[1] !== null)
+  );
+}
+
 function summarizeTrades(trades: Array<Record<string, unknown>>, bounds?: [string, string]): RivalPeriodStats {
   const filtered = trades
     .filter(trade => {
@@ -183,6 +226,35 @@ function summarizeTrades(trades: Array<Record<string, unknown>>, bounds?: [strin
   };
 }
 
+function tradesFromStoreBlob(userId: string, value: unknown): Array<Record<string, unknown>> {
+  const blob = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const state = blob.state && typeof blob.state === 'object'
+    ? blob.state as Record<string, unknown>
+    : {};
+  const entries = Array.isArray(state.entries) ? state.entries : [];
+  return entries.flatMap(entryValue => {
+    if (!entryValue || typeof entryValue !== 'object') return [];
+    const entry = entryValue as Record<string, unknown>;
+    const entryDate = typeof entry.date === 'string' ? entry.date : '';
+    const trades = Array.isArray(entry.trades) ? entry.trades : [];
+    return trades.flatMap(tradeValue => {
+      if (!tradeValue || typeof tradeValue !== 'object') return [];
+      const trade = tradeValue as Record<string, unknown>;
+      const reflection = trade.reflection && typeof trade.reflection === 'object'
+        ? trade.reflection as Record<string, unknown>
+        : {};
+      return [{
+        user_id: userId,
+        pnl: trade.pnl,
+        commission: trade.commission,
+        trade_date: typeof trade.date === 'string' ? trade.date : entryDate,
+        trade_time: trade.time,
+        followed_plan: typeof reflection.followedPlan === 'boolean' ? reflection.followedPlan : null,
+      }];
+    });
+  });
+}
+
 async function getPerformanceByUserIds(userIds: string[]): Promise<Map<string, PerformanceBundle>> {
   const result = new Map<string, PerformanceBundle>();
   if (userIds.length === 0) return result;
@@ -201,8 +273,30 @@ async function getPerformanceByUserIds(userIds: string[]): Promise<Map<string, P
   }
 
   if (error) throw error;
+  const tradesByUserId = new Map<string, Array<Record<string, unknown>>>();
   for (const userId of userIds) {
     const trades = (data ?? []).filter(trade => String(trade.user_id) === userId) as Array<Record<string, unknown>>;
+    if (trades.length > 0) tradesByUserId.set(userId, trades);
+  }
+
+  const usersWithoutLegacyTrades = userIds.filter(userId => !tradesByUserId.has(userId));
+  if (usersWithoutLegacyTrades.length > 0) {
+    const { data: stores, error: storesError } = await supabase
+      .from('user_store')
+      .select('user_id, flyxa_data')
+      .in('user_id', usersWithoutLegacyTrades);
+    if (storesError) throw storesError;
+    for (const store of stores ?? []) {
+      const storeTrades = tradesFromStoreBlob(String(store.user_id), store.flyxa_data);
+      if (storeTrades.length > 0) tradesByUserId.set(String(store.user_id), storeTrades);
+    }
+  }
+
+  for (const userId of userIds) {
+    const trades = tradesByUserId.get(userId);
+    // If neither persistence path has trades, keep the last published profile
+    // snapshot instead of overwriting it with synthetic zeroes.
+    if (!trades?.length) continue;
     result.set(userId, {
       periods: {
         allTime: summarizeTrades(trades),
@@ -222,7 +316,13 @@ async function getPerformanceByUserIds(userIds: string[]): Promise<Map<string, P
 
 function normalizeStats(value: unknown): RivalStats {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const periods = normalizePeriods(raw.periods, ['week', 'month', 'season', 'allTime']);
+  const previousPeriods = normalizePeriods(
+    raw.previousPeriods,
+    ['week', 'month', 'season']
+  ) as Partial<Record<Exclude<LeaderboardPeriod, 'allTime'>, RivalPeriodStats>>;
   return {
+    lifetimeXp: nonNegativeInt(raw.lifetimeXp),
     dailyJournalStreak: nonNegativeInt(raw.dailyJournalStreak),
     dailyJournalScore: clampScore(raw.dailyJournalScore),
     tradingJournalScore: clampScore(raw.tradingJournalScore),
@@ -231,6 +331,8 @@ function normalizeStats(value: unknown): RivalStats {
     winRate: nullableNumber(raw.winRate),
     avgR: nullableNumber(raw.avgR),
     netPnl: nullableNumber(raw.netPnl),
+    ...(Object.keys(periods).length > 0 ? { periods } : {}),
+    ...(Object.keys(previousPeriods).length > 0 ? { previousPeriods } : {}),
   };
 }
 
@@ -267,8 +369,24 @@ function toRivalProfile(profile: {
   if (performance) {
     stats.netPnl = performance.periods.allTime.netPnl;
     stats.winRate = performance.periods.allTime.winRate;
-    stats.periods = performance.periods;
-    stats.previousPeriods = performance.previousPeriods;
+    stats.periods = Object.fromEntries(
+      (['week', 'month', 'season', 'allTime'] as LeaderboardPeriod[]).map(period => [
+        period,
+        {
+          ...performance.periods[period],
+          ruleAdherence: stats.periods?.[period]?.ruleAdherence ?? performance.periods[period].ruleAdherence,
+        },
+      ])
+    ) as Record<LeaderboardPeriod, RivalPeriodStats>;
+    stats.previousPeriods = Object.fromEntries(
+      (['week', 'month', 'season'] as const).map(period => [
+        period,
+        {
+          ...performance.previousPeriods[period],
+          ruleAdherence: stats.previousPeriods?.[period]?.ruleAdherence ?? performance.previousPeriods[period].ruleAdherence,
+        },
+      ])
+    ) as Record<Exclude<LeaderboardPeriod, 'allTime'>, RivalPeriodStats>;
   }
   return {
     userId: profile.user_id,

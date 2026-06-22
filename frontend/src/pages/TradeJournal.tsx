@@ -15,7 +15,7 @@ import {
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import type { JournalEntry as StoreJournalEntry } from '../store/types.js';
+import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { pushToast } from '../store/toastStore.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { lookupContract } from '../constants/futuresContracts.js';
@@ -25,6 +25,7 @@ import { scaleContractAmount } from '../utils/contractSizing.js';
 import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
+import { evaluateEntryRules, manualRules } from '../utils/tradingRules.js';
 import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
@@ -359,18 +360,9 @@ function inMonth(dateValue: string, monthValue: Date) {
 }
 
 
-function getRulesTemplate() {
-  if (typeof window === 'undefined') return DEFAULT_RULES;
-  try {
-    const raw = window.localStorage.getItem('flyxa_checklist');
-    if (!raw) return DEFAULT_RULES;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_RULES;
-    const cleaned = parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-    return cleaned.length ? cleaned : DEFAULT_RULES;
-  } catch {
-    return DEFAULT_RULES;
-  }
+function getRulesTemplate(rules: RiskRule[]) {
+  const configured = manualRules(rules).map(rule => rule.label.trim()).filter(Boolean);
+  return configured.length > 0 ? configured : DEFAULT_RULES;
 }
 
 function createEmptyEntry(date: string, rulesTemplate: string[]): JournalEntry {
@@ -628,7 +620,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
       };
 
       const rulesRaw = Array.isArray(record.rules) ? record.rules : [];
-      const rules = rulesRaw.length
+      const savedRules = rulesRaw.length
         ? rulesRaw.map(rule => {
           const valueRule = rule as Record<string, unknown>;
           const state: RuleState = valueRule.state === 'ok' || valueRule.state === 'fail' || valueRule.state === 'unchecked'
@@ -639,7 +631,12 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
             state,
           };
         }).filter(rule => rule.text)
-        : rulesTemplate.map(text => ({ text, state: 'unchecked' as RuleState }));
+        : [];
+      const savedRuleMap = new Map(savedRules.map(rule => [rule.text, rule.state]));
+      const rules = rulesTemplate.map(text => ({
+        text,
+        state: savedRuleMap.get(text) ?? 'unchecked' as RuleState,
+      }));
 
       const psychologyRaw = (record.psychology ?? {}) as Record<string, unknown>;
       const psychology = {
@@ -1337,6 +1334,59 @@ function SectionHead({ title, collapsed, onToggle }: {
       <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--app-text-subtle)', fontFamily: 'var(--font-mono)' }}>
         {collapsed ? '▶' : '▼'}
       </span>
+    </div>
+  );
+}
+
+function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
+  entry: JournalEntry;
+  rules: RiskRule[];
+  onMutateEntry: (fields: Partial<JournalEntry>) => void;
+}) {
+  const evaluations = evaluateEntryRules(entry as unknown as StoreJournalEntry, rules);
+  const verified = evaluations.filter(item => item.state !== 'unchecked');
+  const passed = verified.filter(item => item.state === 'ok').length;
+  const updateManualRule = (label: string, state: RuleState) => {
+    const next = entry.rules.some(rule => rule.text === label)
+      ? entry.rules.map(rule => rule.text === label ? { ...rule, state } : rule)
+      : [...entry.rules, { text: label, state }];
+    onMutateEntry({ rules: next });
+  };
+
+  return (
+    <div className="tj-card" style={{ marginBottom: 8, padding: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+        <div>
+          <strong style={{ display: 'block', color: 'var(--app-text)', fontSize: 12 }}>Rule verification</strong>
+          <span style={{ display: 'block', marginTop: 3, color: 'var(--app-text-subtle)', fontSize: 10 }}>
+            {verified.length > 0 ? `${passed}/${verified.length} verified checks passed` : 'No rules verified yet'}
+          </span>
+        </div>
+        <span style={{ color: 'var(--app-text-subtle)', fontSize: 9 }}>Automatic + reported</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {evaluations.map(item => (
+          <div key={item.ruleId} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center', padding: '9px 10px', border: '1px solid var(--app-border)', borderRadius: 5, background: 'var(--app-surface-2)' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <strong style={{ color: 'var(--app-text)', fontSize: 10 }}>{item.label}</strong>
+                <span style={{ color: item.source === 'automatic' ? 'var(--green)' : 'var(--cobalt)', fontSize: 8, textTransform: 'uppercase' }}>{item.source}</span>
+              </div>
+              <span style={{ display: 'block', marginTop: 3, color: 'var(--app-text-subtle)', fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.detail}</span>
+            </div>
+            {item.source === 'manual' ? (
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button type="button" onClick={() => updateManualRule(item.label, 'ok')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--app-border)'}`, background: item.state === 'ok' ? 'var(--green-dim)' : 'transparent', color: item.state === 'ok' ? 'var(--green)' : 'var(--app-text-subtle)', fontSize: 9, cursor: 'pointer' }}>Pass</button>
+                <button type="button" onClick={() => updateManualRule(item.label, 'fail')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--app-border)'}`, background: item.state === 'fail' ? 'var(--red-dim)' : 'transparent', color: item.state === 'fail' ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9, cursor: 'pointer' }}>Break</button>
+              </div>
+            ) : (
+              <span style={{ color: item.state === 'ok' ? 'var(--green)' : item.state === 'fail' ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9, fontWeight: 700 }}>
+                {item.state === 'ok' ? 'PASS' : item.state === 'fail' ? 'BREAK' : 'UNVERIFIED'}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2114,9 +2164,10 @@ export default function TradeJournal() {
   const { user } = useAuth();
   const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
+  const riskRules = useFlyxaStore(state => state.riskRules);
   const setEntriesInStore = useFlyxaStore(state => state.setEntries);
   const deleteEntryInStore = useFlyxaStore(state => state.deleteEntry);
-  const rulesTemplate = useMemo(() => getRulesTemplate(), []);
+  const rulesTemplate = useMemo(() => getRulesTemplate(riskRules), [riskRules]);
   const entries = useMemo(() => normalizeEntries(persistedEntries, rulesTemplate), [persistedEntries, rulesTemplate]);
 
   const recentForm = useMemo(() => {
@@ -3608,6 +3659,15 @@ export default function TradeJournal() {
               {!collapsed['dailyReflection'] && (
                 <DailyReflectionBlock
                   entry={selectedEntry}
+                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                />
+              )}
+
+              <SectionHead title="Rule Verification" sectionKey="ruleVerification" collapsed={!!collapsed['ruleVerification']} onToggle={() => toggleSection('ruleVerification')} />
+              {!collapsed['ruleVerification'] && (
+                <RuleComplianceBlock
+                  entry={selectedEntry}
+                  rules={riskRules}
                   onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
                 />
               )}

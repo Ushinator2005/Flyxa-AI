@@ -6,6 +6,7 @@ import { lookupContract } from '../constants/futuresContracts.js';
 import { DEFAULT_ACHIEVEMENTS, mergeAchievementCatalog, refreshAchievements } from './achievements.js';
 import { pushToast } from './toastStore.js';
 import { scaleContractAmount } from '../utils/contractSizing.js';
+import { DEFAULT_STRUCTURED_RULES } from '../utils/tradingRules.js';
 import type {
   Account,
   Achievement,
@@ -20,6 +21,7 @@ import type {
   PlanBlock,
   PreSessionData,
   PropFirm,
+  RivalXpEvent,
   RiskRule,
   ScannerColors,
   Setup,
@@ -43,7 +45,7 @@ export const DEFAULT_NEWS_SOURCES: Record<string, boolean> = {
   Forexlive: true,
 };
 
-export const DEFAULT_RISK_RULES: RiskRule[] = [];
+export const DEFAULT_RISK_RULES: RiskRule[] = DEFAULT_STRUCTURED_RULES;
 
 export const DEFAULT_CHECKLIST: ChecklistItem[] = [];
 
@@ -73,6 +75,7 @@ interface FlyxaStateData {
   journalMoods: Record<string, string>;
   journalTitles: Record<string, string>;
   rivals: StoredRival[];
+  rivalXpEvents: Record<string, RivalXpEvent>;
   deletedTradeIds: string[];
   deletedEntryDates: string[];
   restoredEntryDates: string[];
@@ -124,6 +127,7 @@ export interface FlyxaStore extends FlyxaStateData {
   setJournalMood: (entryId: string, mood: string) => void;
   setJournalTitle: (entryId: string, title: string) => void;
   setRivals: (rivals: StoredRival[]) => void;
+  mergeRivalXpEvents: (events: RivalXpEvent[]) => void;
   addDeletedTradeId: (id: string) => void;
   setBacktestSessions: (sessions: BacktestSession[]) => void;
   setOnboarding: (state: OnboardingState) => void;
@@ -470,6 +474,7 @@ export function getInitialState(): FlyxaStateData {
     journalMoods: {},
     journalTitles: {},
     rivals: [],
+    rivalXpEvents: {},
     deletedTradeIds: [],
     deletedEntryDates: [],
     restoredEntryDates: [],
@@ -858,6 +863,18 @@ const useFlyxaStore = create<FlyxaStore>()(
 
       setRivals: (rivals) => set(() => ({ rivals })),
 
+      mergeRivalXpEvents: (events) => set((state) => {
+        if (events.length === 0) return state;
+        const next = { ...state.rivalXpEvents };
+        let changed = false;
+        for (const event of events) {
+          if (next[event.id]) continue;
+          next[event.id] = event;
+          changed = true;
+        }
+        return changed ? { rivalXpEvents: next } : state;
+      }),
+
       addDeletedTradeId: (id) => set((state) => ({
         deletedTradeIds: state.deletedTradeIds.includes(id) ? state.deletedTradeIds : [...state.deletedTradeIds, id],
       })),
@@ -1013,7 +1030,10 @@ const useFlyxaStore = create<FlyxaStore>()(
               : mergeAchievementCatalog(state.achievements),
             goals: payload.goals ?? state.goals,
             setupPlaybook: removeLegacyDefaults(payload.setupPlaybook ?? state.setupPlaybook, LEGACY_DEFAULT_SETUP_IDS),
-            riskRules: removeLegacyDefaults(payload.riskRules ?? state.riskRules, LEGACY_DEFAULT_RISK_RULE_IDS),
+            riskRules: removeLegacyDefaults(
+              (payload.riskRules?.length ? payload.riskRules : state.riskRules.length ? state.riskRules : DEFAULT_RISK_RULES),
+              LEGACY_DEFAULT_RISK_RULE_IDS
+            ),
             checklist: removeLegacyDefaults(payload.checklist ?? state.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
             planBlocks: payload.planBlocks ?? state.planBlocks,
             propFirms: payload.propFirms ?? state.propFirms,
@@ -1023,6 +1043,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             journalMoods: payload.journalMoods ?? state.journalMoods,
             journalTitles: payload.journalTitles ?? state.journalTitles,
             rivals: payload.rivals ?? state.rivals,
+            rivalXpEvents: { ...state.rivalXpEvents, ...(payload.rivalXpEvents ?? {}) },
             deletedTradeIds,
             deletedEntryDates,
             restoredEntryDates,
@@ -1134,7 +1155,10 @@ const useFlyxaStore = create<FlyxaStore>()(
           ...state,
           entries: withDerivedEntries(ensureAccount(state.entries ?? [], entryAccountFallback)),
           setupPlaybook: removeLegacyDefaults(state.setupPlaybook ?? initial.setupPlaybook, LEGACY_DEFAULT_SETUP_IDS),
-          riskRules: removeLegacyDefaults(state.riskRules ?? initial.riskRules, LEGACY_DEFAULT_RISK_RULE_IDS),
+          riskRules: removeLegacyDefaults(
+            state.riskRules?.length ? state.riskRules : initial.riskRules,
+            LEGACY_DEFAULT_RISK_RULE_IDS
+          ),
           checklist: removeLegacyDefaults(state.checklist ?? initial.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
           aiReflections: state.aiReflections ?? initial.aiReflections,
           billingAccounts: (state.billingAccounts ?? []).map((account) => ({
@@ -1163,6 +1187,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         journalMoods: state.journalMoods,
         journalTitles: state.journalTitles,
         rivals: state.rivals,
+        rivalXpEvents: state.rivalXpEvents,
         deletedTradeIds: state.deletedTradeIds,
         deletedEntryDates: state.deletedEntryDates,
         restoredEntryDates: state.restoredEntryDates,

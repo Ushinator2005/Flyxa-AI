@@ -282,6 +282,7 @@ export interface RivalProfileResponse {
   avatarColor: string;
   avatarUrl?: string | null;
   stats?: {
+    lifetimeXp?: number;
     dailyJournalStreak: number;
     dailyJournalScore: number;
     tradingJournalScore: number;

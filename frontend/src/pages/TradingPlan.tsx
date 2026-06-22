@@ -11,13 +11,16 @@ import {
   Download,
   FileText,
   ListChecks,
-  PenLine,
+  Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
+import type { RiskRule } from '../store/types.js';
+import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
 import './TradingPlan.css';
 
 type TradingPlanTab = 'trading-plan' | 'risk-rules' | 'prop-firm-rules' | 'pre-session-checklist';
@@ -30,14 +33,6 @@ interface PlanBlock {
   content: string;
   placeholder: string;
   isOpen: boolean;
-}
-
-interface RiskRule {
-  id: string;
-  label: string;
-  value: string;
-  unit: string;
-  color: 'red' | 'amber' | 'green' | 'default';
 }
 
 interface PropFirmParam {
@@ -123,8 +118,6 @@ const INITIAL_PLAN_BLOCKS: PlanBlock[] = [
   },
 ];
 
-const INITIAL_RISK_RULES: RiskRule[] = [];
-
 const INITIAL_PROP_FIRMS: PropFirm[] = [];
 
 const INITIAL_CHECKLIST: ChecklistItem[] = [];
@@ -183,11 +176,14 @@ export default function TradingPlan() {
       done: typeof doneMap.get(item.id) === 'boolean' ? Boolean(doneMap.get(item.id)) : item.done,
     }));
   });
+  const [riskRules, setRiskRules] = useState<RiskRule[]>(() => {
+    const stored = useFlyxaStore.getState().riskRules;
+    return (stored.length > 0 ? stored : DEFAULT_STRUCTURED_RULES).map(normalizeRiskRule);
+  });
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const riskRules = INITIAL_RISK_RULES;
   const propFirms = INITIAL_PROP_FIRMS;
 
   const firstMountRef = useRef(true);
@@ -222,7 +218,7 @@ export default function TradingPlan() {
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => persistState(), 650);
-  }, [persistState, checklist, planBlocks]);
+  }, [persistState, checklist, planBlocks, riskRules]);
 
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSaved, now), [lastSaved, now]);
   const completedBlocks = useMemo(() => planBlocks.filter(block => block.content.trim().length > 0).length, [planBlocks]);
@@ -264,6 +260,27 @@ export default function TradingPlan() {
   const resetPlan = () => {
     setPlanBlocks(INITIAL_PLAN_BLOCKS);
     setChecklist(INITIAL_CHECKLIST);
+    setRiskRules(DEFAULT_STRUCTURED_RULES);
+  };
+
+  const updateRiskRule = (id: string, updates: Partial<RiskRule>) => {
+    setRiskRules(current => current.map(rule => rule.id === id ? { ...rule, ...updates } : rule));
+  };
+
+  const addRiskRule = () => {
+    setRiskRules(current => [...current, {
+      id: `rule-${crypto.randomUUID()}`,
+      label: 'New subjective rule',
+      value: '',
+      unit: '',
+      color: 'neutral',
+      kind: 'manual',
+      enabled: true,
+    }]);
+  };
+
+  const deleteRiskRule = (id: string) => {
+    setRiskRules(current => current.filter(rule => rule.id !== id));
   };
 
   const exportPlan = () => {
@@ -445,20 +462,53 @@ export default function TradingPlan() {
 
         {activeTab === 'risk-rules' && (
           <section className="tp-panel">
-            <div className="tp-section-head">
-              <h2>Risk Rule Framework</h2>
-              <p>These are non-negotiable constraints designed to protect your account and decision quality.</p>
+            <div className="tp-section-head tp-section-head-actions">
+              <div>
+                <h2>Rule Framework</h2>
+                <p>Measurable rules are verified automatically. Subjective rules are confirmed in the journal.</p>
+              </div>
+              <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule}>
+                <Plus size={12} /> Add rule
+              </button>
             </div>
 
             <div className="tp-rule-grid">
               {riskRules.map(rule => (
-                <article key={rule.id} className="tp-rule-card">
-                  <p className="tp-rule-label">{rule.label}</p>
-                  <p className={`tp-rule-value num ${ruleColorClass(rule.color)}`}>{rule.value}</p>
-                  <p className="tp-rule-unit">{rule.unit}</p>
-                  <button type="button" className="tp-rule-edit">
-                    <PenLine size={12} />
-                    Edit
+                <article key={rule.id} className={`tp-rule-card tp-rule-editor ${rule.enabled === false ? 'disabled' : ''}`}>
+                  <div className="tp-rule-editor-head">
+                    <span className={`tp-rule-source ${rule.kind === 'manual' ? 'manual' : 'automatic'}`}>
+                      {rule.kind === 'manual' ? 'Manual check' : 'Automatically verified'}
+                    </span>
+                    <label className="tp-rule-toggle">
+                      <input type="checkbox" checked={rule.enabled !== false} onChange={event => updateRiskRule(rule.id, { enabled: event.target.checked })} />
+                      <span>{rule.enabled === false ? 'Off' : 'On'}</span>
+                    </label>
+                  </div>
+                  <input className="tp-rule-input tp-rule-name-input" value={rule.label} onChange={event => updateRiskRule(rule.id, { label: event.target.value })} aria-label="Rule name" />
+                  <select className="tp-rule-input" value={rule.kind ?? 'manual'} onChange={event => updateRiskRule(rule.id, { kind: event.target.value as RiskRule['kind'] })}>
+                    <option value="max_daily_loss">Maximum daily loss</option>
+                    <option value="max_trades">Maximum trades per day</option>
+                    <option value="max_contracts">Maximum contracts</option>
+                    <option value="min_rr">Minimum planned R:R</option>
+                    <option value="time_window">Allowed trading window</option>
+                    <option value="cooldown_after_loss">Cooldown after loss</option>
+                    <option value="manual">Subjective / manual rule</option>
+                  </select>
+                  {rule.kind === 'time_window' ? (
+                    <div className="tp-rule-value-fields">
+                      <label><span>Start</span><input className="tp-rule-input" type="time" value={rule.startTime ?? '09:30'} onChange={event => updateRiskRule(rule.id, { startTime: event.target.value })} /></label>
+                      <label><span>End</span><input className="tp-rule-input" type="time" value={rule.endTime ?? '11:30'} onChange={event => updateRiskRule(rule.id, { endTime: event.target.value })} /></label>
+                    </div>
+                  ) : rule.kind !== 'manual' ? (
+                    <div className="tp-rule-value-fields">
+                      <label><span>Limit</span><input className="tp-rule-input num" type="number" min="0" step="0.1" value={rule.value} onChange={event => updateRiskRule(rule.id, { value: event.target.value })} /></label>
+                      <label><span>Unit</span><input className="tp-rule-input" value={rule.unit} onChange={event => updateRiskRule(rule.id, { unit: event.target.value })} /></label>
+                    </div>
+                  ) : (
+                    <p className="tp-rule-manual-note">This appears in each daily journal for pass/fail confirmation.</p>
+                  )}
+                  <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)}>
+                    <Trash2 size={12} /> Remove
                   </button>
                 </article>
               ))}
@@ -467,8 +517,8 @@ export default function TradingPlan() {
             <div className="tp-warning">
               <AlertCircle size={14} />
               <div>
-                <p>If daily loss limit is hit, the session is over.</p>
-                <span>No recovery trades. No exceptions. Protect the account first.</span>
+                <p>Automatic does not mean guessed.</p>
+                <span>Flyxa verifies only rules supported by logged trade data. Missing timestamps or values remain unverified.</span>
               </div>
             </div>
           </section>

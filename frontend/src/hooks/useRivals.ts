@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
-import { getMascotStage, getMascotXP } from '../lib/mascotProgression.js';
+import { getMascotStage } from '../lib/mascotProgression.js';
 import { useActiveAccountEntries } from '../store/selectors.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { journalApi, rivalsApi, type RivalProfileResponse, type RivalRequestResponse } from '../services/api.js';
-import type { BacktestSession, JournalEntry as TradingJournalEntry, Trade } from '../store/types.js';
+import type { BacktestSession, JournalEntry as TradingJournalEntry, RivalXpEvent, Trade } from '../store/types.js';
 import type { JournalEntry as DailyJournalEntry } from '../types/index.js';
 import type { MascotStats } from '../types/rivals.js';
+import { evaluateEntryRules } from '../utils/tradingRules.js';
 
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
@@ -105,7 +106,7 @@ function computeTradingJournalScore(entries: TradingJournalEntry[]): number {
   return clampScore((covered / weekdays.length) * 100);
 }
 
-function computeRuleFollowingScore(entries: TradingJournalEntry[], trades: Trade[]): number {
+function computeRuleFollowingScore(entries: TradingJournalEntry[], trades: Trade[], rules: import('../store/types.js').RiskRule[]): number {
   const last30 = entries.filter(entry => entry.date >= daysAgo(29));
   const recentTrades = trades.filter(trade => trade.date >= daysAgo(29));
   const planLogged = recentTrades.filter(trade => typeof trade.reflection?.followedPlan === 'boolean');
@@ -121,9 +122,28 @@ function computeRuleFollowingScore(entries: TradingJournalEntry[], trades: Trade
   const rulePassScore = evaluatedRules.length > 0
     ? (evaluatedRules.filter(rule => rule.state === 'ok').length / evaluatedRules.length) * 100
     : null;
+  const configuredChecks = last30.flatMap(entry => evaluateEntryRules(entry, rules));
+  const verifiedConfiguredChecks = configuredChecks.filter(check => check.state !== 'unchecked');
+  const configuredRuleScore = verifiedConfiguredChecks.length > 0
+    ? (verifiedConfiguredChecks.filter(check => check.state === 'ok').length / verifiedConfiguredChecks.length) * 100
+    : null;
 
-  const scores = [tradePlanScore, rulePassScore].filter((score): score is number => typeof score === 'number');
+  const scores = [configuredRuleScore, tradePlanScore, rulePassScore].filter((score): score is number => typeof score === 'number');
   return clampScore(mean(scores));
+}
+
+function periodRuleAdherence(
+  entries: TradingJournalEntry[],
+  rules: import('../store/types.js').RiskRule[],
+  bounds?: [string, string]
+): number {
+  const checks = entries
+    .filter(entry => !bounds || (entry.date >= bounds[0] && entry.date <= bounds[1]))
+    .flatMap(entry => evaluateEntryRules(entry, rules))
+    .filter(check => check.state !== 'unchecked');
+  return checks.length > 0
+    ? Math.round((checks.filter(check => check.state === 'ok').length / checks.length) * 100)
+    : 0;
 }
 
 function computeDailyJournalScore(entries: DailyJournalEntry[], dailyJournalStreak: number): number {
@@ -139,6 +159,79 @@ function computeProcessScore(entries: DailyJournalEntry[], dailyJournalStreak: n
     (tradingJournalScore * 0.35) +
     (ruleFollowingScore * 0.25)
   );
+}
+
+function buildLifetimeXpEvents(
+  dailyEntries: DailyJournalEntry[],
+  tradingEntries: TradingJournalEntry[],
+  backtests: BacktestSession[],
+  dailyJournalStreak: number,
+): RivalXpEvent[] {
+  const events: RivalXpEvent[] = [];
+  for (const entry of dailyEntries.filter(isMeaningfulDailyJournalEntry)) {
+    events.push({
+      id: `daily-journal:${entry.id}`,
+      points: 10,
+      label: 'Completed daily journal',
+      earnedAt: entry.created_at || entry.date,
+    });
+  }
+
+  for (const trade of tradingEntries.flatMap(entry => entry.trades)) {
+    events.push({
+      id: `documented-trade:${trade.id}`,
+      points: 5,
+      label: 'Documented trade',
+      earnedAt: trade.createdAt || trade.date,
+    });
+    const reflection = trade.reflection;
+    if (reflection && Boolean(
+      reflection.thesis?.trim()
+      || reflection.execution?.trim()
+      || reflection.adjustment?.trim()
+    )) {
+      events.push({
+        id: `trade-reflection:${trade.id}`,
+        points: 5,
+        label: 'Completed trade reflection',
+        earnedAt: trade.createdAt || trade.date,
+      });
+    }
+    if (reflection?.followedPlan === true) {
+      events.push({
+        id: `followed-plan:${trade.id}`,
+        points: 5,
+        label: 'Followed trading plan',
+        earnedAt: trade.createdAt || trade.date,
+      });
+    }
+  }
+
+  for (const session of backtests) {
+    events.push({
+      id: `backtest:${session.id}`,
+      points: 20,
+      label: 'Completed backtest session',
+      earnedAt: session.openedAt,
+    });
+  }
+
+  const streakRewards = [
+    { days: 3, points: 15 },
+    { days: 7, points: 35 },
+    { days: 14, points: 75 },
+    { days: 30, points: 150 },
+  ];
+  for (const reward of streakRewards) {
+    if (dailyJournalStreak < reward.days) continue;
+    events.push({
+      id: `journal-streak:${reward.days}`,
+      points: reward.points,
+      label: `${reward.days}-day journal streak`,
+      earnedAt: new Date().toISOString(),
+    });
+  }
+  return events;
 }
 
 function periodBounds(period: Exclude<LeaderboardPeriod, 'allTime'>, previous = false): [string, string] {
@@ -210,12 +303,16 @@ function normalizeRivalStats(rival: Rival): Rival {
   const tradingJournalScore = raw.tradingJournalScore ?? raw.discipline ?? 0;
   const backtestSessions = raw.backtestSessions ?? raw.backtestHours ?? 0;
   const processScore = raw.processScore ?? raw.consistency ?? raw.psychology ?? 0;
+  const lifetimeXp = typeof raw.lifetimeXp === 'number' && Number.isFinite(raw.lifetimeXp)
+    ? Math.max(0, Math.round(raw.lifetimeXp))
+    : undefined;
   return {
     ...rival,
     mascot: {
       ...rival.mascot,
       streakDays: dailyJournalStreak,
       stats: {
+        ...(lifetimeXp !== undefined ? { lifetimeXp } : {}),
         dailyJournalStreak,
         dailyJournalScore,
         tradingJournalScore,
@@ -258,6 +355,9 @@ export function useRivals() {
   const setRivalsAction = useFlyxaStore(state => state.setRivals);
   const entries = useActiveAccountEntries();
   const backtestSessions = useFlyxaStore(state => state.backtestSessions) as BacktestSession[];
+  const riskRules = useFlyxaStore(state => state.riskRules);
+  const rivalXpEvents = useFlyxaStore(state => state.rivalXpEvents);
+  const mergeRivalXpEvents = useFlyxaStore(state => state.mergeRivalXpEvents);
   const [dailyJournalEntries, setDailyJournalEntries] = useState<DailyJournalEntry[]>([]);
   const [rivalRequests, setRivalRequests] = useState<RivalRequestResponse[]>([]);
   const [profile, setProfile] = useState<RivalProfileResponse | null>(null);
@@ -327,6 +427,24 @@ export function useRivals() {
     [rivalRequests]
   );
 
+  const dailyJournalStreak = useMemo(
+    () => computeDailyJournalStreak(dailyJournalEntries),
+    [dailyJournalEntries]
+  );
+  const earnedXpEvents = useMemo(
+    () => buildLifetimeXpEvents(dailyJournalEntries, entries, backtestSessions, dailyJournalStreak),
+    [backtestSessions, dailyJournalEntries, dailyJournalStreak, entries]
+  );
+  const lifetimeXp = useMemo(() => {
+    const merged = { ...rivalXpEvents };
+    for (const event of earnedXpEvents) merged[event.id] ??= event;
+    return Object.values(merged).reduce((sum, event) => sum + event.points, 0);
+  }, [earnedXpEvents, rivalXpEvents]);
+
+  useEffect(() => {
+    mergeRivalXpEvents(earnedXpEvents);
+  }, [earnedXpEvents, mergeRivalXpEvents]);
+
   const saveProfile = async (data: { username: string; displayName?: string; avatarColor?: string; avatarUrl?: string | null }) => {
     const next = await rivalsApi.updateProfile(data);
     setProfile(next);
@@ -339,10 +457,9 @@ export function useRivals() {
   };
 
   const myRival = useMemo(() => {
-    const dailyJournalStreak = computeDailyJournalStreak(dailyJournalEntries);
     const dailyJournalScore = computeDailyJournalScore(dailyJournalEntries, dailyJournalStreak);
     const tradingJournalScore = computeTradingJournalScore(entries);
-    const ruleFollowing = computeRuleFollowingScore(entries, entries.flatMap(entry => entry.trades));
+    const ruleFollowing = computeRuleFollowingScore(entries, entries.flatMap(entry => entry.trades), riskRules);
     const processScore = computeProcessScore(dailyJournalEntries, dailyJournalStreak, tradingJournalScore, ruleFollowing);
 
     const allTrades = entries.flatMap(entry => entry.trades).filter(t => t.result === 'win' || t.result === 'loss');
@@ -358,11 +475,14 @@ export function useRivals() {
         .reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0) * 100
     ) / 100;
     const allSavedTrades = entries.flatMap(entry => entry.trades);
+    const weekBounds = periodBounds('week');
+    const monthBounds = periodBounds('month');
+    const seasonBounds = periodBounds('season');
     const localPeriods = {
-      allTime: computePeriodStats(allSavedTrades),
-      week: computePeriodStats(allSavedTrades, periodBounds('week')),
-      month: computePeriodStats(allSavedTrades, periodBounds('month')),
-      season: computePeriodStats(allSavedTrades, periodBounds('season')),
+      allTime: { ...computePeriodStats(allSavedTrades), ruleAdherence: periodRuleAdherence(entries, riskRules) },
+      week: { ...computePeriodStats(allSavedTrades, weekBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, weekBounds) },
+      month: { ...computePeriodStats(allSavedTrades, monthBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, monthBounds) },
+      season: { ...computePeriodStats(allSavedTrades, seasonBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, seasonBounds) },
     };
     const localPreviousPeriods = {
       week: computePeriodStats(allSavedTrades, periodBounds('week', true)),
@@ -387,6 +507,7 @@ export function useRivals() {
         name: 'You',
         streakDays: dailyJournalStreak,
         stats: {
+          lifetimeXp,
           dailyJournalStreak,
           dailyJournalScore,
           tradingJournalScore,
@@ -402,9 +523,9 @@ export function useRivals() {
       },
     };
 
-    me.mascot.xp = getMascotXP(me.mascot.streakDays, me.mascot.stats);
+    me.mascot.xp = lifetimeXp;
     return me;
-  }, [backtestSessions.length, dailyJournalEntries, entries, profile?.avatarUrl, profile?.stats]);
+  }, [backtestSessions.length, dailyJournalEntries, dailyJournalStreak, entries, lifetimeXp, profile?.avatarUrl, profile?.stats, riskRules]);
 
   const myStatsSignature = useMemo(() => JSON.stringify(myRival.mascot.stats), [myRival.mascot.stats]);
 

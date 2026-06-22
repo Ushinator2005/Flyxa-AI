@@ -9,7 +9,14 @@ import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } fr
 import type { RivalRequestResponse } from '../services/api.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
 import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
-import RankMedallion, { getRankFromXP, getXPProgress, RANK_LABELS, RANK_COLORS } from '../components/rivals/RankMedallion.js';
+import RankMedallion, {
+  getRankFromXP,
+  getXPProgress,
+  RANK_LABELS,
+  RANK_COLORS,
+  RANK_XP_THRESHOLDS,
+  type RankTier,
+} from '../components/rivals/RankMedallion.js';
 import '../components/rivals/rivals.css';
 
 type League = { id: string; name: string; memberIds: string[] };
@@ -28,6 +35,8 @@ const MODES: Array<{ value: LeaderboardMetric; label: string }> = [
   { value: 'processScore', label: 'Process' },
   { value: 'journalStreak', label: 'Journal streak' },
 ];
+
+const RANK_TIERS: RankTier[] = ['bronze', 'silver', 'gold', 'diamond', 'master', 'grandmaster'];
 
 const EMPTY_PERIOD: RivalPeriodStats = {
   netPnl: 0, winRate: 0, tradeCount: 0, tradingDays: 0, greenDays: 0,
@@ -81,6 +90,7 @@ function formatMetricGap(value: number, metric: LeaderboardMetric): string {
 
 function rivalXP(rival: Rival): number {
   const s = rival.mascot.stats;
+  if (typeof s.lifetimeXp === 'number' && Number.isFinite(s.lifetimeXp)) return Math.max(0, Math.round(s.lifetimeXp));
   return s.dailyJournalStreak * 2 + s.dailyJournalScore + s.tradingJournalScore + s.processScore + (s.backtestSessions ?? 0) * 2;
 }
 
@@ -118,7 +128,7 @@ export default function Rivals() {
     try { return JSON.parse(localStorage.getItem('flyxa-private-leagues') ?? '[]') as League[]; } catch { return []; }
   });
   const [activeLeagueId, setActiveLeagueId] = useState('all');
-  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress'>('overview');
+  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'ranks'>('overview');
 
   useEffect(() => {
     localStorage.setItem('flyxa-private-leagues', JSON.stringify(leagues));
@@ -289,6 +299,7 @@ export default function Rivals() {
               <div className="rv-inspector-tabs">
                 <button type="button" className={inspectorTab === 'overview' ? 'active' : ''} onClick={() => setInspectorTab('overview')}>Overview</button>
                 <button type="button" className={inspectorTab === 'progress' ? 'active' : ''} onClick={() => setInspectorTab('progress')}>Progress</button>
+                <button type="button" className={inspectorTab === 'ranks' ? 'active' : ''} onClick={() => setInspectorTab('ranks')}>Ranks</button>
               </div>
               {inspectorTab === 'overview' ? (
                 <>
@@ -305,19 +316,54 @@ export default function Rivals() {
                   </div>
                   <p className="rv-trader-note">{selectedStats.consistency >= 75 ? 'High consistency with controlled downside.' : selectedStats.netPnl > 0 ? 'Profitable, with room to tighten consistency.' : 'Process metrics are the clearest route back up the table.'}</p>
                 </>
-              ) : (
+              ) : inspectorTab === 'progress' ? (
                 <div className="rv-inspector-progress">
                   <div className="rv-inspector-section-head"><h4>Weekly habits</h4><span>Resets Monday</span></div>
                   <Challenge icon={<BookOpen size={14} />} title="Document every trade" value={selectedRival.mascot.stats.tradingJournalScore} target={100} suffix="%" />
-                  <Challenge icon={<ShieldCheck size={14} />} title="Respect the plan" value={getPeriodStats(selectedRival, 'week').ruleAdherence} target={100} suffix="%" />
+                  <Challenge icon={<ShieldCheck size={14} />} title="Verified + reported adherence" value={getPeriodStats(selectedRival, 'week').ruleAdherence} target={100} suffix="%" />
                   <Challenge icon={<Flame size={14} />} title="Build a green streak" value={getPeriodStats(selectedRival, 'week').greenDays} target={5} suffix="/5" />
                   <div className="rv-inspector-section-head rv-milestone-head"><h4>Milestones</h4><span>Verified data</span></div>
                   <div className="rv-achievement-list">
                     <Badge unlocked={selectedStats.greenDays >= 5} icon={<TrendingUp size={14} />} title="Five green days" />
-                    <Badge unlocked={selectedStats.ruleAdherence >= 90} icon={<ShieldCheck size={14} />} title="No rule breaks" />
+                    <Badge unlocked={selectedStats.ruleAdherence >= 90} icon={<ShieldCheck size={14} />} title="90% rule adherence" />
                     <Badge unlocked={selectedStats.maxDrawdown <= Math.max(100, Math.abs(selectedStats.netPnl) * .3)} icon={<Gauge size={14} />} title="Controlled drawdown" />
                     <Badge unlocked={selectedStats.tradeCount >= 10} icon={<BookOpen size={14} />} title="10 documented trades" />
                   </div>
+                </div>
+              ) : (
+                <div className="rv-rank-catalog">
+                  <div className="rv-rank-catalog-summary">
+                    <RankMedallion rank={selectedRankTier} size={52} />
+                    <div>
+                      <span>Current division</span>
+                      <strong style={{ color: RANK_COLORS[selectedRankTier] }}>{RANK_LABELS[selectedRankTier]}</strong>
+                      <small>{selectedXP.toLocaleString('en-US')} lifetime XP</small>
+                    </div>
+                  </div>
+                  <div className="rv-rank-catalog-list">
+                    {RANK_TIERS.map((tier, index) => {
+                      const threshold = RANK_XP_THRESHOLDS[tier];
+                      const isCurrent = tier === selectedRankTier;
+                      const isUnlocked = selectedXP >= threshold;
+                      const nextTier = RANK_TIERS[index + 1];
+                      return (
+                        <div key={tier} className={`rv-rank-catalog-row${isCurrent ? ' current' : ''}${isUnlocked ? ' unlocked' : ' locked'}`}>
+                          <span className="rv-rank-catalog-medal"><RankMedallion rank={tier} size={38} /></span>
+                          <span className="rv-rank-catalog-copy">
+                            <strong style={{ color: isUnlocked || isCurrent ? RANK_COLORS[tier] : undefined }}>{RANK_LABELS[tier]}</strong>
+                            <small>
+                              {threshold.toLocaleString('en-US')} XP
+                              {nextTier ? ` · ${RANK_XP_THRESHOLDS[nextTier].toLocaleString('en-US')} next` : ' · Final division'}
+                            </small>
+                          </span>
+                          <span className="rv-rank-catalog-state">
+                            {isCurrent ? 'Active' : isUnlocked ? <Check size={12} /> : <LockKeyhole size={11} />}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="rv-rank-catalog-note">Ranks reflect documented process activity and update as XP is earned.</p>
                 </div>
               )}
             </section>

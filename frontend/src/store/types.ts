@@ -164,6 +164,10 @@ export interface RiskRule {
   value: string;
   unit: string;
   color?: 'amber' | 'red' | 'green' | 'cobalt' | 'neutral';
+  kind?: 'max_daily_loss' | 'max_trades' | 'max_contracts' | 'min_rr' | 'time_window' | 'cooldown_after_loss' | 'manual';
+  enabled?: boolean;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface ChecklistItem {
@@ -237,6 +241,13 @@ export interface BacktestSession {
   balance: number;
   openedAt: string;
   isActive: boolean;
+}
+
+export interface RivalXpEvent {
+  id: string;
+  points: number;
+  label: string;
+  earnedAt: string;
 }
 
 export interface OnboardingState {

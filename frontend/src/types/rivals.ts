@@ -15,6 +15,7 @@ export interface RivalPeriodStats {
 }
 
 export interface MascotStats {
+  lifetimeXp?: number;
   dailyJournalStreak: number;
   dailyJournalScore: number;
   tradingJournalScore: number;
