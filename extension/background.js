@@ -214,11 +214,16 @@ async function captureAndSend() {
     let tabId;
 
     if (flyxaTab) {
-      // Navigate to /scanner on whatever origin the tab is already on (localhost or flyxa.app)
-      const origin = new URL(flyxaTab.url).origin;
-      await chrome.tabs.update(flyxaTab.id, { active: true, url: `${origin}/scanner` });
-      if (flyxaTab.windowId) await chrome.windows.update(flyxaTab.windowId, { focused: true });
-      tabId = flyxaTab.id;
+      try {
+        // Navigate to /scanner on the existing tab's origin (flyxa.app)
+        const origin = new URL(flyxaTab.url).origin;
+        await chrome.tabs.update(flyxaTab.id, { active: true, url: `${origin}/scanner` });
+        if (flyxaTab.windowId) await chrome.windows.update(flyxaTab.windowId, { focused: true });
+        tabId = flyxaTab.id;
+      } catch {
+        // Tab was closed between query and update — open a fresh one
+        tabId = (await chrome.tabs.create({ url: FLYXA_PROD_SCANNER_URL })).id;
+      }
     } else {
       tabId = (await chrome.tabs.create({ url: FLYXA_PROD_SCANNER_URL })).id;
     }
