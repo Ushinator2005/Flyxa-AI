@@ -2568,6 +2568,10 @@
 
 .rv-pro-rank {
   color: var(--rv-text-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
 }
 
 .rv-pro-trader {
@@ -3108,7 +3112,19 @@
 
 .rv-summary-division {
   display: grid;
-  gap: 9px;
+  grid-template-columns: 38px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.rv-summary-division > svg {
+  grid-row: 1 / 3;
+}
+
+.rv-summary-division > div {
+  align-self: center;
 }
 
 .rv-summary-division span {
@@ -3118,6 +3134,7 @@
 }
 
 .rv-summary-division i {
+  grid-column: 2;
   height: 3px;
   border-radius: 99px;
   overflow: hidden;

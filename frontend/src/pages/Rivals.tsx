@@ -9,6 +9,7 @@ import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } fr
 import type { RivalRequestResponse } from '../services/api.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
 import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
+import RankMedallion, { getRankFromXP, getXPProgress, RANK_LABELS, RANK_COLORS } from '../components/rivals/RankMedallion.js';
 import '../components/rivals/rivals.css';
 
 type League = { id: string; name: string; memberIds: string[] };
@@ -78,11 +79,9 @@ function formatMetricGap(value: number, metric: LeaderboardMetric): string {
   return `${Math.ceil(Math.max(0, value))} points`;
 }
 
-function division(score: number): { name: string; className: string; next: number } {
-  if (score >= 85) return { name: 'Elite', className: 'elite', next: 100 };
-  if (score >= 70) return { name: 'Gold', className: 'gold', next: 85 };
-  if (score >= 50) return { name: 'Silver', className: 'silver', next: 70 };
-  return { name: 'Bronze', className: 'bronze', next: 50 };
+function rivalXP(rival: Rival): number {
+  const s = rival.mascot.stats;
+  return s.dailyJournalStreak * 2 + s.dailyJournalScore + s.tradingJournalScore + s.processScore + (s.backtestSessions ?? 0) * 2;
 }
 
 function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, period: LeaderboardPeriod): number {
@@ -146,7 +145,11 @@ export default function Rivals() {
   if (!currentUser || !selectedRival) return null;
 
   const selectedStats = getPeriodStats(selectedRival, period);
-  const selectedDivision = division(selectedRival.mascot.stats.processScore);
+  const selectedXP = rivalXP(selectedRival);
+  const selectedRankTier = getRankFromXP(selectedXP);
+  const myXP = rivalXP(currentUser);
+  const myXPProgress = getXPProgress(myXP);
+  const myRankTier = myXPProgress.rank;
 
   async function handleRequestAction(id: string, action: 'accept' | 'decline' | 'cancel') {
     setRequestBusyId(id);
@@ -250,8 +253,9 @@ export default function Rivals() {
             {myRank === 1 ? <><Trophy size={14} /> Leading this board</> : <>{formatMetricGap(gapToNext, metric)} to rank #{Math.max(1, myRank - 1)}</>}
           </div>
           <div className="rv-summary-division">
-            <div><span>{division(currentUser.mascot.stats.processScore).name} division</span><small>{currentUser.mascot.stats.processScore}/{division(currentUser.mascot.stats.processScore).next} process score</small></div>
-            <i><u style={{ width: `${Math.min(100, (currentUser.mascot.stats.processScore / division(currentUser.mascot.stats.processScore).next) * 100)}%` }} /></i>
+            <RankMedallion rank={myRankTier} size={38} />
+            <div><span style={{ color: RANK_COLORS[myRankTier] }}>{RANK_LABELS[myRankTier]} rank</span><small>{myXP} XP{myXPProgress.next ? ` · ${myXPProgress.xpToNext} to ${RANK_LABELS[myXPProgress.next]}` : ' · Max rank'}</small></div>
+            <i><u style={{ width: `${myXPProgress.pct}%` }} /></i>
           </div>
           <Sparkline values={getPeriodStats(currentUser, period).equityCurve} />
         </section>
@@ -261,12 +265,12 @@ export default function Rivals() {
             <div className="rv-ranking-title"><div><h2>{activeLeague?.name ?? 'Standings'}</h2><p>Updated from saved journal trades</p></div><span className="rv-live-indicator"><i /> Live</span></div>
             <div className="rv-pro-table">
               <div className="rv-pro-head"><span>Rank</span><span>Trader / equity</span><span>Net P&L</span><span>Win rate</span><span>Avg R</span><span>Consistency</span><span>Move</span></div>
-              {filtered.map((rival, index) => {
+              {filtered.map((rival) => {
                 const stats = getPeriodStats(rival, period);
                 const movement = rankMovement(rival, leagueRivals, metric, period);
                 return (
                   <button key={rival.id} type="button" aria-pressed={selectedRival.id === rival.id} className={`rv-pro-row ${rival.isMe ? 'me' : ''} ${selectedRival.id === rival.id ? 'selected' : ''}`} onClick={() => setSelectedRivalId(rival.id)}>
-                    <span className="rv-pro-rank">{String(ranked.findIndex(item => item.id === rival.id) + 1).padStart(2, '0')}</span>
+                    <span className="rv-pro-rank"><RankMedallion rank={getRankFromXP(rivalXP(rival))} size={20} />{String(ranked.findIndex(item => item.id === rival.id) + 1).padStart(2, '0')}</span>
                     <span className="rv-pro-trader"><RivalAvatar rival={rival} /><span><strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong><small>@{rival.username}</small></span><Sparkline values={stats.equityCurve} compact /></span>
                     <span className={stats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(stats.netPnl)}</span>
                     <span>{stats.winRate}%</span>
@@ -289,7 +293,7 @@ export default function Rivals() {
               {inspectorTab === 'overview' ? (
                 <>
                   <div className="rv-inspector-meta">
-                    <div className={`rv-division-badge ${selectedDivision.className}`}><ShieldCheck size={13} /> {selectedDivision.name} division</div>
+                    <div className="rv-division-badge"><RankMedallion rank={selectedRankTier} size={24} /><span style={{ color: RANK_COLORS[selectedRankTier] }}>{RANK_LABELS[selectedRankTier]}</span></div>
                     <span>Rank #{ranked.findIndex(rival => rival.id === selectedRival.id) + 1}</span>
                   </div>
                   <div className="rv-insight-equity"><div><span>{PERIODS.find(item => item.value === period)?.label} equity</span><strong className={selectedStats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(selectedStats.netPnl)}</strong></div><Sparkline values={selectedStats.equityCurve} large /></div>
