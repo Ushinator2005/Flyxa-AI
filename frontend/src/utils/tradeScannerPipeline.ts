@@ -497,7 +497,16 @@ export async function buildScannerAssets(
 }> {
   const image = await loadImage(file)
   const sourceType = file.type || 'image/png'
-  const scannerContext = detectTradeBoxContext(image, colors?.stopLoss, colors?.takeProfit, colors?.entry)
+  // Always resolve to a concrete hex — never pass undefined to the detector.
+  // This guarantees the entry/stop/TP colors from Settings are used for pixel
+  // matching; without this the entry mask would be silently skipped whenever
+  // the user hasn't explicitly saved a preference.
+  const resolvedColors = {
+    stopLoss:   colors?.stopLoss   ?? DEFAULT_SCANNER_COLORS.stopLoss,
+    takeProfit: colors?.takeProfit ?? DEFAULT_SCANNER_COLORS.takeProfit,
+    entry:      colors?.entry      ?? DEFAULT_SCANNER_COLORS.entry,
+  }
+  const scannerContext = detectTradeBoxContext(image, resolvedColors.stopLoss, resolvedColors.takeProfit, resolvedColors.entry)
   const focusCrops = buildDynamicFocusCrops(scannerContext)
 
   const focusImages = await Promise.all(
