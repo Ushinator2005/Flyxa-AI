@@ -16,7 +16,6 @@
  */
 
 const FLYXA_URLS = [
-  'http://localhost:5173',
   'https://flyxa.app',
 ];
 const FLYXA_PROD_SCANNER_URL = 'https://flyxa.app/scanner';
