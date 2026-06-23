@@ -303,6 +303,66 @@ function inferChartPaneBounds(boxLeftRatio: number, boxRightRatio: number): { le
   return { left: 0, right: 1 }
 }
 
+// Candles and wicks can cut the translucent position-tool fill into several
+// disconnected color components. Recover the complete horizontal span from
+// per-column color density instead of trusting the x-range of one component.
+function detectOverlayHorizontalSpan(
+  redMask: Uint8Array,
+  greenMask: Uint8Array,
+  width: number,
+  height: number,
+  yMin: number,
+  yMax: number,
+  fallbackLeft: number,
+  fallbackRight: number,
+): { left: number; right: number } {
+  const minPixels = Math.max(4, Math.round((yMax - yMin + 1) * 0.035))
+  const strong = new Uint8Array(width)
+
+  for (let x = 0; x < width; x += 1) {
+    let count = 0
+    for (let y = yMin; y <= yMax; y += 1) {
+      const index = y * width + x
+      if (redMask[index] || greenMask[index]) count += 1
+    }
+    if (count >= minPixels) strong[x] = 1
+  }
+
+  const runs: Array<{ left: number; right: number; strongColumns: number }> = []
+  let runStart = -1
+  let lastStrong = -1
+  let strongColumns = 0
+  const maxGap = Math.max(4, Math.round(width * 0.018))
+
+  for (let x = 0; x < width; x += 1) {
+    if (strong[x]) {
+      if (runStart < 0) runStart = x
+      lastStrong = x
+      strongColumns += 1
+    } else if (runStart >= 0 && x - lastStrong > maxGap) {
+      runs.push({ left: runStart, right: lastStrong, strongColumns })
+      runStart = -1
+      lastStrong = -1
+      strongColumns = 0
+    }
+  }
+  if (runStart >= 0) runs.push({ left: runStart, right: lastStrong, strongColumns })
+
+  const selected = runs
+    .filter(run => run.right >= fallbackLeft - maxGap && run.left <= fallbackRight + maxGap)
+    .sort((a, b) => {
+      const aOverlap = Math.max(0, Math.min(a.right, fallbackRight) - Math.max(a.left, fallbackLeft))
+      const bOverlap = Math.max(0, Math.min(b.right, fallbackRight) - Math.max(b.left, fallbackLeft))
+      return bOverlap - aOverlap || b.strongColumns - a.strongColumns
+    })[0]
+
+  if (!selected) return { left: fallbackLeft, right: fallbackRight }
+  return {
+    left: Math.min(fallbackLeft, selected.left),
+    right: Math.max(fallbackRight, selected.right),
+  }
+}
+
 function detectTradeBoxContext(
   image: HTMLImageElement,
   stopHex?: string,
@@ -365,8 +425,20 @@ function detectTradeBoxContext(
   const entryBox = entryMask ? findLargestComponent(entryMask, width, height) : null
   const hasEntryBox = entryBox !== null && entryBox.count >= 150
 
-  const boxLeftRatio = Math.min(redBox.xMin, greenBox.xMin) / width
-  const boxRightRatio = Math.max(redBox.xMax, greenBox.xMax) / width
+  const fallbackLeft = Math.min(redBox.xMin, greenBox.xMin)
+  const fallbackRight = Math.max(redBox.xMax, greenBox.xMax)
+  const overlaySpan = detectOverlayHorizontalSpan(
+    redMask,
+    greenMask,
+    width,
+    height,
+    Math.min(redBox.yMin, greenBox.yMin),
+    Math.max(redBox.yMax, greenBox.yMax),
+    fallbackLeft,
+    fallbackRight,
+  )
+  const boxLeftRatio = overlaySpan.left / width
+  const boxRightRatio = overlaySpan.right / width
   const chartPane = inferChartPaneBounds(boxLeftRatio, boxRightRatio)
   const redCenterY = (redBox.yMin + redBox.yMax) / 2
   const greenCenterY = (greenBox.yMin + greenBox.yMax) / 2

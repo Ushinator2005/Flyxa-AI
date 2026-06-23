@@ -112,7 +112,7 @@ export function evaluateTradeViolations(
   }
 
   const flags = trade.behavioral_flags ?? [];
-  if (trade.followed_plan === false || flags.includes('off-playbook')) {
+  if (trade.followed_plan === false || flags.includes('plan-deviation')) {
     violations.push(violation(
       'plan_deviation',
       'warning',
@@ -143,7 +143,7 @@ export function violationBehaviorFlags(violations: PerformanceViolation[]): stri
     max_trades: 'past-limit',
     max_contracts: 'sized-up',
     revenge_trade: 'revenge',
-    plan_deviation: 'off-playbook',
+    plan_deviation: 'plan-deviation',
     post_loss_pause: 'revenge',
   };
   return [...new Set(violations.map(item => map[item.type]).filter((item): item is string => Boolean(item)))];
@@ -158,7 +158,7 @@ export function generateNextSessionPrescriptions(
     .slice(-30);
   const now = new Date().toISOString();
   const prescriptions: PerformancePrescription[] = [];
-  const offPlan = recent.filter(trade => trade.followed_plan === false || (trade.behavioral_flags ?? []).includes('off-playbook'));
+  const offPlan = recent.filter(trade => trade.followed_plan === false || (trade.behavioral_flags ?? []).includes('plan-deviation'));
   const oversized = recent.filter(trade => limits.maxContracts > 0 && trade.contract_size > limits.maxContracts);
 
   let postLossCount = 0;

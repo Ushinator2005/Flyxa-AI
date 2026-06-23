@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { RiskRule } from '../store/types.js';
+import { saveStoreStatePatchNow } from '../store/supabaseStorage.js';
+import { pushToast } from '../store/toastStore.js';
 import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
 import './TradingPlan.css';
 
@@ -204,6 +206,7 @@ export default function TradingPlan() {
   const propFirms = INITIAL_PROP_FIRMS;
 
   const firstMountRef = useRef(true);
+  const firstRulesMountRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -217,24 +220,52 @@ export default function TradingPlan() {
     };
   }, []);
 
-  const persistState = useCallback(() => {
-    const savedAt = new Date();
-    hydrateSharedData({
-      planBlocks: planBlocks as any,
-      checklist: checklist as any,
-    });
-    setLastSaved(savedAt);
-    setNow(savedAt.getTime());
+  const persistState = useCallback(async () => {
+    const currentRiskRules = useFlyxaStore.getState().riskRules;
+    try {
+      await saveStoreStatePatchNow({
+        planBlocks,
+        checklist,
+        riskRules: currentRiskRules,
+      });
+      hydrateSharedData({
+        planBlocks: planBlocks as any,
+        checklist: checklist as any,
+      });
+      const savedAt = new Date();
+      setLastSaved(savedAt);
+      setNow(savedAt.getTime());
+    } catch {
+      pushToast({
+        tone: 'red',
+        durationMs: 4000,
+        message: 'Trading plan could not sync. Your local changes are still preserved.',
+      });
+    }
   }, [checklist, hydrateSharedData, planBlocks]);
 
+  // Plan blocks and checklist changes — debounced combined save
   useEffect(() => {
     if (firstMountRef.current) {
       firstMountRef.current = false;
       return;
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => persistState(), 650);
+    saveTimerRef.current = setTimeout(() => {
+      void persistState();
+    }, 650);
   }, [persistState, checklist, planBlocks]);
+
+  // Risk rules changes — separate debounced save that does NOT call hydrateSharedData,
+  // breaking the infinite-loop where hydrateSharedData creates a new riskRules reference
+  // which re-triggers this effect.
+  useEffect(() => {
+    if (firstRulesMountRef.current) { firstRulesMountRef.current = false; return; }
+    const timer = setTimeout(() => {
+      void saveStoreStatePatchNow({ riskRules: storeRiskRules }).catch(() => {});
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [storeRiskRules]);
 
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSaved, now), [lastSaved, now]);
   const completedBlocks = useMemo(() => planBlocks.filter(block => block.content.trim().length > 0).length, [planBlocks]);
@@ -383,7 +414,7 @@ export default function TradingPlan() {
               <RefreshCw size={13} />
               Reset
             </button>
-            <button type="button" className="tp-btn tp-btn-primary" onClick={persistState}>
+            <button type="button" className="tp-btn tp-btn-primary" onClick={() => { void persistState(); }}>
               <Save size={13} />
               Save Plan
             </button>
@@ -566,28 +597,26 @@ export default function TradingPlan() {
                     <div className="tp-contract-limits">
                       {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => (
                         <div key={sym} className="tp-contract-row">
-                          <span className="tp-contract-symbol">{sym}</span>
-                          <input
-                            className="tp-rule-input num"
-                            type="number" min="1" step="1"
-                            value={max}
-                            onChange={event => setContractLimit(rule.id, sym, Number(event.target.value))}
-                          />
+                          <span className="tp-contract-ticker">{sym}</span>
+                          <div className="tp-contract-stepper">
+                            <button type="button" className="tp-contract-step-btn"
+                              onClick={() => setContractLimit(rule.id, sym, Math.max(1, max - 1))}>−</button>
+                            <span className="tp-contract-value num">{max}</span>
+                            <button type="button" className="tp-contract-step-btn"
+                              onClick={() => setContractLimit(rule.id, sym, max + 1)}>+</button>
+                          </div>
                           <button type="button" className="tp-contract-remove" onClick={() => removeContractLimit(rule.id, sym)}>
-                            <X size={10} />
+                            <X size={9} />
                           </button>
                         </div>
                       ))}
                       {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).length > 0 && (
-                        <div className="tp-contract-chips">
+                        <div className="tp-contract-quick">
+                          <span className="tp-contract-quick-label">Quick add</span>
                           {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).map(sym => (
-                            <button
-                              key={sym}
-                              type="button"
-                              className="tp-contract-chip"
-                              onClick={() => setContractLimit(rule.id, sym, 1)}
-                            >
-                              {sym}
+                            <button key={sym} type="button" className="tp-contract-chip"
+                              onClick={() => setContractLimit(rule.id, sym, 1)}>
+                              <Plus size={8} />{sym}
                             </button>
                           ))}
                         </div>
@@ -595,20 +624,20 @@ export default function TradingPlan() {
                       <div className="tp-contract-add-row">
                         <input
                           className="tp-rule-input tp-contract-sym-input"
-                          placeholder="Other symbol"
+                          placeholder="Symbol"
                           value={pendingContracts[rule.id]?.symbol ?? ''}
                           onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], symbol: event.target.value.toUpperCase() } }))}
                           onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
                         />
                         <input
-                          className="tp-rule-input num tp-contract-max-input"
+                          className="tp-rule-input num"
                           type="number" min="1" step="1"
                           placeholder="Max"
                           value={pendingContracts[rule.id]?.max ?? ''}
                           onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], max: event.target.value } }))}
                           onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
                         />
-                        <button type="button" className="tp-contract-add-btn" title="Add symbol" onClick={() => commitPendingContract(rule.id)}>
+                        <button type="button" className="tp-contract-add-btn" title="Add" onClick={() => commitPendingContract(rule.id)}>
                           <Plus size={11} />
                         </button>
                       </div>

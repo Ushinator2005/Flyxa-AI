@@ -1,5 +1,6 @@
 import type { StateStorage } from 'zustand/middleware';
 import { supabase } from '../services/api.js';
+import { shouldPreferLocalStore } from '../utils/storeFreshness.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -28,6 +29,7 @@ let latestValue: string | null = null;
 let cachedUserId: string | null = null;
 let cachedToken: string | null = null;
 let setItemRevision = 0;
+let saveQueue: Promise<void> = Promise.resolve();
 
 function stripBase64Images(value: unknown): unknown {
   if (typeof value === 'string') {
@@ -433,6 +435,57 @@ async function flushSaveWithRetry(userId: string, value: string, attempt = 0): P
   }
 }
 
+function enqueueStoreSave(userId: string, value: string): Promise<boolean> {
+  const task = saveQueue.then(() => flushSaveWithRetry(userId, value));
+  saveQueue = task.then(() => undefined, () => undefined);
+  return task;
+}
+
+export async function saveStoreStatePatchNow(
+  patch: Record<string, unknown>,
+): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
+  const userId = await getUserId();
+  if (!userId) throw new Error('You must be signed in to save Flyxa data');
+
+  const source = latestValue ?? pendingValue
+    ?? localStorage.getItem(localStoreKey(userId))
+    ?? localStorage.getItem(LEGACY_STORE_KEY)
+    ?? JSON.stringify({ state: {}, version: 1 });
+  const parsed = JSON.parse(sanitizeStoreValue(source)) as {
+    state?: Record<string, unknown>;
+    version?: number;
+  };
+  const value = sanitizeStoreValue(JSON.stringify({
+    ...parsed,
+    state: {
+      ...(parsed.state ?? {}),
+      ...patch,
+    },
+    version: parsed.version ?? 1,
+  }));
+
+  ++setItemRevision;
+  latestValue = value;
+  pendingValue = value;
+  try {
+    localStorage.setItem(localStoreKey(userId), value);
+    localStorage.setItem(localSavedAtKey(userId), Date.now().toString());
+  } catch {
+    // The queued cloud save remains authoritative if browser storage is full.
+  }
+
+  const saved = await enqueueStoreSave(userId, value);
+  if (!saved) throw new Error('Could not save Flyxa data to Supabase');
+
+  if (latestValue === value) latestValue = null;
+  if (pendingValue === value) pendingValue = null;
+}
+
 export async function flushSupabaseStoreNow(): Promise<void> {
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -452,15 +505,15 @@ export async function flushSupabaseStoreNow(): Promise<void> {
   );
   if (!value) return;
 
-  latestValue = null;
-  pendingValue = null;
-  const saved = await flushSaveWithRetry(userId, value);
+  const saved = await enqueueStoreSave(userId, value);
   if (!saved) {
     // Keep the newest snapshot available for the next write/flush attempt.
     latestValue = value;
     pendingValue = value;
     throw new Error('Could not save Flyxa data to Supabase');
   }
+  if (latestValue === value) latestValue = null;
+  if (pendingValue === value) pendingValue = null;
 }
 
 /**
@@ -641,6 +694,22 @@ export const supabaseZustandStorage: StateStorage = {
         .maybeSingle();
 
       if (!error && data?.flyxa_data) {
+        const local = localStorage.getItem(storeKey);
+        const localSavedAt = localStorage.getItem(localSavedAtKey(userId));
+        if (local && shouldPreferLocalStore(localSavedAt, data.updated_at)) {
+          const sanitizedLocal = sanitizeStoreValue(local);
+          const localEntries = extractEntries(sanitizedLocal);
+          const remoteEntries = (data.flyxa_data as { state?: { entries?: unknown[] } })?.state?.entries;
+          const remoteHasEntries = Array.isArray(remoteEntries) && remoteEntries.length > 0;
+          // Never let a blank local snapshot (e.g. from HMR) override Supabase entries.
+          if (localEntries.length > 0 || !remoteHasEntries) {
+            // The browser has a newer accepted edit than Supabase. Hydrate from
+            // that snapshot immediately and finish syncing it in the background.
+            void enqueueStoreSave(userId, sanitizedLocal);
+            return sanitizedLocal;
+          }
+        }
+
         // Supabase is the source of truth across all devices.
         // Also recover preSessionHistory from the pre_sessions table if the main blob is missing it.
         let flyxaData = data.flyxa_data as Record<string, unknown>;
@@ -678,7 +747,7 @@ export const supabaseZustandStorage: StateStorage = {
         // user_store exists but 0 entries — try store_entries_backup table
         const recovered = await recoverFromJournalEntries(userId, data.flyxa_data);
         if (recovered) {
-          void flushSaveWithRetry(userId, recovered);
+          void enqueueStoreSave(userId, recovered);
           return recovered;
         }
 
@@ -693,7 +762,7 @@ export const supabaseZustandStorage: StateStorage = {
             state: { ...(base.state as Record<string, unknown> ?? {}), entries: safeEntries },
           });
           const sanitizedRebuilt = sanitizeStoreValue(rebuilt);
-          void flushSaveWithRetry(userId, sanitizedRebuilt);
+          void enqueueStoreSave(userId, sanitizedRebuilt);
           return sanitizedRebuilt;
         }
 
@@ -703,7 +772,7 @@ export const supabaseZustandStorage: StateStorage = {
       // No user_store row — try store_entries_backup table
       const recovered = await recoverFromJournalEntries(userId, null);
       if (recovered) {
-        void flushSaveWithRetry(userId, recovered);
+        void enqueueStoreSave(userId, recovered);
         return recovered;
       }
 
@@ -711,7 +780,7 @@ export const supabaseZustandStorage: StateStorage = {
       const local = localStorage.getItem(storeKey);
       if (local) {
         const sanitizedLocal = sanitizeStoreValue(local);
-        void flushSaveWithRetry(userId, sanitizedLocal);
+        void enqueueStoreSave(userId, sanitizedLocal);
         return sanitizedLocal;
       }
 
@@ -719,7 +788,7 @@ export const supabaseZustandStorage: StateStorage = {
       const legacyLocal = readLegacyLocalStore(userId);
       if (legacyLocal) {
         const sanitizedLegacy = sanitizeStoreValue(legacyLocal);
-        void flushSaveWithRetry(userId, sanitizedLegacy);
+        void enqueueStoreSave(userId, sanitizedLegacy);
         return sanitizedLegacy;
       }
 
@@ -730,7 +799,7 @@ export const supabaseZustandStorage: StateStorage = {
       if (safeEntries.length > 0) {
         const rebuilt = JSON.stringify({ state: { entries: safeEntries }, version: 1 });
         const sanitizedRebuilt = sanitizeStoreValue(rebuilt);
-        void flushSaveWithRetry(userId, sanitizedRebuilt);
+        void enqueueStoreSave(userId, sanitizedRebuilt);
         return sanitizedRebuilt;
       }
     } catch {
@@ -820,7 +889,7 @@ export const supabaseZustandStorage: StateStorage = {
     mirrorLocalEntriesSafe(entries, userId, deletedTradeIds, deletedEntryDates);
 
     saveTimer = setTimeout(() => {
-      if (pendingValue) void flushSaveWithRetry(userId, pendingValue);
+      if (pendingValue) void enqueueStoreSave(userId, pendingValue);
     }, SAVE_DEBOUNCE_MS);
   },
 

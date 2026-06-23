@@ -223,6 +223,7 @@ export async function readTradeChart(
   entry_time: string | null;
   close_time: string | null;
   confidence: 'high' | 'medium' | 'low';
+  first_touch_candle_index: number | null;
   evidence: string | null;
   warnings: string[];
 }> {
@@ -250,6 +251,19 @@ Step 3. Find the right-axis price labels attached to the position tool:
   • Label with ${slName} background     → that price number is sl_price
   • Label with ${tpName} background     → that price number is tp_price
 
+CRITICAL — STACKED LABELS DISAMBIGUATION:
+On many platforms (especially TradingView), you will see TWO labels of identical or very similar color stacked close together at the TP or SL price level. One is the position-tool price label (the correct value). The other is the LIVE floating price label that shows the current market price — it can coincidentally match your configured color and float near the zone boundary.
+YOU MUST USE THE ZONE BOUNDARY TO PICK THE CORRECT LABEL:
+  • For a LONG trade:
+    - The correct TP label is the one whose vertical position aligns with the TOP OUTER EDGE of the teal zone (the highest horizontal boundary line of the teal colored area). It will be INSIDE or exactly ON the zone boundary.
+    - Any label that appears ABOVE the top edge of the teal zone (floating beyond the boundary, outside the zone) is the live price marker — IGNORE IT.
+    - The correct SL label is the one whose vertical position aligns with the BOTTOM OUTER EDGE of the red/pink zone (the lowest horizontal boundary line of the red area). It will be INSIDE or exactly ON the zone boundary.
+    - Any label that appears BELOW the bottom edge of the red zone is the live price marker — IGNORE IT.
+  • For a SHORT trade (mirror image):
+    - The correct SL label aligns with the TOP OUTER EDGE of the upper red/pink zone — ignore any label floating above it.
+    - The correct TP label aligns with the BOTTOM OUTER EDGE of the lower teal zone — ignore any label floating below it.
+RULE: When two similarly-colored labels are stacked, ALWAYS choose the inner one (the one sitting at or inside the zone boundary), NOT the one floating outside the boundary.
+
 Step 4. IGNORE everything else on the chart completely:
   • Horizontal lines (black, white, or any color) drawn across the chart = key levels, NOT trade prices
   • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price
@@ -266,11 +280,19 @@ Look at the right-hand price axis. Find the three colored price labels (any shap
   • Teal or green background label = tp_price
 Ignore all horizontal lines across the chart and any other price labels. In particular, never use a black/white right-axis key-level label as entry_price when a grey entry label is visible.
 FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
+STACKED LABELS: If two labels of similar color appear stacked near the TP or SL price, use the one that aligns with the OUTER BOUNDARY of the colored zone (the far edge of the zone from entry). The label floating outside the zone boundary is the live price marker — ignore it.
 `;
 
   const systemPrompt = `You are a professional futures chart reader. Your ONLY job is to extract exact trade data from a P&L card screenshot — the chart may come from TradingView, TopstepX, Apex Trader, FTMO, Tradovate, or any other platform.
 You may receive the full chart plus labelled scanner crops. The crop labels are included as text immediately before each image.
 Use price-label-focus as the primary OCR view for right-axis price labels. Use entry-color-label-focus as the primary OCR view for the entry price label. If entry-label-focus, stop-label-focus, or target-label-focus show black/white horizontal-line labels, treat them as crop hints only and ignore those black/white values as trade prices.
+
+CROP AUTHORITY RULE — HIGHEST PRIORITY FOR SL/TP PRICES:
+The crops labelled stop-label-focus and target-label-focus are scanner-generated strips precisely centered on the SL and TP zone boundary lines — each only ~9% of the chart height tall, placed right at that level.
+• If stop-label-focus contains a COLORED label (any non-black, non-white background) → that label's number is the DEFINITIVE sl_price. It overrides every other reading, including the full chart and price-label-focus. Do not second-guess it.
+• If target-label-focus contains a COLORED label (any non-black, non-white background) → that label's number is the DEFINITIVE tp_price. It overrides every other reading, including the full chart and price-label-focus. Do not second-guess it.
+• Only fall back to price-label-focus or the full chart for a price if the dedicated crop shows ONLY a black or white label (meaning it captured a key-level line instead of the zone boundary label).
+Read each number in the colored label CHARACTER BY CHARACTER — digit by digit. Do not approximate or round. "823" and "830" are completely different numbers — read every digit individually.
 
 STEP 1 — READ THE TICKER:
 Look at the top-left corner of the chart for the instrument header.
@@ -336,9 +358,23 @@ For LONG trades:
 - SL hit: a candle LOW wick reaches or goes below sl_price (bottom edge of lower red/pink zone)
 - TP hit: a candle HIGH wick reaches or exceeds tp_price (top edge of upper teal zone)
 
-FIRST TOUCH RULE: The first candle (leftmost) that triggers either level decides the result. Stop scanning immediately at that candle.
+FIRST TOUCH RULE: Number the entry candle as candle 0, then candle 1, candle 2, and so on moving left-to-right.
+The first numbered candle that triggers either level decides the result. Stop scanning immediately at that candle.
+Return that zero-based number as first_touch_candle_index. If no exit is confirmed, return null.
 If price partially moves toward TP then reverses and hits SL — the result is SL, regardless of how far into the TP zone it went.
 NEVER stop scanning early just because price moved deep into one zone. You must check whether it actually reached the outer boundary.
+
+SINGLE-CANDLE SPAN RULE — THIS OVERRIDES FIRST TOUCH:
+A candle "spans both levels" when its full range covers both the TP price and the SL price simultaneously:
+  • For LONG: that candle's LOW wick ≤ sl_price AND its HIGH wick ≥ tp_price in the same candle.
+  • For SHORT: that candle's HIGH wick ≥ sl_price AND its LOW wick ≤ tp_price in the same candle.
+When the first candle to touch either level also spans the other level in the same candle, the intra-candle order of events is UNKNOWABLE from a static chart image.
+In this case you MUST:
+  1. Set exit_reason to null.
+  2. Set confidence to "low".
+  3. Add "Single candle spans both TP and SL — intra-candle order unknown. Verify Win/Loss manually." to warnings.
+DO NOT default to TP. DO NOT default to SL. DO NOT guess. This situation is genuinely ambiguous — report it as such.
+This rule is especially common on the first 1-minute candle after market open (e.g. 09:30 ET) which often has an outsized range.
 
 When in doubt on a borderline wick (barely grazing the line), set exit_reason to null.
 If a wick clearly breaks THROUGH the zone boundary (extends past the outer edge entirely), that is an unambiguous hit.
@@ -362,6 +398,7 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
   "entry_time": string or null,
   "close_time": string or null,
   "confidence": "high" or "medium" or "low",
+  "first_touch_candle_index": integer or null,
   "evidence": string describing exactly what you saw for the exit decision,
   "warnings": array of strings for anything you were uncertain about
 }`;
@@ -379,6 +416,8 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
       const durationSeconds = durationSecondsRaw !== null ? Math.max(0, Math.round(durationSecondsRaw)) : null;
       const timeframeMinutesRaw = parseNullableNumber(parsed.timeframe_minutes);
       const timeframeMinutes = timeframeMinutesRaw !== null ? Math.max(0, Math.round(timeframeMinutesRaw)) : null;
+      const firstTouchIndexRaw = parseNullableNumber(parsed.first_touch_candle_index);
+      const firstTouchCandleIndex = firstTouchIndexRaw !== null ? Math.max(0, Math.round(firstTouchIndexRaw)) : null;
 
       const direction = parseDirection(parsed.direction);
       const entryPrice = parseNullableNumber(parsed.entry_price);
@@ -414,6 +453,7 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
         entry_time: entryTime,
         close_time: explicitCloseTime ?? addSecondsToHHMM(entryTime, durationSeconds),
         confidence: parsedConfidence,
+        first_touch_candle_index: exitReason ? firstTouchCandleIndex : null,
         evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
         warnings: finalWarnings,
       };
@@ -437,7 +477,12 @@ async function verifyTradeExit(
     target: number;
   },
   boxBounds?: { leftRatio: number; rightRatio: number },
-): Promise<{ exit_reason: 'TP' | 'SL' | null; confidence: 'high' | 'medium' | 'low'; evidence: string | null }> {
+): Promise<{
+  exit_reason: 'TP' | 'SL' | null;
+  confidence: 'high' | 'medium' | 'low';
+  first_touch_candle_index: number | null;
+  evidence: string | null;
+}> {
   const isLong = trade.direction === 'Long';
   const bounds = boxBounds
     ? `Only inspect candle centers between ${Math.round(boxBounds.leftRatio * 100)}% and ${Math.round(boxBounds.rightRatio * 100)}% of the image width.`
@@ -452,7 +497,8 @@ Trade:
 - Target: ${trade.target}
 
 ${bounds}
-Start at the left edge of the colored position tool and scan candle wicks from left to right.
+Number the entry candle at the left edge of the colored position tool as candle 0.
+Then count candle 1, candle 2, and so on while scanning candle wicks left to right.
 For this ${trade.direction}:
 - Stop is touched when a wick ${isLong ? `falls to or below ${trade.stop}` : `rises to or above ${trade.stop}`}.
 - Target is touched when a wick ${isLong ? `rises to or above ${trade.target}` : `falls to or below ${trade.target}`}.
@@ -460,10 +506,15 @@ Entering the colored zone is not a hit; the wick must reach the OUTER boundary a
 The first touched boundary wins. If neither boundary is visibly touched or ordering is uncertain, return null.
 Ignore the live-price marker and all candles outside the colored position tool.
 
+SINGLE-CANDLE SPAN RULE — HIGHEST PRIORITY:
+If the first candle to touch either boundary simultaneously spans BOTH boundaries in the same candle (${isLong ? `LOW wick ≤ ${trade.stop} AND HIGH wick ≥ ${trade.target}` : `HIGH wick ≥ ${trade.stop} AND LOW wick ≤ ${trade.target}`}), the intra-candle order is unknowable from a static image.
+In that case you MUST return exit_reason: null, confidence: "low". DO NOT default to either side.
+
 Return only JSON:
 {
   "exit_reason": "TP" or "SL" or null,
   "confidence": "high" or "medium" or "low",
+  "first_touch_candle_index": integer or null,
   "evidence": "brief first-touch evidence"
 }`;
 
@@ -475,10 +526,86 @@ Return only JSON:
     return {
       exit_reason: parseExitReason(parsed.exit_reason),
       confidence: parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low',
+      first_touch_candle_index: (() => {
+        const value = parseNullableNumber(parsed.first_touch_candle_index);
+        return value === null ? null : Math.max(0, Math.round(value));
+      })(),
       evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
     };
   } catch {
-    return { exit_reason: null, confidence: 'low', evidence: null };
+    return { exit_reason: null, confidence: 'low', first_touch_candle_index: null, evidence: null };
+  }
+}
+
+async function detectBoundaryTouch(
+  base64Image: string,
+  mimeType: string,
+  focusImages: Array<{ base64Image: string; mimeType: string; label: string }>,
+  trade: {
+    direction: 'Long' | 'Short';
+    entry: number;
+    stop: number;
+    target: number;
+  },
+  boundary: 'SL' | 'TP',
+  boxBounds?: { leftRatio: number; rightRatio: number },
+): Promise<{
+  touched: boolean;
+  first_touch_candle_index: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  evidence: string | null;
+}> {
+  const isLong = trade.direction === 'Long';
+  const price = boundary === 'SL' ? trade.stop : trade.target;
+  const touchRule = boundary === 'SL'
+    ? isLong
+      ? `the candle LOW wick reaches or falls below ${price}`
+      : `the candle HIGH wick reaches or rises above ${price}`
+    : isLong
+      ? `the candle HIGH wick reaches or rises above ${price}`
+      : `the candle LOW wick reaches or falls below ${price}`;
+  const bounds = boxBounds
+    ? `The position tool spans approximately ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% of the full image width.`
+    : 'Use the visible left and right edges of the colored position tool.';
+
+  const prompt = `You are checking ONE boundary on a futures chart. Do not decide whether the trade won or lost.
+
+Trade direction: ${trade.direction}
+Entry: ${trade.entry}
+Boundary to inspect: ${boundary} at ${price}
+${bounds}
+
+Start at the FIRST candle whose center is inside the LEFT edge of the colored position tool. That is candle 0.
+Count every candle to the right as candle 1, 2, 3, and so on.
+Ignore all candles left of the colored tool and all chart annotations.
+
+This ${boundary} boundary is touched only when ${touchRule}.
+Entering the colored zone without reaching its far outer edge is not a touch.
+Scan strictly left-to-right and stop at the earliest candle touching this boundary.
+
+Return only JSON:
+{
+  "touched": boolean,
+  "first_touch_candle_index": integer or null,
+  "confidence": "high" or "medium" or "low",
+  "evidence": "describe the earliest touching wick"
+}`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
+    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages);
+    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    const index = parseNullableNumber(parsed.first_touch_candle_index);
+    const touched = parsed.touched === true && index !== null;
+    return {
+      touched,
+      first_touch_candle_index: touched ? Math.max(0, Math.round(index)) : null,
+      confidence: parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low',
+      evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
+    };
+  } catch {
+    return { touched: false, first_touch_candle_index: null, confidence: 'low', evidence: null };
   }
 }
 
@@ -495,6 +622,7 @@ function nullResult(warnings: string[]) {
     entry_time: null,
     close_time: null,
     confidence: 'low' as const,
+    first_touch_candle_index: null,
     evidence: null,
     warnings,
   };
@@ -544,43 +672,58 @@ export async function analyzeChartImage(
     rawDirectionHint === 'Long' || rawDirectionHint === 'Short' ? rawDirectionHint : undefined;
 
   const result = await readTradeChart(base64Image, mimeType, focusImages, userColors, boxBounds, directionHint);
-  let verifiedExitReason = result.exit_reason;
-  let verifiedConfidence = result.confidence;
+  let verifiedExitReason: 'TP' | 'SL' | null = null;
+  let verifiedConfidence: 'high' | 'medium' | 'low' = 'low';
+  let verifiedFirstTouchIndex: number | null = null;
   let verifiedEvidence = result.evidence;
   const verificationWarnings = [...(result.warnings ?? [])];
 
   if (
-    result.exit_reason
-    && result.direction
+    result.direction
     && result.entry_price !== null
     && result.sl_price !== null
     && result.tp_price !== null
   ) {
-    const verification = await verifyTradeExit(
-      base64Image,
-      mimeType,
-      focusImages,
-      {
-        direction: result.direction,
-        entry: result.entry_price,
-        stop: result.sl_price,
-        target: result.tp_price,
-      },
-      boxBounds,
-    );
+    const tradeForVerification = {
+      direction: result.direction,
+      entry: result.entry_price,
+      stop: result.sl_price,
+      target: result.tp_price,
+    };
+    const [stopTouch, targetTouch] = await Promise.all([
+      detectBoundaryTouch(base64Image, mimeType, focusImages, tradeForVerification, 'SL', boxBounds),
+      detectBoundaryTouch(base64Image, mimeType, focusImages, tradeForVerification, 'TP', boxBounds),
+    ]);
 
-    if (verification.exit_reason !== result.exit_reason) {
-      verifiedExitReason = null;
-      verifiedConfidence = 'low';
-      verifiedEvidence = verification.evidence ?? result.evidence;
+    const stopIndex = stopTouch.first_touch_candle_index;
+    const targetIndex = targetTouch.first_touch_candle_index;
+
+    if (stopTouch.touched && stopIndex !== null && (!targetTouch.touched || targetIndex === null || stopIndex < targetIndex)) {
+      verifiedExitReason = 'SL';
+      verifiedFirstTouchIndex = stopIndex;
+      verifiedConfidence = stopTouch.confidence;
+      verifiedEvidence = stopTouch.evidence;
+    } else if (targetTouch.touched && targetIndex !== null && (!stopTouch.touched || stopIndex === null || targetIndex < stopIndex)) {
+      verifiedExitReason = 'TP';
+      verifiedFirstTouchIndex = targetIndex;
+      verifiedConfidence = targetTouch.confidence;
+      verifiedEvidence = targetTouch.evidence;
+    } else if (stopTouch.touched && targetTouch.touched && stopIndex === targetIndex) {
       verificationWarnings.push(
-        `Exit outcome requires confirmation: initial read was ${result.exit_reason}, independent verification was ${verification.exit_reason ?? 'unresolved'}.`
+        `SL and TP were both detected on candle ${stopIndex}; intrabar order cannot be determined from the screenshot.`
       );
     } else {
-      verifiedConfidence = result.confidence === 'high' && verification.confidence === 'high'
-        ? 'high'
-        : 'medium';
-      verifiedEvidence = verification.evidence ?? result.evidence;
+      verificationWarnings.push('Neither SL nor TP had a confirmed boundary touch inside the position tool.');
+    }
+
+    verificationWarnings.push(
+      `Boundary scan: SL=${stopTouch.touched ? `candle ${stopIndex}` : 'not touched'}, TP=${targetTouch.touched ? `candle ${targetIndex}` : 'not touched'}.`
+    );
+
+    if (!verifiedExitReason) {
+      verificationWarnings.push(
+        'Exit remains unconfirmed because no unique earliest boundary touch was established.'
+      );
     }
   }
 
@@ -599,7 +742,7 @@ export async function analyzeChartImage(
     exit_reason: verifiedExitReason,
     pnl_result: verifiedExitReason === 'TP' ? 'Win' : verifiedExitReason === 'SL' ? 'Loss' : null,
     exit_confidence: verifiedConfidence,
-    first_touch_candle_index: null,
+    first_touch_candle_index: verifiedFirstTouchIndex,
     first_touch_evidence: verifiedEvidence,
     warnings: verificationWarnings,
   };

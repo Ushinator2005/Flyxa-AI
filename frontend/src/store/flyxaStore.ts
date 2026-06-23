@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { supabaseZustandStorage } from './supabaseStorage.js';
+import { publishPreSessionSync } from '../utils/preSessionSync.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { DEFAULT_ACHIEVEMENTS, mergeAchievementCatalog, refreshAchievements } from './achievements.js';
 import { pushToast } from './toastStore.js';
@@ -366,6 +368,7 @@ function normalizeTradeUnknown(input: unknown, entryId: string, date: string, ac
       followedPlan: reflectionRaw.followedPlan === true || reflectionRaw.followedPlan === false ? reflectionRaw.followedPlan : null,
       followedPlanLogged: reflectionRaw.followedPlanLogged === true,
     },
+    behavioralFlags: normalizeBehavioralFlags(input.behavioralFlags ?? input.behavioral_flags),
     confluences: normalizeConfluences(input.confluences),
     // `account` is the store field; `accountId` is the JournalTrade field.
     // Accept either so trades normalised from TradeJournal mutations keep their account.
@@ -885,9 +888,12 @@ const useFlyxaStore = create<FlyxaStore>()(
 
       setPreSession: (data) => set(() => ({ preSession: data })),
 
-      setPreSessionForDate: (date, data) => set((state) => ({
-        preSessionHistory: { ...state.preSessionHistory, [date]: data },
-      })),
+      setPreSessionForDate: (date, data) => {
+        set((state) => ({
+          preSessionHistory: { ...state.preSessionHistory, [date]: data },
+        }));
+        publishPreSessionSync(date, data);
+      },
 
       setOathItems: (items) => set(() => ({ oathItems: items })),
 

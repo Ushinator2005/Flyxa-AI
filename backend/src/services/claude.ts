@@ -1570,7 +1570,8 @@ async function decisiveFinalReview(
   const decisivePrompt = `You are the final decision-maker for a futures trade journal scanner.
 
 Your job is to read the TradingView screenshot exactly the way an experienced trader would manually journal it.
-You must return one single best final answer, not an abstention.
+Return a definitive TP or SL only when the first touched level is visible.
+If neither level is visibly touched, the trade is still open, or the first touch cannot be determined, return exit_reason: null.
 
 ${MANUAL_READING_PROCESS}
 ${FIRST_TOUCH_RULE}
@@ -1580,7 +1581,7 @@ When deciding timeframe_minutes, trust the header-focus interval immediately bes
 If a comparison chart is visible anywhere, ignore it unless it is the chart with the colored risk/reward box.
 
 If the earlier passes disagree, use them only as hints. The screenshot itself is the source of truth.
-Do not return manual review text. Choose the single most likely final interpretation.
+Do not return manual review text. Do not convert uncertainty into a win or loss.
 Never invent price levels that are not visible on the screenshot. If one field is slightly unclear, use the best supported value from the hints below.
 
 Hint pass 1:
@@ -1642,7 +1643,7 @@ async function directExitRead(
     model: MODEL,
     max_tokens: 512,
     temperature: 0,
-    system: `You are a precise chart reader. You look at a TradingView candlestick chart and determine whether a trade exited at Stop Loss or Take Profit. You answer decisively based only on what you can see. Return only valid JSON.`,
+  system: `You are a precise chart reader. You look at a TradingView candlestick chart and determine whether a trade exited at Stop Loss or Take Profit. Never guess an exit. Return only valid JSON.`,
     messages: [{
       role: 'user',
       content: [
@@ -1662,10 +1663,11 @@ TASK: Starting from the entry candle (at the LEFT edge of the coloured trade box
 - For a ${isShort ? 'SHORT' : 'LONG'} trade: if ${isShort ? 'the candle LOW (wick bottom) reaches or drops below' : 'the candle HIGH (wick tip) reaches or exceeds'} ${trade.tp} → TP hit.
 - The FIRST level touched decides the result. Stop immediately at that candle.
 - IGNORE any price labels or candles outside the trade box region and to the far right of the chart.
+- If neither level is visibly touched, or you cannot identify which came first, return null.
 
 Return this JSON exactly:
 {
-  "exit_reason": "TP" or "SL",
+  "exit_reason": "TP" or "SL" or null,
   "confidence": "high" or "medium" or "low",
   "evidence": "one sentence describing which candle after entry touched which level first"
 }
@@ -1704,10 +1706,11 @@ function resolveExitReason(
     return humanReview.exit_reason;
   }
 
-  return verification.exit_reason
-    ?? humanReview.exit_reason
-    ?? decisiveReview.exit_reason
-    ?? extraction.exit_reason;
+  const sources = [verification, humanReview, decisiveReview, extraction];
+  const highConfidence = sources.find(source => (
+    source.exit_reason !== null && source.exit_confidence === 'high'
+  ));
+  return highConfidence?.exit_reason ?? null;
 }
 
 function buildManualReaderBase(

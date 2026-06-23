@@ -6,6 +6,7 @@ import { tradesApi } from '../services/api.js';
 import { persistDeletedTradeId } from '../utils/deletedTrades.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import {
   evaluateTradeViolations,
   limitsFromPreSession,
@@ -63,7 +64,8 @@ function deriveEmotionalState(trade: StoreTrade): ApiTrade['emotional_state'] {
 const FLAG_SEVERITY: Record<string, number> = {
   'revenge':         35,
   'past-limit':      35,
-  'off-playbook':    35,
+  'incorrect-stop-loss': 35,
+  'plan-deviation':  35,
   'added-losing':    35,
   'fomo':            20,
   'no-confirmation': 20,
@@ -203,7 +205,7 @@ function toStoreTrade(data: Partial<ApiTrade>, entryId: string, accountId: strin
     confluences: normalizeConfluences(data.confluences),
     account: data.accountId ?? data.account_id ?? data.accountIds?.[0] ?? accountId,
     accountIds: normalizeAccountIds(data.accountIds ?? data.account_ids, data.accountId ?? data.account_id ?? accountId),
-    behavioralFlags: Array.isArray(data.behavioral_flags) ? data.behavioral_flags : [],
+    behavioralFlags: normalizeBehavioralFlags(data.behavioral_flags),
     performanceViolations: Array.isArray(data.performance_violations) ? data.performance_violations : [],
     createdAt: data.created_at ?? new Date().toISOString(),
   };
@@ -264,7 +266,7 @@ export function toApiTrade(trade: StoreTrade): ApiTrade {
     confluences: normalizeConfluences((trade as StoreTrade).confluences),
     followed_plan: typeof followedPlan === 'boolean' ? followedPlan : null,
     plan_score: typeof planScore === 'number' ? planScore : null,
-    behavioral_flags: Array.isArray((trade as RichStoreTrade).behavioralFlags) ? (trade as RichStoreTrade).behavioralFlags : [],
+    behavioral_flags: normalizeBehavioralFlags((trade as RichStoreTrade).behavioralFlags),
     performance_violations: Array.isArray((trade as RichStoreTrade).performanceViolations) ? (trade as RichStoreTrade).performanceViolations : [],
     session,
     created_at: trade.createdAt,

@@ -47,7 +47,7 @@ function isRevengeTrade(trade: Trade) {
 }
 
 function isOffPlanTrade(trade: Trade) {
-  return trade.followed_plan === false || flagsOf(trade).includes('off-playbook');
+  return trade.followed_plan === false || flagsOf(trade).includes('plan-deviation');
 }
 
 function sortedDayTrades(trades: Trade[], date: string) {
@@ -182,4 +182,3 @@ export function getMostRecentDailyFlowBefore(trades: Trade[], beforeDate: string
   const lastDate = dates[0];
   return lastDate ? buildDailyFlowInsight(trades, lastDate) : null;
 }
-

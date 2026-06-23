@@ -23,6 +23,8 @@ import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { scaleContractAmount } from '../utils/contractSizing.js';
 import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
+import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { evaluateEntryRules, manualRules } from '../utils/tradingRules.js';
@@ -583,7 +585,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           thesis: trade.thesis && typeof trade.thesis === 'object' ? trade.thesis as JournalTrade['thesis'] : undefined,
           executionReview: trade.executionReview && typeof trade.executionReview === 'object' ? trade.executionReview as JournalTrade['executionReview'] : undefined,
           psychologyRatings: trade.psychologyRatings && typeof trade.psychologyRatings === 'object' ? trade.psychologyRatings as JournalTrade['psychologyRatings'] : undefined,
-          behavioralFlags: Array.isArray(trade.behavioralFlags) ? trade.behavioralFlags as string[] : undefined,
+          behavioralFlags: normalizeBehavioralFlags(trade.behavioralFlags),
           stateOfMind: Array.isArray(trade.stateOfMind)
             ? trade.stateOfMind
               .map((item) => {
@@ -1290,7 +1292,8 @@ const FLAG_PENALTIES: Record<string, number> = {
   'revenge':        20,
   'added-losing':   20,
   // Serious — discipline failures that damage edge
-  'off-playbook':   12,
+  'incorrect-stop-loss': 12,
+  'plan-deviation': 12,
   'reentry-stop':   12,
   'past-inval':     12,
   'moved-stop':     12,
@@ -1916,7 +1919,7 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
 const BEHAVIORAL_FLAGS_LEFT = [
   { id:'chased-entry',    label:'Chased entry — outside the zone' },
   { id:'no-confirmation', label:'Jumped in before confirmation' },
-  { id:'off-playbook',    label:'Took unplanned trade' },
+  { id:'incorrect-stop-loss', label:'Incorrect stop loss' },
   { id:'sized-up',        label:'Oversized position' },
   { id:'added-losing',    label:'Added to a losing position' },
   { id:'be-too-early',    label:'Moved to breakeven too early' },
@@ -2280,7 +2283,9 @@ export default function TradeJournal() {
 
   const mutateEntries = useCallback((updater: (prev: JournalEntry[]) => JournalEntry[]) => {
     const current = normalizeEntries(useFlyxaStore.getState().entries as unknown[], rulesTemplate);
-    const next = updater(current);
+    // Scanner entries represent traded days. Moving or deleting the final trade
+    // must also remove its empty day instead of leaving a "No trades" shell.
+    const next = pruneEmptyJournalEntries(updater(current));
     setEntriesInStore(next as unknown as StoreJournalEntry[]);
     void flushSupabaseStoreNow().catch(() => {
       // Best effort: local persist already happened; cloud sync can retry on next write.
@@ -2724,7 +2729,19 @@ export default function TradeJournal() {
           : '';
         throw new Error(`Scanner could not read entry/stop/target from this chart.${warningSuffix}`);
       }
-      const scannerExit = extracted.exit_reason === 'SL' ? scannerSl : extracted.exit_reason === 'TP' ? scannerTp : undefined;
+      // The backend's dedicated first-touch readers are authoritative. Once
+      // they resolve SL/TP and a concrete candle, that level is the exit price.
+      const exitIsReliable = extracted.exit_reason !== null
+        && typeof extracted.first_touch_candle_index === 'number'
+        && Number.isFinite(extracted.first_touch_candle_index)
+        && extracted.first_touch_candle_index >= 0;
+      const scannerExit = exitIsReliable
+        ? extracted.exit_reason === 'SL'
+          ? scannerSl
+          : extracted.exit_reason === 'TP'
+            ? scannerTp
+            : undefined
+        : undefined;
       const entryPrice = scannerEntry ?? 0;
       const exitPrice = scannerExit ?? 0;
       const entryTime = typeof extracted.entry_time === 'string' ? extracted.entry_time.slice(0, 5) : tradeTime;

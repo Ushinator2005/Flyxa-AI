@@ -13,6 +13,11 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import { riskApi } from '../services/api.js';
 import type { Trade } from '../types/index.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
+import { getTimeZoneParts } from '../utils/calendarTime.js';
+import {
+  parsePreSessionSync,
+  PRE_SESSION_SYNC_STORAGE_KEY,
+} from '../utils/preSessionSync.js';
 
 type GateStatus = 'clear' | 'caution' | 'blocked';
 type Phase      = 'idle' | 'active' | 'post';
@@ -32,7 +37,9 @@ const C = {
   mono:   'var(--font-mono)',
 } as const;
 
-function todayKey() { return new Date().toISOString().slice(0, 10); }
+function todayKey(timeZone: string) {
+  return getTimeZoneParts(new Date(), timeZone).date;
+}
 
 function fmtMoney(v: number) {
   return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -48,13 +55,13 @@ function sessionConsecLosses(trades: GuardSessionTrade[]): number {
   return n;
 }
 
-function getCalRisk(): string | null {
+function getCalRisk(timeZone: string): string | null {
   try {
     const raw = window.localStorage.getItem('flyxa_calendar_cache_v4');
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { events?: Array<{ event?: string; date?: string; time?: string; impact?: string; actual?: string }> };
     if (!Array.isArray(parsed.events)) return null;
-    const today = todayKey();
+    const today = todayKey(timeZone);
     const next = parsed.events
       .filter(e => e.impact === 'high' && e.date === today && !e.actual)
       .sort((a, b) => String(a.time ?? '').localeCompare(String(b.time ?? '')))[0];
@@ -86,7 +93,7 @@ function flag(status: GateStatus, label: string) { return { status, label }; }
 
 export default function TradeCheck() {
   const { trades }                                           = useTrades();
-  const { selectedAccountId, filterTradesBySelectedAccount } = useAppSettings();
+  const { selectedAccountId, filterTradesBySelectedAccount, preferences } = useAppSettings();
   const { dailyStatus, riskLevel, settings: riskSettings, refreshSettings } = useRisk();
   const activePreSession                                      = useFlyxaStore(state => state.preSession);
   const preSessionHistory                                    = useFlyxaStore(state => state.preSessionHistory);
@@ -102,6 +109,33 @@ export default function TradeCheck() {
   const [limitDraft, setLimitDraft]       = useState({ loss: '', trades: '', riskPct: '', contracts: '' });
   const [limitSaving, setLimitSaving]     = useState(false);
   const sessionStartedAtRef = useRef<string | null>(activePreSession?.startedAt ?? null);
+  const currentDate = todayKey(preferences.timezone);
+
+  // Trade Lens can live in a separate popup window. Zustand updates in the main
+  // app do not automatically update an already-open popup, so consume the
+  // dedicated pre-session storage signal and refresh only the relevant fields.
+  useEffect(() => {
+    const applyPreSession = (value: string | null) => {
+      const payload = parsePreSessionSync(value);
+      if (!payload) return;
+
+      useFlyxaStore.setState(state => ({
+        preSession: payload.data,
+        preSessionHistory: {
+          ...state.preSessionHistory,
+          [payload.date]: payload.data,
+        },
+      }));
+    };
+    const syncPreSession = (event: StorageEvent) => {
+      if (event.key !== PRE_SESSION_SYNC_STORAGE_KEY) return;
+      applyPreSession(event.newValue);
+    };
+
+    applyPreSession(window.localStorage.getItem(PRE_SESSION_SYNC_STORAGE_KEY));
+    window.addEventListener('storage', syncPreSession);
+    return () => window.removeEventListener('storage', syncPreSession);
+  }, []);
 
   useEffect(() => {
     clearStaleGuardSessionTrades(activePreSession?.startedAt);
@@ -130,12 +164,19 @@ export default function TradeCheck() {
     });
   }, [filterTradesBySelectedAccount, selectedAccountId, trades]);
 
-  const priorFlow = useMemo(() => getMostRecentDailyFlowBefore(scopedTrades, todayKey()), [scopedTrades]);
+  const priorFlow = useMemo(
+    () => getMostRecentDailyFlowBefore(scopedTrades, currentDate),
+    [currentDate, scopedTrades],
+  );
 
   // ── Gate: all session-level checks use local sessionTrades, not the DB ──
   const gate = useMemo(() => {
-    const today      = todayKey();
-    const preSession = preSessionHistory[today];
+    const historyPreSession = preSessionHistory[currentDate];
+    const activeSessionDate = activePreSession?.startedAt
+      ? getTimeZoneParts(new Date(activePreSession.startedAt), preferences.timezone).date
+      : null;
+    const preSession = historyPreSession
+      ?? (activeSessionDate === currentDate ? activePreSession : null);
 
     const tradeCount  = sessionTrades.length;
     const sessionLoss = sessionTrades
@@ -153,7 +194,7 @@ export default function TradeCheck() {
     const profitTarget = (preSession?.dailyTarget ?? 0) > 0 ? preSession!.dailyTarget! : null;
     const lossPct     = lossLimit > 0 ? (sessionLoss / lossLimit) * 100 : 0;
     const newsRisk    = getNewsRisk();
-    const calRisk     = getCalRisk();
+    const calRisk     = getCalRisk(preferences.timezone);
     const flags       = [];
 
     // Hard stops
@@ -179,8 +220,13 @@ export default function TradeCheck() {
       flags.push(flag('caution', 'Post-loss — confirm thesis'));
 
     // Pre-session brief
-    if (preSession?.readiness?.status === 'Stand Down')
-      flags.push(flag('blocked', 'Pre-session: stand down'));
+    if (preSession?.readiness?.status === 'Stand Down') {
+      const reason = preSession.readiness.reasons[0];
+      flags.push(flag(
+        'blocked',
+        reason ? `Pre-session: ${reason}` : 'Pre-session: stand down',
+      ));
+    }
     else if (preSession?.readiness?.status === 'Caution')
       flags.push(flag('caution', 'Pre-session caution'));
     else if (!preSession)
@@ -209,7 +255,17 @@ export default function TradeCheck() {
       : flags.some(f => f.status === 'caution') ? 'caution' : 'clear';
 
     return { status, flags, sessionPnl, sessionLoss, tradeCount, lossPct: Math.round(lossPct), lossLimit, profitTarget };
-  }, [sessionTrades, dailyStatus, riskSettings, preSessionHistory, priorFlow, riskLevel]);
+  }, [
+    activePreSession,
+    currentDate,
+    dailyStatus,
+    preferences.timezone,
+    preSessionHistory,
+    priorFlow,
+    riskLevel,
+    riskSettings,
+    sessionTrades,
+  ]);
 
   // Reminders for active phase — pulled from pre-session data
   const reminders = useMemo<string[]>(() => {

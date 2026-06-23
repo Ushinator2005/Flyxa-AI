@@ -82,7 +82,8 @@ function normalizeAccountIds(value: unknown, fallback?: string): string[] {
 }
 
 function normalizeBehavioralFlags(value: unknown): string[] {
-  return normalizeStringArray(value, [], 20);
+  return normalizeStringArray(value, [], 20)
+    .map(flag => flag.toLowerCase() === 'off-playbook' ? 'incorrect-stop-loss' : flag);
 }
 
 // GET all trades for user

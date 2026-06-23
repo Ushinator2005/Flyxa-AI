@@ -9,6 +9,7 @@ import { RiskSettings, Trade } from '../types/index.js';
 import { PatternItem } from './FlyxaAIPatterns.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
+import { publishPreSessionSync } from '../utils/preSessionSync.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { saveGuardSessionTrades } from '../hooks/useGuardSessionTrades.js';
 import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
@@ -619,7 +620,10 @@ export default function FlyxaAIPreSession() {
   useEffect(() => {
     const stored = useFlyxaStore.getState().preSessionHistory[todayIso];
     if (!stored) return;
-    if (stored.readiness?.score === readiness.score && stored.readiness?.status === readiness.status) return;
+    if (stored.readiness?.score === readiness.score && stored.readiness?.status === readiness.status) {
+      publishPreSessionSync(todayIso, stored);
+      return;
+    }
     setPreSessionForDate(todayIso, { ...stored, readiness });
     const active = useFlyxaStore.getState().preSession;
     if (active) setPreSessionAction({ ...active, readiness });
