@@ -267,10 +267,20 @@ export default function TradingPlan() {
     setRiskRules(current => current.map(rule => rule.id === id ? { ...rule, ...updates } : rule));
   };
 
+  const RULE_KIND_LABELS: Record<NonNullable<RiskRule['kind']>, string> = {
+    max_daily_loss:     'Maximum daily loss',
+    max_trades:         'Maximum trades per day',
+    max_contracts:      'Maximum contracts',
+    min_rr:             'Minimum planned R:R',
+    time_window:        'Allowed trading window',
+    cooldown_after_loss:'Cooldown after loss',
+    manual:             'Manual check',
+  };
+
   const addRiskRule = () => {
     setRiskRules(current => [...current, {
       id: `rule-${crypto.randomUUID()}`,
-      label: 'New subjective rule',
+      label: 'Manual check',
       value: '',
       unit: '',
       color: 'neutral',
@@ -480,7 +490,7 @@ export default function TradingPlan() {
                       <select
                         className="tp-rule-kind-select"
                         value={rule.kind ?? 'manual'}
-                        onChange={event => updateRiskRule(rule.id, { kind: event.target.value as RiskRule['kind'] })}
+                        onChange={event => { const kind = event.target.value as NonNullable<RiskRule['kind']>; updateRiskRule(rule.id, { kind, label: RULE_KIND_LABELS[kind] }); }}
                       >
                         <option value="max_daily_loss">Max daily loss</option>
                         <option value="max_trades">Max trades / day</option>
@@ -496,7 +506,6 @@ export default function TradingPlan() {
                       <span>{rule.enabled === false ? 'Off' : 'On'}</span>
                     </label>
                   </div>
-                  <input className="tp-rule-input tp-rule-name-input" value={rule.label} onChange={event => updateRiskRule(rule.id, { label: event.target.value })} aria-label="Rule name" />
                   {rule.kind === 'time_window' ? (
                     <div className="tp-rule-value-fields">
                       <label><span>Start</span><input className="tp-rule-input" type="time" value={rule.startTime ?? '09:30'} onChange={event => updateRiskRule(rule.id, { startTime: event.target.value })} /></label>
