@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { RiskRule } from '../store/types.js';
@@ -176,10 +177,26 @@ export default function TradingPlan() {
       done: typeof doneMap.get(item.id) === 'boolean' ? Boolean(doneMap.get(item.id)) : item.done,
     }));
   });
-  const [riskRules, setRiskRules] = useState<RiskRule[]>(() => {
-    const stored = useFlyxaStore.getState().riskRules;
-    return (stored.length > 0 ? stored : DEFAULT_STRUCTURED_RULES).map(normalizeRiskRule);
-  });
+  const storeRiskRules = useFlyxaStore(state => state.riskRules);
+  const riskRules = useMemo(() => storeRiskRules.map(normalizeRiskRule), [storeRiskRules]);
+
+  const journalEntries = useFlyxaStore(state => state.entries);
+  const topSymbols = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of journalEntries) {
+      for (const trade of entry.trades ?? []) {
+        if (!trade.symbol) continue;
+        const sym = trade.symbol.toUpperCase().trim();
+        counts.set(sym, (counts.get(sym) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([sym]) => sym);
+  }, [journalEntries]);
+
+  const [pendingContracts, setPendingContracts] = useState<Record<string, { symbol: string; max: string }>>({});
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -205,11 +222,10 @@ export default function TradingPlan() {
     hydrateSharedData({
       planBlocks: planBlocks as any,
       checklist: checklist as any,
-      riskRules: riskRules as any,
     });
     setLastSaved(savedAt);
     setNow(savedAt.getTime());
-  }, [checklist, hydrateSharedData, planBlocks, riskRules]);
+  }, [checklist, hydrateSharedData, planBlocks]);
 
   useEffect(() => {
     if (firstMountRef.current) {
@@ -218,7 +234,7 @@ export default function TradingPlan() {
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => persistState(), 650);
-  }, [persistState, checklist, planBlocks, riskRules]);
+  }, [persistState, checklist, planBlocks]);
 
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSaved, now), [lastSaved, now]);
   const completedBlocks = useMemo(() => planBlocks.filter(block => block.content.trim().length > 0).length, [planBlocks]);
@@ -260,15 +276,13 @@ export default function TradingPlan() {
   const resetPlan = () => {
     setPlanBlocks(INITIAL_PLAN_BLOCKS);
     setChecklist(INITIAL_CHECKLIST);
-    setRiskRules(DEFAULT_STRUCTURED_RULES);
+    useFlyxaStore.getState().updateRiskRules(DEFAULT_STRUCTURED_RULES);
   };
 
   const updateRiskRule = (id: string, updates: Partial<RiskRule>) => {
-    setRiskRules(current => {
-      const updated = current.map(rule => rule.id === id ? { ...rule, ...updates } : rule);
-      useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
-      return updated;
-    });
+    const current = useFlyxaStore.getState().riskRules;
+    const updated = current.map(rule => rule.id === id ? { ...rule, ...updates } : rule);
+    useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
   };
 
   const RULE_KIND_LABELS: Record<NonNullable<RiskRule['kind']>, string> = {
@@ -282,27 +296,52 @@ export default function TradingPlan() {
   };
 
   const addRiskRule = () => {
-    setRiskRules(current => {
-      const updated = [...current, {
-        id: `rule-${crypto.randomUUID()}`,
-        label: 'Manual check',
-        value: '',
-        unit: '',
-        color: 'neutral' as const,
-        kind: 'manual' as const,
-        enabled: true,
-      }];
-      useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
-      return updated;
-    });
+    const current = useFlyxaStore.getState().riskRules;
+    const updated = [...current, {
+      id: `rule-${crypto.randomUUID()}`,
+      label: 'Manual check',
+      value: '',
+      unit: '',
+      color: 'neutral' as const,
+      kind: 'manual' as const,
+      enabled: true,
+    }];
+    useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
   };
 
   const deleteRiskRule = (id: string) => {
-    setRiskRules(current => {
-      const updated = current.filter(rule => rule.id !== id);
-      useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
-      return updated;
+    const current = useFlyxaStore.getState().riskRules;
+    const updated = current.filter(rule => rule.id !== id);
+    useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+  };
+
+  const setContractLimit = (ruleId: string, symbol: string, max: number) => {
+    const current = useFlyxaStore.getState().riskRules;
+    const updated = current.map(rule =>
+      rule.id === ruleId
+        ? { ...rule, contractLimits: { ...(rule.contractLimits ?? {}), [symbol]: max } }
+        : rule
+    );
+    useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+  };
+
+  const removeContractLimit = (ruleId: string, symbol: string) => {
+    const current = useFlyxaStore.getState().riskRules;
+    const updated = current.map(rule => {
+      if (rule.id !== ruleId) return rule;
+      const { [symbol]: _, ...rest } = rule.contractLimits ?? {};
+      return { ...rule, contractLimits: rest };
     });
+    useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+  };
+
+  const commitPendingContract = (ruleId: string) => {
+    const pending = pendingContracts[ruleId];
+    const sym = pending?.symbol.trim().toUpperCase();
+    const max = Number(pending?.max);
+    if (!sym || !max || max <= 0) return;
+    setContractLimit(ruleId, sym, max);
+    setPendingContracts(prev => ({ ...prev, [ruleId]: { symbol: '', max: '' } }));
   };
 
   const exportPlan = () => {
@@ -522,6 +561,57 @@ export default function TradingPlan() {
                     <div className="tp-rule-value-fields">
                       <label><span>Start</span><input className="tp-rule-input" type="time" value={rule.startTime ?? '09:30'} onChange={event => updateRiskRule(rule.id, { startTime: event.target.value })} /></label>
                       <label><span>End</span><input className="tp-rule-input" type="time" value={rule.endTime ?? '11:30'} onChange={event => updateRiskRule(rule.id, { endTime: event.target.value })} /></label>
+                    </div>
+                  ) : rule.kind === 'max_contracts' ? (
+                    <div className="tp-contract-limits">
+                      {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => (
+                        <div key={sym} className="tp-contract-row">
+                          <span className="tp-contract-symbol">{sym}</span>
+                          <input
+                            className="tp-rule-input num"
+                            type="number" min="1" step="1"
+                            value={max}
+                            onChange={event => setContractLimit(rule.id, sym, Number(event.target.value))}
+                          />
+                          <button type="button" className="tp-contract-remove" onClick={() => removeContractLimit(rule.id, sym)}>
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                      {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).length > 0 && (
+                        <div className="tp-contract-chips">
+                          {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).map(sym => (
+                            <button
+                              key={sym}
+                              type="button"
+                              className="tp-contract-chip"
+                              onClick={() => setContractLimit(rule.id, sym, 1)}
+                            >
+                              {sym}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="tp-contract-add-row">
+                        <input
+                          className="tp-rule-input tp-contract-sym-input"
+                          placeholder="Other symbol"
+                          value={pendingContracts[rule.id]?.symbol ?? ''}
+                          onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], symbol: event.target.value.toUpperCase() } }))}
+                          onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
+                        />
+                        <input
+                          className="tp-rule-input num tp-contract-max-input"
+                          type="number" min="1" step="1"
+                          placeholder="Max"
+                          value={pendingContracts[rule.id]?.max ?? ''}
+                          onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], max: event.target.value } }))}
+                          onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
+                        />
+                        <button type="button" className="tp-contract-add-btn" title="Add symbol" onClick={() => commitPendingContract(rule.id)}>
+                          <Plus size={11} />
+                        </button>
+                      </div>
                     </div>
                   ) : rule.kind !== 'manual' ? (
                     <div className="tp-rule-value-fields">

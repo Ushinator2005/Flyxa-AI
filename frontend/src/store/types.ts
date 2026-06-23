@@ -168,6 +168,7 @@ export interface RiskRule {
   enabled?: boolean;
   startTime?: string;
   endTime?: string;
+  contractLimits?: Record<string, number>;
 }
 
 export interface ChecklistItem {
@@ -191,6 +192,8 @@ export interface PropFirm {
 }
 
 export type BillingAccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
+export type BillingEvaluationOutcome = 'Unknown' | 'Not passed' | 'Passed' | 'Funded';
+export type BillingOutcomeConfidence = 'low' | 'medium' | 'high';
 
 export interface BillingPayout {
   id: string;
@@ -201,6 +204,9 @@ export interface BillingPayout {
 export interface BillingAccount {
   id: string;
   sourceAccountId?: string;
+  entryKind?: 'account' | 'subscription' | 'reset' | 'activation';
+  parentAccountId?: string;
+  importedFromFile?: boolean;
   firm: string;
   accountType?: string;
   size: string;
@@ -210,6 +216,9 @@ export interface BillingAccount {
   actualPrice: number;
   purchaseDate: string;
   status: BillingAccountStatus;
+  evaluationOutcome?: BillingEvaluationOutcome;
+  outcomeEvidence?: string;
+  outcomeConfidence?: BillingOutcomeConfidence;
   payoutReceived: number;
   payouts?: BillingPayout[];
   notes?: string;

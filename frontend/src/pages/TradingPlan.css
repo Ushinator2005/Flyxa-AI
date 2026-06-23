@@ -667,6 +667,91 @@
   line-height: 1.45;
 }
 
+/* ── Per-symbol contract limits ──────────────────────────────────── */
+.tp-contract-limits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Shared grid: symbol/input | number input | icon button */
+.tp-contract-row,
+.tp-contract-add-row {
+  display: grid;
+  grid-template-columns: 1fr 68px 26px;
+  gap: 5px;
+  align-items: center;
+}
+
+.tp-contract-symbol {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  padding: 0 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--txt);
+  font: 600 11px var(--mono);
+  letter-spacing: .05em;
+}
+
+.tp-contract-remove,
+.tp-contract-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 35px;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--txt-3);
+  cursor: pointer;
+  transition: color .12s, background .12s, border-color .12s;
+}
+.tp-contract-remove:hover { border-color: rgba(239,68,68,.4); color: var(--red); background: rgba(239,68,68,.07); }
+.tp-contract-add-btn:hover { border-color: rgba(34,197,94,.4); color: var(--green); background: rgba(34,197,94,.07); }
+
+/* Suggestion chips */
+.tp-contract-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 4px 0 2px;
+}
+
+.tp-contract-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 5px;
+  background: var(--surface-1);
+  color: var(--txt-2);
+  font: 600 10px var(--mono);
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: border-color .12s, color .12s, background .12s;
+  white-space: nowrap;
+}
+.tp-contract-chip:hover {
+  border-color: var(--cobalt-border);
+  color: var(--cobalt);
+  background: var(--cobalt-dim);
+}
+
+
+.tp-contract-add-row {
+  padding-top: 6px;
+  border-top: 1px solid var(--app-border);
+  margin-top: 2px;
+}
+
+.tp-contract-sym-input { }
+
 .tp-rule-delete {
   align-self: flex-start;
   display: inline-flex;

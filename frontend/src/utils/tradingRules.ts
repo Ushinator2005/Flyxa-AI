@@ -75,6 +75,14 @@ export function evaluateTradeRules(
       return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `Trade ${tradeIndex + 1} of ${Math.round(value)} allowed.` };
     }
     if (rule.kind === 'max_contracts') {
+      const limits = rule.contractLimits;
+      if (limits && Object.keys(limits).length > 0) {
+        const sym = trade.symbol.toUpperCase();
+        const symbolLimit = limits[sym] ?? limits[trade.symbol];
+        if (symbolLimit === undefined) return { ruleId: rule.id, label: rule.label, state: 'ok', source: 'automatic', detail: `No limit set for ${trade.symbol}.` };
+        const passed = trade.contracts <= symbolLimit;
+        return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `${trade.contracts} contracts in ${trade.symbol}; maximum ${symbolLimit}.` };
+      }
       if (value === null) return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'Set a valid contract limit.' };
       const passed = trade.contracts <= value;
       return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `${trade.contracts} contracts; maximum ${value}.` };

@@ -27,6 +27,7 @@ let pendingValue: string | null = null;
 let latestValue: string | null = null;
 let cachedUserId: string | null = null;
 let cachedToken: string | null = null;
+let setItemRevision = 0;
 
 function stripBase64Images(value: unknown): unknown {
   if (typeof value === 'string') {
@@ -580,16 +581,21 @@ export async function clearCurrentUserStoreCache(): Promise<void> {
 // On page close/refresh fire a keepalive fetch so the save completes even if
 // the tab is being destroyed.
 if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
-    if (!pendingValue || !cachedUserId || !cachedToken) return;
+  const flushLatestOnExit = () => {
+    const exitValue = latestValue ?? pendingValue;
+    if (!exitValue || !cachedUserId || !cachedToken) return;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
 
-    const value = sanitizeStoreValue(pendingValue);
+    const value = sanitizeStoreValue(exitValue);
     const userId = cachedUserId;
     const token = cachedToken;
+    latestValue = null;
     pendingValue = null;
 
     try {
+      localStorage.setItem(localStoreKey(userId), value);
+      localStorage.setItem(localSavedAtKey(userId), Date.now().toString());
+
       const parsed = JSON.parse(value) as unknown;
       const sanitized = stripBase64Images(parsed);
       const body = JSON.stringify([{
@@ -610,7 +616,10 @@ if (typeof window !== 'undefined') {
         body,
       });
     } catch { /* ignore — localStorage still has the data */ }
-  });
+  };
+
+  window.addEventListener('beforeunload', flushLatestOnExit);
+  window.addEventListener('pagehide', flushLatestOnExit);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,11 +747,6 @@ export const supabaseZustandStorage: StateStorage = {
   setItem: async (_key: string, value: string): Promise<void> => {
     const sanitizedValue = sanitizeStoreValue(value);
 
-    // Capture the latest value synchronously before any awaits so that
-    // flushSupabaseStoreNow (called concurrently from mutateEntries) always
-    // reads the freshest state rather than stale localStorage.
-    latestValue = sanitizedValue;
-
     // Guard: never overwrite existing journal data with a blank/default state
     // (protects against HMR in dev transiently wiping data).
     const incomingEntries = extractEntries(sanitizedValue);
@@ -769,24 +773,45 @@ export const supabaseZustandStorage: StateStorage = {
       } catch { /* ignore */ }
     }
 
+    const revision = ++setItemRevision;
+
+    // Capture the latest accepted value synchronously before any awaits so a
+    // refresh or explicit flush always sees the newest state.
+    latestValue = sanitizedValue;
+    pendingValue = sanitizedValue;
+
+    // Auth is normally already cached after hydration. Write the browser cache
+    // immediately so a fast refresh cannot reload an older snapshot while
+    // getSession() is still resolving.
+    if (cachedUserId) {
+      try {
+        localStorage.setItem(localStoreKey(cachedUserId), sanitizedValue);
+        localStorage.setItem(localSavedAtKey(cachedUserId), Date.now().toString());
+      } catch { /* quota exceeded */ }
+    }
+
     const userId = await getUserId();
     if (!userId) return;
+    // Multiple Zustand writes can be awaiting auth at once. An older call must
+    // never finish later and replace the newest pending snapshot.
+    if (revision !== setItemRevision) return;
 
     const storeKey = localStoreKey(userId);
+    const currentValue = latestValue ?? sanitizedValue;
 
     try {
-      localStorage.setItem(storeKey, sanitizedValue);
+      localStorage.setItem(storeKey, currentValue);
       localStorage.setItem(localSavedAtKey(userId), Date.now().toString());
     } catch { /* quota exceeded */ }
 
-    pendingValue = sanitizedValue;
+    pendingValue = currentValue;
     if (saveTimer) clearTimeout(saveTimer);
 
-    const entries = extractEntries(sanitizedValue);
+    const entries = extractEntries(currentValue);
     let deletedTradeIds = new Set<string>();
     let deletedEntryDates = new Set<string>();
     try {
-      const parsed = JSON.parse(sanitizedValue) as unknown;
+      const parsed = JSON.parse(currentValue) as unknown;
       deletedTradeIds = deletedTradeIdsFromBlob(parsed);
       deletedEntryDates = deletedEntryDatesFromBlob(parsed);
     } catch {

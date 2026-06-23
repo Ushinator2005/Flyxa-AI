@@ -1,0 +1,144 @@
+.billing-payout-gallery {
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.billing-payout-gallery-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.billing-payout-gallery-label {
+  color: var(--txt-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.billing-payout-gallery h2 {
+  margin: 7px 0 0;
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.billing-payout-gallery p {
+  margin: 8px 0 0;
+  color: var(--txt-3);
+  font-size: 11px;
+}
+
+.billing-payout-gallery-input {
+  display: none;
+}
+
+.billing-payout-gallery-upload {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--green-border);
+  border-radius: 5px;
+  background: var(--green-dim);
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font: 600 11px var(--font-sans);
+  cursor: pointer;
+}
+
+.billing-payout-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.billing-payout-gallery-photo {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.billing-payout-gallery-photo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.billing-payout-gallery-photo figcaption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .88));
+}
+
+.billing-payout-gallery-photo figcaption span {
+  color: rgba(255, 255, 255, .82);
+  font-size: 10px;
+}
+
+.billing-payout-gallery-photo figcaption button {
+  width: 23px;
+  height: 23px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, .45);
+  color: rgba(255, 255, 255, .72);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.billing-payout-gallery-empty {
+  min-height: 86px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--txt-3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.billing-payout-gallery-empty strong,
+.billing-payout-gallery-empty span {
+  display: block;
+}
+
+.billing-payout-gallery-empty strong {
+  margin-bottom: 3px;
+  color: var(--txt-2);
+  font-size: 12px;
+}
+
+.billing-payout-gallery-empty span {
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .billing-payout-gallery-head {
+    flex-direction: column;
+  }
+}

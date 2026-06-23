@@ -18,10 +18,13 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
 import type { TradingAccount } from '../types/index.js';
 import DatePicker from '../components/common/DatePicker.js';
+import PayoutGallery from '../components/billing/PayoutGallery.js';
 import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
 import * as XLSX from 'xlsx';
 
 type AccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
+type EvaluationOutcome = 'Unknown' | 'Not passed' | 'Passed' | 'Funded';
+type OutcomeConfidence = 'low' | 'medium' | 'high';
 
 interface PayoutEntry {
   id: string;
@@ -32,6 +35,9 @@ interface PayoutEntry {
 interface BillingAccount {
   id: string;
   sourceAccountId?: string;
+  entryKind?: 'account' | 'subscription' | 'reset' | 'activation';
+  parentAccountId?: string;
+  importedFromFile?: boolean;
   firm: string;
   accountType: string;
   size: string;
@@ -41,6 +47,9 @@ interface BillingAccount {
   actualPrice: number;
   purchaseDate: string;
   status: AccountStatus;
+  evaluationOutcome: EvaluationOutcome;
+  outcomeEvidence?: string;
+  outcomeConfidence?: OutcomeConfidence;
   payoutReceived: number;
   payouts: PayoutEntry[];
   notes: string;
@@ -64,6 +73,9 @@ interface BillingFormState {
   discountPct: number;
   purchaseDate: string;
   status: AccountStatus;
+  evaluationOutcome: EvaluationOutcome;
+  outcomeEvidence: string;
+  outcomeConfidence: OutcomeConfidence;
   payoutReceived: number;
   payouts: PayoutEntry[];
   notes: string;
@@ -84,8 +96,14 @@ interface ParsedCsvRow {
   accountType: string;
   pricingPath?: 'standard' | 'no_activation_fee';
   status: AccountStatus;
+  evaluationOutcome: EvaluationOutcome;
+  outcomeEvidence: string;
+  outcomeConfidence: OutcomeConfidence;
   purchaseDate: string;
-  pricePaid: number;
+  pricePaid: number | null;
+  priceProvided: boolean;
+  entryKind: 'account' | 'subscription' | 'reset' | 'activation';
+  classificationReason: string;
   discountCode: string;
   payoutReceived: number;
   notes: string;
@@ -95,6 +113,7 @@ interface ParsedCsvRow {
 type ViewMode = 'table' | 'pipeline';
 
 const STATUS_OPTIONS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 'Blown', 'Reset'];
+const OUTCOME_OPTIONS: EvaluationOutcome[] = ['Unknown', 'Not passed', 'Passed', 'Funded'];
 
 const PIPELINE_COLS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 'Blown'];
 
@@ -180,21 +199,105 @@ function normalizeStatus(raw: unknown): AccountStatus {
   return 'Eval 1';
 }
 
+function inferHistoricalOutcome(
+  rawStatus: unknown,
+  rawAccountType: unknown,
+  rawNotes: unknown
+): { outcome: EvaluationOutcome; evidence: string; confidence: OutcomeConfidence } {
+  const status = String(rawStatus ?? '').trim().toLowerCase();
+  const context = `${String(rawStatus ?? '')} ${String(rawAccountType ?? '')} ${String(rawNotes ?? '')}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+  if (/\b(xfa|express funded|funded activation|activation to funded)\b/.test(context)) {
+    return { outcome: 'Funded', evidence: 'XFA or funded activation found in the imported history', confidence: 'high' };
+  }
+  if (/\b(funded|live)\b/.test(status)) {
+    return { outcome: 'Funded', evidence: 'Imported status was Funded', confidence: 'high' };
+  }
+  if (/\b(passed|complete|completed)\b/.test(status)) {
+    return { outcome: 'Passed', evidence: 'Imported status showed the evaluation was passed', confidence: 'high' };
+  }
+  if (/\b(funded account|became funded|reached funded|funding achieved)\b/.test(context)) {
+    return { outcome: 'Funded', evidence: 'Funding language found in the imported history', confidence: 'medium' };
+  }
+  if (/\b(passed|evaluation passed|combine passed)\b/.test(context)) {
+    return { outcome: 'Passed', evidence: 'Pass language found in the imported history', confidence: 'medium' };
+  }
+  if (/\b(blown|failed|breached|terminated)\b/.test(status)) {
+    return { outcome: 'Not passed', evidence: 'Imported status indicated a failed evaluation', confidence: 'medium' };
+  }
+  if (/\bclosed\b/.test(status)) {
+    return { outcome: 'Not passed', evidence: 'Imported status showed the evaluation was closed', confidence: 'medium' };
+  }
+  return { outcome: 'Unknown', evidence: 'No reliable pass or funding signal was found', confidence: 'low' };
+}
+
+function inferStoredEntryKind(raw: StoreBillingAccount): NonNullable<BillingAccount['entryKind']> {
+  const current = raw.entryKind ?? 'account';
+  const importedFromFile = raw.importedFromFile === true
+    || (raw.importedFromFile === undefined && raw.entryKind !== undefined && !raw.sourceAccountId);
+  if (!importedFromFile) return current;
+
+  const type = String(raw.accountType ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const notes = String(raw.notes ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+  if (/\b(xfa|express funded)\b.*\b(activation|fee)\b|\bactivation fee\b.*\b(xfa|express funded)\b/.test(`${type} ${notes}`)) {
+    // A row explicitly stored as a Trading Combine is still the account record;
+    // the note may merely explain that its price includes an XFA activation.
+    return /\btrading combine\b/.test(type) ? 'account' : 'activation';
+  }
+  if (/\b(account )?reset\b|\bfree reset\b/.test(type) || /\bfree reset used\b/.test(notes)) return 'reset';
+  if (/\btrading combine\b|\bevaluation\b/.test(type)) return 'account';
+  if (current === 'subscription' && /\bcombine subscription\b/.test(notes) && !/\bmonthly\b|\brenewal\b|\brebill\b/.test(notes)) {
+    return 'account';
+  }
+  if (/\bmonthly subscription\b|\bsubscription fee\b|\bmonthly fee\b|\brenewal\b|\brebill\b/.test(type)) return 'subscription';
+  return current;
+}
+
 function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
+  const entryKind = inferStoredEntryKind(raw);
+  const isLegacyFileImport = raw.importedFromFile === undefined
+    && raw.entryKind !== undefined
+    && !raw.sourceAccountId;
+  const importedFromFile = raw.importedFromFile === true || isLegacyFileImport;
+  const inferredOutcome = inferHistoricalOutcome(
+    (raw as unknown as { status?: unknown }).status,
+    (raw as unknown as { accountType?: unknown }).accountType,
+    (raw as unknown as { notes?: unknown }).notes
+  );
+  const storedAccountType = typeof (raw as unknown as { accountType?: string }).accountType === 'string'
+    ? (raw as unknown as { accountType: string }).accountType
+    : getDefaultAccountType(raw.firm);
+  const normalizedAccountType = entryKind === 'account' && storedAccountType === 'Monthly subscription'
+    ? 'Trading Combine'
+    : entryKind === 'activation'
+      ? 'XFA activation fee'
+      : entryKind === 'reset'
+        ? 'Account reset'
+        : storedAccountType;
   return {
     id: raw.id,
     sourceAccountId: raw.sourceAccountId,
+    entryKind,
+    parentAccountId: raw.parentAccountId,
+    importedFromFile,
     firm: raw.firm,
-    accountType: typeof (raw as unknown as { accountType?: string }).accountType === 'string'
-      ? (raw as unknown as { accountType: string }).accountType
-      : getDefaultAccountType(raw.firm),
+    accountType: normalizedAccountType,
     size: raw.size,
     listPrice: raw.listPrice,
     discountCode: raw.discountCode,
     discountPct: raw.discountPct,
     actualPrice: raw.actualPrice,
     purchaseDate: raw.purchaseDate,
-    status: normalizeStatus((raw as unknown as { status: unknown }).status),
+    status: importedFromFile && entryKind === 'account'
+      ? 'Blown'
+      : normalizeStatus((raw as unknown as { status: unknown }).status),
+    evaluationOutcome: raw.evaluationOutcome ?? inferredOutcome.outcome,
+    outcomeEvidence: raw.outcomeEvidence ?? inferredOutcome.evidence,
+    outcomeConfidence: raw.outcomeConfidence ?? inferredOutcome.confidence,
     payoutReceived: raw.payoutReceived,
     payouts: Array.isArray((raw as unknown as { payouts?: PayoutEntry[] }).payouts)
       ? ((raw as unknown as { payouts: PayoutEntry[] }).payouts)
@@ -350,6 +453,9 @@ function getDefaultFormState(): BillingFormState {
     discountPct: 0,
     purchaseDate: getTodayInputDate(),
     status: 'Eval 1',
+    evaluationOutcome: 'Unknown',
+    outcomeEvidence: 'No outcome recorded yet',
+    outcomeConfidence: 'low',
     payoutReceived: 0,
     payouts: [],
     notes: '',
@@ -394,6 +500,26 @@ function getStatusDotColor(status: AccountStatus): string {
     case 'Reset': return 'var(--txt-3)';
     default: return 'var(--txt-3)';
   }
+}
+
+function getOutcomeBadgeStyle(outcome: EvaluationOutcome): CSSProperties {
+  if (outcome === 'Funded') {
+    return { background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' };
+  }
+  if (outcome === 'Passed') {
+    return { background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)' };
+  }
+  if (outcome === 'Not passed') {
+    return { background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid var(--red-border)' };
+  }
+  return { background: 'var(--surface-2)', color: 'var(--txt-3)', border: '1px solid var(--border)' };
+}
+
+function getEntryKindLabel(entryKind: NonNullable<BillingAccount['entryKind']>): string {
+  if (entryKind === 'subscription') return 'Subscription';
+  if (entryKind === 'reset') return 'Reset charge';
+  if (entryKind === 'activation') return 'Activation fee';
+  return 'Account';
 }
 
 export default function Billing() {
@@ -513,6 +639,15 @@ export default function Billing() {
         actualPrice: Math.max(0, listPrice - responsibleDiscount),
         purchaseDate,
         status: billingStatusFromTradingAccount(account.status),
+        evaluationOutcome: account.status === 'Funded' || account.status === 'Live'
+          ? 'Funded'
+          : account.status === 'Passed'
+            ? 'Passed'
+            : account.status === 'Blown'
+              ? 'Not passed'
+              : 'Unknown',
+        outcomeEvidence: `Imported from linked account status: ${account.status}`,
+        outcomeConfidence: 'high',
         payoutReceived: 0,
         payouts: [],
         notes: `Imported from account: ${account.name}${listPrice === 0 ? '. Add the purchase price to complete billing.' : ''}`,
@@ -537,17 +672,19 @@ export default function Billing() {
   };
 
   const downloadExcelTemplate = () => {
-    const headers = ['Firm', 'Account Size', 'Account Type', 'Status', 'Purchase Date', 'Price Paid', 'Discount Code', 'Payout Received', 'Notes'];
+    const headers = ['Firm', 'Account Size', 'Account Type', 'Entry Type', 'Status', 'Purchase Date', 'Price Paid', 'Discount Code', 'Payout Received', 'Notes'];
     // Price Paid left blank — auto-filled from catalog on import
-    const example1 = ['Apex Funded', '$50,000', 'Evaluation', 'Passed', '2024-03-15', '', 'SAVE10', 3200, ''];
-    const example2 = ['Topstep', '$50,000', 'Trading Combine', 'Funded', '2024-06-01', '', '', 0, 'No activation fee'];
-    const example3 = ['Lucid', '$100,000', 'LucidFlex', 'Blown', '2024-09-10', '', '', 0, ''];
+    const example1 = ['Apex Funded', '$50,000', 'Evaluation', 'Account', 'Passed', '2024-03-15', '', 'SAVE10', 3200, ''];
+    const example2 = ['Topstep', '$50,000', 'Trading Combine', 'Account', 'Funded', '2024-06-01', 149, '', 0, 'Standard combine; price includes XFA activation'];
+    const example3 = ['Topstep', '$50,000', 'Monthly subscription', 'Subscription', '', '2024-07-01', 49, '', 0, 'Monthly renewal for existing combine'];
+    const example4 = ['Topstep', '$50,000', 'Account reset', 'Reset', '', '2024-07-10', 0, '', 0, 'Free reset used'];
+    const example5 = ['Topstep', '$50,000', 'XFA activation fee', 'Activation', 'Funded', '2024-07-18', 149, '', 0, 'Express Funded Account activation'];
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3, example4, example5]);
 
     // Column widths
-    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 11 }, { wch: 15 }, { wch: 17 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 11 }, { wch: 15 }, { wch: 17 }, { wch: 42 }];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Accounts');
     XLSX.writeFile(wb, 'flyxa-accounts-template.xlsx');
@@ -585,6 +722,7 @@ export default function Billing() {
     const colFirm          = iCol;
     const colSize          = col('accountsize');
     const colAccountType   = col('accounttype');
+    const colEntryType     = col('entrytype');
     const colStatus        = col('status');
     const colDate          = col('purchasedate');
     const colPrice         = col('pricepaid');
@@ -601,6 +739,7 @@ export default function Billing() {
       const rawFirm        = get(colFirm);
       const rawSize        = get(colSize);
       const rawAccountType = get(colAccountType);
+      const rawEntryType   = get(colEntryType);
       const rawStatus      = get(colStatus);
       const rawDate        = get(colDate);
       const rawPrice       = get(colPrice);
@@ -619,19 +758,18 @@ export default function Billing() {
       if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}" — set to Other`);
 
       // Status normalisation
-      const statusMatch = STATUS_OPTIONS.find(
-        s => s.toLowerCase() === rawStatus.toLowerCase()
-      ) as AccountStatus | undefined;
-      const status: AccountStatus = statusMatch ?? 'Eval 1';
-      if (!statusMatch && rawStatus) warnings.push(`Unknown status "${rawStatus}" — defaulted to Eval 1`);
+      const meaning = inferImportMeaning(rawStatus, rawAccountType, rawNotes, rawEntryType);
+      const status: AccountStatus = meaning.status;
+      if (meaning.warning) warnings.push(meaning.warning);
 
       // Date validation
       const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
-      const purchaseDate = dateValid ? rawDate : getTodayInputDate();
-      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — used today');
+      const purchaseDate = dateValid ? rawDate : '';
+      if (!rawDate) warnings.push('Purchase date is missing — left blank');
+      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — date left blank');
 
       // Numeric fields
-      const pricePaid      = parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0;
+      const parsedPrice    = parseOptionalMoney(rawPrice);
       const payoutReceived = parseFloat(rawPayout.replace(/[^0-9.-]/g, '')) || 0;
 
       // Account type — explicit column first, then infer from notes
@@ -648,8 +786,14 @@ export default function Billing() {
         accountType,
         pricingPath: inferred.pricingPath,
         status,
+        evaluationOutcome: meaning.evaluationOutcome,
+        outcomeEvidence: meaning.outcomeEvidence,
+        outcomeConfidence: meaning.outcomeConfidence,
         purchaseDate,
-        pricePaid,
+        pricePaid: parsedPrice.value,
+        priceProvided: parsedPrice.provided,
+        entryKind: meaning.entryKind,
+        classificationReason: meaning.classificationReason,
         discountCode: rawDisc,
         payoutReceived,
         notes: rawNotes,
@@ -696,6 +840,123 @@ export default function Billing() {
     return { accountType, pricingPath };
   };
 
+  const inferImportMeaning = (
+    rawStatus: string,
+    rawAccountType: string,
+    rawNotes: string,
+    rawEntryType = ''
+  ): {
+    status: AccountStatus;
+    entryKind: ParsedCsvRow['entryKind'];
+    classificationReason: string;
+    evaluationOutcome: EvaluationOutcome;
+    outcomeEvidence: string;
+    outcomeConfidence: OutcomeConfidence;
+    warning?: string;
+  } => {
+    const statusText = rawStatus.trim().toLowerCase();
+    const accountTypeText = rawAccountType.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const explicitEntryType = rawEntryType.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const notesText = rawNotes.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const context = `${rawStatus} ${rawAccountType} ${rawNotes}`.toLowerCase();
+    const normalized = context.replace(/[^a-z0-9]+/g, ' ').trim();
+    const historical = inferHistoricalOutcome(rawStatus, rawAccountType, rawNotes);
+
+    let entryKind: ParsedCsvRow['entryKind'] = 'account';
+    let classificationReason = 'Defaulted to an account purchase';
+
+    if (/\bactivation\b/.test(explicitEntryType)) {
+      entryKind = 'activation';
+      classificationReason = 'Entry Type explicitly says Activation';
+    } else if (/\breset\b/.test(explicitEntryType)) {
+      entryKind = 'reset';
+      classificationReason = 'Entry Type explicitly says Reset';
+    } else if (/\b(subscription|renewal|recurring)\b/.test(explicitEntryType)) {
+      entryKind = 'subscription';
+      classificationReason = 'Entry Type explicitly says Subscription';
+    } else if (/\b(account|combine|evaluation)\b/.test(explicitEntryType)) {
+      entryKind = 'account';
+      classificationReason = 'Entry Type explicitly says Account';
+    } else if (/\b(xfa|express funded)\b.*\b(activation|fee)\b|\bactivation fee\b.*\b(xfa|express funded)\b/.test(accountTypeText)) {
+      entryKind = 'activation';
+      classificationReason = 'Account Type identifies an XFA/Express Funded activation fee';
+    } else if (/\b(account )?reset\b/.test(accountTypeText) || /\b(free )?reset\b/.test(notesText)) {
+      entryKind = 'reset';
+      classificationReason = 'Reset event found in the account type or note';
+    } else if (/\bmonthly subscription\b|\bsubscription fee\b|\bmonthly fee\b|\brenewal\b|\brebill\b|\brecurring charge\b/.test(`${accountTypeText} ${notesText}`)) {
+      entryKind = 'subscription';
+      classificationReason = 'A recurring monthly charge was found in the account type or note';
+    } else if (/\btrading combine\b|\bevaluation\b/.test(accountTypeText)) {
+      entryKind = 'account';
+      classificationReason = `Account Type "${rawAccountType}" identifies a trading account`;
+    } else if (/\b(xfa|express funded)\b.*\b(activation|fee)\b|\bactivation fee\b.*\b(xfa|express funded)\b/.test(notesText)) {
+      entryKind = 'activation';
+      classificationReason = 'XFA/Express Funded activation fee found in the note';
+    }
+    const result = (
+      status: AccountStatus,
+      resolvedEntryKind: ParsedCsvRow['entryKind'] = entryKind,
+      warning?: string
+    ) => ({
+      status,
+      entryKind: resolvedEntryKind,
+      classificationReason,
+      evaluationOutcome: historical.outcome,
+      outcomeEvidence: historical.evidence,
+      outcomeConfidence: historical.confidence,
+      warning,
+    });
+
+    if (/\b(xfa|express funded|funded activation|activation to funded)\b/.test(normalized)) {
+      return result('Funded');
+    }
+    if (/\b(blown|failed|breached|terminated)\b/.test(statusText)) {
+      return result('Blown');
+    }
+    if (/\b(funded|xfa)\b/.test(statusText)) {
+      return result('Funded');
+    }
+    if (/\b(passed|complete|completed)\b/.test(statusText)) {
+      return result('Passed');
+    }
+    if (/\b(reset)\b/.test(statusText)) {
+      return result('Reset', 'reset');
+    }
+    if (/\b(eval 2|phase 2|step 2)\b/.test(statusText)) {
+      return result('Eval 2');
+    }
+    if (entryKind === 'subscription' && (!statusText || /\b(in progress|active|current|subscription)\b/.test(statusText))) {
+      return result('Eval 1');
+    }
+    if (/\b(in progress|active|current|evaluation|eval|combine)\b/.test(statusText)) {
+      return result('Eval 1');
+    }
+    if (!statusText && entryKind === 'account') {
+      return result('Blown');
+    }
+
+    return {
+      status: entryKind === 'account' ? 'Blown' : 'Eval 1',
+      entryKind,
+      classificationReason,
+      evaluationOutcome: historical.outcome,
+      outcomeEvidence: historical.evidence,
+      outcomeConfidence: historical.confidence,
+      warning: entryKind === 'account'
+        ? `Unknown status "${rawStatus}" — treated as a historical Blown account`
+        : `Unknown status "${rawStatus}" — kept as In Progress`,
+    };
+  };
+
+  const parseOptionalMoney = (raw: string): { value: number | null; provided: boolean } => {
+    const trimmed = raw.trim();
+    if (trimmed === '') return { value: null, provided: false };
+    const parsed = Number(trimmed.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(parsed)
+      ? { value: parsed, provided: true }
+      : { value: null, provided: false };
+  };
+
   const lookupCatalogPrice = (firm: string, size: string, pricingPath?: 'standard' | 'no_activation_fee'): { price: number; activationFee: number; canonicalSize: string } => {
     const sizeNum = parseFloat(size.replace(/[^0-9.]/g, ''));
 
@@ -725,26 +986,45 @@ export default function Billing() {
     return { price: 0, activationFee: 0, canonicalSize: size };
   };
 
-  const csvRowToBillingAccount = (row: ParsedCsvRow): BillingAccount => {
+  const csvRowToBillingAccount = (row: ParsedCsvRow, parentAccountId?: string): BillingAccount => {
     const { price: catalogPrice, activationFee, canonicalSize } = lookupCatalogPrice(row.firm, row.size, row.pricingPath);
     const accountType = row.accountType || getDefaultAccountType(row.firm);
-    const autoPricePaid = row.pricePaid > 0 ? row.pricePaid : catalogPrice + activationFee;
+    const autoPricePaid = row.priceProvided
+      ? Math.max(0, row.pricePaid ?? 0)
+      : row.entryKind === 'account'
+        ? catalogPrice + activationFee
+        : 0;
+    const displayListPrice = row.entryKind === 'account'
+      ? (catalogPrice > 0 ? catalogPrice : autoPricePaid)
+      : autoPricePaid;
     return {
       id: createId(),
+      entryKind: row.entryKind,
+      parentAccountId,
+      importedFromFile: true,
       firm: row.firm,
-      accountType,
+      accountType: row.entryKind === 'subscription'
+        ? 'Monthly subscription'
+        : row.entryKind === 'reset'
+          ? 'Account reset'
+          : row.entryKind === 'activation'
+            ? 'XFA activation fee'
+          : accountType,
       size: canonicalSize,
-      listPrice: catalogPrice,
+      listPrice: displayListPrice,
       discountCode: row.discountCode,
       discountPct: 0,
       actualPrice: autoPricePaid,
       purchaseDate: row.purchaseDate,
-      status: row.status,
+      status: row.entryKind === 'account' ? 'Blown' : row.status,
+      evaluationOutcome: row.entryKind === 'account' ? row.evaluationOutcome : 'Unknown',
+      outcomeEvidence: row.outcomeEvidence,
+      outcomeConfidence: row.outcomeConfidence,
       payoutReceived: row.payoutReceived,
       payouts: [],
       notes: row.notes,
       pricingPath: row.pricingPath,
-      activationFee: activationFee > 0 ? activationFee : undefined,
+      activationFee: row.entryKind === 'account' && activationFee > 0 ? activationFee : undefined,
     };
   };
 
@@ -760,6 +1040,7 @@ export default function Billing() {
     const colFirm        = col('firm');
     const colSize        = col('accountsize');
     const colAccountType = col('accounttype');
+    const colEntryType   = col('entrytype');
     const colStatus      = col('status');
     const colDate        = col('purchasedate');
     const colPrice       = col('pricepaid');
@@ -783,6 +1064,7 @@ export default function Billing() {
       const rawFirm        = get(colFirm);
       const rawSize        = get(colSize);
       const rawAccountType = get(colAccountType);
+      const rawEntryType   = get(colEntryType);
       const rawPrice       = get(colPrice);
 
       if (!rawFirm && !rawSize && !rawPrice) continue;
@@ -793,21 +1075,22 @@ export default function Billing() {
       if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}" — set to Other`);
 
       const rawStatus = get(colStatus);
-      const statusMatch = STATUS_OPTIONS.find(s => s.toLowerCase() === rawStatus.toLowerCase()) as AccountStatus | undefined;
-      const status: AccountStatus = statusMatch ?? 'Eval 1';
-      if (!statusMatch && rawStatus) warnings.push(`Unknown status "${rawStatus}" — defaulted to Eval 1`);
+      const rawNotes = get(colNotes);
+      const meaning = inferImportMeaning(rawStatus, rawAccountType, rawNotes, rawEntryType);
+      const status: AccountStatus = meaning.status;
+      if (meaning.warning) warnings.push(meaning.warning);
 
       const rawDate = get(colDate);
       const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
-      const purchaseDate = dateValid ? rawDate : getTodayInputDate();
-      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — used today');
+      const purchaseDate = dateValid ? rawDate : '';
+      if (!rawDate) warnings.push('Purchase date is missing — left blank');
+      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — date left blank');
 
-      const pricePaid      = parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0;
+      const parsedPrice    = parseOptionalMoney(rawPrice);
       const rawPayout      = get(colPayout);
       const payoutReceived = parseFloat(rawPayout.replace(/[^0-9.-]/g, '')) || 0;
 
       // Account type — explicit column first, then infer from notes
-      const rawNotes = get(colNotes);
       const inferHint = `${rawAccountType} ${rawNotes}`.trim();
       const inferred = inferAccountTypeFromText(firmMatch, inferHint);
       const accountType = rawAccountType.trim() || inferred.accountType;
@@ -818,8 +1101,14 @@ export default function Billing() {
         accountType,
         pricingPath: inferred.pricingPath,
         status,
+        evaluationOutcome: meaning.evaluationOutcome,
+        outcomeEvidence: meaning.outcomeEvidence,
+        outcomeConfidence: meaning.outcomeConfidence,
         purchaseDate,
-        pricePaid,
+        pricePaid: parsedPrice.value,
+        priceProvided: parsedPrice.provided,
+        entryKind: meaning.entryKind,
+        classificationReason: meaning.classificationReason,
         discountCode: get(colDiscount),
         payoutReceived,
         notes: rawNotes,
@@ -868,11 +1157,45 @@ export default function Billing() {
   };
 
   const confirmCsvImport = () => {
-    const newAccounts = csvParsedRows.map(csvRowToBillingAccount);
-    setAccounts(current => [...newAccounts, ...current]);
+    const knownAccounts = accounts.filter(account => (account.entryKind ?? 'account') === 'account');
+    const newAccounts: BillingAccount[] = [];
+    const fundedParentIds = new Set<string>();
+    for (const row of csvParsedRows) {
+      const candidates = [...knownAccounts, ...newAccounts.filter(account => (account.entryKind ?? 'account') === 'account')];
+      const parent = row.entryKind === 'account'
+        ? undefined
+        : [...candidates].reverse().find(account => (
+          account.firm === row.firm
+          && sizeLabelToNumber(account.size) === sizeLabelToNumber(row.size)
+          && (!row.purchaseDate || !account.purchaseDate || account.purchaseDate <= row.purchaseDate)
+        ));
+      const imported = csvRowToBillingAccount(row, parent?.id);
+      if (row.entryKind !== 'account') {
+        imported.notes = [
+          row.notes,
+          parent ? `Attached to ${parent.firm} ${parent.size} account.` : 'Billing event imported without a matched parent account.',
+        ].filter(Boolean).join(' ');
+        if (row.entryKind === 'activation' && parent) {
+          fundedParentIds.add(parent.id);
+        }
+      }
+      newAccounts.push(imported);
+    }
+    setAccounts(current => [...newAccounts, ...current].map(account => (
+      fundedParentIds.has(account.id)
+        ? {
+            ...account,
+            evaluationOutcome: 'Funded',
+            outcomeEvidence: 'A linked XFA/Express Funded activation fee was imported',
+            outcomeConfidence: 'high',
+          }
+        : account
+    )));
     setIsImportCsvModalOpen(false);
     setCsvParsedRows([]);
-    setImportFeedback(`${newAccounts.length} account${newAccounts.length === 1 ? '' : 's'} imported from CSV.`);
+    const accountCount = newAccounts.filter(account => (account.entryKind ?? 'account') === 'account').length;
+    const chargeCount = newAccounts.length - accountCount;
+    setImportFeedback(`${accountCount} account${accountCount === 1 ? '' : 's'} and ${chargeCount} billing event${chargeCount === 1 ? '' : 's'} imported.`);
   };
 
   const openEditModal = (account: BillingAccount) => {
@@ -891,6 +1214,9 @@ export default function Billing() {
       discountPct: account.discountPct,
       purchaseDate: account.purchaseDate,
       status: account.status,
+      evaluationOutcome: account.evaluationOutcome,
+      outcomeEvidence: account.outcomeEvidence ?? 'Outcome set manually',
+      outcomeConfidence: account.outcomeConfidence ?? 'medium',
       payoutReceived: account.payoutReceived,
       payouts: account.payouts ?? [],
       notes: account.notes ?? '',
@@ -935,16 +1261,17 @@ export default function Billing() {
   );
 
   const derived = useMemo(() => {
-    const totalAccounts = accounts.length;
+    const accountEntries = accounts.filter(account => (account.entryKind ?? 'account') === 'account');
+    const totalAccounts = accountEntries.length;
     const totalSpent = accounts.reduce((sum, a) => sum + a.actualPrice, 0);
     const totalPayouts = accounts.reduce((sum, a) => sum + Math.max(0, a.payoutReceived), 0);
     const totalListPrice = accounts.reduce((sum, a) => sum + a.listPrice, 0);
-    const totalSaved = totalListPrice - totalSpent;
+    const totalSaved = Math.max(0, totalListPrice - totalSpent);
     const netPnL = totalPayouts - totalSpent;
-    const passedAccounts = accounts.filter(a => a.status === 'Passed').length;
-    const fundedAccounts = accounts.filter(a => a.status === 'Funded').length;
-    const activeAccounts = accounts.filter(a => a.status === 'Eval 1' || a.status === 'Eval 2').length;
-    const blownAccounts = accounts.filter(a => a.status === 'Blown').length;
+    const passedAccounts = accountEntries.filter(a => a.evaluationOutcome === 'Passed').length;
+    const fundedAccounts = accountEntries.filter(a => a.evaluationOutcome === 'Funded').length;
+    const activeAccounts = accountEntries.filter(a => a.status === 'Eval 1' || a.status === 'Eval 2').length;
+    const blownAccounts = accountEntries.filter(a => a.status === 'Blown').length;
     const passRate = totalAccounts > 0 ? ((passedAccounts + fundedAccounts) / totalAccounts) * 100 : 0;
     const avgFeePerAccount = totalAccounts > 0 ? totalSpent / totalAccounts : 0;
     const costPerPass = (passedAccounts + fundedAccounts) > 0
@@ -967,11 +1294,14 @@ export default function Billing() {
     const byFirmMap = new Map<string, { firm: string; accounts: number; spent: number; payouts: number; passed: number; blown: number }>();
     accounts.forEach(a => {
       const cur = byFirmMap.get(a.firm) ?? { firm: a.firm, accounts: 0, spent: 0, payouts: 0, passed: 0, blown: 0 };
-      cur.accounts += 1;
+      if ((a.entryKind ?? 'account') === 'account') cur.accounts += 1;
       cur.spent += a.actualPrice;
       cur.payouts += Math.max(0, a.payoutReceived);
-      if (a.status === 'Passed' || a.status === 'Funded') cur.passed += 1;
-      if (a.status === 'Blown') cur.blown += 1;
+      if (
+        (a.entryKind ?? 'account') === 'account'
+        && (a.evaluationOutcome === 'Passed' || a.evaluationOutcome === 'Funded')
+      ) cur.passed += 1;
+      if ((a.entryKind ?? 'account') === 'account' && a.status === 'Blown') cur.blown += 1;
       byFirmMap.set(a.firm, cur);
     });
 
@@ -1006,16 +1336,21 @@ export default function Billing() {
   const footerTotals = useMemo(() => {
     const totalListPrice = filteredAccounts.reduce((sum, a) => sum + a.listPrice, 0);
     const totalPaid = filteredAccounts.reduce((sum, a) => sum + a.actualPrice, 0);
-    const totalSaved = totalListPrice - totalPaid;
-    const passedCount = filteredAccounts.filter(a => a.status === 'Passed' || a.status === 'Funded').length;
-    return { totalListPrice, totalPaid, totalSaved, count: filteredAccounts.length, passedCount };
+    const totalSaved = Math.max(0, totalListPrice - totalPaid);
+    const passedCount = filteredAccounts.filter(a => (
+      (a.entryKind ?? 'account') === 'account'
+      && (a.evaluationOutcome === 'Passed' || a.evaluationOutcome === 'Funded')
+    )).length;
+    const accountCount = filteredAccounts.filter(account => (account.entryKind ?? 'account') === 'account').length;
+    const chargeCount = filteredAccounts.length - accountCount;
+    return { totalListPrice, totalPaid, totalSaved, count: accountCount, chargeCount, passedCount };
   }, [filteredAccounts]);
 
   const pipelineByStatus = useMemo(() => {
     const map: Record<AccountStatus, BillingAccount[]> = {
       'Eval 1': [], 'Eval 2': [], 'Funded': [], 'Passed': [], 'Blown': [], 'Reset': [],
     };
-    accounts.forEach(a => { map[a.status].push(a); });
+    accounts.filter(account => (account.entryKind ?? 'account') === 'account').forEach(a => { map[a.status].push(a); });
     return map;
   }, [accounts]);
 
@@ -1029,7 +1364,10 @@ export default function Billing() {
     ? (() => { try { return new URL(currentLivePricing.source).hostname.replace(/^www\./, ''); } catch { return currentLivePricing.source; } })()
     : null;
 
-  const showPayoutSection = form.status === 'Funded' || form.status === 'Passed';
+  const showPayoutSection = form.status === 'Funded'
+    || form.status === 'Passed'
+    || form.evaluationOutcome === 'Funded'
+    || form.evaluationOutcome === 'Passed';
 
   const saveAccount = () => {
     const listPrice = Math.max(0, toNumber(form.listPrice, 0));
@@ -1047,6 +1385,9 @@ export default function Billing() {
     const next: BillingAccount = {
       id: editingId ?? createId(),
       sourceAccountId: editingId ? accounts.find(account => account.id === editingId)?.sourceAccountId : undefined,
+      entryKind: editingId ? accounts.find(account => account.id === editingId)?.entryKind ?? 'account' : 'account',
+      parentAccountId: editingId ? accounts.find(account => account.id === editingId)?.parentAccountId : undefined,
+      importedFromFile: editingId ? accounts.find(account => account.id === editingId)?.importedFromFile : false,
       firm: form.firm.trim() || 'Other',
       accountType: form.accountType.trim() || getDefaultAccountType(form.firm.trim() || 'Other'),
       size: form.size.trim() || 'Custom',
@@ -1056,6 +1397,9 @@ export default function Billing() {
       actualPrice,
       purchaseDate: form.purchaseDate || getTodayInputDate(),
       status: form.status,
+      evaluationOutcome: form.evaluationOutcome,
+      outcomeEvidence: form.outcomeEvidence.trim() || 'Outcome set manually',
+      outcomeConfidence: form.outcomeConfidence,
       payoutReceived,
       payouts,
       notes: form.notes.trim(),
@@ -1371,7 +1715,7 @@ export default function Billing() {
           <article className="billing-stat-card">
             <p className="billing-stat-label">Pass Rate</p>
             <p className="billing-stat-value">{derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}</p>
-            <p className="billing-stat-note">{derived.totalAccounts} accounts purchased</p>
+            <p className="billing-stat-note">{derived.passedAccounts + derived.fundedAccounts} of {derived.totalAccounts} evaluations ever passed</p>
           </article>
         </div>
       </section>
@@ -1385,11 +1729,17 @@ export default function Billing() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)' }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
-          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Funded/pass <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
-          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)' }}>{derived.blownAccounts}</strong></span>
+          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
+          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Currently blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)' }}>{derived.blownAccounts}</strong></span>
         </div>
       </section>
 
+      <PayoutGallery
+        total={derived.totalPayouts}
+        payoutCount={accounts.reduce((count, account) => (
+          count + (account.payouts?.length || (account.payoutReceived > 0 ? 1 : 0))
+        ), 0)}
+      />
 
       <section style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         <header style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -1566,10 +1916,22 @@ export default function Billing() {
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt)', whiteSpace: 'nowrap' }}>{account.size}</td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>{formatDateLabel(account.purchaseDate)}</td>
                           <td style={cellStyle}>
-                            <span style={{ ...getStatusBadgeStyle(account.status), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: getStatusDotColor(account.status), flexShrink: 0 }} />
-                              {account.status}
+                            <span style={{ ...getStatusBadgeStyle((account.entryKind ?? 'account') === 'account' ? account.status : 'Reset'), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: (account.entryKind ?? 'account') === 'account' ? getStatusDotColor(account.status) : 'var(--txt-3)', flexShrink: 0 }} />
+                              {(account.entryKind ?? 'account') === 'account' ? account.status : getEntryKindLabel(account.entryKind ?? 'account')}
                             </span>
+                            {(account.entryKind ?? 'account') === 'account' && (
+                              <span
+                                title={`${account.outcomeEvidence ?? 'No evidence recorded'} · ${account.outcomeConfidence ?? 'low'} confidence`}
+                                style={{ ...getOutcomeBadgeStyle(account.evaluationOutcome), borderRadius: 3, fontSize: 9, fontWeight: 600, padding: '2px 6px', display: 'table', marginTop: 5, whiteSpace: 'nowrap' }}
+                              >
+                                {account.evaluationOutcome === 'Funded'
+                                  ? 'Previously funded'
+                                  : account.evaluationOutcome === 'Passed'
+                                    ? 'Previously passed'
+                                    : account.evaluationOutcome}
+                              </span>
+                            )}
                           </td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt-2)', textDecoration: account.discountPct > 0 ? 'line-through' : 'none', whiteSpace: 'nowrap' }}>
                             {formatCurrency(account.listPrice)}
@@ -1630,7 +1992,7 @@ export default function Billing() {
             </div>
             <footer style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                {footerTotals.count} accounts · {footerTotals.passedCount} funded/passed
+                {footerTotals.count} accounts · {footerTotals.chargeCount} billing events · {footerTotals.passedCount} funded/passed
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
@@ -1767,7 +2129,7 @@ export default function Billing() {
             aria-modal="true"
             aria-label="Import accounts from CSV"
             onClick={event => event.stopPropagation()}
-            style={{ width: '100%', maxWidth: 780, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 24px 60px rgba(0,0,0,0.6)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            style={{ width: '100%', maxWidth: 940, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 24px 60px rgba(0,0,0,0.6)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
           >
             <header style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 }}>
               <div>
@@ -1783,7 +2145,7 @@ export default function Billing() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                 <thead>
                   <tr style={{ background: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                    {['Firm', 'Account Type', 'Size', 'Status', 'Purchase Date', 'Price Paid', 'Payout', 'Notes', ''].map(h => (
+                    {['Firm', 'Source Type', 'Imported As', 'Size', 'Current Status', 'Historical Outcome', 'Purchase Date', 'Price Paid', 'Payout', 'Notes', ''].map(h => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--txt-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -1791,17 +2153,32 @@ export default function Billing() {
                 <tbody>
                   {csvParsedRows.map((row, idx) => {
                     const { price: catalogPrice, activationFee } = lookupCatalogPrice(row.firm, row.size, row.pricingPath);
-                    const displayPrice = row.pricePaid > 0 ? row.pricePaid : catalogPrice + activationFee;
+                    const displayPrice = row.priceProvided
+                      ? Math.max(0, row.pricePaid ?? 0)
+                      : row.entryKind === 'account'
+                        ? catalogPrice + activationFee
+                        : 0;
                     return (
                     <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: row.warning ? 'rgba(var(--amber-rgb, 255, 180, 0), 0.05)' : undefined }}>
                       <td style={{ padding: '9px 12px', color: 'var(--txt)', fontWeight: 500 }}>{row.firm}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-2)' }}>{row.accountType || <span style={{ color: 'var(--txt-3)' }}>—</span>}</td>
+                      <td title={row.classificationReason} style={{ padding: '9px 12px', color: row.entryKind === 'account' ? 'var(--green)' : 'var(--amber)', whiteSpace: 'nowrap' }}>
+                        {getEntryKindLabel(row.entryKind)}
+                      </td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.size}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)' }}>{row.status}</td>
+                      <td style={{ padding: '9px 12px', color: row.entryKind === 'account' ? 'var(--red)' : 'var(--txt-2)' }}>
+                        {row.entryKind === 'account' ? 'Blown' : getEntryKindLabel(row.entryKind)}
+                      </td>
+                      <td
+                        title={`${row.outcomeEvidence} · ${row.outcomeConfidence} confidence`}
+                        style={{ padding: '9px 12px', color: row.evaluationOutcome === 'Funded' || row.evaluationOutcome === 'Passed' ? 'var(--green)' : 'var(--txt-2)', whiteSpace: 'nowrap' }}
+                      >
+                        {row.entryKind === 'account' ? row.evaluationOutcome : '—'}
+                      </td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.purchaseDate}</td>
                       <td style={{ padding: '9px 12px', color: displayPrice > 0 ? 'var(--txt-2)' : 'var(--txt-3)', fontFamily: 'var(--font-mono)' }}>
                         {displayPrice > 0 ? `$${displayPrice.toFixed(2)}` : '—'}
-                        {row.pricePaid === 0 && displayPrice > 0 && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--txt-3)' }}>(auto)</span>}
+                        {!row.priceProvided && displayPrice > 0 && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--txt-3)' }}>(auto)</span>}
                       </td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.payoutReceived > 0 ? `$${row.payoutReceived.toFixed(2)}` : '—'}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-3)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.notes || '—'}</td>
@@ -2003,13 +2380,49 @@ export default function Billing() {
                       key={status}
                       type="button"
                       className={`billing-status-toggle${form.status === status ? ' is-active' : ''}`}
-                      onClick={() => setFormField('status', status)}
+                      onClick={() => setForm(current => ({
+                        ...current,
+                        status,
+                        evaluationOutcome: status === 'Funded'
+                          ? 'Funded'
+                          : status === 'Passed'
+                            ? 'Passed'
+                            : current.evaluationOutcome,
+                        outcomeEvidence: status === 'Funded' || status === 'Passed'
+                          ? `Outcome confirmed from ${status} status`
+                          : current.outcomeEvidence,
+                        outcomeConfidence: status === 'Funded' || status === 'Passed'
+                          ? 'high'
+                          : current.outcomeConfidence,
+                      }))}
                       style={form.status === status ? { ...getStatusBadgeStyle(status), height: 32, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none' } : undefined}
                     >
                       {status}
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Historical evaluation outcome</label>
+                <select
+                  className="billing-modal-field"
+                  value={form.evaluationOutcome}
+                  onChange={event => {
+                    const evaluationOutcome = event.target.value as EvaluationOutcome;
+                    setForm(current => ({
+                      ...current,
+                      evaluationOutcome,
+                      outcomeEvidence: 'Outcome confirmed manually',
+                      outcomeConfidence: 'high',
+                    }));
+                  }}
+                >
+                  {OUTCOME_OPTIONS.map(outcome => <option key={outcome} value={outcome}>{outcome}</option>)}
+                </select>
+                <p style={{ margin: '6px 0 0', color: 'var(--txt-3)', fontSize: 10, lineHeight: 1.45 }}>
+                  Current status can be Blown while this remains Passed or Funded. This field drives pass-rate reporting.
+                </p>
               </div>
 
               {/* Payouts (Funded / Passed only) */}
