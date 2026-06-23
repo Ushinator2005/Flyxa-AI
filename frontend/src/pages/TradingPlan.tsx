@@ -264,7 +264,11 @@ export default function TradingPlan() {
   };
 
   const updateRiskRule = (id: string, updates: Partial<RiskRule>) => {
-    setRiskRules(current => current.map(rule => rule.id === id ? { ...rule, ...updates } : rule));
+    setRiskRules(current => {
+      const updated = current.map(rule => rule.id === id ? { ...rule, ...updates } : rule);
+      useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+      return updated;
+    });
   };
 
   const RULE_KIND_LABELS: Record<NonNullable<RiskRule['kind']>, string> = {
@@ -278,19 +282,27 @@ export default function TradingPlan() {
   };
 
   const addRiskRule = () => {
-    setRiskRules(current => [...current, {
-      id: `rule-${crypto.randomUUID()}`,
-      label: 'Manual check',
-      value: '',
-      unit: '',
-      color: 'neutral',
-      kind: 'manual',
-      enabled: true,
-    }]);
+    setRiskRules(current => {
+      const updated = [...current, {
+        id: `rule-${crypto.randomUUID()}`,
+        label: 'Manual check',
+        value: '',
+        unit: '',
+        color: 'neutral' as const,
+        kind: 'manual' as const,
+        enabled: true,
+      }];
+      useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+      return updated;
+    });
   };
 
   const deleteRiskRule = (id: string) => {
-    setRiskRules(current => current.filter(rule => rule.id !== id));
+    setRiskRules(current => {
+      const updated = current.filter(rule => rule.id !== id);
+      useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+      return updated;
+    });
   };
 
   const exportPlan = () => {
