@@ -613,6 +613,18 @@ export default function FlyxaAIPreSession() {
     } as const;
   }, [checklistTotals.completed, checklistTotals.pct, checklistTotals.total, emotion, emotionLogged, lastSession, recentBehavior.planAdherence, recentBehavior.revengeTagged]);
 
+  // Sync freshly-computed readiness to the store after every re-render that changes it.
+  // Without this, toggleChecklist saves the stale (pre-render) readiness because React
+  // hasn't re-run the memo yet when the setState updater runs.
+  useEffect(() => {
+    const stored = useFlyxaStore.getState().preSessionHistory[todayIso];
+    if (!stored) return;
+    if (stored.readiness?.score === readiness.score && stored.readiness?.status === readiness.status) return;
+    setPreSessionForDate(todayIso, { ...stored, readiness });
+    const active = useFlyxaStore.getState().preSession;
+    if (active) setPreSessionAction({ ...active, readiness });
+  }, [readiness, todayIso, setPreSessionForDate, setPreSessionAction]);
+
   const persistPreSession = (updates: Partial<{ emotion: string; note: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null; sessionMaxLoss: number | null; dailyTarget: number | null }>) => {
     const parsedLoss = parseFloat(sessionMaxLoss);
     const parsedTarget = parseFloat(sessionTarget);
