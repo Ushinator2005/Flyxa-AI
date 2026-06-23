@@ -580,6 +580,39 @@
   color: var(--cobalt);
 }
 
+.tp-rule-source-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.tp-rule-source-wrap.automatic { color: var(--green); }
+.tp-rule-source-wrap.manual    { color: var(--cobalt); }
+
+.tp-rule-source-wrap::after {
+  content: '▾';
+  margin-left: 3px;
+  font-size: 10px;
+  pointer-events: none;
+  opacity: .7;
+}
+
+.tp-rule-kind-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+}
+
 .tp-rule-toggle {
   display: inline-flex;
   align-items: center;

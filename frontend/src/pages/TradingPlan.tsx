@@ -476,8 +476,20 @@ export default function TradingPlan() {
               {riskRules.map(rule => (
                 <article key={rule.id} className={`tp-rule-card tp-rule-editor ${rule.enabled === false ? 'disabled' : ''}`}>
                   <div className="tp-rule-editor-head">
-                    <span className={`tp-rule-source ${rule.kind === 'manual' ? 'manual' : 'automatic'}`}>
-                      {rule.kind === 'manual' ? 'Manual check' : 'Automatically verified'}
+                    <span className={`tp-rule-source-wrap ${rule.kind === 'manual' ? 'manual' : 'automatic'}`}>
+                      <select
+                        className="tp-rule-kind-select"
+                        value={rule.kind ?? 'manual'}
+                        onChange={event => updateRiskRule(rule.id, { kind: event.target.value as RiskRule['kind'] })}
+                      >
+                        <option value="max_daily_loss">Max daily loss</option>
+                        <option value="max_trades">Max trades / day</option>
+                        <option value="max_contracts">Max contracts</option>
+                        <option value="min_rr">Min R:R</option>
+                        <option value="time_window">Time window</option>
+                        <option value="cooldown_after_loss">Cooldown after loss</option>
+                        <option value="manual">Manual check</option>
+                      </select>
                     </span>
                     <label className="tp-rule-toggle">
                       <input type="checkbox" checked={rule.enabled !== false} onChange={event => updateRiskRule(rule.id, { enabled: event.target.checked })} />
@@ -485,15 +497,6 @@ export default function TradingPlan() {
                     </label>
                   </div>
                   <input className="tp-rule-input tp-rule-name-input" value={rule.label} onChange={event => updateRiskRule(rule.id, { label: event.target.value })} aria-label="Rule name" />
-                  <select className="tp-rule-input" value={rule.kind ?? 'manual'} onChange={event => updateRiskRule(rule.id, { kind: event.target.value as RiskRule['kind'] })}>
-                    <option value="max_daily_loss">Maximum daily loss</option>
-                    <option value="max_trades">Maximum trades per day</option>
-                    <option value="max_contracts">Maximum contracts</option>
-                    <option value="min_rr">Minimum planned R:R</option>
-                    <option value="time_window">Allowed trading window</option>
-                    <option value="cooldown_after_loss">Cooldown after loss</option>
-                    <option value="manual">Subjective / manual rule</option>
-                  </select>
                   {rule.kind === 'time_window' ? (
                     <div className="tp-rule-value-fields">
                       <label><span>Start</span><input className="tp-rule-input" type="time" value={rule.startTime ?? '09:30'} onChange={event => updateRiskRule(rule.id, { startTime: event.target.value })} /></label>
