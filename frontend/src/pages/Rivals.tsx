@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bell, BookOpen, Check, ChevronDown, Clock3, Flame,
   Gauge, LockKeyhole, MessageCircle, Plus, Search, ShieldCheck,
@@ -273,20 +273,48 @@ export default function Rivals() {
         <div className="rv-competition-layout">
           <main className="rv-ranking-card">
             <div className="rv-ranking-title"><div><h2>{activeLeague?.name ?? 'Standings'}</h2><p>Updated from saved journal trades</p></div><span className="rv-live-indicator"><i /> Live</span></div>
-            <div className="rv-pro-table">
-              <div className="rv-pro-head"><span>Rank</span><span>Trader / equity</span><span>Net P&L</span><span>Win rate</span><span>Avg R</span><span>Consistency</span><span>Move</span></div>
+            <div className="rv-card-grid">
               {filtered.map((rival) => {
                 const stats = getPeriodStats(rival, period);
                 const movement = rankMovement(rival, leagueRivals, metric, period);
+                const position = ranked.findIndex(item => item.id === rival.id) + 1;
+                const tier = getRankFromXP(rivalXP(rival));
+                const tierColor = RANK_COLORS[tier];
+                const isSelected = selectedRival.id === rival.id;
                 return (
-                  <button key={rival.id} type="button" aria-pressed={selectedRival.id === rival.id} className={`rv-pro-row ${rival.isMe ? 'me' : ''} ${selectedRival.id === rival.id ? 'selected' : ''}`} onClick={() => setSelectedRivalId(rival.id)}>
-                    <span className="rv-pro-rank"><RankMedallion rank={getRankFromXP(rivalXP(rival))} size={20} />{String(ranked.findIndex(item => item.id === rival.id) + 1).padStart(2, '0')}</span>
-                    <span className="rv-pro-trader"><RivalAvatar rival={rival} /><span><strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong><small>@{rival.username}</small></span><Sparkline values={stats.equityCurve} compact /></span>
-                    <span className={stats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(stats.netPnl)}</span>
-                    <span>{stats.winRate}%</span>
-                    <span>{rival.mascot.stats.avgR == null ? '—' : `${rival.mascot.stats.avgR.toFixed(2)}R`}</span>
-                    <span><div className="rv-consistency-cell"><b>{stats.consistency}</b><i><u style={{ width: `${stats.consistency}%` }} /></i></div></span>
-                    <span className={`rv-movement ${movement > 0 ? 'up' : movement < 0 ? 'down' : ''}`}>{movement > 0 ? <><TrendingUp size={12} />{movement}</> : movement < 0 ? <><TrendingDown size={12} />{Math.abs(movement)}</> : '—'}</span>
+                  <button
+                    key={rival.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    className={['rv-rival-card', rival.isMe ? 'me' : '', isSelected ? 'selected' : ''].filter(Boolean).join(' ')}
+                    style={{ '--rv-card-tier-color': tierColor } as React.CSSProperties}
+                    onClick={() => setSelectedRivalId(rival.id)}
+                  >
+                    <div className="rv-card-head">
+                      <div className="rv-card-rank">
+                        <RankMedallion rank={tier} size={24} />
+                        <span className="rv-card-pos">{String(position).padStart(2, '0')}</span>
+                      </div>
+                      <RivalAvatar rival={rival} />
+                      <div className="rv-card-identity">
+                        <strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong>
+                        <small>@{rival.username}</small>
+                      </div>
+                      <div className="rv-card-pnl">
+                        <span className={stats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(stats.netPnl)}</span>
+                        <span className={`rv-movement ${movement > 0 ? 'up' : movement < 0 ? 'down' : ''}`}>
+                          {movement > 0 ? <><TrendingUp size={11} />{movement}</> : movement < 0 ? <><TrendingDown size={11} />{Math.abs(movement)}</> : <span className="rv-card-neutral">—</span>}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rv-card-sparkwrap">
+                      <Sparkline values={stats.equityCurve} />
+                    </div>
+                    <div className="rv-card-footer">
+                      <div><span>Win rate</span><strong>{stats.winRate}%</strong></div>
+                      <div><span>Avg R</span><strong>{rival.mascot.stats.avgR == null ? '—' : `${rival.mascot.stats.avgR.toFixed(2)}R`}</strong></div>
+                      <div><span>Consist.</span><strong>{stats.consistency}</strong><i><u style={{ width: `${stats.consistency}%` }} /></i></div>
+                    </div>
                   </button>
                 );
               })}
