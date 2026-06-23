@@ -279,6 +279,11 @@ Read the ticker symbol. Examples:
 - 'MNQM26 · 1' → symbol is MNQ, timeframe_minutes is 1
 - 'ESM26 · 5' → symbol is ES, timeframe_minutes is 5
 Always return the ROOT ticker only (NQ not NQM26, MNQ not MNQM26).
+Product-name mapping is mandatory:
+- "Micro Nasdaq" or "Micro E-mini Nasdaq-100" = MNQ
+- "E-mini Nasdaq-100" without the word Micro = NQ
+- "Micro S&P" or "Micro E-mini S&P 500" = MES
+- "E-mini S&P 500" without the word Micro = ES
 Valid roots: NQ, MNQ, ES, MES, YM, MYM, RTY, M2K, CL, MCL, GC, MGC, SI, 6E, 6B, BTC, MBT
 
 STEP 2 — IDENTIFY entry_price, sl_price, tp_price:
@@ -307,6 +312,11 @@ DO NOT USE ANY COLOR OR SIZE BIAS — CANDLE WICKS ARE THE ONLY EVIDENCE.
 Do NOT use the background color of the teal zone, the red/pink zone, or any P&L label to decide the outcome.
 Those zone colors are fixed regardless of what happened. A large teal zone just means TP was far away — it says nothing about whether TP was hit.
 Do NOT use the size of either zone as a signal. Ignore all color cues. The answer comes only from candle wicks inside the P&L card.
+
+ANNOTATION EXCLUSION RULE — IGNORE ALL TEXT LABELS ON THE CHART:
+POS Bracket drawing tools (and similar tools) render number labels directly onto the colored zones: commonly −2, −1, 0, +1, +2, +3, etc. These are purely cosmetic design elements of the drawing tool. They do NOT mark price levels that matter, and their position tells you nothing about whether TP or SL was hit.
+Also ignore: confluence marker labels, order-block labels, session-range labels, horizontal-line labels, any floating annotation, and any other text overlay you see on the chart.
+Your ONLY evidence for an exit decision is the physical position of candle wicks relative to the FAR OUTER BOUNDARY of the colored zones — never text, numbers, or annotation positions.
 
 EXACT RULES — WHAT COUNTS AS A HIT:
 You must trace a horizontal line at the exact SL price and another at the exact TP price across the chart.
@@ -416,6 +426,62 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
   }
 }
 
+async function verifyTradeExit(
+  base64Image: string,
+  mimeType: string,
+  focusImages: Array<{ base64Image: string; mimeType: string; label: string }>,
+  trade: {
+    direction: 'Long' | 'Short';
+    entry: number;
+    stop: number;
+    target: number;
+  },
+  boxBounds?: { leftRatio: number; rightRatio: number },
+): Promise<{ exit_reason: 'TP' | 'SL' | null; confidence: 'high' | 'medium' | 'low'; evidence: string | null }> {
+  const isLong = trade.direction === 'Long';
+  const bounds = boxBounds
+    ? `Only inspect candle centers between ${Math.round(boxBounds.leftRatio * 100)}% and ${Math.round(boxBounds.rightRatio * 100)}% of the image width.`
+    : 'Only inspect candles physically inside the colored position-tool overlay.';
+  const prompt = `You are the independent exit verifier for a futures trade screenshot.
+Do not re-read or change the supplied prices. Determine only the first touched exit level.
+
+Trade:
+- Direction: ${trade.direction}
+- Entry: ${trade.entry}
+- Stop: ${trade.stop}
+- Target: ${trade.target}
+
+${bounds}
+Start at the left edge of the colored position tool and scan candle wicks from left to right.
+For this ${trade.direction}:
+- Stop is touched when a wick ${isLong ? `falls to or below ${trade.stop}` : `rises to or above ${trade.stop}`}.
+- Target is touched when a wick ${isLong ? `rises to or above ${trade.target}` : `falls to or below ${trade.target}`}.
+Entering the colored zone is not a hit; the wick must reach the OUTER boundary at the exact supplied price.
+The first touched boundary wins. If neither boundary is visibly touched or ordering is uncertain, return null.
+Ignore the live-price marker and all candles outside the colored position tool.
+
+Return only JSON:
+{
+  "exit_reason": "TP" or "SL" or null,
+  "confidence": "high" or "medium" or "low",
+  "evidence": "brief first-touch evidence"
+}`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
+    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages);
+    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    return {
+      exit_reason: parseExitReason(parsed.exit_reason),
+      confidence: parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low',
+      evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
+    };
+  } catch {
+    return { exit_reason: null, confidence: 'low', evidence: null };
+  }
+}
+
 function nullResult(warnings: string[]) {
   return {
     symbol: null,
@@ -478,6 +544,45 @@ export async function analyzeChartImage(
     rawDirectionHint === 'Long' || rawDirectionHint === 'Short' ? rawDirectionHint : undefined;
 
   const result = await readTradeChart(base64Image, mimeType, focusImages, userColors, boxBounds, directionHint);
+  let verifiedExitReason = result.exit_reason;
+  let verifiedConfidence = result.confidence;
+  let verifiedEvidence = result.evidence;
+  const verificationWarnings = [...(result.warnings ?? [])];
+
+  if (
+    result.exit_reason
+    && result.direction
+    && result.entry_price !== null
+    && result.sl_price !== null
+    && result.tp_price !== null
+  ) {
+    const verification = await verifyTradeExit(
+      base64Image,
+      mimeType,
+      focusImages,
+      {
+        direction: result.direction,
+        entry: result.entry_price,
+        stop: result.sl_price,
+        target: result.tp_price,
+      },
+      boxBounds,
+    );
+
+    if (verification.exit_reason !== result.exit_reason) {
+      verifiedExitReason = null;
+      verifiedConfidence = 'low';
+      verifiedEvidence = verification.evidence ?? result.evidence;
+      verificationWarnings.push(
+        `Exit outcome requires confirmation: initial read was ${result.exit_reason}, independent verification was ${verification.exit_reason ?? 'unresolved'}.`
+      );
+    } else {
+      verifiedConfidence = result.confidence === 'high' && verification.confidence === 'high'
+        ? 'high'
+        : 'medium';
+      verifiedEvidence = verification.evidence ?? result.evidence;
+    }
+  }
 
   return {
     symbol: result.symbol,
@@ -491,11 +596,11 @@ export async function analyzeChartImage(
     trade_length_seconds: result.trade_length_seconds,
     candle_count: null,
     timeframe_minutes: result.timeframe_minutes,
-    exit_reason: result.exit_reason,
-    pnl_result: result.exit_reason === 'TP' ? 'Win' : result.exit_reason === 'SL' ? 'Loss' : null,
-    exit_confidence: result.confidence,
+    exit_reason: verifiedExitReason,
+    pnl_result: verifiedExitReason === 'TP' ? 'Win' : verifiedExitReason === 'SL' ? 'Loss' : null,
+    exit_confidence: verifiedConfidence,
     first_touch_candle_index: null,
-    first_touch_evidence: result.evidence,
-    warnings: result.warnings ?? [],
+    first_touch_evidence: verifiedEvidence,
+    warnings: verificationWarnings,
   };
 }
