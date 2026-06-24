@@ -8,6 +8,7 @@ import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsCo
 import { scanChart } from '../../utils/scanChart.js';
 import DatePicker from '../common/DatePicker.js';
 import { pushToast } from '../../store/toastStore.js';
+import { useScanStore } from '../../store/scanStore.js';
 
 const DRAFT_KEY = 'tw_scanner_draft';
 const DRAFT_IMAGE_KEY = 'tw_scanner_draft_image';
@@ -570,16 +571,20 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     [editTrade?.contract_size, prefillTrade?.contract_size]
   );
 
-  const [scanning, setScanning]           = useState(false);
-  const [scanError, setScanError]         = useState('');
-  const [warnings, setWarnings]           = useState<string[]>([]);
-  const [scanEvidence, setScanEvidence]   = useState<string>('');
+  const [scanning, setScanning]           = useState(() => !editTrade && !prefillTrade ? useScanStore.getState().scanning : false);
+  const [scanError, setScanError]         = useState(() => !editTrade && !prefillTrade ? useScanStore.getState().error : '');
+  const [warnings, setWarnings]           = useState<string[]>(() => !editTrade && !prefillTrade ? (useScanStore.getState().result?.warnings ?? []) : []);
+  const [scanEvidence, setScanEvidence]   = useState<string>(() => !editTrade && !prefillTrade ? (useScanStore.getState().result?.evidence ?? '') : '');
   const [formData, setFormData]           = useState<Partial<Trade> | null>(() => {
     if (editTrade) return editTrade;
     if (prefillTrade) return prefillTrade;
     return readScannerDraft();
   });
-  const [aiFields, setAiFields]           = useState<Set<string>>(new Set());
+  const [aiFields, setAiFields]           = useState<Set<string>>(() => {
+    if (editTrade || prefillTrade) return new Set();
+    const r = useScanStore.getState().result;
+    return r ? new Set(r.aiFields) : new Set();
+  });
   const [imagePreview, setImagePreview]   = useState<string | null>(() => {
     if (editTrade) return editTrade.screenshot_url ?? null;
     try { return localStorage.getItem(DRAFT_IMAGE_KEY) ?? null; } catch { return null; }
@@ -599,6 +604,8 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoImportedImageKeyRef = useRef('');
+  const mountedRef = useRef(false);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const accountById = useMemo(() => new Map(accounts.map(account => [account.id, account] as const)), [accounts]);
   const existingTradeAccountId = editTrade ? resolveTradeAccountId(editTrade) : null;
   const selectedTradeAccount = accountById.get(tradeAccountId);
@@ -635,10 +642,20 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     }
     setContractInputValue(String(Math.max(1, Number(editTrade?.contract_size ?? prefillTrade?.contract_size ?? savedDraft?.contract_size ?? 1))));
     setTradeAccountId(getInitialTradeAccountId());
-    setAiFields(new Set());
-    setWarnings([]);
-    setScanEvidence('');
-    setScanError('');
+
+    if (editTrade || prefillTrade) {
+      setAiFields(new Set());
+      setWarnings([]);
+      setScanEvidence('');
+      setScanError('');
+    } else {
+      const { scanning: storeScan, result: storeResult, error: storeErr } = useScanStore.getState();
+      if (storeScan) setScanning(true);
+      setAiFields(storeResult ? new Set(storeResult.aiFields) : new Set());
+      setWarnings(storeResult?.warnings ?? []);
+      setScanEvidence(storeResult?.evidence ?? '');
+      setScanError(storeErr);
+    }
 
     if (editTrade) {
       setFormData(editTrade);
@@ -652,6 +669,30 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
 
     setFormData(savedDraft ?? null);
   }, [editTrade, getInitialContractSize, getInitialTradeAccountId, isOpen, prefillTrade]);
+
+  // Subscribe to scan store — syncs local state when scan completes while this component is mounted
+  const storeScan = useScanStore(s => s.scanning);
+  const storeResult = useScanStore(s => s.result);
+  const storeError = useScanStore(s => s.error);
+  useEffect(() => {
+    if (!isOpen || editTrade || prefillTrade) return;
+    if (storeScan) {
+      setScanning(true);
+    } else {
+      setScanning(false);
+      if (storeResult) {
+        setAiFields(new Set(storeResult.aiFields));
+        setWarnings(storeResult.warnings);
+        setScanEvidence(storeResult.evidence);
+        setScanError('');
+        const draft = readScannerDraft();
+        if (draft) setFormData(draft);
+        try { const img = localStorage.getItem(DRAFT_IMAGE_KEY); if (img) setImagePreview(img); } catch {}
+      } else if (storeError) {
+        setScanError(storeError);
+      }
+    }
+  }, [storeScan, storeResult, storeError, isOpen, editTrade, prefillTrade]);
 
   const handleFormDraftChange = useCallback((draftData: Partial<Trade>) => {
     if (!isOpen || editTrade) {
@@ -731,6 +772,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     setAiFields(new Set());
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_IMAGE_KEY);
+    useScanStore.getState().clearScan();
     setImagePreview(editTrade?.screenshot_url ?? null);
     setFullscreenPreview(false);
     setScanError('');
@@ -763,6 +805,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
     setScanError('');
     setWarnings([]);
     setScanning(true);
+    useScanStore.getState().startScan();
 
     const reader = new FileReader();
     reader.onload = e => {
@@ -861,13 +904,20 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       if (extracted.candle_count)     mapped.candle_count = Number(extracted.candle_count);
       if (extracted.timeframe_minutes) mapped.timeframe_minutes = Number(extracted.timeframe_minutes);
 
+      const evidence = extracted.first_touch_evidence ?? '';
+      useScanStore.getState().completeScan({ aiFields: [...fields], warnings: w, evidence });
+      if (!mountedRef.current) {
+        pushToast({ tone: 'green', durationMs: 6000, message: 'Trade scan complete — open the journal to review.' });
+      }
       setAiFields(fields);
       setFormData(mapped);
       setWarnings(w);
-      setScanEvidence(extracted.first_touch_evidence ?? '');
+      setScanEvidence(evidence);
       localStorage.setItem(DRAFT_KEY, JSON.stringify({ data: mapped }));
     } catch (err) {
-      setScanError(err instanceof Error ? err.message : 'Failed to scan image');
+      const msg = err instanceof Error ? err.message : 'Failed to scan image';
+      useScanStore.getState().failScan(msg);
+      setScanError(msg);
     } finally {
       setScanning(false);
     }
@@ -930,6 +980,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       });
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(DRAFT_IMAGE_KEY);
+      useScanStore.getState().clearScan();
       handleClose();
     } catch (err) {
       pushToast({ tone: 'red', durationMs: 4500, message: err instanceof Error ? err.message : 'Failed to save trade.' });
