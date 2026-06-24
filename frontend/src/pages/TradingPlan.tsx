@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { RiskRule } from '../store/types.js';
-import { saveStoreStatePatchNow } from '../store/supabaseStorage.js';
+import { saveStoreStatePatchNow, flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import { pushToast } from '../store/toastStore.js';
 import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
 import './TradingPlan.css';
@@ -217,6 +217,8 @@ export default function TradingPlan() {
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      // Flush any pending state immediately so rule changes survive navigation.
+      void flushSupabaseStoreNow();
     };
   }, []);
 
@@ -262,7 +264,9 @@ export default function TradingPlan() {
   useEffect(() => {
     if (firstRulesMountRef.current) { firstRulesMountRef.current = false; return; }
     const timer = setTimeout(() => {
-      void saveStoreStatePatchNow({ riskRules: storeRiskRules }).catch(() => {});
+      void saveStoreStatePatchNow({ riskRules: storeRiskRules }).catch(() => {
+        pushToast({ tone: 'red', durationMs: 4000, message: 'Risk rules could not sync. Your changes are saved locally.' });
+      });
     }, 650);
     return () => clearTimeout(timer);
   }, [storeRiskRules]);
@@ -326,11 +330,27 @@ export default function TradingPlan() {
     manual:             'Manual check',
   };
 
+  const changeRiskRuleKind = (rule: RiskRule, kind: NonNullable<RiskRule['kind']>) => {
+    const previousKindLabel = rule.kind ? RULE_KIND_LABELS[rule.kind] : RULE_KIND_LABELS.manual;
+    const keepCustomManualLabel = kind === 'manual'
+      && rule.label.trim()
+      && rule.label !== previousKindLabel
+      && !Object.values(RULE_KIND_LABELS).includes(rule.label);
+
+    updateRiskRule(rule.id, {
+      kind,
+      label: keepCustomManualLabel ? rule.label : kind === 'manual' ? 'New custom rule' : RULE_KIND_LABELS[kind],
+      value: kind === 'manual' ? (rule.value ?? '') : rule.value,
+      unit: kind === 'manual' ? '' : rule.unit,
+      color: kind === 'manual' ? 'neutral' : rule.color,
+    });
+  };
+
   const addRiskRule = () => {
     const current = useFlyxaStore.getState().riskRules;
     const updated = [...current, {
       id: `rule-${crypto.randomUUID()}`,
-      label: 'Manual check',
+      label: 'New custom rule',
       value: '',
       unit: '',
       color: 'neutral' as const,
@@ -572,7 +592,10 @@ export default function TradingPlan() {
                       <select
                         className="tp-rule-kind-select"
                         value={rule.kind ?? 'manual'}
-                        onChange={event => { const kind = event.target.value as NonNullable<RiskRule['kind']>; updateRiskRule(rule.id, { kind, label: RULE_KIND_LABELS[kind] }); }}
+                        onChange={event => {
+                          const kind = event.target.value as NonNullable<RiskRule['kind']>;
+                          changeRiskRuleKind(rule, kind);
+                        }}
                       >
                         <option value="max_daily_loss">Max daily loss</option>
                         <option value="max_trades">Max trades / day</option>
@@ -648,7 +671,29 @@ export default function TradingPlan() {
                       <label><span>Unit</span><input className="tp-rule-input" value={rule.unit} onChange={event => updateRiskRule(rule.id, { unit: event.target.value })} /></label>
                     </div>
                   ) : (
-                    <p className="tp-rule-manual-note">This appears in each daily journal for pass/fail confirmation.</p>
+                    <div className="tp-manual-rule-fields">
+                      <label>
+                        <span>Rule</span>
+                        <input
+                          className="tp-rule-input tp-rule-name-input"
+                          value={rule.label}
+                          placeholder="e.g. No trades before pre-session is complete"
+                          onChange={event => updateRiskRule(rule.id, { label: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Notes / confirmation prompt</span>
+                        <textarea
+                          className="tp-rule-input tp-rule-textarea"
+                          value={rule.value}
+                          placeholder="Optional: what counts as passing or breaking this rule?"
+                          onChange={event => updateRiskRule(rule.id, { value: event.target.value })}
+                        />
+                      </label>
+                      <p className="tp-rule-manual-note">
+                        This custom rule appears in each daily journal for pass/fail confirmation.
+                      </p>
+                    </div>
                   )}
                   <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)}>
                     <Trash2 size={12} /> Remove
