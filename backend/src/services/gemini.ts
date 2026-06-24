@@ -260,26 +260,27 @@ IMPORTANT: The ENTRY label should match the user's configured Entry zone color w
 If an attached crop is labelled price-label-focus, use it to read all visible right-axis labels. If an attached crop is labelled entry-color-label-focus, use it to resolve the entry label only.
 FALLBACK — if no colored labels are visible on the right axis at all: trace each zone boundary (entry line, outer edge of pink zone, outer edge of teal zone) horizontally to the price axis gridlines and read the nearest grid price.
 
-Step 2. The user has set these three zone colors in their settings:
-  • Entry zone color   = ${entryName} (${userColors.entry})
-  • Stop Loss color    = ${slName} (${userColors.stopLoss})
-  • Take Profit color  = ${tpName} (${userColors.takeProfit})
+Step 2. The user has configured exactly these three zone colors in their Flyxa settings:
+  • Entry zone    = ${entryName} — exact hex: ${userColors.entry}
+  • Stop Loss     = ${slName} — exact hex: ${userColors.stopLoss}
+  • Take Profit   = ${tpName} — exact hex: ${userColors.takeProfit}
+These hex values describe the background color of the position-tool price labels on the right axis. The label whose background most closely matches each hex is the correct one for that level.
 
 ⚠ MANDATORY — KEY-LEVEL LINE LABELS vs POSITION TOOL LABELS (THE #1 MISREAD):
-Traders draw horizontal support/resistance lines across their entire chart. These lines produce their own right-axis labels with BLACK or VERY DARK GREY backgrounds. They are completely separate from the position tool.
+Traders draw horizontal support/resistance lines across their entire chart. These lines produce their own right-axis labels with TRUE BLACK or VERY DARK backgrounds (close to #000000). They are completely separate from the position tool and must be ignored.
 How to tell them apart:
-  • KEY-LEVEL label: black/dark background. The line it belongs to runs horizontally across the ENTIRE chart, extending into blank future space beyond the P&L box.
-  • POSITION TOOL label: colored background matching the user's configured colors (or grey for the entry on default settings). The label appears only at the zone boundary edge.
-When a key-level line is drawn at the SAME price as the entry — both labels appear stacked at the same Y position. They will look like two labels for the same price.
-MANDATORY: Discard the black/dark one entirely. Read ONLY the colored (or grey) label.
-MANDATORY: If entry-label-focus shows only a black/dark label with no colored label beside it, the crop caught a key-level line that coincides with the entry zone boundary. In that case, find the colored entry label in price-label-focus at the same vertical position.
-NEVER read entry_price from a label with a black, very dark grey, or white background when any colored label exists at or near that price level. This rule has no exceptions.
+  • KEY-LEVEL label: true black or near-black background (#000000–#222222 range). The line it belongs to runs horizontally across the ENTIRE chart, extending into blank future space beyond the P&L box.
+  • POSITION TOOL label: background matches the user's configured hex above. Even if the configured entry color is grey or grey-blue (e.g. #78788E), it is visually LIGHTER and has a distinct hue compared to a true-black key-level label.
+WHEN BOTH APPEAR AT THE SAME PRICE (common case): a key-level line happens to be drawn exactly at the entry/SL/TP price, so two labels stack at the same Y position on the right axis — one black (key-level), one colored/grey (position tool). You MUST use the non-black one.
+MANDATORY: Discard any black or near-black label entirely. Read ONLY the label whose background matches the configured hex.
+MANDATORY: If entry-label-focus shows only a black/dark label with no lighter label beside it, the crop caught a key-level line. Find the correct entry label in price-label-focus at the same vertical position — it will be lighter than black.
+NEVER read entry_price from a true-black or near-black background label. This applies even when it appears at the correct Y position for entry.
 
-Step 3. Find the right-axis price labels attached to the position tool:
-  • Label with ${entryName} background  → that price number is entry_price
-  • Grey label at the entry boundary    → entry_price ONLY if no ${entryName} entry label is visible
-  • Label with ${slName} background     → that price number is sl_price
-  • Label with ${tpName} background     → that price number is tp_price
+Step 3. Match each right-axis label to the configured hex colors above:
+  • Label whose background ≈ ${userColors.entry} (${entryName})  → entry_price
+  • Label whose background ≈ ${userColors.stopLoss} (${slName})   → sl_price
+  • Label whose background ≈ ${userColors.takeProfit} (${tpName}) → tp_price
+  If no ${entryName} entry label is visible, fall back to any grey label at the entry boundary as entry_price.
 
 CRITICAL — STACKED LABELS DISAMBIGUATION:
 On many platforms (especially TradingView), you will see TWO labels of identical or very similar color stacked close together at the TP or SL price level. One is the position-tool price label (the correct value). The other is the LIVE floating price label that shows the current market price — it can coincidentally match your configured color and float near the zone boundary.
