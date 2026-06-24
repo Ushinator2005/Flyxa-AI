@@ -2,8 +2,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ExtractedTradeData } from '../types/index';
 
 const GEMINI_MODEL_FALLBACK_CHAIN = ['gemini-2.5-flash', 'gemini-2.5-pro'];
-const GEMINI_MAX_RETRIES_PER_MODEL = 4;
+const GEMINI_MAX_RETRIES_PER_MODEL = 0;
 const GEMINI_BASE_RETRY_DELAY_MS = 2000;
+const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? 30_000);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,6 +21,21 @@ function isRetryableGeminiError(message: string): boolean {
     text.includes('timed out') ||
     text.includes('timeout')
   );
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 async function generateWithFallback(
@@ -62,7 +78,11 @@ async function generateWithFallback(
 
     for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES_PER_MODEL; attempt += 1) {
       try {
-        const result = await model.generateContent(content);
+        const result = await withTimeout(
+          model.generateContent(content),
+          GEMINI_REQUEST_TIMEOUT_MS,
+          `${modelName} scanner request`
+        );
         const text = result.response.text().trim();
         return { text, model: modelName };
       } catch (error) {
@@ -245,6 +265,16 @@ Step 2. The user has set these three zone colors in their settings:
   • Stop Loss color    = ${slName} (${userColors.stopLoss})
   • Take Profit color  = ${tpName} (${userColors.takeProfit})
 
+⚠ MANDATORY — KEY-LEVEL LINE LABELS vs POSITION TOOL LABELS (THE #1 MISREAD):
+Traders draw horizontal support/resistance lines across their entire chart. These lines produce their own right-axis labels with BLACK or VERY DARK GREY backgrounds. They are completely separate from the position tool.
+How to tell them apart:
+  • KEY-LEVEL label: black/dark background. The line it belongs to runs horizontally across the ENTIRE chart, extending into blank future space beyond the P&L box.
+  • POSITION TOOL label: colored background matching the user's configured colors (or grey for the entry on default settings). The label appears only at the zone boundary edge.
+When a key-level line is drawn at the SAME price as the entry — both labels appear stacked at the same Y position. They will look like two labels for the same price.
+MANDATORY: Discard the black/dark one entirely. Read ONLY the colored (or grey) label.
+MANDATORY: If entry-label-focus shows only a black/dark label with no colored label beside it, the crop caught a key-level line that coincides with the entry zone boundary. In that case, find the colored entry label in price-label-focus at the same vertical position.
+NEVER read entry_price from a label with a black, very dark grey, or white background when any colored label exists at or near that price level. This rule has no exceptions.
+
 Step 3. Find the right-axis price labels attached to the position tool:
   • Label with ${entryName} background  → that price number is entry_price
   • Grey label at the entry boundary    → entry_price ONLY if no ${entryName} entry label is visible
@@ -278,7 +308,9 @@ Look at the right-hand price axis. Find the three colored price labels (any shap
   • Grey background label = entry_price
   • Red or pink background label = sl_price
   • Teal or green background label = tp_price
-Ignore all horizontal lines across the chart and any other price labels. In particular, never use a black/white right-axis key-level label as entry_price when a grey entry label is visible.
+
+⚠ KEY-LEVEL LINES: Traders draw horizontal lines across their entire chart. These produce BLACK or DARK GREY right-axis labels — they are NOT position-tool labels. If a black/dark label appears near the same price as a grey/colored position-tool label, DISCARD the black/dark one and use only the grey/colored one. This is the most common misread.
+
 FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
 STACKED LABELS: If two labels of similar color appear stacked near the TP or SL price, use the one that aligns with the OUTER BOUNDARY of the colored zone (the far edge of the zone from entry). The label floating outside the zone boundary is the live price marker — ignore it.
 `;
