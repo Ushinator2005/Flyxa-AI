@@ -65,20 +65,38 @@ class ApiService {
     return response.json() as Promise<T>;
   }
 
-  async postFormData<T>(path: string, formData: FormData): Promise<T> {
+  async postFormData<T>(path: string, formData: FormData, options: { timeoutMs?: number } = {}): Promise<T> {
     const authHeader = await this.getAuthHeader();
-    const response = await fetch(`${API_URL}${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader,
-      },
-      body: formData,
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || `Request failed: ${response.status}`);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutMs = options.timeoutMs;
+    const timeoutId = controller && timeoutMs && timeoutMs > 0
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : undefined;
+
+    try {
+      const response = await fetch(`${API_URL}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+        },
+        body: formData,
+        signal: controller?.signal,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(err.error || `Request failed: ${response.status}`);
+      }
+      return response.json() as Promise<T>;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('Scanner request timed out. Please retry with a clearer/cropped screenshot.');
+      }
+      throw error;
+    } finally {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
     }
-    return response.json() as Promise<T>;
   }
 
   async put<T>(path: string, body: unknown): Promise<T> {
@@ -147,7 +165,7 @@ export const aiApi = {
     }
     formData.append('entryDate', entryDate);
     formData.append('entryTime', entryTime);
-    return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData);
+    return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData, { timeoutMs: 75_000 });
   },
   analyzeTradeById: (tradeId: string, trade?: Partial<Trade>, history?: Partial<Trade>[]) =>
     api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, { trade, history }),
@@ -321,6 +339,28 @@ export const rivalsApi = {
 
 export const accountApi = {
   reset: () => api.post<{ ok: boolean; preserved: string[] }>('/api/account/reset', {}),
+};
+
+export interface SharedTradeRecord {
+  shareId: string;
+  sharedAt: string;
+  sharedByUserId: string;
+  sharedByProfile: {
+    user_id: string;
+    username: string;
+    display_name: string | null;
+    avatar_color: string;
+    avatar_url: string | null;
+  } | null;
+  trade: Trade;
+}
+
+export const tradeSharesApi = {
+  getSharedWithMe: () => api.get<SharedTradeRecord[]>('/api/trades/shared-with-me'),
+  share: (tradeId: string, rivalUserId: string, tradeData: Trade) =>
+    api.post<{ id: string }>('/api/trades/share', { tradeId, rivalUserId, tradeData }),
+  unshare: (tradeId: string, rivalUserId: string) =>
+    api.delete(`/api/trades/share/${tradeId}/${rivalUserId}`),
 };
 
 export interface RivalMessage {

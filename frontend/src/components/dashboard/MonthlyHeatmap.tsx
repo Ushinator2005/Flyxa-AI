@@ -25,6 +25,7 @@ const TABS = [
   { key: 'lessons', label: 'Lessons' },
   { key: 'gratitude', label: 'Gratitude' },
 ] as const;
+const NO_JOURNAL_ENTRY_MESSAGE = 'No journal entry yet for this day.';
 
 type JournalTab = (typeof TABS)[number]['key'];
 type EmotionTone = 'neutral' | 'green' | 'amber' | 'red';
@@ -279,6 +280,7 @@ function DailyJournalModal({
   onSave: (tab: JournalTab, content: string) => Promise<void> | void;
   onViewTrades: () => void;
 }) {
+  const isNoJournalEntry = error === NO_JOURNAL_ENTRY_MESSAGE;
   const [activeTab, setActiveTab] = useState<JournalTab>('reflection');
   const [draftByTab, setDraftByTab] = useState<Record<JournalTab, string>>({
     reflection: entry.reflection,
@@ -594,7 +596,7 @@ function DailyJournalModal({
                     Loading daily journal entry...
                   </p>
                 ) : error ? (
-                  <p style={{ margin: 0, fontSize: 13, color: 'var(--red)' }}>
+                  <p style={{ margin: 0, fontSize: 13, color: isNoJournalEntry ? 'var(--txt-3)' : 'var(--red)' }}>
                     {error}
                   </p>
                 ) : (
@@ -1013,9 +1015,14 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
       const fetched = await journalApi.getById(journalId);
       if (journalRequestRef.current !== requestId) return;
       setSelectedJournal(fetched as JournalEntry);
-    } catch {
+    } catch (error) {
       if (journalRequestRef.current !== requestId) return;
-      setJournalError('Unable to load this daily journal entry.');
+      const message = error instanceof Error ? error.message : '';
+      setJournalError(
+        message.includes('Entry not found') || message.includes('404')
+          ? NO_JOURNAL_ENTRY_MESSAGE
+          : 'Unable to load this daily journal entry.'
+      );
     } finally {
       if (journalRequestRef.current !== requestId) return;
       setJournalLoading(false);

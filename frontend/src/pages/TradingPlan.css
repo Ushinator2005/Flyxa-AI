@@ -653,11 +653,22 @@
   min-width: 0;
 }
 
-.tp-rule-value-fields label > span {
+.tp-rule-value-fields label > span,
+.tp-manual-rule-fields label > span {
   display: block;
   margin-bottom: 5px;
   color: var(--txt-3);
   font-size: 9px;
+}
+
+.tp-manual-rule-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.tp-manual-rule-fields label {
+  display: block;
 }
 
 .tp-rule-manual-note {
@@ -665,6 +676,14 @@
   color: var(--txt-3);
   font-size: 10px;
   line-height: 1.45;
+}
+
+.tp-rule-textarea {
+  min-height: 68px;
+  height: auto;
+  resize: vertical;
+  line-height: 1.45;
+  padding: 9px;
 }
 
 /* ── Per-symbol contract limits ──────────────────────────────────── */

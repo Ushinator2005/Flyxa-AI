@@ -549,9 +549,11 @@ interface Props {
   editTrade?: Trade | null;
   prefillTrade?: Partial<Trade> | null;
   initialImageFile?: File | null;
+  readOnly?: boolean;
+  sharedByName?: string;
 }
 
-export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTrade, prefillTrade, initialImageFile }: Props) {
+export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTrade, prefillTrade, initialImageFile, readOnly = false, sharedByName }: Props) {
   const { accounts, preferences, getDefaultTradeAccountId, isTradeAccountAllocatable, resolveTradeAccountId } = useAppSettings();
   const normalizeTradeAccountIds = useCallback((trade: Partial<Trade> | null | undefined) => {
     const rawIds = Array.isArray(trade?.accountIds) ? trade.accountIds : [];
@@ -1056,9 +1058,16 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
         <div className="relative mx-auto h-full max-w-[1400px]">
           <div className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-700/70 bg-slate-900/95 shadow-[0_32px_120px_rgba(2,6,23,0.58)]">
             <div className="flex items-center justify-between border-b border-slate-700/80 px-5 py-4">
-              <h2 className="text-lg font-semibold text-white">{editTrade ? 'Edit Trade' : 'Add Trade'}</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  {readOnly ? 'Shared Trade' : editTrade ? 'Edit Trade' : 'Add Trade'}
+                </h2>
+                {readOnly && sharedByName && (
+                  <p className="text-xs text-slate-400 mt-0.5">shared by {sharedByName}</p>
+                )}
+              </div>
               <div className="flex items-center gap-3">
-                {scanning && (
+                {scanning && !readOnly && (
                   <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200">
                     <span className="h-3 w-3 rounded-full border-2 border-blue-300 border-t-transparent animate-spin" />
                     Flyxa is analysing your trade
@@ -1078,7 +1087,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
               <div className="flex min-h-full flex-col gap-5">
 
         {/* Trade date/time + warnings */}
-        <div className="rounded-2xl border border-slate-700/60 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(15,23,42,0.88))] px-4 py-4 shadow-[0_18px_40px_rgba(2,6,23,0.28)]">
+        {!readOnly && <div className="rounded-2xl border border-slate-700/60 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(15,23,42,0.88))] px-4 py-4 shadow-[0_18px_40px_rgba(2,6,23,0.28)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Trade Date/Time</p>
@@ -1114,9 +1123,9 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
               </label>
             </div>
           </div>
-        </div>
+        </div>}
 
-        {scanEvidence && (
+        {!readOnly && scanEvidence && (
           <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300/80">AI Scan Note</p>
             <p className="mt-1 text-sm text-blue-200">{scanEvidence}</p>
@@ -1167,7 +1176,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
                     <Expand size={12} />
                     Fullscreen
                   </button>
-                  {!editTrade && (
+                  {!editTrade && !readOnly && (
                     <button onClick={reset} className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-slate-600/80 bg-slate-950/90 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-500 hover:text-white">
                       <X size={12} />
                       Clear
@@ -1184,7 +1193,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
                       </div>
                     </div>
                   )}
-                  {!scanning && (
+                  {!scanning && !readOnly && (
                     <button onClick={() => fileInputRef.current?.click()}
                       className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full border border-slate-600/80 bg-slate-950/90 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-blue-400/50 hover:text-white">
                       <ImagePlus size={13} />
@@ -1282,19 +1291,34 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
 
           {/* Right: form */}
           <div className="min-w-0">
-            <div className="rounded-[28px] border border-slate-700/60 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.72))] p-4 shadow-[0_24px_60px_rgba(2,6,23,0.32)] md:p-5">
+            <div
+              className="rounded-[28px] border border-slate-700/60 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.72))] p-4 shadow-[0_24px_60px_rgba(2,6,23,0.32)] md:p-5"
+              style={readOnly ? { pointerEvents: 'none' } : undefined}
+            >
               <TradeForm
                 initialData={formData || undefined}
                 aiFields={aiFields}
                 tradeDate={currentDate}
                 tradeTime={currentTime}
                 showContractsField={false}
+                showActionBar={!readOnly}
                 onSubmit={handleSave}
                 onDraftChange={handleFormDraftChange}
                 onCancel={handleClose}
                 isLoading={saving}
               />
             </div>
+            {readOnly && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/80 bg-slate-800/80 px-6 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
               </div>

@@ -173,6 +173,154 @@ function sanitizeStoreValue(value: string): string {
   }
 }
 
+function entryRecordsFromBlob(blob: unknown): Record<string, unknown>[] {
+  const entries = (blob as { state?: { entries?: unknown[] } } | null)?.state?.entries;
+  if (!Array.isArray(entries)) return [];
+  return entries.filter(
+    (entry): entry is Record<string, unknown> =>
+      entry != null && typeof entry === 'object' &&
+      typeof (entry as Record<string, unknown>).id === 'string'
+  );
+}
+
+function entryMergeKey(entry: Record<string, unknown>): string | null {
+  if (typeof entry.date === 'string' && entry.date.trim()) return `date:${entry.date}`;
+  if (typeof entry.id === 'string' && entry.id.trim()) return `id:${entry.id}`;
+  return null;
+}
+
+function tradeRecordsFromEntry(entry: Record<string, unknown>): Record<string, unknown>[] {
+  return Array.isArray(entry.trades)
+    ? entry.trades.filter((trade): trade is Record<string, unknown> => trade != null && typeof trade === 'object')
+    : [];
+}
+
+function tradeMergeKey(trade: Record<string, unknown>): string | null {
+  if (typeof trade.id === 'string' && trade.id.trim()) return `id:${trade.id}`;
+  const date = typeof trade.date === 'string' ? trade.date : '';
+  const symbol = typeof trade.symbol === 'string' ? trade.symbol : '';
+  const entryTime = typeof trade.entryTime === 'string' ? trade.entryTime : '';
+  const entryPrice = typeof trade.entryPrice === 'number' || typeof trade.entryPrice === 'string'
+    ? String(trade.entryPrice)
+    : '';
+  return date || symbol || entryTime || entryPrice
+    ? `sig:${date}|${symbol}|${entryTime}|${entryPrice}`
+    : null;
+}
+
+function mergeScreenshots(localValue: unknown, remoteValue: unknown): unknown {
+  if (Array.isArray(localValue) && localValue.length > 0) return localValue;
+  if (Array.isArray(remoteValue) && remoteValue.length > 0) return remoteValue;
+  return localValue ?? remoteValue;
+}
+
+function mergeRemoteEntryIntoLocal(
+  localEntry: Record<string, unknown>,
+  remoteEntry: Record<string, unknown>,
+  deletedTradeIds: Set<string>
+): Record<string, unknown> {
+  const localTrades = tradeRecordsFromEntry(localEntry)
+    .filter((trade) => typeof trade.id !== 'string' || !deletedTradeIds.has(trade.id));
+  const localTradeKeys = new Set(
+    localTrades
+      .map(tradeMergeKey)
+      .filter((key): key is string => typeof key === 'string')
+  );
+  const remoteTradesToAdd = tradeRecordsFromEntry(remoteEntry)
+    .filter((trade) => typeof trade.id !== 'string' || !deletedTradeIds.has(trade.id))
+    .filter((trade) => {
+      const key = tradeMergeKey(trade);
+      return !key || !localTradeKeys.has(key);
+    });
+
+  return {
+    ...remoteEntry,
+    ...localEntry,
+    screenshots: mergeScreenshots(localEntry.screenshots, remoteEntry.screenshots),
+    scannedImageUrl: localEntry.scannedImageUrl || remoteEntry.scannedImageUrl,
+    trades: [...localTrades, ...remoteTradesToAdd],
+  };
+}
+
+function mergeRemoteEntriesIntoStoreBlob(
+  localBlob: unknown,
+  remoteBlob: unknown,
+  deletedTradeIds = new Set([
+    ...deletedTradeIdsFromBlob(remoteBlob),
+    ...deletedTradeIdsFromBlob(localBlob),
+  ]),
+  deletedEntryDates = new Set([
+    ...deletedEntryDatesFromBlob(remoteBlob),
+    ...deletedEntryDatesFromBlob(localBlob),
+  ])
+): Record<string, unknown> {
+  const localRecord = (localBlob && typeof localBlob === 'object')
+    ? (localBlob as Record<string, unknown>)
+    : { state: {}, version: 1 };
+  const localState = (localRecord.state && typeof localRecord.state === 'object')
+    ? (localRecord.state as Record<string, unknown>)
+    : {};
+  const localEntries = entryRecordsFromBlob(localRecord)
+    .filter((entry) => typeof entry.date !== 'string' || !deletedEntryDates.has(entry.date))
+    .map((entry) => removeDeletedTradesFromEntry(entry, deletedTradeIds));
+  const remoteEntries = entryRecordsFromBlob(remoteBlob)
+    .filter((entry) => typeof entry.date !== 'string' || !deletedEntryDates.has(entry.date))
+    .map((entry) => removeDeletedTradesFromEntry(entry, deletedTradeIds));
+
+  if (remoteEntries.length === 0) {
+    return {
+      ...localRecord,
+      state: {
+        ...localState,
+        entries: localEntries,
+      },
+    };
+  }
+
+  const mergedByKey = new Map<string, Record<string, unknown>>();
+  const looseEntries: Record<string, unknown>[] = [];
+
+  for (const entry of localEntries) {
+    const key = entryMergeKey(entry);
+    if (key) {
+      mergedByKey.set(key, entry);
+    } else {
+      looseEntries.push(entry);
+    }
+  }
+
+  for (const remoteEntry of remoteEntries) {
+    const key = entryMergeKey(remoteEntry);
+    if (!key) {
+      looseEntries.push(remoteEntry);
+      continue;
+    }
+
+    const existing = mergedByKey.get(key);
+    mergedByKey.set(
+      key,
+      existing
+        ? mergeRemoteEntryIntoLocal(existing, remoteEntry, deletedTradeIds)
+        : remoteEntry
+    );
+  }
+
+  const entries = [...mergedByKey.values(), ...looseEntries]
+    .filter((entry) => {
+      const trades = tradeRecordsFromEntry(entry);
+      return trades.length > 0 || Object.keys(entry).some((key) => !['id', 'date', 'trades'].includes(key));
+    })
+    .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
+
+  return {
+    ...localRecord,
+    state: {
+      ...localState,
+      entries,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Per-user safe-entry backup
 // ---------------------------------------------------------------------------
@@ -300,7 +448,6 @@ async function syncEntriesToTable(
   deletedTradeIds: Set<string>,
   deletedEntryDates: Set<string>
 ): Promise<void> {
-  const existingBackups = await readBackupEntries(userId);
   const protectedEntries = entries
     .filter((entry) => typeof entry.date !== 'string' || !deletedEntryDates.has(entry.date))
     .map((entry) => removeDeletedTradesFromEntry(entry, deletedTradeIds));
@@ -318,20 +465,15 @@ async function syncEntriesToTable(
     if (upsertError) throw upsertError;
   }
 
-  const protectedIds = new Set(
-    protectedEntries
-      .map((entry) => entry.id)
-      .filter((id): id is string => typeof id === 'string')
-  );
-  const staleIds = existingBackups
-    .map((entry) => entry.id)
-    .filter((id): id is string => typeof id === 'string' && !protectedIds.has(id));
-  if (staleIds.length > 0) {
+  // Never delete backup rows merely because this client does not currently see
+  // them. Another browser/friend may have logged that trade moments ago. Only
+  // explicit date tombstones are allowed to remove backup rows.
+  if (deletedEntryDates.size > 0) {
     const { error: deleteError } = await supabase
       .from('store_entries_backup')
       .delete()
       .eq('user_id', userId)
-      .in('id', staleIds);
+      .in('date', Array.from(deletedEntryDates));
     if (deleteError) throw deleteError;
   }
 }
@@ -392,6 +534,7 @@ async function flushSave(userId: string, value: string): Promise<void> {
     ...deletedEntryDatesFromBlob(remoteBlob),
     ...deletedEntryDatesFromBlob(parsed),
   ].filter((date) => !restoredEntryDates.has(date)));
+  parsed = mergeRemoteEntriesIntoStoreBlob(parsed, remoteBlob, deletedTradeIds, deletedEntryDates);
   parsed = {
     ...parsed,
     state: {
@@ -703,10 +846,15 @@ export const supabaseZustandStorage: StateStorage = {
           const remoteHasEntries = Array.isArray(remoteEntries) && remoteEntries.length > 0;
           // Never let a blank local snapshot (e.g. from HMR) override Supabase entries.
           if (localEntries.length > 0 || !remoteHasEntries) {
+            const localBlob = JSON.parse(sanitizedLocal) as Record<string, unknown>;
+            const mergedLocal = sanitizeStoreValue(JSON.stringify(
+              mergeRemoteEntriesIntoStoreBlob(localBlob, data.flyxa_data)
+            ));
             // The browser has a newer accepted edit than Supabase. Hydrate from
-            // that snapshot immediately and finish syncing it in the background.
-            void enqueueStoreSave(userId, sanitizedLocal);
-            return sanitizedLocal;
+            // that snapshot immediately, but first merge in any remote trades
+            // that this browser had not loaded yet.
+            void enqueueStoreSave(userId, mergedLocal);
+            return mergedLocal;
           }
         }
 

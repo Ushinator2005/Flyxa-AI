@@ -32,7 +32,9 @@ export function automaticRules(rules: RiskRule[]): RiskRule[] {
 }
 
 export function manualRules(rules: RiskRule[]): RiskRule[] {
-  return rules.map(normalizeRiskRule).filter(rule => rule.enabled && rule.kind === 'manual');
+  return rules
+    .map(normalizeRiskRule)
+    .filter(rule => rule.enabled && rule.kind === 'manual' && rule.label.trim().length > 0);
 }
 
 function numericValue(rule: RiskRule): number | null {
@@ -126,12 +128,17 @@ export function evaluateEntryRules(entry: JournalEntry, rules: RiskRule[]): Rule
   });
   const manual = manualRules(rules).map(rule => {
     const saved = entry.rules.find(item => item.text === rule.label);
+    const prompt = rule.value.trim();
     return {
       ruleId: rule.id,
       label: rule.label,
       state: saved?.state ?? 'unchecked',
       source: 'manual' as const,
-      detail: saved?.state === 'ok' ? 'Trader confirmed this rule was followed.' : saved?.state === 'fail' ? 'Trader reported a rule break.' : 'Manual confirmation required.',
+      detail: saved?.state === 'ok'
+        ? 'Trader confirmed this rule was followed.'
+        : saved?.state === 'fail'
+          ? 'Trader reported a rule break.'
+          : prompt || 'Manual confirmation required.',
     };
   });
   return [...automaticByRule, ...manual];

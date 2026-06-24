@@ -428,4 +428,114 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
   }
 });
 
+// GET /shared-with-me — trades rivals have shared with the current user
+router.get('/shared-with-me', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { data: shares, error: sharesError } = await supabase
+      .from('trade_shares')
+      .select('id, shared_at, shared_by_user_id, trade_snapshot')
+      .eq('shared_with_user_id', req.userId!)
+      .order('shared_at', { ascending: false });
+
+    if (sharesError) throw sharesError;
+    if (!shares || shares.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const sharerIds = [...new Set(shares.map(s => s.shared_by_user_id as string))];
+    const { data: profiles } = await supabase
+      .from('rival_profiles')
+      .select('user_id, username, display_name, avatar_color, avatar_url')
+      .in('user_id', sharerIds);
+
+    const profileMap = Object.fromEntries((profiles ?? []).map(p => [p.user_id as string, p]));
+
+    res.json(shares.map(share => ({
+      shareId: share.id,
+      sharedAt: share.shared_at,
+      sharedByUserId: share.shared_by_user_id,
+      sharedByProfile: profileMap[share.shared_by_user_id as string] ?? null,
+      trade: share.trade_snapshot,
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /share — share a trade snapshot with an accepted rival
+router.post('/share', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { rivalUserId, tradeId, tradeData } = req.body as {
+      rivalUserId?: unknown;
+      tradeId?: unknown;
+      tradeData?: unknown;
+    };
+
+    if (typeof rivalUserId !== 'string' || !rivalUserId.trim()) {
+      res.status(400).json({ error: 'rivalUserId is required' });
+      return;
+    }
+    if (typeof tradeId !== 'string' || !tradeId.trim()) {
+      res.status(400).json({ error: 'tradeId is required' });
+      return;
+    }
+    if (!tradeData || typeof tradeData !== 'object') {
+      res.status(400).json({ error: 'tradeData is required' });
+      return;
+    }
+
+    // Must be an accepted rival
+    const { data: rivalRel } = await supabase
+      .from('rival_requests')
+      .select('id')
+      .eq('status', 'accepted')
+      .or(`and(requester_id.eq.${req.userId},recipient_id.eq.${rivalUserId}),and(requester_id.eq.${rivalUserId},recipient_id.eq.${req.userId})`)
+      .maybeSingle();
+
+    if (!rivalRel) {
+      res.status(403).json({ error: 'You can only share trades with accepted rivals' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('trade_shares')
+      .upsert(
+        {
+          trade_id_ref: tradeId,
+          shared_by_user_id: req.userId!,
+          shared_with_user_id: rivalUserId,
+          trade_snapshot: tradeData,
+        },
+        { onConflict: 'trade_id_ref,shared_with_user_id' },
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /share/:tradeIdRef/:rivalUserId — remove a share
+router.delete('/share/:tradeIdRef/:rivalUserId', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { tradeIdRef, rivalUserId } = req.params;
+
+    const { error } = await supabase
+      .from('trade_shares')
+      .delete()
+      .eq('trade_id_ref', tradeIdRef)
+      .eq('shared_by_user_id', req.userId!)
+      .eq('shared_with_user_id', rivalUserId);
+
+    if (error) throw error;
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
