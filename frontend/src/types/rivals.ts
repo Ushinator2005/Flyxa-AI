@@ -4,6 +4,7 @@ export type LeaderboardPeriod = 'week' | 'month' | 'season' | 'allTime';
 export interface RivalPeriodStats {
   netPnl: number;
   winRate: number;
+  avgR: number | null;
   tradeCount: number;
   tradingDays: number;
   greenDays: number;

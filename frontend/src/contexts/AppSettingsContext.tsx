@@ -379,7 +379,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         firm: account.broker || 'Flyxa',
         size: sb,
         type: account.status === 'Live' ? 'live' : account.status === 'Funded' ? 'live' : 'eval',
-        phase: account.status === 'Funded' ? 'funded' : 'eval',
+        phase: account.status === 'Funded' || account.status === 'Live' ? 'funded' : 'eval',
         balance: sb,
         dailyLossLimit: account.dailyLossLimit ?? 0,
         maxDrawdown: account.maxDrawdown ?? 3000,

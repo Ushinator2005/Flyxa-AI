@@ -89,7 +89,7 @@ export default function EvaluationCoach() {
   const entries = useFlyxaStore(state => state.entries);
   const activeAccountId = useFlyxaStore(state => state.activeAccountId);
   const updateAccount = useFlyxaStore(state => state.updateAccount);
-  const { accounts: tradingAccounts, decorateTrades } = useAppSettings();
+  const { accounts: tradingAccounts, decorateTrades, selectedAccountId: appSelectedId } = useAppSettings();
 
   const statusById = useMemo(
     () => new Map(tradingAccounts.map(ta => [ta.id, ta.status])),
@@ -102,9 +102,20 @@ export default function EvaluationCoach() {
     [accounts, statusById],
   );
 
-  const [selectedId, setSelectedId] = useState(
-    evaluationAccounts.find(a => a.id === activeAccountId)?.id ?? evaluationAccounts[0]?.id ?? '',
-  );
+  const [selectedId, setSelectedId] = useState(() => {
+    const preferred = evaluationAccounts.find(a => a.id === appSelectedId)
+      ?? evaluationAccounts.find(a => a.id === activeAccountId)
+      ?? evaluationAccounts[0];
+    return preferred?.id ?? '';
+  });
+
+  useEffect(() => {
+    if (selectedId && evaluationAccounts.find(a => a.id === selectedId)) return;
+    const preferred = evaluationAccounts.find(a => a.id === appSelectedId)
+      ?? evaluationAccounts.find(a => a.id === activeAccountId)
+      ?? evaluationAccounts[0];
+    if (preferred) setSelectedId(preferred.id);
+  }, [evaluationAccounts, appSelectedId, activeAccountId]);
   const [templateId, setTemplateId] = useState('');
   const [remoteTopstepTemplates, setRemoteTopstepTemplates] = useState<EvaluationTemplate[]>([]);
   const [rulesCatalogSource, setRulesCatalogSource] = useState('bundled verified catalog');
@@ -289,20 +300,57 @@ export default function EvaluationCoach() {
   const { targetScore, survivalScore, recentWinRate, dayQuality } = progress.probabilityFactors;
   const factorColor = (v: number) => v >= 60 ? '#34d399' : v >= 30 ? '#f59e0b' : '#f87171';
   const probFactors = [
-    { label: 'Target pace', score: targetScore },
-    { label: 'Survival', score: survivalScore },
-    { label: 'Win rate', score: recentWinRate },
-    { label: 'Day quality', score: dayQuality },
+    {
+      label: 'Target pace',
+      score: targetScore,
+      weight: 36,
+      hint: progress.tradingDays === 0
+        ? `No trades yet — start building toward ${money(target)}`
+        : targetScore === 0
+          ? `No net profit toward ${money(target)} — post a profitable session to move this`
+          : targetScore < 30
+            ? `${targetScore}% of the way to ${money(target)} — focus on consistent profitable sessions`
+            : targetScore < 70
+              ? `${targetScore}% there — keep compounding; ${money(progress.targetRemaining)} remaining`
+              : `Nearly at target — protect your progress and avoid unnecessary risk`,
+    },
+    {
+      label: 'Survival',
+      score: survivalScore,
+      weight: 26,
+      hint: survivalScore < 25
+        ? `Critical — only ${money(progress.drawdownRemaining)} left before violation. Stop trading and reassess`
+        : survivalScore < 50
+          ? `Over half the buffer used — size down to preserve the remaining ${money(progress.drawdownRemaining)}`
+          : survivalScore < 75
+            ? `${money(progress.drawdownRemaining)} of buffer intact — stay risk-aware and avoid overtrading`
+            : `Buffer is healthy at ${money(progress.drawdownRemaining)} — keep respecting your limits`,
+    },
+    {
+      label: 'Win rate',
+      score: recentWinRate,
+      weight: 12,
+      hint: recentWinRate < 30
+        ? 'Under 30% on last 20 trades — only take A-grade setups until this stabilises'
+        : recentWinRate < 50
+          ? 'Below 50% — be more selective; skip setups that don\'t fully meet your criteria'
+          : recentWinRate < 65
+            ? 'Decent — tighten entry rules and cut B-grade setups to push above 65%'
+            : 'Strong win rate — keep filtering out low-conviction setups',
+    },
+    {
+      label: 'Day quality',
+      score: dayQuality,
+      weight: 8,
+      hint: dayQuality < 30
+        ? 'Most sessions end negative — set a hard daily stop and walk away when hit'
+        : dayQuality < 50
+          ? 'Under half your sessions are green — respect your daily loss limit every session'
+          : dayQuality < 70
+            ? 'Mixed results — aim to end flat rather than force trades on bad days'
+            : 'Most sessions profitable — maintain the discipline that\'s working',
+    },
   ];
-  const weakest = [...probFactors].sort((a, b) => a.score - b.score)[0];
-  const strongest = [...probFactors].sort((a, b) => b.score - a.score)[0];
-  const probDriverText = progress.tradingDays === 0
-    ? 'Start trading to generate a meaningful estimate.'
-    : weakest.score < 35
-      ? `${weakest.label} is the main drag. Improving it will raise the probability the most.`
-      : strongest.score > 75
-        ? `${strongest.label} is the strongest factor. Keep it up.`
-        : 'Probability is balanced across all factors.';
 
   return (
     <div className="eval-page">
@@ -333,6 +381,17 @@ export default function EvaluationCoach() {
         <div className="eval-prob-left">
           <p className="eval-prob-kicker">{selected.firm} · {money(selected.size)} · {selected.drawdownType ?? activeTemplate.drawdownType} drawdown</p>
           <h1 className="eval-prob-name">{selected.name}</h1>
+          <div className="eval-current-balance">
+            <span className="eval-balance-label">Current balance</span>
+            <span className={`eval-balance-value${progress.netPnl >= 0 ? ' positive' : ' negative'}`}>
+              {money(progress.currentBalance)}
+            </span>
+            {progress.netPnl !== 0 && (
+              <span className={`eval-balance-delta${progress.netPnl >= 0 ? ' positive' : ' negative'}`}>
+                {progress.netPnl >= 0 ? '+' : ''}{money(progress.netPnl)}
+              </span>
+            )}
+          </div>
           <div className={`eval-prob-badge eval-prob-badge-${decision.tone}`}>
             <span className="eval-prob-badge-dot" style={{ background: toneColor[decision.tone] }} />
             {decision.label}
@@ -350,14 +409,16 @@ export default function EvaluationCoach() {
           <div className="eval-prob-factors">
             {probFactors.map(f => (
               <div key={f.label} className="eval-prob-factor">
-                <span className="eval-prob-factor-lbl">{f.label}</span>
+                <div className="eval-prob-factor-head">
+                  <span className="eval-prob-factor-lbl">{f.label}</span>
+                  <span className="eval-prob-factor-val" style={{ color: factorColor(f.score) }}>{f.score}<span className="eval-prob-factor-weight"> /{f.weight}%</span></span>
+                </div>
                 <div className="eval-prob-factor-track">
                   <div className="eval-prob-factor-fill" style={{ width: `${f.score}%`, background: factorColor(f.score) }} />
                 </div>
-                <span className="eval-prob-factor-val" style={{ color: factorColor(f.score) }}>{f.score}</span>
+                <p className="eval-prob-factor-hint">{f.hint}</p>
               </div>
             ))}
-            <p className="eval-prob-driver">{probDriverText}</p>
           </div>
         </div>
       </div>

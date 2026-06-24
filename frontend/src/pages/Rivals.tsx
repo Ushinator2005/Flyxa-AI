@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell, BookOpen, Check, ChevronDown, Clock3, Flame,
-  Gauge, LockKeyhole, MessageCircle, Plus, Search, ShieldCheck,
+  Gauge, LockKeyhole, MessageCircle, Plus, Search, Share2, ShieldCheck,
   TrendingDown, TrendingUp, Trophy, Users, X,
 } from 'lucide-react';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
-import type { RivalRequestResponse } from '../services/api.js';
+import type { RivalRequestResponse, SharedTradeRecord } from '../services/api.js';
+import { tradeSharesApi } from '../services/api.js';
+import { useTrades } from '../hooks/useTrades.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
 import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
+import ScreenshotImportModal from '../components/scanner/ScreenshotImportModal.js';
 import RankMedallion, {
   getRankFromXP,
   getXPProgress,
@@ -39,7 +42,7 @@ const MODES: Array<{ value: LeaderboardMetric; label: string }> = [
 const RANK_TIERS: RankTier[] = ['bronze', 'silver', 'gold', 'diamond', 'master', 'grandmaster'];
 
 const EMPTY_PERIOD: RivalPeriodStats = {
-  netPnl: 0, winRate: 0, tradeCount: 0, tradingDays: 0, greenDays: 0,
+  netPnl: 0, winRate: 0, avgR: null, tradeCount: 0, tradingDays: 0, greenDays: 0,
   maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [],
 };
 
@@ -55,6 +58,7 @@ function getPeriodStats(rival: Rival, period: LeaderboardPeriod): RivalPeriodSta
     ...EMPTY_PERIOD,
     netPnl: rival.mascot.stats.netPnl ?? 0,
     winRate: rival.mascot.stats.winRate ?? 0,
+    avgR: rival.mascot.stats.avgR ?? null,
     consistency: rival.mascot.stats.processScore,
   };
 }
@@ -112,6 +116,7 @@ function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, 
 
 export default function Rivals() {
   const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
+  const { trades: allMyTrades } = useTrades();
   const [period, setPeriod] = useState<LeaderboardPeriod>('season');
   const [metric, setMetric] = useState<LeaderboardMetric>('netPnl');
   const [query, setQuery] = useState('');
@@ -128,7 +133,14 @@ export default function Rivals() {
     try { return JSON.parse(localStorage.getItem('flyxa-private-leagues') ?? '[]') as League[]; } catch { return []; }
   });
   const [activeLeagueId, setActiveLeagueId] = useState('all');
-  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'ranks'>('overview');
+  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'ranks' | 'trades'>('overview');
+  const [sharedTrades, setSharedTrades] = useState<SharedTradeRecord[]>([]);
+  const [sharesLoading, setSharesLoading] = useState(false);
+  const [viewingSharedTrade, setViewingSharedTrade] = useState<SharedTradeRecord | null>(null);
+  const [sharePickerOpen, setSharePickerOpen] = useState(false);
+  const [sharingBusy, setSharingBusy] = useState<string | null>(null);
+  const [sharedSet, setSharedSet] = useState<Set<string>>(new Set());
+  const prevRivalIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('flyxa-private-leagues', JSON.stringify(leagues));
@@ -151,6 +163,40 @@ export default function Rivals() {
     ? metricValue(nextRival, metric, period) - metricValue(currentUser, metric, period)
     : 0;
   const pendingRequests = rivalRequests.filter(request => request.status === 'pending');
+
+  // Reset share state when switching rivals
+  useEffect(() => {
+    if (prevRivalIdRef.current === selectedRivalId) return;
+    prevRivalIdRef.current = selectedRivalId;
+    setSharedSet(new Set());
+    setSharePickerOpen(false);
+  }, [selectedRivalId]);
+
+  // Load trades shared WITH me by the selected rival when the Trades tab is open
+  useEffect(() => {
+    if (inspectorTab !== 'trades') return;
+    const rivalUserId = rivals.find(r => r.id === selectedRivalId)?.userId;
+    if (!rivalUserId) { setSharedTrades([]); return; }
+    setSharesLoading(true);
+    tradeSharesApi.getSharedWithMe()
+      .then(data => setSharedTrades(data.filter(s => s.sharedByUserId === rivalUserId)))
+      .catch(() => setSharedTrades([]))
+      .finally(() => setSharesLoading(false));
+  }, [inspectorTab, selectedRivalId, rivals]);
+
+  async function handleShareTrade(tradeId: string) {
+    const rivalUserId = rivals.find(r => r.id === selectedRivalId)?.userId;
+    if (!rivalUserId) return;
+    const trade = allMyTrades.find(t => t.id === tradeId);
+    if (!trade) return;
+    setSharingBusy(tradeId);
+    try {
+      await tradeSharesApi.share(tradeId, rivalUserId, trade);
+      setSharedSet(prev => new Set([...prev, tradeId]));
+    } finally {
+      setSharingBusy(null);
+    }
+  }
 
   if (!currentUser || !selectedRival) return null;
 
@@ -290,30 +336,36 @@ export default function Rivals() {
                     style={{ '--rv-card-tier-color': tierColor } as React.CSSProperties}
                     onClick={() => setSelectedRivalId(rival.id)}
                   >
-                    <div className="rv-card-head">
-                      <div className="rv-card-rank">
-                        <RankMedallion rank={tier} size={24} />
-                        <span className="rv-card-pos">{String(position).padStart(2, '0')}</span>
+                    <div className="rv-card-rank">
+                      <RankMedallion rank={tier} size={30} />
+                      <span className="rv-card-pos">#{position}</span>
+                      <span className="rv-card-tier-label">{RANK_LABELS[tier]}</span>
+                    </div>
+                    <RivalAvatar rival={rival} />
+                    <div className="rv-card-identity">
+                      <strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong>
+                      <small>@{rival.username}</small>
+                    </div>
+                    <div className="rv-card-stats">
+                      <div className="rv-card-stat">
+                        <span>Win</span>
+                        <strong>{stats.winRate}%</strong>
                       </div>
-                      <RivalAvatar rival={rival} />
-                      <div className="rv-card-identity">
-                        <strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong>
-                        <small>@{rival.username}</small>
+                      <div className="rv-card-stat">
+                        <span>Avg R</span>
+                        <strong>{stats.avgR == null ? '—' : `${stats.avgR.toFixed(2)}R`}</strong>
                       </div>
-                      <div className="rv-card-pnl">
-                        <span className={stats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(stats.netPnl)}</span>
-                        <span className={`rv-movement ${movement > 0 ? 'up' : movement < 0 ? 'down' : ''}`}>
-                          {movement > 0 ? <><TrendingUp size={11} />{movement}</> : movement < 0 ? <><TrendingDown size={11} />{Math.abs(movement)}</> : <span className="rv-card-neutral">—</span>}
-                        </span>
+                      <div className="rv-card-stat">
+                        <span>Consist.</span>
+                        <strong>{stats.consistency}</strong>
+                        <i className="rv-card-stat-bar"><u style={{ width: `${stats.consistency}%` }} /></i>
                       </div>
                     </div>
-                    <div className="rv-card-sparkwrap">
-                      <Sparkline values={stats.equityCurve} />
-                    </div>
-                    <div className="rv-card-footer">
-                      <div><span>Win rate</span><strong>{stats.winRate}%</strong></div>
-                      <div><span>Avg R</span><strong>{rival.mascot.stats.avgR == null ? '—' : `${rival.mascot.stats.avgR.toFixed(2)}R`}</strong></div>
-                      <div><span>Consist.</span><strong>{stats.consistency}</strong><i><u style={{ width: `${stats.consistency}%` }} /></i></div>
+                    <div className="rv-card-pnl">
+                      <span className={stats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(stats.netPnl)}</span>
+                      <span className={`rv-movement ${movement > 0 ? 'up' : movement < 0 ? 'down' : ''}`}>
+                        {movement > 0 ? <><TrendingUp size={11} />{movement}</> : movement < 0 ? <><TrendingDown size={11} />{Math.abs(movement)}</> : <span className="rv-card-neutral">—</span>}
+                      </span>
                     </div>
                   </button>
                 );
@@ -328,6 +380,7 @@ export default function Rivals() {
                 <button type="button" className={inspectorTab === 'overview' ? 'active' : ''} onClick={() => setInspectorTab('overview')}>Overview</button>
                 <button type="button" className={inspectorTab === 'progress' ? 'active' : ''} onClick={() => setInspectorTab('progress')}>Progress</button>
                 <button type="button" className={inspectorTab === 'ranks' ? 'active' : ''} onClick={() => setInspectorTab('ranks')}>Ranks</button>
+                <button type="button" className={inspectorTab === 'trades' ? 'active' : ''} onClick={() => setInspectorTab('trades')}>Trades</button>
               </div>
               {inspectorTab === 'overview' ? (
                 <>
@@ -358,7 +411,7 @@ export default function Rivals() {
                     <Badge unlocked={selectedStats.tradeCount >= 10} icon={<BookOpen size={14} />} title="10 documented trades" />
                   </div>
                 </div>
-              ) : (
+              ) : inspectorTab === 'ranks' ? (
                 <div className="rv-rank-catalog">
                   <div className="rv-rank-catalog-summary">
                     <RankMedallion rank={selectedRankTier} size={52} />
@@ -393,6 +446,99 @@ export default function Rivals() {
                   </div>
                   <p className="rv-rank-catalog-note">Ranks reflect documented process activity and update as XP is earned.</p>
                 </div>
+              ) : (
+                /* Trades tab */
+                <div className="rv-trades-panel">
+                  {selectedRival.isMe ? (
+                    <p className="rv-trades-empty">Select a rival to see trades they've shared with you.</p>
+                  ) : (
+                    <>
+                      <div className="rv-trades-section-head">
+                        <span>Shared by {selectedRival.displayName}</span>
+                      </div>
+
+                      {sharesLoading ? (
+                        <p className="rv-trades-empty">Loading…</p>
+                      ) : sharedTrades.length === 0 ? (
+                        <p className="rv-trades-empty">No trades shared with you yet.</p>
+                      ) : (
+                        sharedTrades.map((record) => {
+                          const { shareId, sharedAt, trade } = record;
+                          return (<button key={shareId} type="button" className="rv-shared-trade" onClick={() => setViewingSharedTrade(record)}>
+                            <div className="rv-st-header">
+                              <span className="rv-st-symbol">{trade.symbol}</span>
+                              <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
+                              <span className="rv-st-date">{trade.trade_date}</span>
+                              <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
+                            </div>
+                            <div className="rv-st-meta">
+                              <span>Entry {trade.entry_price}</span>
+                              <span>Exit {trade.exit_price}</span>
+                              <span>{trade.exit_reason}</span>
+                              <span className="rv-st-shared-at">{new Date(sharedAt).toLocaleDateString()}</span>
+                            </div>
+                            {trade.screenshot_url && (
+                              <div className="rv-st-screenshot">
+                                <img src={trade.screenshot_url} alt="Trade screenshot" />
+                              </div>
+                            )}
+                            {(trade.pre_trade_notes || trade.post_trade_notes) && (
+                              <div className="rv-st-notes">
+                                {trade.pre_trade_notes && <p>{trade.pre_trade_notes}</p>}
+                                {trade.post_trade_notes && <p>{trade.post_trade_notes}</p>}
+                              </div>
+                            )}
+                          </button>
+                        );})
+                      )}
+
+                      {!selectedRival.isMe && selectedRival.userId && (
+                        <>
+                          <div className="rv-trades-section-head rv-trades-share-head">
+                            <span>Share a trade</span>
+                            <button
+                              type="button"
+                              className="rv-trades-share-toggle"
+                              onClick={() => setSharePickerOpen(p => !p)}
+                            >
+                              <Share2 size={11} />
+                              {sharePickerOpen ? 'Cancel' : `With ${selectedRival.displayName}`}
+                            </button>
+                          </div>
+
+                          {sharePickerOpen && (
+                            allMyTrades.length === 0 ? (
+                              <p className="rv-trades-empty">No trades found in your journal yet.</p>
+                            ) : (
+                              <div className="rv-share-picker">
+                                {allMyTrades.slice(0, 20).map(trade => {
+                                  const alreadyShared = sharedSet.has(trade.id);
+                                  const busy = sharingBusy === trade.id;
+                                  return (
+                                    <div key={trade.id} className={`rv-share-trade-row${alreadyShared ? ' shared' : ''}`}>
+                                      <span className="rv-st-symbol">{trade.symbol}</span>
+                                      <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
+                                      <span className="rv-st-date">{trade.trade_date}</span>
+                                      <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
+                                      <button
+                                        type="button"
+                                        className={`rv-share-btn${alreadyShared ? ' shared' : ''}`}
+                                        disabled={busy || alreadyShared}
+                                        onClick={() => void handleShareTrade(trade.id)}
+                                      >
+                                        {alreadyShared ? <><Check size={10} /> Shared</> : busy ? '…' : 'Share'}
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
             </section>
           </aside>
@@ -401,6 +547,16 @@ export default function Rivals() {
 
       <AddRivalModal open={isAddOpen} onClose={() => setIsAddOpen(false)} onSubmit={username => addRival(username)} />
       <RivalChatPanel open={chatOpen} rival={activeChatRival} myUserId={profile?.userId ?? null} onClose={() => setChatOpen(false)} />
+      {viewingSharedTrade && (
+        <ScreenshotImportModal
+          isOpen
+          readOnly
+          sharedByName={viewingSharedTrade.sharedByProfile?.display_name ?? selectedRival.displayName}
+          editTrade={viewingSharedTrade.trade}
+          onClose={() => setViewingSharedTrade(null)}
+          onSave={async () => {}}
+        />
+      )}
     </div>
   );
 }

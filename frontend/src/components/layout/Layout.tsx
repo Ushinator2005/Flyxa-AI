@@ -12,9 +12,11 @@ import ErrorBoundary from '../common/ErrorBoundary.js';
 import GlobalMessagesPanel from '../messages/GlobalMessagesPanel.js';
 import { useRisk } from '../../contexts/RiskContext.js';
 import { useEvaluationAgent } from '../../hooks/useEvaluationAgent.js';
+import { useRivalStatsSync } from '../../hooks/useRivalStatsSync.js';
 
 export default function Layout() {
   useEvaluationAgent();
+  useRivalStatsSync();
   const { riskLevel, dailyStatus } = useRisk();
   const location = useLocation();
   const isJournalWorkspace = location.pathname === '/scanner' || location.pathname === '/market-news';

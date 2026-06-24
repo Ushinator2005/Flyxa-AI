@@ -26,7 +26,15 @@
 .eval-prob-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:28px;padding:24px 26px;border:1px solid var(--app-border);background:var(--app-panel);margin-bottom:8px}
 .eval-prob-left{flex:1;min-width:0}
 .eval-prob-kicker{margin:0 0 6px;font-size:10px;color:var(--app-text-subtle);letter-spacing:.04em}
-.eval-prob-name{margin:0 0 12px;font-size:22px;font-weight:680;letter-spacing:-.03em;color:var(--app-text)}
+.eval-prob-name{margin:0 0 10px;font-size:22px;font-weight:680;letter-spacing:-.03em;color:var(--app-text)}
+.eval-current-balance{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.eval-balance-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--app-text-subtle)}
+.eval-balance-value{font-size:20px;font-weight:720;letter-spacing:-.03em;line-height:1}
+.eval-balance-value.positive{color:#34d399}
+.eval-balance-value.negative{color:#f87171}
+.eval-balance-delta{font-size:11px;font-weight:600;letter-spacing:-.01em;opacity:.7}
+.eval-balance-delta.positive{color:#34d399}
+.eval-balance-delta.negative{color:#f87171}
 .eval-prob-badge{display:inline-flex;align-items:center;gap:6px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:3px;border:1px solid;margin-bottom:8px}
 .eval-prob-badge-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 .eval-prob-badge-good{color:#34d399;background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.25)}
@@ -45,13 +53,15 @@
 .eval-prob-label{display:block;font-size:8px;color:var(--app-text-subtle);letter-spacing:.07em;text-transform:uppercase;text-align:center}
 
 /* ── Probability factor bars ──────────────────────────────────────── */
-.eval-prob-factors{margin-top:10px;display:flex;flex-direction:column;gap:7px;width:160px}
-.eval-prob-factor{display:grid;grid-template-columns:70px 1fr 22px;align-items:center;gap:6px}
-.eval-prob-factor-lbl{font-size:9px;color:var(--app-text-subtle);text-align:right}
-.eval-prob-factor-track{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+.eval-prob-factors{margin-top:12px;display:flex;flex-direction:column;gap:10px;width:200px}
+.eval-prob-factor{display:flex;flex-direction:column;gap:4px}
+.eval-prob-factor-head{display:flex;justify-content:space-between;align-items:center}
+.eval-prob-factor-lbl{font-size:9px;font-weight:600;color:var(--app-text-subtle);letter-spacing:.04em;text-transform:uppercase}
+.eval-prob-factor-val{font:700 9px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.eval-prob-factor-weight{font-weight:400;opacity:.5}
+.eval-prob-factor-track{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
 .eval-prob-factor-fill{height:100%;border-radius:2px;transition:width .4s ease}
-.eval-prob-factor-val{font:600 9px/1 var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
-.eval-prob-driver{margin:5px 0 0;font-size:9px;color:var(--app-text-subtle);line-height:1.5;text-align:center}
+.eval-prob-factor-hint{margin:0;font-size:9px;color:var(--app-text-subtle);line-height:1.45;opacity:.8}
 
 /* ── Path to pass (3 cards) ───────────────────────────────────────── */
 .eval-path{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
