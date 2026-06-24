@@ -466,9 +466,10 @@ export function useRivals() {
     const winTrades = allTrades.filter(t => t.result === 'win');
     const lossTrades = allTrades.filter(t => t.result === 'loss');
     const winRate = allTrades.length > 0 ? Math.round((winTrades.length / allTrades.length) * 100) : null;
-    // Avg R: winning trades contribute their rr, losing trades cost 1R.
-    const avgR = allTrades.length > 0
-      ? Math.round(((winTrades.reduce((sum, t) => sum + t.rr, 0) - lossTrades.length) / allTrades.length) * 100) / 100
+    const winTradesWithR = winTrades.filter(t => t.rr > 0);
+    const rTotal = winTradesWithR.length + lossTrades.length;
+    const avgR = winTradesWithR.length > 0
+      ? Math.round(((winTradesWithR.reduce((sum, t) => sum + t.rr, 0) - lossTrades.length) / rTotal) * 100) / 100
       : null;
     const netPnl = Math.round(
       entries.flatMap(entry => entry.trades)

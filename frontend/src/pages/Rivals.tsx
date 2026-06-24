@@ -406,15 +406,32 @@ export default function Rivals() {
 }
 
 function Sparkline({ values, compact = false, large = false }: { values: number[]; compact?: boolean; large?: boolean }) {
-  const points = values.length > 1 ? values : [0, values[0] ?? 0];
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const pts = values.length > 1 ? values : [0, values[0] ?? 0];
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
   const range = Math.max(1, max - min);
-  const width = large ? 260 : compact ? 76 : 120;
-  const height = large ? 62 : compact ? 28 : 40;
-  const path = points.map((value, index) => `${(index / Math.max(1, points.length - 1)) * width},${height - ((value - min) / range) * (height - 4) - 2}`).join(' ');
-  const positive = points[points.length - 1] >= points[0];
-  return <svg className={`rv-sparkline ${large ? 'large' : ''}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"><polyline points={path} fill="none" stroke={positive ? '#34d399' : '#f87171'} strokeWidth={large ? 2 : 1.5} vectorEffect="non-scaling-stroke" /></svg>;
+  const W = large ? 260 : compact ? 76 : 120;
+  const H = large ? 62 : compact ? 28 : 40;
+  const PAD = 3;
+  const xOf = (i: number) => (i / Math.max(1, pts.length - 1)) * (W - PAD * 2) + PAD;
+  const yOf = (v: number) => H - PAD - ((v - min) / range) * (H - PAD * 2);
+  const linePts = pts.map((v, i) => `${xOf(i)},${yOf(v)}`).join(' ');
+  const areaPts = [`${PAD},${H}`, ...pts.map((v, i) => `${xOf(i)},${yOf(v)}`), `${W - PAD},${H}`].join(' ');
+  const positive = pts[pts.length - 1] >= pts[0];
+  const color = positive ? '#34d399' : '#f87171';
+  const fillId = positive ? 'rv-spk-fill-pos' : 'rv-spk-fill-neg';
+  return (
+    <svg className={`rv-sparkline ${large ? 'large' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPts} fill={`url(#${fillId})`} />
+      <polyline points={linePts} fill="none" stroke={color} strokeWidth={large ? 1.5 : 1.2} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
 }
 
 function RivalAvatar({ rival, large = false }: { rival: Rival; large?: boolean }) {
