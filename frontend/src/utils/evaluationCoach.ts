@@ -37,6 +37,7 @@ export interface EvaluationProgress {
   targetProgressPct: number;
   dailyPnl: number;
   dailyLossRemaining: number;
+  drawdownFloor: number;
   drawdownUsed: number;
   drawdownRemaining: number;
   tradingDays: number;
@@ -501,6 +502,7 @@ export function computeEvaluationProgress(
   const dailyLimit = account.dailyLossLimit || template.dailyLossLimit;
   const maxDrawdown = account.maxDrawdown || template.maxDrawdown;
   const minimumTradingDays = account.minimumTradingDays ?? template.minimumTradingDays;
+  const drawdownType = account.drawdownType ?? template.drawdownType;
   const netPnl = trades.reduce((sum, trade) => sum + net(trade), 0);
   const currentBalance = account.startingBalance + netPnl;
   const today = localDateSlice(now);
@@ -509,15 +511,18 @@ export function computeEvaluationProgress(
 
   let equity = account.startingBalance;
   let peak = equity;
-  let maxObservedDrawdown = 0;
   trades.forEach(trade => {
     equity += net(trade);
     peak = Math.max(peak, equity);
-    maxObservedDrawdown = Math.max(maxObservedDrawdown, peak - equity);
   });
 
   const targetProgressPct = profitTarget > 0 ? clamp((netPnl / profitTarget) * 100) : 0;
-  const drawdownRemaining = Math.max(0, maxDrawdown - maxObservedDrawdown);
+  const startingDrawdownFloor = account.startingBalance - maxDrawdown;
+  const drawdownFloor = drawdownType === 'trailing'
+    ? Math.max(startingDrawdownFloor, peak - maxDrawdown)
+    : startingDrawdownFloor;
+  const drawdownRemaining = Math.max(0, currentBalance - drawdownFloor);
+  const drawdownUsed = Math.max(0, maxDrawdown - drawdownRemaining);
   const dailyLossRemaining = dailyLimit > 0 ? Math.max(0, dailyLimit + Math.min(0, dailyPnl)) : Infinity;
   const violations = trades.flatMap(trade => trade.performanceViolations ?? []);
   const criticalViolations = violations.filter(item => item.severity === 'critical').length;
@@ -565,7 +570,8 @@ export function computeEvaluationProgress(
     targetProgressPct,
     dailyPnl,
     dailyLossRemaining,
-    drawdownUsed: maxObservedDrawdown,
+    drawdownFloor,
+    drawdownUsed,
     drawdownRemaining,
     tradingDays,
     minimumTradingDays,

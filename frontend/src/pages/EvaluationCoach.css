@@ -29,7 +29,7 @@
 .eval-prob-name{margin:0 0 10px;font-size:22px;font-weight:680;letter-spacing:-.03em;color:var(--app-text)}
 .eval-current-balance{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
 .eval-balance-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--app-text-subtle)}
-.eval-balance-value{font-size:20px;font-weight:720;letter-spacing:-.03em;line-height:1}
+.eval-balance-value{font-size:20px;font-weight:620;letter-spacing:-.015em;line-height:1;text-shadow:none;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
 .eval-balance-value.positive{color:#34d399}
 .eval-balance-value.negative{color:#f87171}
 .eval-balance-delta{font-size:11px;font-weight:600;letter-spacing:-.01em;opacity:.7}
@@ -48,8 +48,8 @@
 .eval-gauge-fill{transition:stroke-dasharray .6s ease}
 .eval-gauge-wrap{position:relative;width:140px;height:140px}
 .eval-gauge-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
-.eval-prob-pct{font:700 36px/1 var(--font-mono);letter-spacing:-.04em;color:var(--app-text)}
-.eval-prob-pct-sign{font:700 16px/1 var(--font-mono);color:var(--app-text-muted);margin-left:1px;vertical-align:super}
+.eval-prob-pct{font:620 36px/1 var(--font-mono);letter-spacing:-.02em;color:var(--app-text);text-shadow:none;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.eval-prob-pct-sign{font:600 16px/1 var(--font-mono);color:var(--app-text-muted);margin-left:1px;vertical-align:super}
 .eval-prob-label{display:block;font-size:8px;color:var(--app-text-subtle);letter-spacing:.07em;text-transform:uppercase;text-align:center}
 
 /* ── Probability factor bars ──────────────────────────────────────── */
@@ -67,7 +67,7 @@
 .eval-path{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
 .eval-path-card{border:1px solid var(--app-border);border-top:3px solid var(--card-accent,var(--app-border));background:var(--app-panel);padding:16px 16px 14px}
 .eval-path-label{display:block;font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--app-text-subtle);margin-bottom:8px}
-.eval-path-value{display:block;font:700 22px/1 var(--font-mono);letter-spacing:-.03em;color:var(--app-text);margin-bottom:8px}
+.eval-path-value{display:block;font:600 22px/1 var(--font-mono);letter-spacing:-.012em;color:var(--app-text);margin-bottom:8px;text-shadow:none;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
 .eval-path-denom{font-size:14px;font-weight:500;color:var(--app-text-muted)}
 .eval-path-track{height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin-bottom:8px}
 .eval-path-fill{height:100%;border-radius:2px;transition:width .4s ease}

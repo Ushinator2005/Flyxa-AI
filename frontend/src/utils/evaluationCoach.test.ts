@@ -101,8 +101,29 @@ describe('evaluation coach', () => {
     expect(progress.netPnl).toBe(1000);
     expect(progress.targetRemaining).toBe(2000);
     expect(progress.tradingDays).toBe(2);
-    expect(progress.drawdownUsed).toBe(200);
+    expect(progress.drawdownFloor).toBe(48000);
+    expect(progress.drawdownUsed).toBe(0);
     expect(progress.dailyPnl).toBe(200);
+  });
+
+  it('uses the active MLL floor for drawdown buffer instead of peak-to-trough movement', () => {
+    const topstepAccount: Account = {
+      ...account,
+      firm: 'Topstep',
+      name: 'Topstep 50K',
+      size: 50_000,
+      startingBalance: 50_000,
+      maxDrawdown: 2_000,
+      drawdownType: 'trailing',
+    };
+    const progress = computeEvaluationProgress(topstepAccount, [
+      trade('loss', '2026-06-23', '09:30', -170, topstepAccount.id),
+    ], new Date('2026-06-23T12:00:00'));
+
+    expect(progress.currentBalance).toBe(49830);
+    expect(progress.drawdownFloor).toBe(48000);
+    expect(progress.drawdownRemaining).toBe(1830);
+    expect(progress.drawdownUsed).toBe(170);
   });
 
   it('creates a post-loss process warning from repeated immediate re-entry', () => {

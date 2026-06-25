@@ -463,7 +463,7 @@ export default function EvaluationCoach() {
           <div className="eval-path-track">
             <div className="eval-path-fill" style={{ width: `${drawdownPct}%`, background: toneColor[drawdownTone] }} />
           </div>
-          <span className="eval-path-note">{drawdownPct}% of {money(maxDrawdown)} used</span>
+          <span className="eval-path-note">MLL {money(progress.drawdownFloor)} · {drawdownPct}% of {money(maxDrawdown)} used</span>
         </div>
 
         {/* Daily budget or trading days */}
