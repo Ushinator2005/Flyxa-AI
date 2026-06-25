@@ -5,6 +5,7 @@ import useFlyxaStore from '../../store/flyxaStore.js';
 import { useActiveAccountEntries, useAllTrades, useDashboardStats } from '../../store/selectors.js';
 import './FlyxaChatWidget.css';
 import { inferEvaluationTemplate } from '../../utils/evaluationCoach.js';
+import { buildPlanAdherenceReport } from '../../utils/planAdherence.js';
 
 type ChatMessage = {
   id: string;
@@ -67,6 +68,7 @@ export default function FlyxaChatWidget() {
   const aiContext = useMemo(() => {
     const recent = [...allTrades].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)).slice(-20);
     const psych = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
+    const planReport = buildPlanAdherenceReport(entries, riskRules, { accountId: activeAccountId });
     const evaluationTemplate = account && (account.type === 'eval' || account.phase === 'eval')
       ? inferEvaluationTemplate(account)
       : null;
@@ -118,6 +120,12 @@ ${psych.map(entry =>
 
 CURRENT TRADING RULES:
 ${riskRules.map(rule => `  ${rule.label}: ${rule.value} ${rule.unit}`).join('\n')}
+
+TRADING PLAN ADHERENCE:
+  Score: ${planReport.pct === null ? 'No verified checks yet' : `${planReport.pct}%`}
+  Checks passed: ${planReport.passed}/${planReport.checked}
+  Broken days: ${planReport.brokenDays}
+  Most repeated break: ${planReport.mostBrokenRule ? `${planReport.mostBrokenRule.label} (${planReport.mostBrokenRule.failed}x)` : 'None'}
 
 Use the active prop-firm rule set as the source of truth for rule questions.
 If a rule is missing or uncertain, say so and ask the trader to verify the firm dashboard.

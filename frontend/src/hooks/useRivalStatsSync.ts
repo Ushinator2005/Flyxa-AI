@@ -37,8 +37,8 @@ export function useRivalStatsSync() {
   }, []);
 
   const earnedXpEvents = useMemo(
-    () => buildLifetimeXpEvents(dailyJournalEntries, entries, backtestSessions, computeDailyJournalStreak(dailyJournalEntries)),
-    [backtestSessions, dailyJournalEntries, entries]
+    () => buildLifetimeXpEvents(dailyJournalEntries, entries, backtestSessions, computeDailyJournalStreak(dailyJournalEntries), riskRules),
+    [backtestSessions, dailyJournalEntries, entries, riskRules]
   );
 
   useEffect(() => {
@@ -48,14 +48,15 @@ export function useRivalStatsSync() {
   const statsSignature = useMemo(() => {
     const dailyJournalStreak = computeDailyJournalStreak(dailyJournalEntries);
     const tradingJournalScore = computeTradingJournalScore(entries);
+    const ruleFollowing = computeRuleFollowingScore(entries, entries.flatMap(e => e.trades), riskRules);
     const allTrades = entries.flatMap(e => e.trades).filter(t => t.result === 'win' || t.result === 'loss');
     const winRate = allTrades.length > 0 ? Math.round((allTrades.filter(t => t.result === 'win').length / allTrades.length) * 100) : null;
     const tradesWithRR = allTrades.filter(t => typeof t.rr === 'number' && isFinite(t.rr) && t.rr !== 0);
     const avgR = tradesWithRR.length > 0
       ? Math.round((tradesWithRR.reduce((sum, t) => sum + t.rr, 0) / tradesWithRR.length) * 100) / 100
       : null;
-    return JSON.stringify({ dailyJournalStreak, tradingJournalScore, winRate, avgR, tradeCount: allTrades.length });
-  }, [dailyJournalEntries, entries]);
+    return JSON.stringify({ dailyJournalStreak, tradingJournalScore, ruleFollowing, winRate, avgR, tradeCount: allTrades.length });
+  }, [dailyJournalEntries, entries, riskRules]);
 
   useEffect(() => {
     if (!hasProfile) return;

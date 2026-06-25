@@ -5,7 +5,9 @@ import { format, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { journalApi } from '../../services/api.js';
 import { JournalEntry, Trade } from '../../types/index.js';
+import type { JournalEntry as StoreJournalEntry } from '../../store/types.js';
 import { buildMonthlyHeatmapData } from '../../utils/tradeAnalytics.js';
+import { getEntryRuleAdherence } from '../../utils/tradingRules.js';
 import { useAppSettings, ALL_ACCOUNTS_ID } from '../../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
 
@@ -14,9 +16,10 @@ function getCellBg(pnl: number | undefined): string {
   if (pnl > 200) return 'bg-emerald-800/60';
   if (pnl > 50) return 'bg-emerald-700/40';
   if (pnl > 0) return 'bg-emerald-900/40';
-  if (pnl > -50) return 'bg-red-900/40';
-  if (pnl > -200) return 'bg-red-700/40';
-  return 'bg-red-800/60';
+  if (pnl < -200) return 'bg-red-800/60';
+  if (pnl < -50) return 'bg-red-700/40';
+  if (pnl < 0) return 'bg-red-900/40';
+  return 'bg-slate-600/10'; // exactly $0 breakeven — neutral, not red
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -838,6 +841,7 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   // Live store entries — covers blank days created in the same session before the next API refetch
   const storeEntries = useFlyxaStore(state => state.entries);
+  const riskRules = useFlyxaStore(state => state.riskRules);
   const [journals, setJournals] = useState<Record<number, { id: string; date: string; isBlankDay: boolean; accountIds?: string[]; hasApiEntry?: boolean }>>({});
   const { selectedAccountId } = useAppSettings();
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
@@ -1096,11 +1100,33 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
     const dayTrades = trades.filter(trade => trade.trade_date === activeJournalDate);
     const pnl = dayTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
 
+    const storeDayEntries = (storeEntries as StoreJournalEntry[]).filter(entry => entry.date === activeJournalDate);
+    const scopedStoreTrades = storeDayEntries
+      .flatMap(entry => entry.trades)
+      .filter(trade => {
+        if (selectedAccountId === ALL_ACCOUNTS_ID) return true;
+        const ids = trade.accountIds ?? [trade.account].filter(Boolean);
+        return ids.includes(selectedAccountId);
+      });
+    const scopedStoreRules = storeDayEntries.flatMap(entry => entry.rules);
+    const structuredPlanEntry = storeDayEntries[0] && scopedStoreTrades.length > 0
+      ? {
+          ...storeDayEntries[0],
+          trades: scopedStoreTrades,
+          rules: scopedStoreRules.length > 0 ? scopedStoreRules : storeDayEntries[0].rules,
+        } satisfies StoreJournalEntry
+      : null;
+    const structuredAdherence = structuredPlanEntry
+      ? getEntryRuleAdherence(structuredPlanEntry, riskRules)
+      : null;
+
     const tradesWithScore = dayTrades.filter(trade => typeof trade.plan_score === 'number');
     const tradesWithPlanLogged = tradesWithScore.length > 0
       ? tradesWithScore
       : dayTrades.filter(trade => typeof trade.followed_plan === 'boolean');
-    const avgPlanScore = tradesWithScore.length > 0
+    const avgPlanScore = structuredAdherence?.pct !== null && structuredAdherence?.pct !== undefined
+      ? structuredAdherence.pct
+      : tradesWithScore.length > 0
       ? tradesWithScore.reduce((s, t) => s + (t.plan_score as number), 0) / tradesWithScore.length
       : tradesWithPlanLogged.length > 0
         ? (tradesWithPlanLogged.filter(t => t.followed_plan === true).length / tradesWithPlanLogged.length) * 100
@@ -1108,7 +1134,9 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
     const discipline = avgPlanScore !== null
       ? Number((1 + (avgPlanScore / 100) * 4).toFixed(1))
       : 0;
-    const disciplineNote = avgPlanScore !== null
+    const disciplineNote = structuredAdherence?.pct !== null && structuredAdherence?.pct !== undefined
+      ? `${structuredAdherence.pct}% plan adherence (${structuredAdherence.passed}/${structuredAdherence.checked} rules)`
+      : avgPlanScore !== null
       ? `${Math.round(avgPlanScore)}% plan adherence`
       : 'No trades logged';
 
@@ -1159,7 +1187,7 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
       accountStatus: matchedAccount?.status ?? 'Journal only',
       lastSaved: selectedJournal ? lastSavedById[selectedJournal.id] : undefined,
     };
-  }, [accounts, activeJournalDate, lastSavedById, selectedJournal, trades]);
+  }, [accounts, activeJournalDate, lastSavedById, riskRules, selectedAccountId, selectedJournal, storeEntries, trades]);
 
   return (
     <div>

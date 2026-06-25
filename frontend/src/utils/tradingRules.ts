@@ -8,6 +8,13 @@ export interface RuleEvaluation {
   detail: string;
 }
 
+export interface RuleAdherenceSummary {
+  checked: number;
+  passed: number;
+  failed: number;
+  pct: number | null;
+}
+
 export const DEFAULT_STRUCTURED_RULES: RiskRule[] = [
   { id: 'structured-max-daily-loss', label: 'Maximum daily loss', value: '500', unit: '$', color: 'red', kind: 'max_daily_loss', enabled: true },
   { id: 'structured-max-trades', label: 'Maximum trades per day', value: '3', unit: 'trades', color: 'amber', kind: 'max_trades', enabled: true },
@@ -53,12 +60,22 @@ function tradeNet(trade: Trade): number {
   return trade.pnl - (trade.commission ?? 0);
 }
 
+function tradeTime(trade: Trade): string | null {
+  return trade.time
+    ?? (trade as Trade & { entryTime?: string }).entryTime
+    ?? null;
+}
+
+function tradeSortKey(trade: Trade): string {
+  return `${trade.date ?? ''} ${tradeTime(trade) ?? ''}`;
+}
+
 export function evaluateTradeRules(
   trade: Trade,
   dayTrades: Trade[],
   rules: RiskRule[]
 ): RuleEvaluation[] {
-  const ordered = [...dayTrades].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const ordered = [...dayTrades].sort((a, b) => tradeSortKey(a).localeCompare(tradeSortKey(b)));
   const tradeIndex = Math.max(0, ordered.findIndex(item => item.id === trade.id));
   const tradesThroughCurrent = ordered.slice(0, tradeIndex + 1);
   const previousTrade = tradeIndex > 0 ? ordered[tradeIndex - 1] : null;
@@ -95,18 +112,19 @@ export function evaluateTradeRules(
       return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `${trade.rr.toFixed(2)}R planned; minimum ${value.toFixed(2)}R.` };
     }
     if (rule.kind === 'time_window') {
-      const entry = minutes(trade.time);
+      const time = tradeTime(trade);
+      const entry = minutes(time);
       const start = minutes(rule.startTime);
       const end = minutes(rule.endTime);
       if (entry === null || start === null || end === null) return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'Entry time or allowed window is missing.' };
       const passed = start <= end ? entry >= start && entry <= end : entry >= start || entry <= end;
-      return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `Entered ${trade.time}; allowed ${rule.startTime}–${rule.endTime}.` };
+      return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `Entered ${time}; allowed ${rule.startTime}-${rule.endTime}.` };
     }
     if (rule.kind === 'cooldown_after_loss') {
       if (!previousTrade || tradeNet(previousTrade) >= 0) return { ruleId: rule.id, label: rule.label, state: 'ok', source: 'automatic', detail: 'No preceding losing trade required a cooldown.' };
       if (value === null) return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'Set a valid cooldown duration.' };
-      const previousExit = minutes(previousTrade.exitTime ?? previousTrade.time);
-      const currentEntry = minutes(trade.time);
+      const previousExit = minutes(previousTrade.exitTime ?? tradeTime(previousTrade));
+      const currentEntry = minutes(tradeTime(trade));
       if (previousExit === null || currentEntry === null) return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'Trade times are incomplete.' };
       const gap = Math.max(0, currentEntry - previousExit);
       const passed = gap >= value;
@@ -142,4 +160,31 @@ export function evaluateEntryRules(entry: JournalEntry, rules: RiskRule[]): Rule
     };
   });
   return [...automaticByRule, ...manual];
+}
+
+export function summarizeRuleEvaluations(evaluations: RuleEvaluation[]): RuleAdherenceSummary {
+  const checked = evaluations.filter(check => check.state !== 'unchecked');
+  const passed = checked.filter(check => check.state === 'ok').length;
+  const failed = checked.filter(check => check.state === 'fail').length;
+  return {
+    checked: checked.length,
+    passed,
+    failed,
+    pct: checked.length > 0 ? Math.round((passed / checked.length) * 100) : null,
+  };
+}
+
+export function getEntryRuleAdherence(entry: JournalEntry, rules: RiskRule[]): RuleAdherenceSummary {
+  return summarizeRuleEvaluations(evaluateEntryRules(entry, rules));
+}
+
+export function getEntriesRuleAdherence(
+  entries: JournalEntry[],
+  rules: RiskRule[],
+  bounds?: [string, string]
+): RuleAdherenceSummary {
+  const evaluations = entries
+    .filter(entry => !bounds || (entry.date >= bounds[0] && entry.date <= bounds[1]))
+    .flatMap(entry => evaluateEntryRules(entry, rules));
+  return summarizeRuleEvaluations(evaluations);
 }

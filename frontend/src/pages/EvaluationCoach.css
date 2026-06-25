@@ -23,8 +23,8 @@
 .eval-acct-sep{padding:8px 12px 4px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--app-text-subtle);border-top:1px solid var(--app-border);margin-top:2px}
 
 /* ── Pass probability hero ────────────────────────────────────────── */
-.eval-prob-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:28px;padding:24px 26px;border:1px solid var(--app-border);background:var(--app-panel);margin-bottom:8px}
-.eval-prob-left{flex:1;min-width:0}
+.eval-prob-hero{display:flex;align-items:stretch;justify-content:space-between;gap:28px;padding:24px 26px;border:1px solid var(--app-border);background:var(--app-panel);margin-bottom:8px}
+.eval-prob-left{flex:1;min-width:0;display:flex;flex-direction:column}
 .eval-prob-kicker{margin:0 0 6px;font-size:10px;color:var(--app-text-subtle);letter-spacing:.04em}
 .eval-prob-name{margin:0 0 10px;font-size:22px;font-weight:680;letter-spacing:-.03em;color:var(--app-text)}
 .eval-current-balance{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
@@ -40,7 +40,25 @@
 .eval-prob-badge-good{color:#34d399;background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.25)}
 .eval-prob-badge-warning{color:#f59e0b;background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25)}
 .eval-prob-badge-danger{color:#f87171;background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25)}
-.eval-prob-reason{margin:0;font-size:11px;color:var(--app-text-muted);line-height:1.5;max-width:420px}
+.eval-prob-reason{margin:0 0 16px;font-size:11px;color:var(--app-text-muted);line-height:1.5;max-width:420px}
+/* ── Template strip (under account name) ──────────────────────────── */
+.eval-template-strip{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:4px 0 12px;font-size:10px;color:var(--app-text-subtle)}
+.eval-template-strip-path{font-weight:600;color:var(--app-text-muted)}
+.eval-template-strip-dot{width:3px;height:3px;border-radius:50%;background:var(--app-text-subtle);opacity:.4;flex-shrink:0}
+.eval-template-strip-price{color:var(--app-text-subtle)}
+.eval-template-strip-dll{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--app-text-subtle)}
+.eval-template-strip-dll input{accent-color:#f59e0b;width:11px;height:11px;cursor:pointer}
+.eval-template-strip-src{color:#60a5fa;text-decoration:none;font-size:9px}
+.eval-template-strip-src:hover{text-decoration:underline}
+
+/* ── Mini stats grid (inside hero left panel) ─────────────────────── */
+.eval-mini-stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--app-border);border-radius:4px;overflow:hidden;margin-top:auto}
+.eval-mini-stat{padding:10px 12px;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--app-border);border-bottom:1px solid var(--app-border)}
+.eval-mini-stat:nth-child(3n){border-right:none}
+.eval-mini-stat:nth-last-child(-n+3){border-bottom:none}
+.eval-mini-stat strong{font:700 12px/1 var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--app-text)}
+.eval-mini-stat span{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--app-text-subtle);opacity:.8}
+.eval-mini-empty{margin-top:auto;padding:16px 0;font-size:11px;color:var(--app-text-subtle);line-height:1.5}
 
 /* ── Gauge ────────────────────────────────────────────────────────── */
 .eval-prob-dial{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:0}
@@ -104,10 +122,7 @@
 .eval-preset label{display:block;font-size:10px;font-weight:600;margin-bottom:2px}
 .eval-preset p{margin:0;font-size:9px;color:var(--app-text-subtle)}
 .eval-preset select,.eval-preset button{height:28px;border:1px solid var(--app-border);border-radius:4px;background:var(--app-bg);color:var(--app-text);font-size:10px;font-family:var(--font-sans);padding:0 8px;cursor:pointer}
-.eval-rule-source{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(260px,1fr) auto;align-items:center;gap:14px;padding:12px 14px;border-top:1px solid var(--app-border);background:rgba(52,211,153,.018)}
-.eval-rule-source>div:first-child strong,.eval-rule-source>div:first-child span{display:block}.eval-rule-source>div:first-child strong{font-size:10px}.eval-rule-source>div:first-child span{margin-top:4px;color:var(--app-text-muted);font-size:9px}
 .eval-dll-option{display:flex;align-items:center;gap:8px;color:var(--app-text-muted);font-size:9px;cursor:pointer}.eval-dll-option input{accent-color:#f59e0b}
-.eval-rule-source-meta{display:flex;align-items:flex-end;flex-direction:column;gap:4px;color:var(--app-text-subtle);font-size:8px}.eval-rule-source-meta a{color:#60a5fa;text-decoration:none}.eval-rule-source-meta a:hover{text-decoration:underline}
 
 /* ── Pass screen ──────────────────────────────────────────────────── */
 .eval-pass{height:calc(100vh - 56px);display:grid;place-content:center;padding:32px;background:var(--app-bg)}
@@ -135,5 +150,5 @@
 
 /* ── Responsive ───────────────────────────────────────────────────── */
 @media(max-width:960px){.eval-page{padding:18px 16px 40px}.eval-path{grid-template-columns:1fr 1fr}.eval-path .eval-path-card:last-child{grid-column:1/-1}}
-@media(max-width:900px){.eval-rule-source{grid-template-columns:1fr}.eval-rule-source-meta{align-items:flex-start}}
+
 @media(max-width:640px){.eval-prob-hero{flex-direction:column}.eval-prob-dial{align-items:flex-start;width:100%}.eval-prob-factors{width:100%}.eval-topbar{flex-direction:column;align-items:flex-start;gap:8px}.eval-acct-trigger{max-width:100%;width:100%}.eval-path{grid-template-columns:1fr}}

@@ -2,7 +2,7 @@ import type { BacktestSession, JournalEntry as TradingJournalEntry, RivalXpEvent
 import type { JournalEntry as DailyJournalEntry } from '../types/index.js';
 import type { LeaderboardPeriod, RivalPeriodStats } from '../types/rivals.js';
 import type { RiskRule } from '../store/types.js';
-import { evaluateEntryRules } from './tradingRules.js';
+import { getEntriesRuleAdherence, getEntryRuleAdherence } from './tradingRules.js';
 
 export function mean(values: number[]): number {
   if (values.length === 0) return 0;
@@ -112,11 +112,8 @@ export function computeRuleFollowingScore(entries: TradingJournalEntry[], trades
   const rulePassScore = evaluatedRules.length > 0
     ? (evaluatedRules.filter(r => r.state === 'ok').length / evaluatedRules.length) * 100
     : null;
-  const configuredChecks = last30.flatMap(e => evaluateEntryRules(e, rules));
-  const verifiedConfiguredChecks = configuredChecks.filter(c => c.state !== 'unchecked');
-  const configuredRuleScore = verifiedConfiguredChecks.length > 0
-    ? (verifiedConfiguredChecks.filter(c => c.state === 'ok').length / verifiedConfiguredChecks.length) * 100
-    : null;
+  const configuredSummary = getEntriesRuleAdherence(last30, rules);
+  const configuredRuleScore = configuredSummary.pct;
 
   const scores = [configuredRuleScore, tradePlanScore, rulePassScore].filter((s): s is number => typeof s === 'number');
   return clampScore(mean(scores));
@@ -147,6 +144,7 @@ export function buildLifetimeXpEvents(
   tradingEntries: TradingJournalEntry[],
   backtests: BacktestSession[],
   dailyJournalStreak: number,
+  riskRules: RiskRule[] = [],
 ): RivalXpEvent[] {
   const events: RivalXpEvent[] = [];
   for (const entry of dailyEntries.filter(isMeaningfulDailyJournalEntry)) {
@@ -160,6 +158,15 @@ export function buildLifetimeXpEvents(
     }
     if (reflection?.followedPlan === true) {
       events.push({ id: `followed-plan:${trade.id}`, points: 5, label: 'Followed trading plan', earnedAt: trade.createdAt || trade.date });
+    }
+  }
+  for (const entry of tradingEntries) {
+    const adherence = getEntryRuleAdherence(entry, riskRules);
+    if (adherence.checked <= 0 || adherence.pct === null) continue;
+    if (adherence.pct === 100) {
+      events.push({ id: `perfect-rule-day:${entry.id}`, points: 10, label: 'Perfect Trading Plan day', earnedAt: entry.date });
+    } else if (adherence.pct >= 80) {
+      events.push({ id: `strong-rule-day:${entry.id}`, points: 5, label: 'Strong Trading Plan adherence', earnedAt: entry.date });
     }
   }
   for (const session of backtests) {
@@ -242,10 +249,6 @@ export function periodRuleAdherence(
   bounds?: [string, string]
 ): number {
   const checks = entries
-    .filter(e => !bounds || (e.date >= bounds[0] && e.date <= bounds[1]))
-    .flatMap(e => evaluateEntryRules(e, rules))
-    .filter(c => c.state !== 'unchecked');
-  return checks.length > 0
-    ? Math.round((checks.filter(c => c.state === 'ok').length / checks.length) * 100)
-    : 0;
+    .filter(e => !bounds || (e.date >= bounds[0] && e.date <= bounds[1]));
+  return getEntriesRuleAdherence(checks, rules).pct ?? 0;
 }

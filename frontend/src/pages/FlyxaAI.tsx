@@ -6,7 +6,9 @@ import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { buildPlanAdherenceReport, type PlanAdherenceReport } from '../utils/planAdherence.js';
 
 type InsightType = 'risk' | 'pattern' | 'psychology' | 'edge';
 type TagTone = 'positive' | 'negative' | 'neutral';
@@ -174,6 +176,10 @@ function formatPeriodRange(start: Date, end: Date): string {
   return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
 }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function parseTradeDate(trade?: Partial<Trade> | null): Date | null {
   if (!trade) return null;
   // ApiTrade uses trade_date; StoreTrade uses date
@@ -299,7 +305,7 @@ function summarize(trades: Trade[]) {
   };
 }
 
-function processBreakdown(trades: Trade[]) {
+function processBreakdown(trades: Trade[], ruleReport?: PlanAdherenceReport) {
   if (!trades.length) {
     return {
       items: [
@@ -322,7 +328,13 @@ function processBreakdown(trades: Trade[]) {
   const rawPlan = tradesWithPlanLogged.length > 0
     ? pct(tradesWithPlanLogged.filter(t => t.followed_plan === true).length, tradesWithPlanLogged.length)
     : 0;
-  const plan = Math.round(rawPlan * coverage);
+  const structuredPlan = ruleReport && ruleReport.checked > 0 ? ruleReport.pct ?? 0 : null;
+  const plan = structuredPlan !== null ? structuredPlan : Math.round(rawPlan * coverage);
+  const planNote = structuredPlan !== null
+    ? `${ruleReport!.passed}/${ruleReport!.checked} rule checks`
+    : coverage < 1
+      ? `${Math.round(coverage * 100)}% of trades logged`
+      : undefined;
 
   // ── Size Discipline ────────────────────────────────────────────────────────
   // Mean Absolute Deviation from the median size, normalised by the median.
@@ -394,7 +406,7 @@ function processBreakdown(trades: Trade[]) {
 
   return {
     items: [
-      { label: 'Plan adherence', value: plan, note: coverage < 1 ? `${Math.round(coverage * 100)}% of trades logged` : undefined },
+      { label: 'Plan adherence', value: plan, note: planNote },
       { label: 'Size discipline', value: size },
       { label: 'Entry patience', value: patience },
       {
@@ -529,7 +541,14 @@ function buildAdaptiveTimeBuckets(timedTrades: Trade[]): {
   return { buckets, bucketSize, minTime, maxTime, spread };
 }
 
-function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): WeeklyDebriefData {
+function buildData(
+  trades: Trade[],
+  tf: TimeFrame = '1W',
+  weekOffset = 0,
+  entries: StoreJournalEntry[] = [],
+  riskRules: RiskRule[] = [],
+  accountId?: string | null,
+): WeeklyDebriefData {
   const pw = getPeriodWindow(tf, weekOffset);
   const { periodLabel, prevLabel } = pw;
 
@@ -598,10 +617,12 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
   const periodTrades = ordered.filter(t => inRange(t, periodStart, periodEnd));
   const previous = tf !== 'All' ? ordered.filter(t => inRange(t, prevStart, prevEnd)) : [];
   const rolling = ordered.filter(t => inRange(t, rollingStart, periodEnd));
+  const periodRuleReport = buildPlanAdherenceReport(entries, riskRules, { bounds: [dateKey(periodStart), dateKey(periodEnd)], accountId });
+  const rollingRuleReport = buildPlanAdherenceReport(entries, riskRules, { bounds: [dateKey(rollingStart), dateKey(periodEnd)], accountId });
   const periodSummary = summarize(periodTrades);
   const previousSummary = summarize(previous);
-  const periodProcess = processBreakdown(periodTrades);
-  const rollingProcess = processBreakdown(rolling);
+  const periodProcess = processBreakdown(periodTrades, periodRuleReport);
+  const rollingProcess = processBreakdown(rolling, rollingRuleReport);
   const processDiff = periodProcess.score - rollingProcess.score;
   const sessionCount = new Set(periodTrades.map(tradeSessionKey).filter(Boolean)).size;
 
@@ -1158,6 +1179,10 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
   // Plan adherence
   const planScore = byLabel.get('Plan adherence') ?? 0;
   if (planScore < 75) {
+    if (periodRuleReport.checked > 0 && periodRuleReport.mostBrokenRule) {
+      const rule = periodRuleReport.mostBrokenRule;
+      focusItems.push(`Plan adherence is at ${planScore}/100. "${rule.label}" broke ${rule.failed} time${rule.failed !== 1 ? 's' : ''} this period and appeared on ${rule.dates.length} day${rule.dates.length !== 1 ? 's' : ''}. That is now the rule to protect first — make it visible before entry and require a deliberate pass/fail confirmation.`);
+    } else {
     const violations = periodTrades.filter(t => t.followed_plan === false);
     const violPnl = violations.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
     if (violations.length >= 2) {
@@ -1166,6 +1191,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
       focusItems.push(`Plan adherence is at ${planScore}/100. The most common form of drift is entering a trade that partially meets criteria and rationalising the gap — the trade feels valid in the moment but the missing condition was load-bearing. Before each entry, state what specifically needs to be true, and if any one condition isn't present, that's the signal to pass.`);
     }
   }
+    }
 
   // Size discipline
   const sizeScore = byLabel.get('Size discipline') ?? 0;
@@ -1212,7 +1238,7 @@ function buildData(trades: Trade[], tf: TimeFrame = '1W', weekOffset = 0): Weekl
 
 export default function FlyxaAI() {
   const { trades, loading } = useTrades();
-  const { filterTradesBySelectedAccount } = useAppSettings();
+  const { filterTradesBySelectedAccount, selectedAccountId } = useAppSettings();
   const navigate = useNavigate();
   const [respondOpen, setRespondOpen] = useState(false);
   const [respondText, setRespondText] = useState('');
@@ -1221,6 +1247,8 @@ export default function FlyxaAI() {
   const aiReflections = useFlyxaStore(state => state.aiReflections);
   const addAiReflection = useFlyxaStore(state => state.addAiReflection);
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
+  const entries = useFlyxaStore(state => state.entries);
+  const riskRules = useFlyxaStore(state => state.riskRules);
 
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
@@ -1231,8 +1259,8 @@ export default function FlyxaAI() {
     [accountTrades]
   );
   const weeklyDebriefData = useMemo(
-    () => buildData(safeAccountTrades, timeframe, weekOffset),
-    [safeAccountTrades, timeframe, weekOffset]
+    () => buildData(safeAccountTrades, timeframe, weekOffset, entries as StoreJournalEntry[], riskRules, selectedAccountId),
+    [entries, riskRules, safeAccountTrades, selectedAccountId, timeframe, weekOffset]
   );
   const sessionsProgress = Math.min(100, (weeklyDebriefData.nextDebrief.sessionsLogged / weeklyDebriefData.nextDebrief.sessionsTarget) * 100);
   const processScoreNumeric = Number.parseInt(weeklyDebriefData.stats.processScore.value, 10);

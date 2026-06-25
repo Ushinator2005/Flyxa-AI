@@ -4,7 +4,10 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { Trade } from '../types/index.js';
+import useFlyxaStore from '../store/flyxaStore.js';
+import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import './FlyxaAIWeeklyReport.css';
 
 // ─── Design tokens ───────────────────────────────────────────────
@@ -65,6 +68,10 @@ function tradeR(t: Partial<Trade>): number {
 
 function pad2(n: number): string { return String(n).padStart(2, '0'); }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
 // ─── Stats computation ───────────────────────────────────────────
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
@@ -84,7 +91,12 @@ interface WeekStats {
   planAdherence: number | null;
 }
 
-function computeWeekStats(trades: Trade[], offset: number): WeekStats {
+function computeWeekStats(
+  trades: Trade[],
+  offset: number,
+  entries: StoreJournalEntry[] = [],
+  riskRules: RiskRule[] = [],
+): WeekStats {
   const mon  = weekMonday(offset);
   const sun  = addDays(mon, 6);
   sun.setHours(23, 59, 59, 999);
@@ -153,7 +165,10 @@ function computeWeekStats(trades: Trade[], offset: number): WeekStats {
 
   const withScore = wt.filter(t => typeof t.plan_score === 'number');
   const withPlan = wt.filter(t => typeof t.followed_plan === 'boolean');
-  const planAdherence = withScore.length > 0
+  const ruleReport = buildPlanAdherenceReport(entries, riskRules, { bounds: [dateKey(mon), dateKey(sun)] });
+  const planAdherence = ruleReport.checked > 0
+    ? ruleReport.pct
+    : withScore.length > 0
     ? Math.round(withScore.reduce((s, t) => s + (t.plan_score as number), 0) / withScore.length)
     : withPlan.length > 0
       ? Math.round(withPlan.filter(t => t.followed_plan).length / withPlan.length * 100)
@@ -693,6 +708,8 @@ export default function FlyxaAIWeeklyReport() {
   const navigate                          = useNavigate();
   const { trades, loading }               = useTrades();
   const { filterTradesBySelectedAccount } = useAppSettings();
+  const entries                           = useFlyxaStore(state => state.entries);
+  const riskRules                         = useFlyxaStore(state => state.riskRules);
   const [weekOffset, setWeekOffset]       = useState(0);
   const [slideIndex, setSlideIndex]       = useState(0);
   const [direction, setDirection]         = useState<'fwd' | 'bwd'>('fwd');
@@ -702,7 +719,7 @@ export default function FlyxaAIWeeklyReport() {
 
   const accountTrades = useMemo(() => filterTradesBySelectedAccount(trades), [filterTradesBySelectedAccount, trades]);
   const safeTrades    = useMemo(() => accountTrades.filter((t): t is Trade => Boolean(t)), [accountTrades]);
-  const stats         = useMemo(() => computeWeekStats(safeTrades, weekOffset), [safeTrades, weekOffset]);
+  const stats         = useMemo(() => computeWeekStats(safeTrades, weekOffset, entries as StoreJournalEntry[], riskRules), [entries, riskRules, safeTrades, weekOffset]);
   const actionPlan    = useMemo(() => generateActionPlan(stats), [stats]);
 
   useEffect(() => {

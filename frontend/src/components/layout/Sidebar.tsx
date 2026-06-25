@@ -107,8 +107,14 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
     || (user?.user_metadata?.full_name as string | undefined)
     || user?.email?.split('@')[0]
     || 'Trader';
-  const [rivalUsername, setRivalUsername] = useState<string | null>(null);
-  const [rivalAvatarUrl, setRivalAvatarUrl] = useState<string | null>(null);
+  // Seed from sessionStorage so the username shows immediately on page load
+  // (sessionStorage is ephemeral UI state — cleared when the tab closes)
+  const [rivalUsername, setRivalUsername] = useState<string | null>(() =>
+    window.sessionStorage.getItem('flyxa:sidebar:username') || null
+  );
+  const [rivalAvatarUrl, setRivalAvatarUrl] = useState<string | null>(() =>
+    window.sessionStorage.getItem('flyxa:sidebar:avatarUrl') || null
+  );
 
   // "More" section — auto-open when current route is one of the more items
   const moreActive = moreNavItems.some(item =>
@@ -121,9 +127,14 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
     let cancelled = false;
     rivalsApi.getProfile()
       .then(p => {
-        if (!cancelled) {
-          if (p?.username) setRivalUsername(p.username);
-          if (p?.avatarUrl) setRivalAvatarUrl(p.avatarUrl);
+        if (cancelled) return;
+        if (p?.username) {
+          setRivalUsername(p.username);
+          window.sessionStorage.setItem('flyxa:sidebar:username', p.username);
+        }
+        if (p?.avatarUrl) {
+          setRivalAvatarUrl(p.avatarUrl);
+          window.sessionStorage.setItem('flyxa:sidebar:avatarUrl', p.avatarUrl);
         }
       })
       .catch(() => {});
@@ -134,8 +145,14 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
     const handler = () => {
       rivalsApi.getProfile()
         .then(p => {
-          if (p?.username) setRivalUsername(p.username);
-          if (p?.avatarUrl) setRivalAvatarUrl(p.avatarUrl);
+          if (p?.username) {
+            setRivalUsername(p.username);
+            window.sessionStorage.setItem('flyxa:sidebar:username', p.username);
+          }
+          if (p?.avatarUrl) {
+            setRivalAvatarUrl(p.avatarUrl);
+            window.sessionStorage.setItem('flyxa:sidebar:avatarUrl', p.avatarUrl);
+          }
         })
         .catch(() => {});
     };

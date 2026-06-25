@@ -178,7 +178,7 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
       supabase.from('trading_accounts').select('id, name, broker, type, status, color, starting_balance, target_balance, archived, created_at').eq('user_id', userId),
     ]);
 
-    if (settingsResult.error) return null;
+    if (settingsResult.error) throw settingsResult.error;
 
     const row: AppSettingsRow = settingsResult.data?.app_settings
       ? { ...(settingsResult.data.app_settings as AppSettingsRow) }
@@ -235,8 +235,9 @@ async function loadAppSettingsFromSupabase(userId: string): Promise<AppSettingsR
     if (!settingsResult.data?.app_settings && !row.accounts?.length) return null;
 
     return row;
-  } catch { /* fall through to localStorage migration */ }
-  return null;
+  } catch (error) {
+    throw error;
+  }
 }
 
 async function saveAppSettingsToSupabase(userId: string, row: AppSettingsRow): Promise<void> {
@@ -330,7 +331,16 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     }
 
     void (async () => {
-      let row = await loadAppSettingsFromSupabase(user.id);
+      let row: AppSettingsRow | null = null;
+      try {
+        row = await loadAppSettingsFromSupabase(user.id);
+      } catch {
+        // Do not mark initial load complete after a transient Supabase failure.
+        // Otherwise the default empty settings can be saved over the user's
+        // real app_settings row on hard refresh.
+        initialLoadDone.current = false;
+        return;
+      }
 
       // First time: migrate from localStorage.
       if (!row || Object.values(row).every(v => v === undefined)) {

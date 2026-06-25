@@ -20,12 +20,14 @@ import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import type { JournalEntry as StoreJournalEntry } from '../store/types.js';
 import { Trade } from '../types/index.js';
 import { formatCurrency } from '../utils/calculations.js';
 import { getSessionKeyForTime, timeToMinutes } from '../utils/sessionTimes.js';
 import { getTradeRiskReward } from '../utils/tradeAnalytics.js';
 import { formatRiskRewardRatio } from '../utils/riskReward.js';
 import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
+import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 
 type PeriodKey = '1W' | '1M' | '3M' | 'YTD' | 'ALL';
 
@@ -172,6 +174,10 @@ function formatSignedCurrency(value: number, withCents = false): string {
   return `${value >= 0 ? '+' : '-'}${signed}`;
 }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function formatHoldDuration(seconds: number | null): string {
   if (!seconds || seconds <= 0) return '--';
   const mins = Math.floor(seconds / 60);
@@ -243,6 +249,8 @@ export default function Analytics() {
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount, preferences, selectedAccountId } = useAppSettings();
   const storeAccounts = useFlyxaStore(state => state.accounts);
+  const entries = useFlyxaStore(state => state.entries);
+  const riskRules = useFlyxaStore(state => state.riskRules);
   const selectedStoreAcct = selectedAccountId && selectedAccountId !== ALL_ACCOUNTS_ID
     ? storeAccounts.find(a => a.id === selectedAccountId)
     : undefined;
@@ -269,6 +277,13 @@ export default function Analytics() {
     () => getPeriodRange(period, periodOffset, today),
     [period, periodOffset, today]
   );
+
+  const planReport = useMemo(() => {
+    const bounds = periodRange
+      ? [dateKey(periodRange.start), dateKey(new Date(periodRange.end.getTime() - 86_400_000))] as [string, string]
+      : undefined;
+    return buildPlanAdherenceReport(entries as StoreJournalEntry[], riskRules, { bounds, accountId: selectedAccountId });
+  }, [entries, periodRange, riskRules, selectedAccountId]);
 
   const filteredTrades = useMemo(() => {
     const range = periodRange;
@@ -1082,6 +1097,54 @@ export default function Analytics() {
                 )}
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text)]">Trading Plan adherence</h3>
+              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Configured risk rules for this period</p>
+            </div>
+            <span
+              className={`font-mono text-2xl tabular-nums ${
+                (planReport.pct ?? 0) >= 80 ? 'text-emerald-400' : (planReport.pct ?? 0) >= 60 ? 'text-amber-400' : 'text-red-400'
+              }`}
+            >
+              {planReport.pct === null ? '--' : `${planReport.pct}%`}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
+              <p className="text-[var(--app-text-muted)]">Checked</p>
+              <p className="mt-1 font-mono text-base text-[var(--app-text)]">{planReport.checked}</p>
+            </div>
+            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
+              <p className="text-[var(--app-text-muted)]">Broken days</p>
+              <p className="mt-1 font-mono text-base text-red-400">{planReport.brokenDays}</p>
+            </div>
+            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
+              <p className="text-[var(--app-text-muted)]">Perfect days</p>
+              <p className="mt-1 font-mono text-base text-emerald-400">{planReport.perfectDays}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-[var(--app-border)] pt-3 text-xs">
+            {planReport.mostBrokenRule ? (
+              <>
+                <p className="text-[var(--app-text-muted)]">Most repeated break</p>
+                <p className="mt-1 text-[var(--app-text)]">{planReport.mostBrokenRule.label}</p>
+                <p className="mt-1 text-[var(--app-text-muted)]">
+                  {planReport.mostBrokenRule.failed} break{planReport.mostBrokenRule.failed !== 1 ? 's' : ''}
+                  {planReport.mostExpensiveRule ? ` · ${formatCurrency(planReport.mostExpensiveRule.lossWhenBroken)} loss on ${planReport.mostExpensiveRule.label}` : ''}
+                </p>
+              </>
+            ) : (
+              <p className="text-[var(--app-text-muted)]">
+                {planReport.checked > 0 ? 'No rule breaks in this period.' : 'No configured rule checks yet.'}
+              </p>
+            )}
           </div>
         </section>
       </div>

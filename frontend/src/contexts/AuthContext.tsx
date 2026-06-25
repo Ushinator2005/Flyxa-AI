@@ -56,6 +56,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
       wasLoggedInRef.current = !!session;
+
+      // Zustand's async Supabase storage can run before Supabase auth has
+      // restored the browser session. In that case the first hydration sees
+      // "no user" and returns the empty initial store. Always rehydrate once
+      // the actual session is known so hard refreshes reload the user's cloud
+      // journal instead of staying on defaults.
+      if (session) {
+        void useFlyxaStore.persist.rehydrate();
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {

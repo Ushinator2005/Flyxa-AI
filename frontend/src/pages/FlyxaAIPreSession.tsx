@@ -8,11 +8,13 @@ import { riskApi } from '../services/api.js';
 import { RiskSettings, Trade } from '../types/index.js';
 import { PatternItem } from './FlyxaAIPatterns.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
 import { publishPreSessionSync } from '../utils/preSessionSync.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { saveGuardSessionTrades } from '../hooks/useGuardSessionTrades.js';
 import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
+import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -112,6 +114,13 @@ function parseRiskSettingsFromStorage(): Partial<RiskSettings> {
     }
   }
   return {};
+}
+
+function enabledPlanRuleValue(rules: RiskRule[], kind: NonNullable<RiskRule['kind']>): number | null {
+  const rule = rules.find(item => (item.kind ?? 'manual') === kind && item.enabled !== false);
+  if (!rule) return null;
+  const value = Number(rule.value);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function parseMaxWinFromStorage(): number | null {
@@ -220,7 +229,7 @@ function buildPatternInstruction(pattern: PatternItem, mode: 'watch' | 'protect'
 export default function FlyxaAIPreSession() {
   const navigate = useNavigate();
   const { trades, loading } = useTrades();
-  const { filterTradesBySelectedAccount, preferences } = useAppSettings();
+  const { filterTradesBySelectedAccount, preferences, selectedAccountId } = useAppSettings();
   const { settings, refreshSettings } = useRisk();
 
   const storedPreSession = useFlyxaStore(state => state.preSession);
@@ -228,6 +237,8 @@ export default function FlyxaAIPreSession() {
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const storedOathItems = useFlyxaStore(state => state.oathItems);
   const setOathItemsAction = useFlyxaStore(state => state.setOathItems);
+  const journalEntries = useFlyxaStore(state => state.entries);
+  const riskRules = useFlyxaStore(state => state.riskRules);
 
   const [now, setNow] = useState(() => new Date());
   const todayIso = useMemo(() => getTimeZoneParts(now, preferences.timezone).date, [now, preferences.timezone]);
@@ -316,7 +327,13 @@ export default function FlyxaAIPreSession() {
       .slice(0, 20);
     const withScore = recentTrades.filter(trade => typeof trade.plan_score === 'number');
     const planLogged = withScore.length > 0 ? withScore : recentTrades.filter(trade => typeof trade.followed_plan === 'boolean');
-    const planAdherence = withScore.length > 0
+    const recentEntries = [...(journalEntries as StoreJournalEntry[])]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 20);
+    const ruleReport = buildPlanAdherenceReport(recentEntries, riskRules, { accountId: selectedAccountId });
+    const planAdherence = ruleReport.checked > 0
+      ? ruleReport.pct
+      : withScore.length > 0
       ? Math.round(withScore.reduce((s, t) => s + (t.plan_score as number), 0) / withScore.length)
       : planLogged.length > 0
         ? Math.round((planLogged.filter(trade => trade.followed_plan === true).length / planLogged.length) * 100)
@@ -326,12 +343,12 @@ export default function FlyxaAIPreSession() {
 
     return {
       sampleSize: recentTrades.length,
-      planLogged: planLogged.length,
+      planLogged: ruleReport.checked > 0 ? ruleReport.checked : planLogged.length,
       planAdherence,
       revengeTagged,
       emotionTagged,
     };
-  }, [accountTrades]);
+  }, [accountTrades, journalEntries, riskRules, selectedAccountId]);
 
   const priorFlow = useMemo(
     () => getMostRecentDailyFlowBefore(accountTrades, todayIso),
@@ -339,9 +356,12 @@ export default function FlyxaAIPreSession() {
   );
 
   const riskLimits = useMemo(() => {
-    const dailyLoss = Number.isFinite(settings?.daily_loss_limit) ? settings?.daily_loss_limit : storedRiskSettings.daily_loss_limit;
-    const maxTrades = Number.isFinite(settings?.max_trades_per_day) ? settings?.max_trades_per_day : storedRiskSettings.max_trades_per_day;
-    const maxContracts = Number.isFinite(settings?.max_contracts_per_trade) ? settings?.max_contracts_per_trade : storedRiskSettings.max_contracts_per_trade;
+    const planDailyLoss = enabledPlanRuleValue(riskRules, 'max_daily_loss');
+    const planMaxTrades = enabledPlanRuleValue(riskRules, 'max_trades');
+    const planMaxContracts = enabledPlanRuleValue(riskRules, 'max_contracts');
+    const dailyLoss = planDailyLoss ?? (Number.isFinite(settings?.daily_loss_limit) ? settings?.daily_loss_limit : storedRiskSettings.daily_loss_limit);
+    const maxTrades = planMaxTrades ?? (Number.isFinite(settings?.max_trades_per_day) ? settings?.max_trades_per_day : storedRiskSettings.max_trades_per_day);
+    const maxContracts = planMaxContracts ?? (Number.isFinite(settings?.max_contracts_per_trade) ? settings?.max_contracts_per_trade : storedRiskSettings.max_contracts_per_trade);
     const accountSize = Number.isFinite(settings?.account_size) ? settings?.account_size : storedRiskSettings.account_size;
     const riskPct = Number.isFinite(settings?.risk_percentage) ? settings?.risk_percentage : storedRiskSettings.risk_percentage;
 
@@ -365,7 +385,7 @@ export default function FlyxaAIPreSession() {
       riskPct: riskPctValue,
       accountSize: accountSizeValue,
     };
-  }, [settings, storedRiskSettings, maxWinStored]);
+  }, [settings, storedRiskSettings, maxWinStored, riskRules]);
 
   const openRiskEditor = () => {
     setRiskDraft({

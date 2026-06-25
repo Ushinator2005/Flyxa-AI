@@ -15,7 +15,7 @@ import {
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
+import type { JournalEntry as StoreJournalEntry, RiskRule, Trade as StoreTrade } from '../store/types.js';
 import { pushToast } from '../store/toastStore.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { lookupContract } from '../constants/futuresContracts.js';
@@ -27,7 +27,7 @@ import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
-import { evaluateEntryRules, manualRules } from '../utils/tradingRules.js';
+import { evaluateEntryRules, evaluateTradeRules, manualRules } from '../utils/tradingRules.js';
 import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
@@ -1349,6 +1349,8 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
   const evaluations = evaluateEntryRules(entry as unknown as StoreJournalEntry, rules);
   const verified = evaluations.filter(item => item.state !== 'unchecked');
   const passed = verified.filter(item => item.state === 'ok').length;
+  const broken = verified.filter(item => item.state === 'fail');
+  const pct = verified.length > 0 ? Math.round((passed / verified.length) * 100) : null;
   const updateManualRule = (label: string, state: RuleState) => {
     const next = entry.rules.some(rule => rule.text === label)
       ? entry.rules.map(rule => rule.text === label ? { ...rule, state } : rule)
@@ -1362,10 +1364,12 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
         <div>
           <strong style={{ display: 'block', color: 'var(--app-text)', fontSize: 12 }}>Rule verification</strong>
           <span style={{ display: 'block', marginTop: 3, color: 'var(--app-text-subtle)', fontSize: 10 }}>
-            {verified.length > 0 ? `${passed}/${verified.length} verified checks passed` : 'No rules verified yet'}
+            {verified.length > 0 ? `${pct}% adherence · ${passed}/${verified.length} verified checks passed` : 'No rules verified yet'}
           </span>
         </div>
-        <span style={{ color: 'var(--app-text-subtle)', fontSize: 9 }}>Automatic + reported</span>
+        <span style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9 }}>
+          {broken.length > 0 ? `${broken.length} broken` : 'Automatic + reported'}
+        </span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {evaluations.map(item => (
@@ -1390,6 +1394,58 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ActiveTradeRuleBlock({ entry, trade, rules }: {
+  entry: JournalEntry;
+  trade: JournalTrade;
+  rules: RiskRule[];
+}) {
+  const evaluations = evaluateTradeRules(
+    trade as unknown as StoreTrade,
+    entry.trades as unknown as StoreTrade[],
+    rules,
+  );
+  const verified = evaluations.filter(item => item.state !== 'unchecked');
+  const passed = verified.filter(item => item.state === 'ok').length;
+  const broken = verified.filter(item => item.state === 'fail');
+  const pct = verified.length > 0 ? Math.round((passed / verified.length) * 100) : null;
+  const primary = broken[0];
+
+  return (
+    <div className="tj-card" style={{ marginBottom: 10, padding: 14, borderLeft: `3px solid ${broken.length > 0 ? 'var(--red)' : pct === null ? 'var(--app-border)' : 'var(--green)'}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'center' }}>
+        <div>
+          <div style={{ color: 'var(--app-text-subtle)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
+            Active trade plan check
+          </div>
+          <strong style={{ display: 'block', color: broken.length > 0 ? 'var(--red)' : 'var(--app-text)', fontSize: 13 }}>
+            {pct === null ? 'No automatic rules verified' : broken.length > 0 ? primary?.label ?? 'Rule break' : 'Trade is on-plan'}
+          </strong>
+          <span style={{ display: 'block', marginTop: 4, color: 'var(--app-text-subtle)', fontSize: 10 }}>
+            {primary?.detail ?? (pct === null ? 'Add rules with measurable values in Trading Plan.' : `${passed}/${verified.length} checks passed for this trade.`)}
+          </span>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, lineHeight: 1 }}>
+            {pct === null ? '--' : `${pct}%`}
+          </div>
+          <div style={{ color: 'var(--app-text-subtle)', fontSize: 9, marginTop: 4 }}>
+            adherence
+          </div>
+        </div>
+      </div>
+      {broken.length > 1 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+          {broken.slice(1, 4).map(item => (
+            <span key={item.ruleId} style={{ border: '1px solid var(--red-border, rgba(248,113,113,0.35))', background: 'var(--red-dim)', color: 'var(--red)', borderRadius: 999, padding: '3px 7px', fontSize: 9 }}>
+              {item.label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3673,6 +3729,14 @@ export default function TradeJournal() {
                 <PriceLevelsBlock
                   trade={activeTrade}
                   onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                />
+              )}
+
+              {activeTrade && (
+                <ActiveTradeRuleBlock
+                  entry={selectedEntry}
+                  trade={activeTrade}
+                  rules={riskRules}
                 />
               )}
 

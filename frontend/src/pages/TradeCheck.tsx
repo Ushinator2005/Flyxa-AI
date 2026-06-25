@@ -18,6 +18,7 @@ import {
   parsePreSessionSync,
   PRE_SESSION_SYNC_STORAGE_KEY,
 } from '../utils/preSessionSync.js';
+import type { RiskRule } from '../store/types.js';
 
 type GateStatus = 'clear' | 'caution' | 'blocked';
 type Phase      = 'idle' | 'active' | 'post';
@@ -91,12 +92,40 @@ function getNewsRisk(): string | null {
 
 function flag(status: GateStatus, label: string) { return { status, label }; }
 
+function enabledPlanRule(rules: RiskRule[], kind: NonNullable<RiskRule['kind']>): RiskRule | null {
+  return rules.find(rule => (rule.kind ?? 'manual') === kind && rule.enabled !== false) ?? null;
+}
+
+function numericRuleValue(rule: RiskRule | null): number | null {
+  if (!rule) return null;
+  const value = Number(rule.value);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function clockMinutes(value: string | null | undefined): number | null {
+  if (!value || !/^\d{1,2}:\d{2}$/.test(value)) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function isInsideWindow(now: string, start: string | undefined, end: string | undefined): boolean | null {
+  const current = clockMinutes(now);
+  const startMinutes = clockMinutes(start);
+  const endMinutes = clockMinutes(end);
+  if (current === null || startMinutes === null || endMinutes === null) return null;
+  return startMinutes <= endMinutes
+    ? current >= startMinutes && current <= endMinutes
+    : current >= startMinutes || current <= endMinutes;
+}
+
 export default function TradeCheck() {
   const { trades }                                           = useTrades();
   const { selectedAccountId, filterTradesBySelectedAccount, preferences } = useAppSettings();
   const { dailyStatus, riskLevel, settings: riskSettings, refreshSettings } = useRisk();
   const activePreSession                                      = useFlyxaStore(state => state.preSession);
   const preSessionHistory                                    = useFlyxaStore(state => state.preSessionHistory);
+  const riskRules                                            = useFlyxaStore(state => state.riskRules);
 
   const [phase, setPhase]                 = useState<Phase>('idle');
   const [direction, setDirection]         = useState<TradeDir | null>(null);
@@ -186,11 +215,15 @@ export default function TradeCheck() {
       s + (t.outcome === 'win' ? t.amount : t.outcome === 'loss' ? -t.amount : 0), 0);
     const consec      = sessionConsecLosses(sessionTrades);
 
-    const maxTrades   = dailyStatus?.maxTradesPerDay  ?? dailyStatus?.settings?.max_trades_per_day ?? riskSettings?.max_trades_per_day ?? 0;
+    const planMaxTrades = numericRuleValue(enabledPlanRule(riskRules, 'max_trades'));
+    const planLossLimit = numericRuleValue(enabledPlanRule(riskRules, 'max_daily_loss'));
+    const timeWindowRule = enabledPlanRule(riskRules, 'time_window');
+    const cooldownMinutes = numericRuleValue(enabledPlanRule(riskRules, 'cooldown_after_loss'));
+    const maxTrades   = planMaxTrades ?? dailyStatus?.maxTradesPerDay  ?? dailyStatus?.settings?.max_trades_per_day ?? riskSettings?.max_trades_per_day ?? 0;
     // Session max loss: prefer pre-session override, then DB risk settings
     const lossLimit   = (preSession?.sessionMaxLoss ?? 0) > 0
       ? preSession!.sessionMaxLoss!
-      : (dailyStatus?.dailyLossLimit ?? dailyStatus?.settings?.daily_loss_limit ?? riskSettings?.daily_loss_limit ?? 0);
+      : (planLossLimit ?? dailyStatus?.dailyLossLimit ?? dailyStatus?.settings?.daily_loss_limit ?? riskSettings?.daily_loss_limit ?? 0);
     const profitTarget = (preSession?.dailyTarget ?? 0) > 0 ? preSession!.dailyTarget! : null;
     const lossPct     = lossLimit > 0 ? (sessionLoss / lossLimit) * 100 : 0;
     const newsRisk    = getNewsRisk();
@@ -214,10 +247,23 @@ export default function TradeCheck() {
     else if (maxTrades > 0 && tradeCount === maxTrades - 1)
       flags.push(flag('caution', `Last trade — cap is ${maxTrades}`));
 
+    if (timeWindowRule) {
+      const now = getTimeZoneParts(new Date(), preferences.timezone).time;
+      const insideWindow = isInsideWindow(now, timeWindowRule.startTime, timeWindowRule.endTime);
+      if (insideWindow === false) {
+        flags.push(flag('blocked', `Outside plan window ${timeWindowRule.startTime}-${timeWindowRule.endTime}`));
+      } else if (insideWindow === null) {
+        flags.push(flag('caution', 'Trading window rule needs valid times'));
+      }
+    }
+
     if (consec >= 2)
       flags.push(flag('blocked', `${consec} consecutive losses`));
     else if (consec === 1)
       flags.push(flag('caution', 'Post-loss — confirm thesis'));
+
+    if (cooldownMinutes && consec >= 1)
+      flags.push(flag('blocked', `Trading Plan cooldown: wait ${cooldownMinutes} min after loss`));
 
     // Pre-session brief
     if (preSession?.readiness?.status === 'Stand Down') {
@@ -254,7 +300,7 @@ export default function TradeCheck() {
     const status: GateStatus = flags.some(f => f.status === 'blocked') ? 'blocked'
       : flags.some(f => f.status === 'caution') ? 'caution' : 'clear';
 
-    return { status, flags, sessionPnl, sessionLoss, tradeCount, lossPct: Math.round(lossPct), lossLimit, profitTarget };
+    return { status, flags, sessionPnl, sessionLoss, tradeCount, lossPct: Math.round(lossPct), lossLimit, profitTarget, maxTrades };
   }, [
     activePreSession,
     currentDate,
@@ -264,6 +310,7 @@ export default function TradeCheck() {
     priorFlow,
     riskLevel,
     riskSettings,
+    riskRules,
     sessionTrades,
   ]);
 
@@ -302,7 +349,7 @@ export default function TradeCheck() {
     return { score, color, msg };
   }, [phase, outcome, sessionTrades, gate.lossPct, gate.status]);
 
-  const maxTrades = dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day ?? 0;
+  const maxTrades = gate.maxTrades;
 
   const sc = gate.status === 'blocked'
     ? { label: 'Blocked', color: C.red,   Icon: CircleSlash  }

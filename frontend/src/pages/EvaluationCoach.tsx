@@ -11,6 +11,7 @@ import {
   getEvaluationTemplates,
   inferEvaluationTemplate,
   ruleRecordToTemplate,
+  tradesForAccount,
 } from '../utils/evaluationCoach.js';
 import './EvaluationCoach.css';
 
@@ -190,6 +191,28 @@ export default function EvaluationCoach() {
     () => selected && progress ? buildEvaluationAgentAlerts(selected, allTrades, progress) : [],
     [allTrades, progress, selected],
   );
+
+  const accountTrades = useMemo(
+    () => selected ? tradesForAccount(allTrades, selected.id) : [],
+    [allTrades, selected],
+  );
+
+  const tradeStats = useMemo(() => {
+    if (!accountTrades.length) return null;
+    const nets = accountTrades.map(t => Number(t.pnl ?? 0) - Number(t.commission ?? 0));
+    const wins = nets.filter(n => n > 0).length;
+    const winRate = Math.round((wins / nets.length) * 100);
+    const avgPnl = nets.reduce((s, n) => s + n, 0) / nets.length;
+    const byDay = new Map<string, number>();
+    accountTrades.forEach((t, i) => byDay.set(t.date, (byDay.get(t.date) ?? 0) + nets[i]));
+    const dayValues = [...byDay.values()];
+    const bestDay = dayValues.length ? Math.max(...dayValues) : 0;
+    const worstDay = dayValues.length ? Math.min(...dayValues) : 0;
+    const greenDayPct = dayValues.length
+      ? Math.round((dayValues.filter(v => v > 0).length / dayValues.length) * 100)
+      : 0;
+    return { tradeCount: nets.length, winRate, avgPnl, bestDay, worstDay, greenDayPct };
+  }, [accountTrades]);
 
   const comparisons = useMemo(
     () => evaluationAccounts.map(a => ({
@@ -404,6 +427,36 @@ export default function EvaluationCoach() {
         <div className="eval-prob-left">
           <p className="eval-prob-kicker">{selected.firm} · {money(selected.size)} · {selected.drawdownType ?? activeTemplate.drawdownType} drawdown</p>
           <h1 className="eval-prob-name">{selected.name}</h1>
+          {selectedTemplate.firm === 'Topstep' && (
+            <div className="eval-template-strip">
+              <span className="eval-template-strip-path">
+                {selectedTemplate.path === 'no_activation_fee' ? 'No Activation Fee' : 'Standard'} path
+              </span>
+              <span className="eval-template-strip-dot" />
+              <span className="eval-template-strip-price">
+                {money(selectedTemplate.monthlyPrice ?? 0)}/mo · {selectedTemplate.activationFee ? `${money(selectedTemplate.activationFee)} activation` : 'no activation fee'}
+              </span>
+              {selectedTemplate.optionalDailyLossLimit && (
+                <>
+                  <span className="eval-template-strip-dot" />
+                  <label className="eval-template-strip-dll">
+                    <input
+                      type="checkbox"
+                      checked={useOptionalDailyLoss}
+                      onChange={e => setUseOptionalDailyLoss(e.target.checked)}
+                    />
+                    {money(selectedTemplate.optionalDailyLossLimit)} daily limit
+                  </label>
+                </>
+              )}
+              {selectedTemplate.sourceUrl && (
+                <>
+                  <span className="eval-template-strip-dot" />
+                  <a className="eval-template-strip-src" href={selectedTemplate.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a>
+                </>
+              )}
+            </div>
+          )}
           <div className="eval-current-balance">
             <span className="eval-balance-label">Current balance</span>
             <span className={`eval-balance-value${progress.netPnl >= 0 ? ' positive' : ' negative'}`}>
@@ -420,6 +473,49 @@ export default function EvaluationCoach() {
             {decision.label}
           </div>
           <p className="eval-prob-reason">{decision.reason}</p>
+
+          {tradeStats ? (
+            <div className="eval-mini-stats">
+              <div className="eval-mini-stat">
+                <strong>{tradeStats.tradeCount}</strong>
+                <span>Trades</span>
+              </div>
+              <div className="eval-mini-stat">
+                <strong style={{ color: tradeStats.winRate >= 50 ? '#34d399' : '#f87171' }}>
+                  {tradeStats.winRate}%
+                </strong>
+                <span>Win rate</span>
+              </div>
+              <div className="eval-mini-stat">
+                <strong style={{ color: tradeStats.avgPnl >= 0 ? '#34d399' : '#f87171' }}>
+                  {tradeStats.avgPnl >= 0 ? '+' : ''}{money(tradeStats.avgPnl)}
+                </strong>
+                <span>Avg / trade</span>
+              </div>
+              <div className="eval-mini-stat">
+                <strong style={{ color: tradeStats.bestDay >= 0 ? '#34d399' : '#f87171' }}>
+                  {tradeStats.bestDay >= 0 ? '+' : ''}{money(tradeStats.bestDay)}
+                </strong>
+                <span>Best day</span>
+              </div>
+              <div className="eval-mini-stat">
+                <strong style={{ color: tradeStats.worstDay >= 0 ? '#34d399' : '#f87171' }}>
+                  {money(tradeStats.worstDay)}
+                </strong>
+                <span>Worst day</span>
+              </div>
+              <div className="eval-mini-stat">
+                <strong style={{ color: tradeStats.greenDayPct >= 50 ? '#34d399' : '#f87171' }}>
+                  {tradeStats.greenDayPct}%
+                </strong>
+                <span>Green days</span>
+              </div>
+            </div>
+          ) : (
+            <div className="eval-mini-empty">
+              No trades recorded yet. Start trading to see your performance stats.
+            </div>
+          )}
         </div>
         <div className="eval-prob-dial">
           <div className="eval-gauge-wrap">
@@ -543,29 +639,6 @@ export default function EvaluationCoach() {
             </select>
             <button type="button" onClick={() => applyTemplate(selected)}>Apply</button>
           </div>
-          {selectedTemplate.firm === 'Topstep' && (
-            <div className="eval-rule-source">
-              <div>
-                <strong>{selectedTemplate.path === 'no_activation_fee' ? 'No Activation Fee path' : 'Standard path'}</strong>
-                <span>
-                  {money(selectedTemplate.monthlyPrice ?? 0)}/month · {selectedTemplate.activationFee ? `${money(selectedTemplate.activationFee)} activation` : 'no activation fee'}
-                </span>
-              </div>
-              <label className="eval-dll-option">
-                <input
-                  type="checkbox"
-                  checked={useOptionalDailyLoss}
-                  onChange={event => setUseOptionalDailyLoss(event.target.checked)}
-                />
-                <span>Add Topstep’s fixed {money(selectedTemplate.optionalDailyLossLimit ?? 0)} daily loss limit</span>
-              </label>
-              <div className="eval-rule-source-meta">
-                <span>{selectedTemplate.consistencyLimitPct}% consistency · {selectedTemplate.maxMicros} micros max · v{selectedTemplate.version ?? 1}</span>
-                {selectedTemplate.sourceUrl && <a href={selectedTemplate.sourceUrl} target="_blank" rel="noreferrer">Official source</a>}
-                <span>{rulesCatalogSource}</span>
-              </div>
-            </div>
-          )}
 
       <p className="eval-disclaimer">Firm rules can change. Flyxa's presets are monitoring aids, not the legal source of truth. Verify every limit against your firm dashboard and agreement.</p>
     </div>

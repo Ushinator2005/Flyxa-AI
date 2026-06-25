@@ -179,8 +179,8 @@ export function useRivals() {
     [dailyJournalEntries]
   );
   const earnedXpEvents = useMemo(
-    () => buildLifetimeXpEvents(dailyJournalEntries, entries, backtestSessions, dailyJournalStreak),
-    [backtestSessions, dailyJournalEntries, dailyJournalStreak, entries]
+    () => buildLifetimeXpEvents(dailyJournalEntries, entries, backtestSessions, dailyJournalStreak, riskRules),
+    [backtestSessions, dailyJournalEntries, dailyJournalStreak, entries, riskRules]
   );
   const lifetimeXp = useMemo(() => {
     const merged = { ...rivalXpEvents };

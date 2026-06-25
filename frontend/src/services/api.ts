@@ -208,21 +208,33 @@ export const psychologyApi = {
   getMindsetChart: () => api.get('/api/psychology/mindset-chart'),
 };
 
-export const journalApi = {
-  getAll: () => api.get('/api/journal'),
-  getById: (id: string) => api.get(`/api/journal/${id}`),
-  create: (data: Record<string, unknown>) => api.post('/api/journal', data),
-  update: (id: string, data: Record<string, unknown>) => api.put(`/api/journal/${id}`, data),
-  delete: (id: string) => api.delete(`/api/journal/${id}`),
-  exportBackup: () =>
-    api.get<{
-      version: number;
-      exported_at: string;
-      entries: JournalEntry[];
-    }>('/api/journal/backup'),
-  restoreBackup: (entries: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>>) =>
-    api.post<JournalBackupRestoreResult>('/api/journal/backup/restore', { entries }),
-};
+export const journalApi = (() => {
+  // Deduplicate concurrent getAll() calls that fire simultaneously on page mount
+  // (Layout's useRivalStatsSync + Journal/Dashboard/Rivals components all call this).
+  let inflightGetAll: Promise<unknown> | null = null;
+  return {
+    getAll: (): Promise<unknown> => {
+      if (!inflightGetAll) {
+        inflightGetAll = api.get('/api/journal').finally(() => {
+          inflightGetAll = null;
+        });
+      }
+      return inflightGetAll;
+    },
+    getById: (id: string) => api.get(`/api/journal/${id}`),
+    create: (data: Record<string, unknown>) => api.post('/api/journal', data),
+    update: (id: string, data: Record<string, unknown>) => api.put(`/api/journal/${id}`, data),
+    delete: (id: string) => api.delete(`/api/journal/${id}`),
+    exportBackup: () =>
+      api.get<{
+        version: number;
+        exported_at: string;
+        entries: JournalEntry[];
+      }>('/api/journal/backup'),
+    restoreBackup: (entries: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>>) =>
+      api.post<JournalBackupRestoreResult>('/api/journal/backup/restore', { entries }),
+  };
+})();
 
 export const marketDataApi = {
   getChart: (symbol: string, interval: string, range: string) =>
@@ -323,19 +335,52 @@ export interface RivalRequestResponse {
   profile: RivalProfileResponse | null;
 }
 
-export const rivalsApi = {
-  getProfile: () => api.get<RivalProfileResponse | null>('/api/rivals/profile'),
-  updateProfile: (data: { username: string; displayName?: string; avatarColor?: string; avatarUrl?: string | null }) =>
-    api.put<RivalProfileResponse>('/api/rivals/profile', data),
-  updateStats: (stats: NonNullable<RivalProfileResponse['stats']>) =>
-    api.put<RivalProfileResponse>('/api/rivals/profile/stats', { stats }),
-  search: (username: string) =>
-    api.get<RivalProfileResponse | null>(`/api/rivals/search?username=${encodeURIComponent(username)}`),
-  getAll: () => api.get<RivalRequestResponse[]>('/api/rivals'),
-  sendRequest: (username: string) => api.post<RivalRequestResponse>('/api/rivals/requests', { username }),
-  updateRequest: (id: string, action: 'accept' | 'decline' | 'cancel') =>
-    api.put<RivalRequestResponse>(`/api/rivals/requests/${id}`, { action }),
-};
+export const rivalsApi = (() => {
+  // Deduplicate concurrent getProfile() calls (Sidebar + useRivalStatsSync + useRivals all
+  // call this on every page mount). Cache the result for 30s; invalidate on save.
+  let inflightGetProfile: Promise<RivalProfileResponse | null> | null = null;
+  let profileCache: { value: RivalProfileResponse | null; at: number } | null = null;
+  const PROFILE_CACHE_TTL = 30_000;
+
+  function getProfileCached(): Promise<RivalProfileResponse | null> {
+    if (profileCache && Date.now() - profileCache.at < PROFILE_CACHE_TTL) {
+      return Promise.resolve(profileCache.value);
+    }
+    if (inflightGetProfile) return inflightGetProfile;
+    inflightGetProfile = api.get<RivalProfileResponse | null>('/api/rivals/profile')
+      .then(data => {
+        profileCache = { value: data, at: Date.now() };
+        inflightGetProfile = null;
+        return data;
+      })
+      .catch(err => {
+        inflightGetProfile = null;
+        throw err;
+      });
+    return inflightGetProfile;
+  }
+
+  function invalidateProfileCache() {
+    profileCache = null;
+    inflightGetProfile = null;
+  }
+
+  return {
+    getProfile: getProfileCached,
+    updateProfile: (data: { username: string; displayName?: string; avatarColor?: string; avatarUrl?: string | null }) => {
+      invalidateProfileCache();
+      return api.put<RivalProfileResponse>('/api/rivals/profile', data);
+    },
+    updateStats: (stats: NonNullable<RivalProfileResponse['stats']>) =>
+      api.put<RivalProfileResponse>('/api/rivals/profile/stats', { stats }),
+    search: (username: string) =>
+      api.get<RivalProfileResponse | null>(`/api/rivals/search?username=${encodeURIComponent(username)}`),
+    getAll: () => api.get<RivalRequestResponse[]>('/api/rivals'),
+    sendRequest: (username: string) => api.post<RivalRequestResponse>('/api/rivals/requests', { username }),
+    updateRequest: (id: string, action: 'accept' | 'decline' | 'cancel') =>
+      api.put<RivalRequestResponse>(`/api/rivals/requests/${id}`, { action }),
+  };
+})();
 
 export const accountApi = {
   reset: () => api.post<{ ok: boolean; preserved: string[] }>('/api/account/reset', {}),

@@ -979,8 +979,10 @@ export const supabaseZustandStorage: StateStorage = {
         );
       } catch { return false; }
     })();
+    const incomingIsBlankUserSnapshot = incomingEntries.length === 0 && !incomingHasUserData;
+    let resolvedUserId: string | null = null;
 
-    if (incomingEntries.length === 0 && !incomingHasUserData) {
+    if (incomingIsBlankUserSnapshot) {
       try {
         const uid = cachedUserId;
         const existing = uid
@@ -988,6 +990,33 @@ export const supabaseZustandStorage: StateStorage = {
           : localStorage.getItem(LEGACY_STORE_KEY);
         if (existing && extractEntries(existing).length > 0) return;
       } catch { /* ignore */ }
+
+      // If the browser has no local entries but Supabase does, this is almost
+      // certainly an auth/hydration race after hard refresh. Do not allow the
+      // empty initial Zustand state to overwrite the cloud store.
+      resolvedUserId = await getUserId();
+      if (!resolvedUserId) return;
+      try {
+        const { data, error } = await supabase
+          .from('user_store')
+          .select('flyxa_data, updated_at')
+          .eq('user_id', resolvedUserId)
+          .maybeSingle();
+        const remoteEntries = Array.isArray(data?.flyxa_data?.state?.entries)
+          ? data.flyxa_data.state.entries
+          : [];
+        if (!error && remoteEntries.length > 0 && data?.flyxa_data) {
+          const remoteValue = sanitizeStoreValue(JSON.stringify(data.flyxa_data));
+          localStorage.setItem(localStoreKey(resolvedUserId), remoteValue);
+          localStorage.setItem(localSavedAtKey(resolvedUserId), Date.now().toString());
+          latestValue = null;
+          pendingValue = null;
+          return;
+        }
+      } catch {
+        // Network failures should not turn into a destructive blank save.
+        return;
+      }
     }
 
     const revision = ++setItemRevision;
@@ -1007,7 +1036,7 @@ export const supabaseZustandStorage: StateStorage = {
       } catch { /* quota exceeded */ }
     }
 
-    const userId = await getUserId();
+    const userId = resolvedUserId ?? await getUserId();
     if (!userId) return;
     // Multiple Zustand writes can be awaiting auth at once. An older call must
     // never finish later and replace the newest pending snapshot.
