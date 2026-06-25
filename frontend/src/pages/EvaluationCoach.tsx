@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, Download, ShieldCheck, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account } from '../store/types.js';
@@ -102,20 +102,40 @@ export default function EvaluationCoach() {
     [accounts, statusById],
   );
 
-  const [selectedId, setSelectedId] = useState(() => {
-    const preferred = evaluationAccounts.find(a => a.id === appSelectedId)
-      ?? evaluationAccounts.find(a => a.id === activeAccountId)
-      ?? evaluationAccounts[0];
-    return preferred?.id ?? '';
-  });
+  // Returns the ISO date of the most recent journal entry for an account, or ''
+  const latestEntryDateForAccount = useCallback((accountId: string): string => {
+    let latest = '';
+    for (const entry of entries) {
+      const accs = entry.accountIds?.length ? entry.accountIds : (entry.account ? [entry.account] : []);
+      if (accs.includes(accountId) && entry.date > latest) latest = entry.date;
+    }
+    return latest;
+  }, [entries]);
+
+  // Picks the best default eval account: prefer appSelected/active if they are
+  // eval accounts, otherwise fall back to the most recently logged non-blown
+  // account, then the most recently logged of any eval account.
+  const pickDefaultEvalAccount = useCallback(() => {
+    const explicit = evaluationAccounts.find(a => a.id === appSelectedId)
+      ?? evaluationAccounts.find(a => a.id === activeAccountId);
+    if (explicit) return explicit;
+
+    const sorted = [...evaluationAccounts].sort((a, b) => {
+      const blownA = statusById.get(a.id) === 'Blown' ? 1 : 0;
+      const blownB = statusById.get(b.id) === 'Blown' ? 1 : 0;
+      if (blownA !== blownB) return blownA - blownB;
+      return latestEntryDateForAccount(b.id).localeCompare(latestEntryDateForAccount(a.id));
+    });
+    return sorted[0] ?? null;
+  }, [evaluationAccounts, appSelectedId, activeAccountId, statusById, latestEntryDateForAccount]);
+
+  const [selectedId, setSelectedId] = useState(() => pickDefaultEvalAccount()?.id ?? '');
 
   useEffect(() => {
     if (selectedId && evaluationAccounts.find(a => a.id === selectedId)) return;
-    const preferred = evaluationAccounts.find(a => a.id === appSelectedId)
-      ?? evaluationAccounts.find(a => a.id === activeAccountId)
-      ?? evaluationAccounts[0];
+    const preferred = pickDefaultEvalAccount();
     if (preferred) setSelectedId(preferred.id);
-  }, [evaluationAccounts, appSelectedId, activeAccountId]);
+  }, [evaluationAccounts, pickDefaultEvalAccount]);
   const [templateId, setTemplateId] = useState('');
   const [remoteTopstepTemplates, setRemoteTopstepTemplates] = useState<EvaluationTemplate[]>([]);
   const [rulesCatalogSource, setRulesCatalogSource] = useState('bundled verified catalog');
