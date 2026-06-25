@@ -37,6 +37,18 @@ export default function SessionStatusBar() {
     clearStaleGuardSessionTrades(preSession?.startedAt);
   }, [preSession?.startedAt]);
 
+  // Auto-expire sessions from a previous calendar day — a trading session
+  // cannot span midnight, so any leftover preSession from yesterday is stale.
+  useEffect(() => {
+    if (!preSession?.startedAt) return;
+    const sessionDate = new Date(preSession.startedAt).toDateString();
+    const today = new Date().toDateString();
+    if (sessionDate !== today) {
+      setPreSession(null);
+      void flushSupabaseStoreNow();
+    }
+  }, [preSession?.startedAt, setPreSession]);
+
   if (!preSession?.startedAt) return null;
 
   const bias = preSession.bias as BiasState | null;
