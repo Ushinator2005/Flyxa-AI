@@ -2911,11 +2911,16 @@ export default function TradeJournal() {
     setDraftDuration(activeTrade?.durationMinutes != null ? String(activeTrade.durationMinutes) : '');
   }, [activeTrade?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Only show a screenshot when the entry has trades — don't surface the scanner
-  // image on blank days where the AI found no trades.
-  const primaryScreenshot = selectedEntry && selectedEntry.trades.length > 0
-    ? (activeTrade?.screenshotUrl || selectedEntry.screenshots[0] || selectedEntry.scannedImageUrl || '')
-    : '';
+  // On trade days: prefer the active trade's screenshot, then the first entry slot, then the scanner image.
+  // On blank days: show manually-uploaded screenshots (entry.screenshots) but NOT the scanner image,
+  // which could be a "no trades found" scan that shouldn't appear on intentional no-trade days.
+  const primaryScreenshot = (() => {
+    if (!selectedEntry) return '';
+    if (selectedEntry.trades.length > 0) {
+      return activeTrade?.screenshotUrl || selectedEntry.screenshots[0] || selectedEntry.scannedImageUrl || '';
+    }
+    return selectedEntry.screenshots.find(s => typeof s === 'string' && s.trim()) ?? '';
+  })();
 
   const allTradeImages = [
     ...(primaryScreenshot ? [primaryScreenshot] : []),

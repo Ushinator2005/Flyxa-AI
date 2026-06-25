@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { useRisk } from '../contexts/RiskContext.js';
+import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import {
   clearStaleGuardSessionTrades,
   readGuardSessionTrades,
@@ -236,6 +237,7 @@ export default function SessionActive() {
 
   const handleEnd = () => {
     setPreSession(null);
+    void flushSupabaseStoreNow();
     navigate('/post-session');
   };
 

@@ -88,7 +88,7 @@ export function recentWeekdayDates(count: number): string[] {
 export function computeTradingJournalScore(entries: TradingJournalEntry[]): number {
   const entryDates = new Set(
     entries
-      .filter(e => isMeaningfulTradingJournalEntry(e) && e.trades.length > 0)
+      .filter(isMeaningfulTradingJournalEntry)
       .map(e => e.date)
   );
   const weekdays = recentWeekdayDates(20);

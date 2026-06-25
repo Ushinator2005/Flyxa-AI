@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { clearStaleGuardSessionTrades, summarizeGuardSessionTrades, useGuardSessionTrades } from '../../hooks/useGuardSessionTrades.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
 import { useRisk } from '../../contexts/RiskContext.js';
+import { flushSupabaseStoreNow } from '../../store/supabaseStorage.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<string, BiasValue>;
@@ -200,6 +201,7 @@ export default function SessionStatusBar() {
         type="button"
         onClick={() => {
           setPreSession(null);
+          void flushSupabaseStoreNow();
           navigate('/flyxa-ai');
         }}
         style={{
