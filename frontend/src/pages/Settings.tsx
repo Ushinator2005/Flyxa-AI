@@ -196,7 +196,9 @@ function normalizeUsername(value: string): string {
 }
 
 function usernameFromUser(email?: string, displayName?: string): string {
-  const source = displayName || email?.split('@')[0] || '';
+  // Prefer email prefix (e.g. "ushinator2005") over display name (e.g. "ushi")
+  // to match what the backend generates in ensureOwnProfile.
+  const source = email?.split('@')[0] || displayName || '';
   return normalizeUsername(source.replace(/\s+/g, '_'));
 }
 
@@ -1083,9 +1085,14 @@ export default function Settings() {
   const avatarUrl = profile?.avatarUrl ?? getAuthAvatarUrl(user);
 
   useEffect(() => {
-    if (profileUsername || profileDraft || !suggestedProfileUsername) return;
-    setProfileDraft(suggestedProfileUsername);
-  }, [profileDraft, profileUsername, suggestedProfileUsername]);
+    // Keep the draft in sync with the saved username as it loads.
+    // Only overwrite if the user hasn't manually changed the draft away from the suggestion.
+    setProfileDraft(prev => {
+      const alreadyCustom = prev !== '' && prev !== suggestedProfileUsername;
+      if (alreadyCustom) return prev;
+      return profileUsername || suggestedProfileUsername || '';
+    });
+  }, [profileUsername, suggestedProfileUsername]);
 
   useEffect(() => {
     const sectionEntries = [
