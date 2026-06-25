@@ -202,7 +202,7 @@ export default function SessionStatusBar() {
         onClick={() => {
           setPreSession(null);
           void flushSupabaseStoreNow();
-          navigate('/flyxa-ai');
+          navigate('/post-session');
         }}
         style={{
           fontSize: 10,
