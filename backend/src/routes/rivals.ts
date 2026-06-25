@@ -315,16 +315,16 @@ async function getPerformanceByUserIds(userIds: string[]): Promise<Map<string, P
   if (error && isMissingCommissionColumnError(error)) {
     const fallback = await supabase
       .from('trades')
-      .select('user_id, pnl, rr, trade_date, trade_time, followed_plan')
+      .select('user_id, pnl, trade_date, trade_time, followed_plan')
       .in('user_id', userIds);
     data = fallback.data as typeof data;
     error = fallback.error;
   }
 
   if (error) {
-    // rr column may not exist yet — fall back without it
+    // rr column may not exist yet (schema cache miss or column truly absent) — fall back without it
     const message = extractErrorMessage(error);
-    if (message.includes("'rr'") && message.includes('schema cache')) {
+    if (message.includes('rr')) {
       const fallback = await supabase
         .from('trades')
         .select('user_id, pnl, commission, trade_date, trade_time, followed_plan')
