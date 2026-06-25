@@ -67,7 +67,7 @@
 .eval-path{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
 .eval-path-card{border:1px solid var(--app-border);border-top:3px solid var(--card-accent,var(--app-border));background:var(--app-panel);padding:16px 16px 14px}
 .eval-path-label{display:block;font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--app-text-subtle);margin-bottom:8px}
-.eval-path-value{display:block;font:600 22px/1 var(--font-mono);letter-spacing:-.012em;color:var(--app-text);margin-bottom:8px;text-shadow:none;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.eval-path-value{display:block;font:520 20px/1 var(--font-sans);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--app-text);margin-bottom:10px;text-shadow:none;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
 .eval-path-denom{font-size:14px;font-weight:500;color:var(--app-text-muted)}
 .eval-path-track{height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin-bottom:8px}
 .eval-path-fill{height:100%;border-radius:2px;transition:width .4s ease}

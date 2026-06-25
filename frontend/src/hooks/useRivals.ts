@@ -170,6 +170,7 @@ export function useRivals() {
   const saveProfile = async (data: { username: string; displayName?: string; avatarColor?: string; avatarUrl?: string | null }) => {
     const next = await rivalsApi.updateProfile(data);
     setProfile(next);
+    window.dispatchEvent(new CustomEvent('flyxa:profile-saved'));
   };
 
   const respondToRequest = async (id: string, action: 'accept' | 'decline' | 'cancel') => {

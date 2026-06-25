@@ -195,6 +195,20 @@ function normalizeUsername(value: string): string {
     .slice(0, 24);
 }
 
+function usernameFromUser(email?: string, displayName?: string): string {
+  const source = displayName || email?.split('@')[0] || '';
+  return normalizeUsername(source.replace(/\s+/g, '_'));
+}
+
+function getAuthAvatarUrl(user: ReturnType<typeof useAuth>['user']): string | null {
+  const metadata = user?.user_metadata as Record<string, unknown> | undefined;
+  const avatarUrl = metadata?.avatar_url;
+  const picture = metadata?.picture;
+  if (typeof avatarUrl === 'string' && avatarUrl.trim()) return avatarUrl.trim();
+  if (typeof picture === 'string' && picture.trim()) return picture.trim();
+  return null;
+}
+
 function getConfluenceCategoryOverridesKey(userId: string) {
   return `tw_confluence_category_overrides_${userId}`;
 }
@@ -810,7 +824,8 @@ export default function Settings() {
   }
 
   async function handleSaveProfile() {
-    const username = normalizeUsername(profileDraft || profile?.username || '');
+    const fallbackUsername = usernameFromUser(user?.email, displayName);
+    const username = normalizeUsername(profileDraft || profile?.username || fallbackUsername);
     setProfileDraft(username);
     if (!username) {
       setProfileStatus('Choose a username first.');
@@ -835,7 +850,9 @@ export default function Settings() {
     event.target.value = '';
     if (!file) return;
 
-    const username = normalizeUsername(profileDraft || profile?.username || '');
+    const fallbackUsername = usernameFromUser(user?.email, displayName);
+    const username = normalizeUsername(profileDraft || profile?.username || fallbackUsername);
+    setProfileDraft(username);
     if (!username) {
       setProfileStatus('Choose a username before adding a profile picture.');
       return;
@@ -1058,9 +1075,17 @@ export default function Settings() {
     || (user?.user_metadata?.full_name as string | undefined)
     || user?.email?.split('@')[0]
     || 'Trader';
+  const suggestedProfileUsername = usernameFromUser(user?.email, displayName);
+  const visibleProfileUsername = profileUsername || suggestedProfileUsername;
+  const hasSavedProfileUsername = Boolean(profileUsername);
   const email = user?.email ?? 'No email on file';
   const avatarInitials = (profile?.avatarInitials || displayName.slice(0, 2)).toUpperCase();
-  const avatarUrl = profile?.avatarUrl ?? null;
+  const avatarUrl = profile?.avatarUrl ?? getAuthAvatarUrl(user);
+
+  useEffect(() => {
+    if (profileUsername || profileDraft || !suggestedProfileUsername) return;
+    setProfileDraft(suggestedProfileUsername);
+  }, [profileDraft, profileUsername, suggestedProfileUsername]);
 
   useEffect(() => {
     const sectionEntries = [
@@ -1686,8 +1711,12 @@ export default function Settings() {
                 <p style={{ marginTop: '3px', color: T3, fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {email}
                 </p>
-                <p style={{ marginTop: '8px', color: profileUsername ? 'var(--cobalt)' : T3, fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
-                  {profileUsername ? `@${profileUsername}` : 'Username not set'}
+                <p style={{ marginTop: '8px', color: hasSavedProfileUsername ? 'var(--cobalt)' : AMBER, fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                  {hasSavedProfileUsername
+                    ? `@${profileUsername}`
+                    : visibleProfileUsername
+                      ? `Ready to save @${visibleProfileUsername}`
+                      : 'Username not set'}
                 </p>
                 <button
                   type="button"
@@ -1723,7 +1752,7 @@ export default function Settings() {
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 92px', gap: '8px' }}>
                 <input
                   value={profileDraft}
-                  placeholder={profileUsername || 'your_username'}
+                  placeholder={visibleProfileUsername || 'your_username'}
                   onChange={event => setProfileDraft(normalizeUsername(event.target.value))}
                   onKeyDown={event => {
                     if (event.key === 'Enter') void handleSaveProfile();

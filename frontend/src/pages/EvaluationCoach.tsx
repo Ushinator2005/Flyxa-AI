@@ -308,13 +308,16 @@ export default function EvaluationCoach() {
   const daysToTarget = avgDailyPnl > 0 && progress.targetRemaining > 0
     ? Math.ceil(progress.targetRemaining / avgDailyPnl) : null;
 
+  const s = (n: number) => n !== 1 ? 's' : '';
   const paceText = progress.tradingDays === 0
     ? 'No trades recorded yet — start trading to see pace projections.'
-    : avgDailyPnl <= 0
-      ? `Averaging ${money(avgDailyPnl)}/session — the target is moving away. A profitable run is needed to get back on track.`
-      : `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${progress.tradingDays !== 1 ? 's' : ''}. At this pace, approximately ${daysToTarget} more session${daysToTarget !== 1 ? 's' : ''} to reach the ${money(target)} target.`;
+    : avgDailyPnl > 0 && daysToTarget !== null
+      ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. At this pace, approximately ${daysToTarget} more session${s(daysToTarget)} to reach the ${money(target)} target.`
+      : avgDailyPnl > 0
+        ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}.`
+        : `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. ${money(progress.targetRemaining)} still needed to reach the ${money(target)} target.`;
 
-  const paceNegative = progress.tradingDays > 0 && avgDailyPnl <= 0;
+  const paceNegative = progress.tradingDays > 0 && avgDailyPnl < 0;
 
   // Probability factor breakdown
   const { targetScore, survivalScore, recentWinRate, dayQuality } = progress.probabilityFactors;
