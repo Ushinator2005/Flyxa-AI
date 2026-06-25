@@ -35,11 +35,11 @@ router.post('/reset', authMiddleware, async (req: AuthenticatedRequest, res: Res
       .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`);
     if (rrError && rrError.code !== '42P01' && rrError.code !== '42703') throw rrError;
 
-    // Reset rival profile stats but keep the username
+    // Reset rival profile stats but keep the public identity.
     try {
       const { data: profile } = await supabase
         .from('rival_profiles')
-        .select('username')
+        .select('username, display_name, avatar_color, avatar_url')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -47,9 +47,9 @@ router.post('/reset', authMiddleware, async (req: AuthenticatedRequest, res: Res
         await supabase
           .from('rival_profiles')
           .update({
-            display_name: profile.username,
-            avatar_color: '#f59e0b',
-            avatar_url: null,
+            display_name: profile.display_name || profile.username,
+            avatar_color: profile.avatar_color || '#f59e0b',
+            avatar_url: profile.avatar_url || null,
             stats: {},
             updated_at: new Date().toISOString(),
           })
@@ -64,4 +64,3 @@ router.post('/reset', authMiddleware, async (req: AuthenticatedRequest, res: Res
 });
 
 export default router;
-

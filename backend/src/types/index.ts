@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import type { User } from '@supabase/supabase-js';
 
 export interface Trade {
   id: string;
@@ -97,6 +98,7 @@ export interface RiskSettings {
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
+  authUser?: User;
 }
 
 export interface ExtractedTradeData {

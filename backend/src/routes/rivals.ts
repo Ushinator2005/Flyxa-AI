@@ -45,6 +45,7 @@ const EMPTY_STATS: RivalStats = {
   avgR: null,
   netPnl: null,
 };
+const PROFILE_IMAGE_BUCKET = 'trade-screenshots';
 
 function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -73,6 +74,44 @@ function normalizeUsername(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const cleaned = value.trim().replace(/^@/, '').toLowerCase();
   return /^[a-z0-9_]{3,24}$/.test(cleaned) ? cleaned : null;
+}
+
+function cleanUsernameCandidate(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const cleaned = value
+    .trim()
+    .replace(/^@/, '')
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 24);
+  return cleaned.length >= 3 ? cleaned : null;
+}
+
+function authMetadataValue(authUser: AuthenticatedRequest['authUser'], keys: string[]): string | null {
+  const metadata = authUser?.user_metadata as Record<string, unknown> | undefined;
+  for (const key of keys) {
+    const value = metadata?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function displayNameFromAuth(authUser: AuthenticatedRequest['authUser']): string | null {
+  return authMetadataValue(authUser, ['name', 'full_name', 'display_name']) || authUser?.email?.split('@')[0] || null;
+}
+
+function usernameBaseFromAuth(authUser: AuthenticatedRequest['authUser'], userId: string): string {
+  return cleanUsernameCandidate(authMetadataValue(authUser, ['username', 'preferred_username', 'user_name']))
+    || cleanUsernameCandidate(authUser?.email?.split('@')[0])
+    || cleanUsernameCandidate(displayNameFromAuth(authUser))
+    || `trader_${userId.replace(/-/g, '').slice(0, 8)}`;
+}
+
+function avatarUrlFromAuth(authUser: AuthenticatedRequest['authUser']): string | null {
+  return authMetadataValue(authUser, ['avatar_url', 'picture']);
 }
 
 function initialsFromUsername(username: string): string {
@@ -379,6 +418,90 @@ async function getProfileByUsername(username: string) {
   return data;
 }
 
+async function resolveAvailableUsername(baseUsername: string, userId: string): Promise<string> {
+  const base = cleanUsernameCandidate(baseUsername) || `trader_${userId.replace(/-/g, '').slice(0, 8)}`;
+
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const suffix = attempt === 0 ? '' : `_${attempt + 1}`;
+    const candidate = `${base.slice(0, Math.max(3, 24 - suffix.length))}${suffix}`;
+    const existing = await getProfileByUsername(candidate);
+    if (!existing || existing.user_id === userId) return candidate;
+  }
+
+  return `trader_${userId.replace(/-/g, '').slice(0, 16)}`.slice(0, 24);
+}
+
+async function recoverUploadedProfileAvatarUrl(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .storage
+    .from(PROFILE_IMAGE_BUCKET)
+    .list(userId, {
+      limit: 100,
+      sortBy: { column: 'created_at', order: 'desc' },
+    });
+
+  if (error || !data?.length) return null;
+
+  const latestProfileImage = data.find(file => file.name.startsWith('profile-'));
+  if (!latestProfileImage) return null;
+
+  const { data: publicUrlData } = supabase
+    .storage
+    .from(PROFILE_IMAGE_BUCKET)
+    .getPublicUrl(`${userId}/${latestProfileImage.name}`);
+
+  return publicUrlData.publicUrl || null;
+}
+
+async function bestAvatarUrlForUser(userId: string, authUser: AuthenticatedRequest['authUser']): Promise<string | null> {
+  return await recoverUploadedProfileAvatarUrl(userId) || avatarUrlFromAuth(authUser);
+}
+
+async function ensureOwnProfile(userId: string, authUser: AuthenticatedRequest['authUser']) {
+  const existing = await getProfileByUserId(userId);
+
+  if (existing?.username) {
+    if (!existing.avatar_url) {
+      const recoveredAvatarUrl = await bestAvatarUrlForUser(userId, authUser);
+      if (recoveredAvatarUrl) {
+        const { data, error } = await supabase
+          .from('rival_profiles')
+          .update({
+            avatar_url: recoveredAvatarUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId)
+          .select('user_id, username, display_name, avatar_color, avatar_url, stats')
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? existing;
+      }
+    }
+    return existing;
+  }
+
+  const username = await resolveAvailableUsername(usernameBaseFromAuth(authUser, userId), userId);
+  const displayName = displayNameFromAuth(authUser)?.slice(0, 40) || username;
+  const avatarUrl = await bestAvatarUrlForUser(userId, authUser);
+
+  const { data, error } = await supabase
+    .from('rival_profiles')
+    .upsert({
+      user_id: userId,
+      username,
+      display_name: displayName,
+      avatar_color: '#f59e0b',
+      ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      stats: EMPTY_STATS,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+    .select('user_id, username, display_name, avatar_color, avatar_url, stats')
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 function toRivalProfile(profile: {
   user_id: string;
   username: string;
@@ -431,8 +554,8 @@ async function toRivalProfileWithPnl(profile: Parameters<typeof toRivalProfile>[
 // GET /profile
 router.get('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const profile = await getProfileByUserId(req.userId!);
-    res.json(profile ? await toRivalProfileWithPnl(profile) : null);
+    const profile = await ensureOwnProfile(req.userId!, req.authUser);
+    res.json(await toRivalProfileWithPnl(profile));
   } catch (err) {
     next(withRivalsSetupHint(err));
   }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
 import { getMascotStage } from '../lib/mascotProgression.js';
+import { useAuth } from '../contexts/AuthContext.js';
 import { useActiveAccountEntries } from '../store/selectors.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { journalApi, rivalsApi, type RivalProfileResponse, type RivalRequestResponse } from '../services/api.js';
@@ -12,6 +13,29 @@ import {
   computeTradingJournalScore, computeRuleFollowingScore, computeProcessScore,
   buildLifetimeXpEvents, periodBounds, computePeriodStats, periodRuleAdherence,
 } from '../utils/rivalStatsCompute.js';
+
+function normalizeUsername(value: string): string {
+  return value
+    .trim()
+    .replace(/^@/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 24);
+}
+
+function usernameFromUser(email?: string, displayName?: string): string {
+  const source = email?.split('@')[0] || displayName || '';
+  return normalizeUsername(source.replace(/\s+/g, '_'));
+}
+
+function authAvatarUrl(user: ReturnType<typeof useAuth>['user']): string | null {
+  const metadata = user?.user_metadata as Record<string, unknown> | undefined;
+  const avatarUrl = metadata?.avatar_url;
+  const picture = metadata?.picture;
+  if (typeof avatarUrl === 'string' && avatarUrl.trim()) return avatarUrl.trim();
+  if (typeof picture === 'string' && picture.trim()) return picture.trim();
+  return null;
+}
 
 function normalizeRivalStats(rival: Rival): Rival {
   const raw = rival.mascot.stats as MascotStats & {
@@ -73,6 +97,7 @@ function rivalFromRequest(request: RivalRequestResponse): Rival | null {
 }
 
 export function useRivals() {
+  const { user } = useAuth();
   const storedRivals = useFlyxaStore(state => state.rivals) as Rival[];
   const setRivalsAction = useFlyxaStore(state => state.setRivals);
   const entries = useActiveAccountEntries();
@@ -180,6 +205,15 @@ export function useRivals() {
   };
 
   const myRival = useMemo(() => {
+    const authDisplayName = (user?.user_metadata?.name as string | undefined)
+      || (user?.user_metadata?.full_name as string | undefined)
+      || user?.email?.split('@')[0]
+      || 'You';
+    const meUsername = profile?.username || usernameFromUser(user?.email, authDisplayName) || 'you';
+    const meDisplayName = profile?.displayName || authDisplayName || 'You';
+    const meAvatarUrl = profile?.avatarUrl ?? authAvatarUrl(user);
+    const meAvatarInitials = (profile?.avatarInitials || meDisplayName.slice(0, 2)).toUpperCase();
+    const meAvatarColor = profile?.avatarColor || '#f59e0b';
     const dailyJournalScore = computeDailyJournalScore(dailyJournalEntries, dailyJournalStreak);
     const tradingJournalScore = computeTradingJournalScore(entries);
     const ruleFollowing = computeRuleFollowingScore(entries, entries.flatMap(entry => entry.trades), riskRules);
@@ -219,15 +253,15 @@ export function useRivals() {
 
     const me: Rival = {
       id: 'rival-me',
-      username: 'you',
-      displayName: 'You',
-      avatarInitials: 'YU',
-      avatarColor: '#f59e0b',
-      avatarUrl: profile?.avatarUrl ?? null,
+      username: meUsername,
+      displayName: meDisplayName,
+      avatarInitials: meAvatarInitials,
+      avatarColor: meAvatarColor,
+      avatarUrl: meAvatarUrl,
       isMe: true,
       mascot: {
         stage: getMascotStage(processScore),
-        name: 'You',
+        name: meDisplayName,
         streakDays: dailyJournalStreak,
         stats: {
           lifetimeXp,
@@ -248,7 +282,7 @@ export function useRivals() {
 
     me.mascot.xp = lifetimeXp;
     return me;
-  }, [backtestSessions.length, dailyJournalEntries, dailyJournalStreak, entries, lifetimeXp, profile?.avatarUrl, profile?.stats, riskRules]);
+  }, [backtestSessions.length, dailyJournalEntries, dailyJournalStreak, entries, lifetimeXp, profile, riskRules, user]);
 
   const myStatsSignature = useMemo(() => JSON.stringify(myRival.mascot.stats), [myRival.mascot.stats]);
 
