@@ -10,6 +10,7 @@ type LeaderboardPeriod = 'week' | 'month' | 'season' | 'allTime';
 type RivalPeriodStats = {
   netPnl: number;
   winRate: number;
+  avgR: number | null;
   tradeCount: number;
   tradingDays: number;
   greenDays: number;
@@ -133,7 +134,7 @@ function periodBounds(period: Exclude<LeaderboardPeriod, 'allTime'>, previous = 
 }
 
 function emptyPeriodStats(): RivalPeriodStats {
-  return { netPnl: 0, winRate: 0, tradeCount: 0, tradingDays: 0, greenDays: 0, maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [] };
+  return { netPnl: 0, winRate: 0, avgR: null, tradeCount: 0, tradingDays: 0, greenDays: 0, maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [] };
 }
 
 function normalizePeriodStats(value: unknown): RivalPeriodStats | null {
@@ -153,6 +154,7 @@ function normalizePeriodStats(value: unknown): RivalPeriodStats | null {
   return {
     netPnl: finiteNumber('netPnl'),
     winRate: clampScore(raw.winRate),
+    avgR: nullableNumber(raw.avgR),
     tradeCount: nonNegativeInt(raw.tradeCount),
     tradingDays: nonNegativeInt(raw.tradingDays),
     greenDays: nonNegativeInt(raw.greenDays),
@@ -192,6 +194,7 @@ function summarizeTrades(trades: Array<Record<string, unknown>>, bounds?: [strin
   let wins = 0;
   let evaluated = 0;
   let followed = 0;
+  const rrValues: number[] = [];
   const equityCurve: number[] = [];
   for (const trade of filtered) {
     const pnl = Number(trade.pnl);
@@ -207,14 +210,20 @@ function summarizeTrades(trades: Array<Record<string, unknown>>, bounds?: [strin
       evaluated += 1;
       if (trade.followed_plan) followed += 1;
     }
+    const rr = Number(trade.rr);
+    if (Number.isFinite(rr) && rr !== 0) rrValues.push(rr);
     equityCurve.push(Math.round(cumulative * 100) / 100);
   }
   const greenDays = [...daily.values()].filter(value => value > 0).length;
   const positiveShare = daily.size ? greenDays / daily.size : 0;
   const drawdownPenalty = Math.min(1, maxDrawdown / Math.max(Math.abs(cumulative), 1));
+  const avgR = rrValues.length > 0
+    ? Math.round((rrValues.reduce((sum, r) => sum + r, 0) / rrValues.length) * 100) / 100
+    : null;
   return {
     netPnl: Math.round(cumulative * 100) / 100,
     winRate: Math.round((wins / filtered.length) * 100),
+    avgR,
     tradeCount: filtered.length,
     tradingDays: daily.size,
     greenDays,
@@ -247,6 +256,7 @@ function tradesFromStoreBlob(userId: string, value: unknown): Array<Record<strin
         user_id: userId,
         pnl: trade.pnl,
         commission: trade.commission,
+        rr: trade.rr,
         trade_date: typeof trade.date === 'string' ? trade.date : entryDate,
         trade_time: trade.time,
         followed_plan: typeof reflection.followedPlan === 'boolean' ? reflection.followedPlan : null,
@@ -260,16 +270,29 @@ async function getPerformanceByUserIds(userIds: string[]): Promise<Map<string, P
   if (userIds.length === 0) return result;
   let { data, error } = await supabase
     .from('trades')
-    .select('user_id, pnl, commission, trade_date, trade_time, followed_plan')
+    .select('user_id, pnl, commission, rr, trade_date, trade_time, followed_plan')
     .in('user_id', userIds);
 
   if (error && isMissingCommissionColumnError(error)) {
     const fallback = await supabase
       .from('trades')
-      .select('user_id, pnl, trade_date, trade_time, followed_plan')
+      .select('user_id, pnl, rr, trade_date, trade_time, followed_plan')
       .in('user_id', userIds);
     data = fallback.data as typeof data;
     error = fallback.error;
+  }
+
+  if (error) {
+    // rr column may not exist yet — fall back without it
+    const message = extractErrorMessage(error);
+    if (message.includes("'rr'") && message.includes('schema cache')) {
+      const fallback = await supabase
+        .from('trades')
+        .select('user_id, pnl, commission, trade_date, trade_time, followed_plan')
+        .in('user_id', userIds);
+      data = fallback.data as typeof data;
+      error = fallback.error;
+    }
   }
 
   if (error) throw error;
@@ -369,6 +392,7 @@ function toRivalProfile(profile: {
   if (performance) {
     stats.netPnl = performance.periods.allTime.netPnl;
     stats.winRate = performance.periods.allTime.winRate;
+    stats.avgR = performance.periods.allTime.avgR;
     stats.periods = Object.fromEntries(
       (['week', 'month', 'season', 'allTime'] as LeaderboardPeriod[]).map(period => [
         period,
