@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Brain, BarChart2, Target,
   FileText, Crosshair, Swords, Trophy,
-  Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck, ShieldCheck,
+  Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck, ShieldCheck, X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
@@ -588,9 +588,35 @@ function MobileDrawer() {
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
+          position: 'relative',
           animation: 'mobile-drawer-in 0.22s ease both',
         }}
       >
+        {/* Close button — overlaid top-right of drawer */}
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Close navigation"
+          title="Close navigation"
+          style={{
+            position: 'absolute',
+            top: 13,
+            right: 10,
+            zIndex: 10,
+            width: 26,
+            height: 26,
+            borderRadius: 5,
+            border: `1px solid ${BORDER}`,
+            background: 'rgba(255,255,255,0.05)',
+            color: T3,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <X size={12} />
+        </button>
         <SidebarContent collapsed={false} onNavClick={() => setOpen(false)} />
       </div>
       {/* Backdrop */}

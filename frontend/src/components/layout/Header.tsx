@@ -1,4 +1,4 @@
-import { Settings, ChevronDown, MessageSquare } from 'lucide-react';
+import { Settings, ChevronDown, MessageSquare, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
@@ -78,6 +78,29 @@ export default function Header() {
         gap: 8,
       }}
     >
+
+      {/* Mobile hamburger — only visible below md breakpoint */}
+      <button
+        type="button"
+        className="flex md:hidden"
+        onClick={() => window.dispatchEvent(new Event('flyxa:open-mobile-nav'))}
+        aria-label="Open navigation"
+        title="Open navigation"
+        style={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 34,
+          height: 34,
+          borderRadius: 6,
+          border: '1px solid var(--app-border)',
+          background: 'transparent',
+          color: 'var(--app-text-muted)',
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        <Menu size={16} />
+      </button>
 
       <h1 style={{
         fontSize: 13,
