@@ -1062,12 +1062,12 @@ export const supabaseZustandStorage: StateStorage = {
         const sanitizedLocal = local ? sanitizeStoreValue(local) : null;
         const localSavedAt = localStorage.getItem(localSavedAtKey(userId));
         if (local && shouldPreferLocalStore(localSavedAt, data.updated_at)) {
-          const localEntries = extractEntries(sanitizedLocal);
+          const localEntries = extractEntries(sanitizedLocal!);
           const remoteEntries = (data.flyxa_data as { state?: { entries?: unknown[] } })?.state?.entries;
           const remoteHasEntries = Array.isArray(remoteEntries) && remoteEntries.length > 0;
           // Never let a blank local snapshot (e.g. from HMR) override Supabase entries.
           if (localEntries.length > 0 || !remoteHasEntries) {
-            const localBlob = JSON.parse(sanitizedLocal) as Record<string, unknown>;
+            const localBlob = JSON.parse(sanitizedLocal!) as Record<string, unknown>;
             // Merge remote entries in, then recover any non-entry state that may
             // have been wiped by a blank initial snapshot (accounts, tradingPlan, etc.)
             const entryMerged = mergeRemoteEntriesIntoStoreBlob(localBlob, data.flyxa_data);
@@ -1149,19 +1149,21 @@ export const supabaseZustandStorage: StateStorage = {
           return sanitizeStoreValue(JSON.stringify(flyxaData));
         }
 
-        // user_store exists but 0 entries — try store_entries_backup table
-        const recovered = await recoverFromJournalEntries(userId, data.flyxa_data);
+        // user_store exists but 0 entries — try store_entries_backup table.
+        // Use flyxaData (already has dedicated risk_rules applied) as the base.
+        const recovered = await recoverFromJournalEntries(userId, flyxaData);
         if (recovered) {
           void enqueueStoreSave(userId, recovered);
           return recovered;
         }
 
-        // Last resort: per-user safe backup (then legacy)
+        // Last resort: per-user safe backup (then legacy).
+        // Use flyxaData so dedicated rules survive even this recovery path.
         const safeEntries = readLocalEntriesSafe(userId).length > 0
           ? readLocalEntriesSafe(userId)
           : readLegacyEntriesSafe(userId);
         if (safeEntries.length > 0) {
-          const base = data.flyxa_data as Record<string, unknown>;
+          const base = flyxaData;
           const rebuilt = JSON.stringify({
             ...base,
             state: { ...(base.state as Record<string, unknown> ?? {}), entries: safeEntries },
@@ -1171,7 +1173,7 @@ export const supabaseZustandStorage: StateStorage = {
           return sanitizedRebuilt;
         }
 
-        return sanitizeStoreValue(JSON.stringify(data.flyxa_data));
+        return sanitizeStoreValue(JSON.stringify(flyxaData));
       }
 
       // No user_store row — try store_entries_backup table
