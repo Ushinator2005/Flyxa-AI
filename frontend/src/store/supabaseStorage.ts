@@ -830,6 +830,56 @@ export async function flushSupabaseStoreNow(): Promise<void> {
   if (pendingValue === value) pendingValue = null;
 }
 
+// ---------------------------------------------------------------------------
+// Dedicated risk_rules table — atomic read/write independent of the main blob
+// ---------------------------------------------------------------------------
+
+export async function saveRiskRulesNow(rules: unknown[], updatedAt: string): Promise<void> {
+  const userId = cachedUserId ?? await getUserId();
+  if (!userId) return;
+  await supabase.from('risk_rules').upsert(
+    { user_id: userId, rules, updated_at: updatedAt },
+    { onConflict: 'user_id' }
+  );
+}
+
+export async function loadRiskRulesFromSupabase(): Promise<{ rules: unknown[]; updatedAt: string } | null> {
+  const userId = cachedUserId ?? await getUserId();
+  if (!userId) return null;
+  const { data } = await supabase
+    .from('risk_rules')
+    .select('rules, updated_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!data?.rules || !Array.isArray(data.rules) || data.rules.length === 0) return null;
+  return { rules: data.rules as unknown[], updatedAt: data.updated_at as string };
+}
+
+/**
+ * Patches dedicated risk_rules table data into a store blob if the dedicated
+ * table has a newer timestamp than what's already in the blob.
+ */
+function applyDedicatedRules(
+  blob: Record<string, unknown>,
+  dedicated: { rules: unknown[]; updatedAt: string } | null
+): Record<string, unknown> {
+  if (!dedicated || !Array.isArray(dedicated.rules) || dedicated.rules.length === 0) return blob;
+  const blobState = (blob.state ?? {}) as Record<string, unknown>;
+  const blobRulesAt = timestampMs(blobState.riskRulesUpdatedAt);
+  const dedicatedAt = timestampMs(dedicated.updatedAt);
+  if (dedicatedAt === null) return blob;
+  // Only override if dedicated table is strictly newer than what's in the blob.
+  if (blobRulesAt !== null && blobRulesAt >= dedicatedAt) return blob;
+  return {
+    ...blob,
+    state: {
+      ...blobState,
+      riskRules: dedicated.rules,
+      riskRulesUpdatedAt: dedicated.updatedAt,
+    },
+  };
+}
+
 /**
  * Returns entries stored in the per-user safe-entry localStorage backup.
  * This backup is written on every save, even before Supabase sync completes,
@@ -1001,11 +1051,11 @@ export const supabaseZustandStorage: StateStorage = {
     const storeKey = localStoreKey(userId);
 
     try {
-      const { data, error } = await supabase
-        .from('user_store')
-        .select('flyxa_data, updated_at')
-        .eq('user_id', userId)
-        .maybeSingle();
+      // Fetch main blob and dedicated risk_rules table concurrently.
+      const [{ data, error }, dedicatedRules] = await Promise.all([
+        supabase.from('user_store').select('flyxa_data, updated_at').eq('user_id', userId).maybeSingle(),
+        loadRiskRulesFromSupabase(),
+      ]);
 
       if (!error && data?.flyxa_data) {
         const local = localStorage.getItem(storeKey);
@@ -1021,7 +1071,10 @@ export const supabaseZustandStorage: StateStorage = {
             // Merge remote entries in, then recover any non-entry state that may
             // have been wiped by a blank initial snapshot (accounts, tradingPlan, etc.)
             const entryMerged = mergeRemoteEntriesIntoStoreBlob(localBlob, data.flyxa_data);
-            const recovered = recoverMissingStateFromRemote(entryMerged, data.flyxa_data as Record<string, unknown>);
+            const recovered = applyDedicatedRules(
+              recoverMissingStateFromRemote(entryMerged, data.flyxa_data as Record<string, unknown>),
+              dedicatedRules
+            );
             const mergedLocal = sanitizeStoreValue(JSON.stringify(recovered));
             // The browser has a newer accepted edit than Supabase. Hydrate from
             // that snapshot immediately, but first merge in any remote trades
@@ -1040,6 +1093,8 @@ export const supabaseZustandStorage: StateStorage = {
             flyxaData = recoverMissingStateFromRemote(flyxaData, localBlob);
           } catch { /* local cache is non-critical */ }
         }
+        // Apply dedicated risk_rules table — wins if it has a newer timestamp.
+        flyxaData = applyDedicatedRules(flyxaData, dedicatedRules);
         const blobState = flyxaData.state as Record<string, unknown> | undefined;
         const blobPreSessionHistory = blobState?.preSessionHistory as Record<string, unknown> | undefined;
         if (!blobPreSessionHistory || Object.keys(blobPreSessionHistory).length === 0) {
@@ -1082,9 +1137,9 @@ export const supabaseZustandStorage: StateStorage = {
               e => typeof e.date === 'string' && !existingDates.has(e.date)
             );
             if (missingEntries.length > 0) {
-              const mergedBlob = mergeRemoteEntriesIntoStoreBlob(
-                flyxaData,
-                { state: { entries: missingEntries } } as unknown
+              const mergedBlob = applyDedicatedRules(
+                mergeRemoteEntriesIntoStoreBlob(flyxaData, { state: { entries: missingEntries } } as unknown),
+                dedicatedRules
               );
               const mergedValue = sanitizeStoreValue(JSON.stringify(mergedBlob));
               void enqueueStoreSave(userId, mergedValue);

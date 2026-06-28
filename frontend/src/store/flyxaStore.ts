@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { supabaseZustandStorage } from './supabaseStorage.js';
+import { supabaseZustandStorage, saveRiskRulesNow } from './supabaseStorage.js';
 import { publishPreSessionSync } from '../utils/preSessionSync.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { DEFAULT_ACHIEVEMENTS, mergeAchievementCatalog, refreshAchievements } from './achievements.js';
@@ -68,6 +68,7 @@ interface FlyxaStateData {
   goals: Goal[];
   setupPlaybook: Setup[];
   riskRules: RiskRule[];
+  riskRulesUpdatedAt: string | null;
   checklist: ChecklistItem[];
   planBlocks: PlanBlock[];
   propFirms: PropFirm[];
@@ -193,18 +194,6 @@ function computeResult(grossPnl: number, exit: number | null, commission = 0): T
   return 'be';
 }
 
-const LEGACY_DEFAULT_RISK_RULE_IDS = new Set([
-  'rr-1',
-  'rr-2',
-  'rr-3',
-  'daily-loss',
-  'max-trades',
-  'max-contracts',
-  'min-rr',
-  'max-losses',
-  'risk-per-trade',
-]);
-
 const LEGACY_DEFAULT_CHECKLIST_IDS = new Set([
   'cl-1',
   'cl-2',
@@ -227,6 +216,20 @@ const LEGACY_DEFAULT_SETUP_IDS = new Set([
 
 function removeLegacyDefaults<T extends { id: string }>(items: T[] | undefined, legacyIds: Set<string>): T[] {
   return (items ?? []).filter((item) => !legacyIds.has(item.id));
+}
+
+function hasOwnKey<T extends object>(value: T | null | undefined, key: PropertyKey): boolean {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function persistedRiskRules(
+  source: Partial<Pick<FlyxaStateData, 'riskRules'>> | null | undefined,
+  fallback: RiskRule[],
+): RiskRule[] {
+  if (hasOwnKey(source, 'riskRules')) {
+    return Array.isArray(source?.riskRules) ? source.riskRules : [];
+  }
+  return Array.isArray(fallback) ? fallback : DEFAULT_RISK_RULES;
 }
 
 function recalcTrade(trade: Trade): Trade {
@@ -468,6 +471,7 @@ export function getInitialState(): FlyxaStateData {
     goals: [],
     setupPlaybook: DEFAULT_SETUPS,
     riskRules: DEFAULT_RISK_RULES,
+    riskRulesUpdatedAt: null,
     checklist: DEFAULT_CHECKLIST,
     planBlocks: DEFAULT_PLAN_BLOCKS,
     propFirms: [],
@@ -802,7 +806,11 @@ const useFlyxaStore = create<FlyxaStore>()(
         setupPlaybook: state.setupPlaybook.map((setup) => (setup.id === id ? { ...setup, ...updates } : setup)),
       })),
 
-      updateRiskRules: (rules) => set(() => ({ riskRules: rules })),
+      updateRiskRules: (rules) => {
+        const updatedAt = new Date().toISOString();
+        set(() => ({ riskRules: rules, riskRulesUpdatedAt: updatedAt }));
+        void saveRiskRulesNow(rules, updatedAt);
+      },
 
       updateChecklist: (items) => set(() => ({ checklist: items })),
 
@@ -1036,10 +1044,10 @@ const useFlyxaStore = create<FlyxaStore>()(
               : mergeAchievementCatalog(state.achievements),
             goals: payload.goals ?? state.goals,
             setupPlaybook: removeLegacyDefaults(payload.setupPlaybook ?? state.setupPlaybook, LEGACY_DEFAULT_SETUP_IDS),
-            riskRules: removeLegacyDefaults(
-              (payload.riskRules?.length ? payload.riskRules : state.riskRules.length ? state.riskRules : DEFAULT_RISK_RULES),
-              LEGACY_DEFAULT_RISK_RULE_IDS
-            ),
+            riskRules: persistedRiskRules(payload, state.riskRules),
+            riskRulesUpdatedAt: hasOwnKey(payload, 'riskRulesUpdatedAt')
+              ? (typeof payload.riskRulesUpdatedAt === 'string' ? payload.riskRulesUpdatedAt : null)
+              : state.riskRulesUpdatedAt,
             checklist: removeLegacyDefaults(payload.checklist ?? state.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
             planBlocks: payload.planBlocks ?? state.planBlocks,
             propFirms: payload.propFirms ?? state.propFirms,
@@ -1127,7 +1135,10 @@ const useFlyxaStore = create<FlyxaStore>()(
           ),
           billingAccounts: sanitizedBilling,
           setupPlaybook: removeLegacyDefaults(persisted.setupPlaybook ?? base.setupPlaybook, LEGACY_DEFAULT_SETUP_IDS),
-          riskRules: removeLegacyDefaults(persisted.riskRules ?? base.riskRules, LEGACY_DEFAULT_RISK_RULE_IDS),
+          riskRules: persistedRiskRules(persisted, base.riskRules),
+          riskRulesUpdatedAt: typeof persisted.riskRulesUpdatedAt === 'string'
+            ? persisted.riskRulesUpdatedAt
+            : base.riskRulesUpdatedAt,
           checklist: removeLegacyDefaults(persisted.checklist ?? base.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
           aiReflections: persisted.aiReflections ?? base.aiReflections,
           // Prefer non-empty moods/titles: if Supabase blob has none (e.g. older save that predates
@@ -1161,10 +1172,8 @@ const useFlyxaStore = create<FlyxaStore>()(
           ...state,
           entries: withDerivedEntries(ensureAccount(state.entries ?? [], entryAccountFallback)),
           setupPlaybook: removeLegacyDefaults(state.setupPlaybook ?? initial.setupPlaybook, LEGACY_DEFAULT_SETUP_IDS),
-          riskRules: removeLegacyDefaults(
-            state.riskRules?.length ? state.riskRules : initial.riskRules,
-            LEGACY_DEFAULT_RISK_RULE_IDS
-          ),
+          riskRules: persistedRiskRules(state, initial.riskRules),
+          riskRulesUpdatedAt: typeof state.riskRulesUpdatedAt === 'string' ? state.riskRulesUpdatedAt : initial.riskRulesUpdatedAt,
           checklist: removeLegacyDefaults(state.checklist ?? initial.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
           aiReflections: state.aiReflections ?? initial.aiReflections,
           billingAccounts: (state.billingAccounts ?? []).map((account) => ({
@@ -1183,7 +1192,8 @@ const useFlyxaStore = create<FlyxaStore>()(
         achievements: state.achievements,
         goals: state.goals,
         setupPlaybook: removeLegacyDefaults(state.setupPlaybook, LEGACY_DEFAULT_SETUP_IDS),
-        riskRules: removeLegacyDefaults(state.riskRules, LEGACY_DEFAULT_RISK_RULE_IDS),
+        riskRules: state.riskRules,
+        riskRulesUpdatedAt: state.riskRulesUpdatedAt,
         checklist: removeLegacyDefaults(state.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
         planBlocks: state.planBlocks,
         propFirms: state.propFirms,
