@@ -478,6 +478,7 @@ export function useTrades() {
     updatedEntry = useFlyxaStore.getState().entries.find(candidate => candidate.id === entry.id);
     updatedTrade = updatedEntry?.trades.find(trade => trade.id === id);
     if (!updatedTrade) throw new Error('Trade violation update failed');
+    await flushSupabaseStoreNow();
     return toApiTrade(updatedTrade);
   }, [entries, updateTradeInStore]);
 
