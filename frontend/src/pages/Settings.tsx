@@ -1490,69 +1490,80 @@ export default function Settings() {
             title="Data safety"
             subtitle="Confirm which login owns the data currently loaded on this device."
           >
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-
-              {/* Account + snapshot */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <User size={13} style={{ color: T3, flexShrink: 0 }} />
-                  <span style={{ color: T1, font: `600 12px ${SANS}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: 12,
+                alignItems: 'stretch',
+              }}
+            >
+              <article style={{ minHeight: 126, border: `1px solid ${BORDER}`, borderRadius: 10, background: S2, padding: 14, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <span style={{ color: T3, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Signed-in account</span>
+                  <User size={14} style={{ color: T3, flexShrink: 0 }} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, color: T1, font: `650 13px ${SANS}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user?.email ?? 'Not signed in'}
-                  </span>
+                  </p>
+                  <p style={{ margin: '7px 0 0', color: T3, fontSize: 10, lineHeight: 1.45 }}>
+                    This login owns the data loaded on this device.
+                  </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: '-0.03em', lineHeight: 1 }}>{journalEntries.length}</strong>
-                    <span style={{ color: T3, fontSize: 10 }}>{journalEntries.length === 1 ? 'day' : 'days'}</span>
-                  </div>
-                  <span style={{ width: 1, height: 12, background: BSUB, display: 'block' }} />
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: '-0.03em', lineHeight: 1 }}>{loadedTradeCount}</strong>
-                    <span style={{ color: T3, fontSize: 10 }}>{loadedTradeCount === 1 ? 'trade' : 'trades'}</span>
-                  </div>
-                </div>
-              </div>
+              </article>
 
-              {/* Backup controls */}
-              <div style={{ paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 10 }}>
-                  <span style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Backup</span>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input ref={importFileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportJson} />
-                    <SafetyActionButton icon={<FileJson size={13} />} onClick={handleExportJson} disabled={journalEntries.length === 0}>
-                      Export JSON
-                    </SafetyActionButton>
-                    <SafetyActionButton icon={<FileSpreadsheet size={13} />} onClick={handleExportCsv} disabled={loadedTradeCount === 0}>
-                      Export CSV
-                    </SafetyActionButton>
-                    <SafetyActionButton icon={<Upload size={13} />} onClick={() => importFileRef.current?.click()}>
-                      Import JSON
-                    </SafetyActionButton>
+              <article style={{ minHeight: 126, border: `1px solid ${BORDER}`, borderRadius: 10, background: S2, padding: 14, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 16 }}>
+                <span style={{ color: T3, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Journal snapshot</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ border: `1px solid ${BSUB}`, borderRadius: 8, background: 'rgba(255,255,255,0.016)', padding: '10px 11px' }}>
+                    <strong style={{ display: 'block', color: T1, font: `600 22px ${SANS}`, letterSpacing: '-0.035em', lineHeight: 1 }}>{journalEntries.length}</strong>
+                    <span style={{ display: 'block', marginTop: 5, color: T3, fontSize: 10 }}>{journalEntries.length === 1 ? 'journal day' : 'journal days'}</span>
+                  </div>
+                  <div style={{ border: `1px solid ${BSUB}`, borderRadius: 8, background: 'rgba(255,255,255,0.016)', padding: '10px 11px' }}>
+                    <strong style={{ display: 'block', color: T1, font: `600 22px ${SANS}`, letterSpacing: '-0.035em', lineHeight: 1 }}>{loadedTradeCount}</strong>
+                    <span style={{ display: 'block', marginTop: 5, color: T3, fontSize: 10 }}>{loadedTradeCount === 1 ? 'trade logged' : 'trades logged'}</span>
                   </div>
                 </div>
-                <p style={{ color: T3, fontSize: 10, lineHeight: 1.5, fontFamily: SANS }}>
-                  Export before major imports or account changes. JSON restores Flyxa data; CSV is for spreadsheet review.
-                </p>
+              </article>
+
+              <article style={{ minHeight: 126, border: `1px solid ${BORDER}`, borderRadius: 10, background: S2, padding: 14, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <span style={{ color: T3, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Backup controls</span>
+                  <p style={{ margin: '7px 0 0', color: T3, fontSize: 10, lineHeight: 1.45, fontFamily: SANS }}>
+                    Export before major imports or account changes.
+                  </p>
+                </div>
+                <input ref={importFileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportJson} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7 }}>
+                  <SafetyActionButton icon={<FileJson size={13} />} onClick={handleExportJson} disabled={journalEntries.length === 0}>
+                    JSON
+                  </SafetyActionButton>
+                  <SafetyActionButton icon={<FileSpreadsheet size={13} />} onClick={handleExportCsv} disabled={loadedTradeCount === 0}>
+                    CSV
+                  </SafetyActionButton>
+                  <SafetyActionButton icon={<Upload size={13} />} onClick={() => importFileRef.current?.click()}>
+                    Import
+                  </SafetyActionButton>
+                </div>
                 {importFeedback && (
-                  <p style={{ marginTop: 7, fontSize: 11, color: importFeedback.ok ? '#4ade80' : '#f87171', fontFamily: SANS }}>
+                  <p style={{ margin: 0, fontSize: 11, color: importFeedback.ok ? '#4ade80' : '#f87171', fontFamily: SANS }}>
                     {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
                   </p>
                 )}
-              </div>
+              </article>
 
-              {/* Browser recovery */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>Browser recovery</div>
-                  <p style={{ color: T3, fontSize: 10, lineHeight: 1.5, fontFamily: SANS, maxWidth: 520 }}>
-                    Merge trades from this browser's local backup when recent cloud journal trades are missing.
+              <article style={{ minHeight: 126, border: `1px solid ${BORDER}`, borderRadius: 10, background: S2, padding: 14, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <span style={{ color: T3, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Browser recovery</span>
+                  <p style={{ margin: '7px 0 0', color: T3, fontSize: 10, lineHeight: 1.45, fontFamily: SANS }}>
+                    Merge trades from this browser's local backup when cloud data is missing.
                   </p>
                 </div>
                 <SafetyActionButton icon={<RotateCcw size={13} />} tone="primary" onClick={() => { void handleRecoverFromLocalCache(); }}>
                   Recover missing trades
                 </SafetyActionButton>
-              </div>
-
+              </article>
             </div>
           </SectionPanel>
         </div>

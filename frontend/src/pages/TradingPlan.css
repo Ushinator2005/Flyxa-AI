@@ -695,6 +695,14 @@
   line-height: 1.45;
 }
 
+.tp-rule-stat-pct {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
 .tp-rule-textarea {
   min-height: 68px;
   height: auto;

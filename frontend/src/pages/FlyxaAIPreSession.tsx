@@ -84,6 +84,28 @@ function parseTradeDate(trade: Trade): Date | null {
   return null;
 }
 
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function tradeDateKey(trade: Trade): string {
+  if (trade.trade_date && /^\d{4}-\d{2}-\d{2}/.test(trade.trade_date)) {
+    return trade.trade_date.slice(0, 10);
+  }
+  if (trade.created_at && /^\d{4}-\d{2}-\d{2}/.test(trade.created_at)) {
+    return trade.created_at.slice(0, 10);
+  }
+  const parsed = parseTradeDate(trade);
+  return parsed ? localDateKey(parsed) : '';
+}
+
+function tradeNetPnl(trade: Trade): number {
+  return Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
+}
+
 function formatCurrency(value: number) {
   const sign = value < 0 ? '-' : '';
   return `${sign}$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -299,9 +321,8 @@ export default function FlyxaAIPreSession() {
 
   const lastSession = useMemo(() => {
     const grouped = accountTrades.reduce<Map<string, Trade[]>>((map, trade) => {
-      const date = parseTradeDate(trade);
-      if (!date) return map;
-      const key = date.toISOString().slice(0, 10);
+      const key = tradeDateKey(trade);
+      if (!key || key >= todayIso) return map;
       map.set(key, [...(map.get(key) || []), trade]);
       return map;
     }, new Map());
@@ -309,25 +330,29 @@ export default function FlyxaAIPreSession() {
     const latestDate = Array.from(grouped.keys()).sort((a, b) => b.localeCompare(a))[0];
     if (!latestDate) return null;
     const latestTrades = grouped.get(latestDate) || [];
-    const netPnl = latestTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+    const netPnl = latestTrades.reduce((sum, trade) => sum + tradeNetPnl(trade), 0);
     return {
       date: latestDate,
       tradeCount: latestTrades.length,
       netPnl,
     };
-  }, [accountTrades]);
+  }, [accountTrades, todayIso]);
 
   const recentBehavior = useMemo(() => {
     const recentTrades = [...accountTrades]
+      .filter(trade => {
+        const date = tradeDateKey(trade);
+        return Boolean(date) && date < todayIso;
+      })
       .sort((a, b) => {
-        const aDate = parseTradeDate(a)?.getTime() ?? 0;
-        const bDate = parseTradeDate(b)?.getTime() ?? 0;
-        return bDate - aDate;
+        const dateCompare = tradeDateKey(b).localeCompare(tradeDateKey(a));
+        return dateCompare !== 0 ? dateCompare : (b.trade_time ?? '').localeCompare(a.trade_time ?? '');
       })
       .slice(0, 20);
     const withScore = recentTrades.filter(trade => typeof trade.plan_score === 'number');
     const planLogged = withScore.length > 0 ? withScore : recentTrades.filter(trade => typeof trade.followed_plan === 'boolean');
     const recentEntries = [...(journalEntries as StoreJournalEntry[])]
+      .filter(entry => entry.date < todayIso)
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 20);
     const ruleReport = buildPlanAdherenceReport(recentEntries, riskRules, { accountId: selectedAccountId });
@@ -348,7 +373,7 @@ export default function FlyxaAIPreSession() {
       revengeTagged,
       emotionTagged,
     };
-  }, [accountTrades, journalEntries, riskRules, selectedAccountId]);
+  }, [accountTrades, journalEntries, riskRules, selectedAccountId, todayIso]);
 
   const priorFlow = useMemo(
     () => getMostRecentDailyFlowBefore(accountTrades, todayIso),

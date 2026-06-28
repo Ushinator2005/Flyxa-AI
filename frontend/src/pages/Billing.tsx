@@ -1601,7 +1601,7 @@ export default function Billing() {
         }
       `}</style>
 
-      <section style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+      <section data-tour-id="billing-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
           <p className="billing-kicker">Funding Desk</p>
           <h1 style={{ margin: '6px 0 0', fontSize: 20, fontWeight: 600, color: 'var(--txt)', letterSpacing: 0 }}>Billing</h1>
@@ -1609,7 +1609,7 @@ export default function Billing() {
             Track prop firm spend, challenge phases, discounts, payouts, and account ROI.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div data-tour-id="billing-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="billing-command-btn" onClick={() => setViewMode(viewMode === 'table' ? 'pipeline' : 'table')}>
             {viewMode === 'table' ? <LayoutGrid size={14} /> : <List size={14} />}
             {viewMode === 'table' ? 'Pipeline' : 'Ledger'}
@@ -1646,7 +1646,7 @@ export default function Billing() {
         <div style={{ margin: '-6px 0 14px', fontSize: 11, color: 'var(--red)' }}>{csvParseError}</div>
       )}
 
-      <section className="billing-desk">
+      <section className="billing-desk" data-tour-id="billing-overview">
         <article className="billing-hero-panel">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
             <div>
@@ -1734,14 +1734,16 @@ export default function Billing() {
         </div>
       </section>
 
-      <PayoutGallery
-        total={derived.totalPayouts}
-        payoutCount={accounts.reduce((count, account) => (
-          count + (account.payouts?.length || (account.payoutReceived > 0 ? 1 : 0))
-        ), 0)}
-      />
+      <div data-tour-id="billing-payouts">
+        <PayoutGallery
+          total={derived.totalPayouts}
+          payoutCount={accounts.reduce((count, account) => (
+            count + (account.payouts?.length || (account.payoutReceived > 0 ? 1 : 0))
+          ), 0)}
+        />
+      </div>
 
-      <section style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+      <section data-tour-id="billing-ledger" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         <header style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>Account Ledger</p>

@@ -4,6 +4,7 @@ import { ArrowRight, Check, X } from 'lucide-react';
 import { useTrades } from '../../hooks/useTrades.js';
 
 const TOUR_KEY = 'flyxa_website_tour_completed_v1';
+const TOUR_ACTIVE_KEY = 'flyxa_website_tour_active_v1';
 const SANS = 'var(--font-sans)';
 const AMBER = '#f59e0b';
 const T1 = 'var(--app-text)';
@@ -73,11 +74,11 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'pre-session-tab',
-    targetId: 'pre-session',
+    targetId: 'session',
     path: '/pre-session',
-    title: 'Pre-Session tab',
+    title: 'Session tab',
     body: 'This tab is your before-trading checkpoint. It helps you slow down, check your mental state, confirm risk, and commit to the session plan.',
-    action: 'Open Pre-Session',
+    action: 'Open Session',
   },
   {
     id: 'pre-session-mindset',
@@ -166,6 +167,14 @@ const STEPS: TourStep[] = [
     title: 'Daily Journal tab',
     body: 'This is your private writing space. Use it after the session to capture what happened, what you learned, and how you felt.',
     action: 'Open Journal',
+  },
+  {
+    id: 'journal-header',
+    targetId: 'journal-header',
+    path: '/journal',
+    title: 'Journal momentum',
+    body: 'The header shows how many journal entries you have and your current writing streak. It is a quick read on whether review is becoming a habit.',
+    action: 'Next',
   },
   {
     id: 'journal-new-entry',
@@ -264,6 +273,22 @@ const STEPS: TourStep[] = [
     action: 'Next',
   },
   {
+    id: 'evaluation-tab',
+    targetId: 'evaluation',
+    path: '/evaluation-coach',
+    title: 'Evaluation',
+    body: 'Evaluation tracks prop-firm progress, rule pressure, drawdown buffer, and the remaining work needed to pass without violating the account.',
+    action: 'Open Evaluation',
+  },
+  {
+    id: 'evaluation-overview',
+    targetId: 'evaluation-overview',
+    path: '/evaluation-coach',
+    title: 'Evaluation overview',
+    body: 'This page changes based on your account state: it can show setup guidance, live evaluation progress, rule warnings, or a pass-ready summary.',
+    action: 'Next',
+  },
+  {
     id: 'backtest-tab',
     targetId: 'backtest',
     path: '/backtest',
@@ -296,35 +321,115 @@ const STEPS: TourStep[] = [
     action: 'Next',
   },
   {
-    id: 'trading-plan-tab',
-    targetId: 'trading-plan',
+    id: 'risk-rules-tab',
+    targetId: 'risk-rules',
     path: '/trading-plan',
-    title: 'Trading Plan tab',
-    body: 'Your trading plan is the written operating system. It defines the rules you are supposed to follow before the market gets emotional.',
-    action: 'Open Plan',
+    title: 'Risk Rules',
+    body: 'Your risk rules are the locked operating system Flyxa uses to score plan adherence and flag process drift.',
+    action: 'Open Rules',
   },
   {
     id: 'trading-plan-kpis',
     targetId: 'trading-plan-kpis',
     path: '/trading-plan',
-    title: 'Plan readiness',
-    body: 'These KPIs show whether the plan, checklist, and guardrails are filled in enough to be useful.',
+    title: 'Rule coverage',
+    body: 'These KPIs show how many rules are active and how many can be verified automatically from logged trades.',
     action: 'Next',
   },
   {
     id: 'trading-plan-tabs',
     targetId: 'trading-plan-tabs',
     path: '/trading-plan',
-    title: 'Plan sections',
-    body: 'Use these tabs to switch between core strategy, risk rules, prop firm rules, and your pre-session checklist.',
+    title: 'Rules and notes',
+    body: 'Risk Rules is the main workspace. Strategy Notes stays available for written context around your process.',
     action: 'Next',
   },
   {
-    id: 'trading-plan-core',
-    targetId: 'trading-plan-core',
+    id: 'risk-rules-framework',
+    targetId: 'risk-rules-framework',
     path: '/trading-plan',
-    title: 'Core strategy blocks',
-    body: 'This is where you write market selection, entry criteria, execution rules, trade management, and review process.',
+    title: 'Rule framework',
+    body: 'Edit your automatic and manual risk rules here. These saved rules power plan adherence, risk warnings, and rule-break analytics, so they should only change when you intentionally update your plan.',
+    action: 'Next',
+  },
+  {
+    id: 'rivals-tab',
+    targetId: 'rivals',
+    path: '/rivals',
+    title: 'Rivals',
+    body: 'Rivals turns trading into a private league. Compare verified P&L, process, risk-adjusted performance, and weekly trade volume with your circle.',
+    action: 'Open Rivals',
+  },
+  {
+    id: 'rivals-controls',
+    targetId: 'rivals-controls',
+    path: '/rivals',
+    title: 'League controls',
+    body: 'Use these controls to switch metric, time frame, league, and search. The standings and selected trader panel update from the same filter.',
+    action: 'Next',
+  },
+  {
+    id: 'rivals-summary',
+    targetId: 'rivals-summary',
+    path: '/rivals',
+    title: 'Your standing',
+    body: 'This strip shows your rank, season progress, selected metric, and how far you are from the next trader above you.',
+    action: 'Next',
+  },
+  {
+    id: 'rivals-standings',
+    targetId: 'rivals-standings',
+    path: '/rivals',
+    title: 'Standings',
+    body: 'Each row shows rank, last five trading outcomes, trade count for the selected period, win rate, average R, consistency, and the active leaderboard metric.',
+    action: 'Next',
+  },
+  {
+    id: 'rivals-detail',
+    targetId: 'rivals-detail',
+    path: '/rivals',
+    title: 'Trader detail',
+    body: 'Select a trader to inspect their equity curve, period stats, progress, ranks, and recent trades without leaving the leaderboard.',
+    action: 'Next',
+  },
+  {
+    id: 'billing-tab',
+    targetId: 'billing',
+    path: '/billing',
+    title: 'Billing',
+    body: 'Billing tracks prop-firm spend, account purchases, resets, activation fees, discounts, payouts, and account ROI.',
+    action: 'Open Billing',
+  },
+  {
+    id: 'billing-actions',
+    targetId: 'billing-actions',
+    path: '/billing',
+    title: 'Billing import tools',
+    body: 'Import accounts from Excel, download the template, or add one account manually. The importer preserves real $0 charges instead of replacing them with list price.',
+    action: 'Next',
+  },
+  {
+    id: 'billing-overview',
+    targetId: 'billing-overview',
+    path: '/billing',
+    title: 'Funding overview',
+    body: 'This dashboard summarizes net position, spend, payouts, savings, pass rate, monthly burn, and cost per pass.',
+    action: 'Next',
+  },
+  {
+    id: 'billing-payouts',
+    targetId: 'billing-payouts',
+    path: '/billing',
+    title: 'Payout gallery',
+    body: 'Payout screenshots now live in Billing so your proof of funded-account returns stays beside spend, ROI, and account history.',
+    action: 'Next',
+  },
+  {
+    id: 'billing-ledger',
+    targetId: 'billing-ledger',
+    path: '/billing',
+    title: 'Account ledger',
+    body: 'The ledger is the source of truth for every prop account event: combines, resets, monthly subscriptions, XFA activations, status, purchase date, and notes.',
     action: 'Next',
   },
   {
@@ -368,6 +473,14 @@ const STEPS: TourStep[] = [
     action: 'Next',
   },
   {
+    id: 'settings-data-safety',
+    targetId: 'settings-data-safety',
+    path: '/settings',
+    title: 'Data safety',
+    body: 'Export backups, import JSON, and recover missing trades from the browser cache here. Use this before big imports or if local and cloud data ever drift.',
+    action: 'Next',
+  },
+  {
     id: 'settings-scanner',
     targetId: 'settings-scanner',
     path: '/settings',
@@ -390,6 +503,11 @@ function readCompleted() {
   return window.localStorage.getItem(TOUR_KEY) === '1';
 }
 
+function readActive() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(TOUR_ACTIVE_KEY) === '1';
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -399,22 +517,27 @@ export default function WebsiteTour() {
   const navigate = useNavigate();
   const location = useLocation();
   const [completed, setCompleted] = useState(readCompleted);
+  const [tourActive, setTourActive] = useState(readActive);
   const [stepIndex, setStepIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
-  const shouldShow = !completed && trades.length === 0;
+  const shouldShow = tourActive || (!completed && trades.length === 0);
   const step = STEPS[stepIndex];
   const onStepPath = location.pathname === step.path;
 
   const markDone = useCallback(() => {
     window.localStorage.setItem(TOUR_KEY, '1');
+    window.localStorage.removeItem(TOUR_ACTIVE_KEY);
+    setTourActive(false);
     setCompleted(true);
   }, []);
 
   useEffect(() => {
     const restart = () => {
       window.localStorage.removeItem(TOUR_KEY);
+      window.localStorage.setItem(TOUR_ACTIVE_KEY, '1');
       setStepIndex(0);
+      setTourActive(true);
       setCompleted(false);
       navigate('/');
     };
@@ -435,9 +558,9 @@ export default function WebsiteTour() {
     updateRect();
     window.addEventListener('resize', updateRect);
     window.addEventListener('scroll', updateRect, true);
-    const t = window.setTimeout(updateRect, 80);
+    const timers = [80, 220, 460, 800, 1200].map(delay => window.setTimeout(updateRect, delay));
     return () => {
-      window.clearTimeout(t);
+      timers.forEach(timer => window.clearTimeout(timer));
       window.removeEventListener('resize', updateRect);
       window.removeEventListener('scroll', updateRect, true);
     };

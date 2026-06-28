@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Brain, BarChart2, Target,
   FileText, Crosshair, Swords, Trophy,
-  Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck, ShieldCheck, X,
+  Settings, LogOut, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, CreditCard, ScanLine, Newspaper, ClipboardCheck, ShieldCheck, LockKeyhole, X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
@@ -42,11 +42,11 @@ const primaryNavItems: NavItemDef[] = [
   { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
   { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
   { path: '/journal',      icon: FileText,        label: 'Daily Journal' },
+  { path: '/trading-plan', icon: LockKeyhole,     label: 'Risk Rules'    },
   { path: '/rivals',       icon: Swords,          label: 'Rivals'        },
 ];
 
 const moreNavItems: NavItemDef[] = [
-  { path: '/trading-plan', icon: FileText,        label: 'Trading Plan'  },
   { path: '/backtest',     icon: Target,          label: 'Backtest'      },
   { path: '/psychology',   icon: Brain,           label: 'Psychology'    },
   { path: '/goals',        icon: Crosshair,       label: 'Goals'         },

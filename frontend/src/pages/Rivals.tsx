@@ -285,7 +285,7 @@ export default function Rivals() {
   return (
     <div className="rivals-page rv-competitive-page">
       <div className="rivals-shell rv-league-shell">
-        <header className="rv-league-header">
+        <header className="rv-league-header" data-tour-id="rivals-header">
           <div>
             <div className="rv-page-kicker">RIVALS</div>
             <h1>Leaderboard</h1>
@@ -338,7 +338,7 @@ export default function Rivals() {
           {leagues.map(league => <button key={league.id} className={activeLeagueId === league.id ? 'active' : ''} onClick={() => setActiveLeagueId(league.id)}><LockKeyhole size={12} /> {league.name}</button>)}
         </nav>
 
-        <section className="rv-command-bar">
+        <section className="rv-command-bar" data-tour-id="rivals-controls">
           <div className="rv-command-selects">
             <div className="rv-metric-tabs">
               {MODES.map(mode => <button type="button" key={mode.value} title={mode.help} className={metric === mode.value ? 'active' : ''} onClick={() => setMetric(mode.value)}>{mode.label}</button>)}
@@ -352,7 +352,7 @@ export default function Rivals() {
           </div>
         </section>
 
-        <section className="rv-summary-bar">
+        <section className="rv-summary-bar" data-tour-id="rivals-summary">
           <div className="rv-summary-identity">
             <RivalAvatar rival={currentUser} />
             <div><span>Your standing</span><strong>#{myRank || '—'} of {ranked.length}</strong></div>
@@ -385,7 +385,7 @@ export default function Rivals() {
         </section>
 
         <div className="rv-competition-layout">
-          <main className="rv-ranking-card">
+          <main className="rv-ranking-card" data-tour-id="rivals-standings">
             <div className="rv-ranking-title"><div><h2>{activeLeague?.name ?? 'Standings'}</h2><p>Updated from saved journal trades</p></div><span className="rv-live-indicator"><i /> Live</span></div>
             <div className="rv-card-grid">
               {filtered.map((rival) => {
@@ -450,7 +450,7 @@ export default function Rivals() {
             </div>
           </main>
 
-          <aside className="rv-competitive-rail">
+          <aside className="rv-competitive-rail" data-tour-id="rivals-detail">
             <section className="rv-trader-insight">
               <div className="rv-insight-head"><RivalAvatar rival={selectedRival} large /><div><h3>{selectedRival.displayName}</h3><small>@{selectedRival.username}</small></div>{!selectedRival.isMe && selectedRival.userId && <button aria-label={`Message ${selectedRival.displayName}`} onClick={() => { setActiveChatRival(selectedRival); setChatOpen(true); }}><MessageCircle size={14} /></button>}</div>
               <div className="rv-inspector-tabs">

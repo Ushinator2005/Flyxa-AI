@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Download,
+  Flame,
   Leaf,
   Moon,
   PenLine,
@@ -186,6 +187,21 @@ function getEntryContent(entry: JournalEntry) {
 function formatEntryDate(date: string, pattern: string) {
   const parsed = parseISO(date);
   return Number.isNaN(parsed.getTime()) ? (date || 'Unknown date') : format(parsed, pattern);
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function shiftDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  if (!year || !month || !day) return dateKey;
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return localDateKey(date);
 }
 
 function normalizeBackupDate(value: unknown): string | null {
@@ -727,6 +743,26 @@ export default function Journal() {
   }, [filtered]);
 
   const totalJournalEntries = entries.length;
+  const journalStreak = useMemo(() => {
+    const writtenDates = new Set(
+      entries
+        .filter(entry => getEntryContent(entry).length > 0)
+        .map(entry => normalizeBackupDate(entry.date))
+        .filter((date): date is string => Boolean(date))
+    );
+
+    const today = localDateKey(new Date());
+    const yesterday = shiftDateKey(today, -1);
+    let cursor = writtenDates.has(today) ? today : writtenDates.has(yesterday) ? yesterday : '';
+    let streak = 0;
+
+    while (cursor && writtenDates.has(cursor)) {
+      streak += 1;
+      cursor = shiftDateKey(cursor, -1);
+    }
+
+    return streak;
+  }, [entries]);
   const selectedWordCount = selected ? wordCount(getEntryContent(selected)) : 0;
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
@@ -769,10 +805,69 @@ export default function Journal() {
           <p style={{ fontSize: '11px', color: T3, marginTop: '3px' }}>Your private trading log — pick up where you left off.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {selected && !isMobile && (
-            <span style={{ fontSize: '11px', color: T3, fontFamily: 'var(--font-mono)' }}>
-              {totalJournalEntries} journal {totalJournalEntries === 1 ? 'entry' : 'entries'}
-            </span>
+          {!isMobile && (
+            <div
+              title={`${totalJournalEntries} journal ${totalJournalEntries === 1 ? 'entry' : 'entries'} · ${journalStreak} day streak`}
+              style={{
+                height: '32px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                overflow: 'hidden',
+                border: `1px solid ${BORDER}`,
+                borderRadius: '999px',
+                background: `linear-gradient(135deg, ${S2}, rgba(245,158,11,0.035))`,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                flexShrink: 0,
+              }}
+            >
+              <span style={{
+                height: '100%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 10px',
+                color: T2,
+                fontSize: '11.5px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}>
+                <PenLine size={13} color={T3} />
+                <strong style={{ color: T1, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{totalJournalEntries}</strong>
+                {totalJournalEntries === 1 ? 'entry' : 'entries'}
+              </span>
+              <span style={{ width: 1, height: '58%', background: BORDER }} />
+              <span style={{
+                height: '100%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 10px',
+                color: journalStreak > 0 ? T1 : T3,
+                fontSize: '11.5px',
+                fontWeight: 650,
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{
+                  width: 18,
+                  height: 18,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '999px',
+                  background: journalStreak > 0 ? 'rgba(245,158,11,0.14)' : BSUB,
+                  border: `1px solid ${journalStreak > 0 ? 'rgba(245,158,11,0.24)' : BORDER}`,
+                }}>
+                  <Flame
+                    size={12}
+                    color={journalStreak > 0 ? AMBER : T3}
+                    fill={journalStreak > 0 ? 'rgba(245,158,11,0.28)' : 'transparent'}
+                    strokeWidth={2.4}
+                  />
+                </span>
+                <strong style={{ color: journalStreak > 0 ? AMBER : T2, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{journalStreak}</strong>
+                day {journalStreak === 1 ? 'streak' : 'streak'}
+              </span>
+            </div>
           )}
           {!isMobile && (
             <>

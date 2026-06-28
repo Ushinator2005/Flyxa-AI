@@ -61,6 +61,18 @@
   cursor: pointer;
 }
 
+.tj-adherence-percent {
+  font-family: var(--font-sans);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .tj-nav-group {
   display: inline-flex;
   align-items: center;

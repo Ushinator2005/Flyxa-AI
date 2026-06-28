@@ -657,7 +657,7 @@ export default function TradingPlan() {
                     const clr = s.pct === null ? 'var(--app-text-subtle)' : s.pct >= 80 ? 'var(--green)' : s.pct >= 60 ? 'var(--amber)' : 'var(--red)';
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 8px', background: 'var(--app-surface-2)', borderRadius: 5, border: '1px solid var(--app-border)' }}>
-                        <span style={{ color: clr, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700 }}>{s.pct}%</span>
+                        <span className="tp-rule-stat-pct" style={{ color: clr }}>{s.pct}%</span>
                         <span style={{ color: 'var(--app-text-subtle)', fontSize: 10 }}>
                           {s.failed > 0 ? `${s.failed} break${s.failed !== 1 ? 's' : ''}` : 'no breaks'} · last 30 days
                         </span>

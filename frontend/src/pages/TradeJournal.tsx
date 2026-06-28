@@ -1462,7 +1462,7 @@ function ActiveTradeRuleBlock({ entry, trade, rules }: {
           </span>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, lineHeight: 1 }}>
+          <div className="tj-adherence-percent" style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--green)' }}>
             {pct === null ? '--' : `${pct}%`}
           </div>
           <div style={{ color: 'var(--app-text-subtle)', fontSize: 9, marginTop: 4 }}>
