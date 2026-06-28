@@ -889,6 +889,7 @@ function BlankDayAccountSelector({ entry, onMutate }: { entry: JournalEntry; onM
         ).map(account => {
           const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
           const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
+          const dotColor = ACCOUNT_STATUS_DOT[account.status] ?? 'rgba(255,255,255,0.25)';
           return (
             <label
               key={account.id}
@@ -900,17 +901,16 @@ function BlankDayAccountSelector({ entry, onMutate }: { entry: JournalEntry; onM
                 onChange={e => toggleAccount(account.id, e.target.checked)}
                 disabled={isInactive}
               />
+              <span
+                className="tj-account-status-dot"
+                style={{ background: dotColor }}
+                title={account.status}
+              />
               <span>{account.name}{statusLabel}</span>
             </label>
           );
         })}
       </div>
-      {(() => {
-        const selected = accounts.find(a => a.id === selectedAccountIds[0]);
-        if (!selected) return null;
-        const dotColor = ACCOUNT_STATUS_DOT[selected.status] ?? '#888';
-        return <span className="tj-account-dot" style={{ background: dotColor }} title={selected.status} />;
-      })()}
     </div>
   );
 }
@@ -2260,6 +2260,8 @@ export default function TradeJournal() {
 
     const winsLast10 = last10.filter(t => t.result === 'win').length;
     const lossesLast10 = last10.filter(t => t.result === 'loss').length;
+    const breakevenLast10 = last10.filter(t => t.result !== 'win' && t.result !== 'loss').length;
+    const decisiveLast10 = winsLast10 + lossesLast10;
     const netLast10 = last10.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
 
     // 7-day rolling stats
@@ -2277,8 +2279,9 @@ export default function TradeJournal() {
       tradeBars,
       winsLast10,
       lossesLast10,
+      breakevenLast10,
       netLast10,
-      winRateLast10: last10.length > 0 ? (winsLast10 / last10.length) * 100 : null,
+      winRateLast10: decisiveLast10 > 0 ? (winsLast10 / decisiveLast10) * 100 : null,
       streak,
       streakType,
       total7d,
@@ -3169,7 +3172,9 @@ export default function TradeJournal() {
                 {[
                   {
                     label: 'Record',
-                    value: `${recentForm.winsLast10}–${recentForm.lossesLast10}`,
+                    value: recentForm.breakevenLast10 > 0
+                      ? `${recentForm.winsLast10}–${recentForm.lossesLast10}–${recentForm.breakevenLast10}`
+                      : `${recentForm.winsLast10}–${recentForm.lossesLast10}`,
                     color: winColor,
                   },
                   {

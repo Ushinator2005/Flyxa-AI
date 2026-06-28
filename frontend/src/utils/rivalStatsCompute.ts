@@ -99,24 +99,43 @@ export function computeTradingJournalScore(entries: TradingJournalEntry[]): numb
 export function computeRuleFollowingScore(entries: TradingJournalEntry[], trades: Trade[], rules: RiskRule[]): number {
   const last30 = entries.filter(e => e.date >= daysAgo(29));
   const recentTrades = trades.filter(t => t.date >= daysAgo(29));
+
   const planLogged = recentTrades.filter(t => typeof t.reflection?.followedPlan === 'boolean');
   const planAdherence = planLogged.length > 0
     ? (planLogged.filter(t => t.reflection.followedPlan === true).length / planLogged.length) * 100
     : null;
   const planCoverage = recentTrades.length > 0 ? (planLogged.length / recentTrades.length) * 100 : null;
-  const tradePlanScore = planAdherence === null
+  const followedPlanScore = planAdherence === null
     ? null
     : (planAdherence * 0.75) + ((planCoverage ?? 0) * 0.25);
 
+  // Legacy daily journal rule checks are still accepted for older journal data.
   const evaluatedRules = last30.flatMap(e => e.rules.filter(r => r.state !== 'unchecked'));
-  const rulePassScore = evaluatedRules.length > 0
+  const legacyRuleScore = evaluatedRules.length > 0
     ? (evaluatedRules.filter(r => r.state === 'ok').length / evaluatedRules.length) * 100
     : null;
-  const configuredSummary = getEntriesRuleAdherence(last30, rules);
-  const configuredRuleScore = configuredSummary.pct;
 
-  const scores = [configuredRuleScore, tradePlanScore, rulePassScore].filter((s): s is number => typeof s === 'number');
-  return clampScore(mean(scores));
+  // Saved Trading Plan rules are the important part: automatic rules are verified
+  // against trade data, manual rules use the journal pass/fail confirmation.
+  const configuredSummary = getEntriesRuleAdherence(last30, rules);
+  const configuredRuleScore = configuredSummary.pct ?? legacyRuleScore;
+
+  const behavioralDisciplineScore = recentTrades.length > 0
+    ? (recentTrades.filter(t =>
+        (t.behavioralFlags?.length ?? 0) === 0 &&
+        (t.performanceViolations?.length ?? 0) === 0
+      ).length / recentTrades.length) * 100
+    : null;
+
+  const weightedScores = [
+    { score: configuredRuleScore, weight: 0.45 },
+    { score: followedPlanScore, weight: 0.35 },
+    { score: behavioralDisciplineScore, weight: 0.20 },
+  ].filter((item): item is { score: number; weight: number } => typeof item.score === 'number' && Number.isFinite(item.score));
+
+  if (weightedScores.length === 0) return 0;
+  const totalWeight = weightedScores.reduce((sum, item) => sum + item.weight, 0);
+  return clampScore(weightedScores.reduce((sum, item) => sum + item.score * item.weight, 0) / totalWeight);
 }
 
 export function computeDailyJournalScore(entries: DailyJournalEntry[], dailyJournalStreak: number): number {
@@ -133,9 +152,9 @@ export function computeProcessScore(
 ): number {
   const dailyJournalScore = computeDailyJournalScore(entries, dailyJournalStreak);
   return clampScore(
-    (dailyJournalScore * 0.4) +
-    (tradingJournalScore * 0.35) +
-    (ruleFollowingScore * 0.25)
+    (dailyJournalScore * 0.25) +
+    (tradingJournalScore * 0.25) +
+    (ruleFollowingScore * 0.5)
   );
 }
 
@@ -240,6 +259,9 @@ export function computePeriodStats(trades: Trade[], bounds?: [string, string]): 
     ruleAdherence: evaluated.length ? Math.round((evaluated.filter(t => t.reflection.followedPlan).length / evaluated.length) * 100) : 0,
     riskAdjusted: Math.round((netPnl / Math.max(maxDrawdown, 1)) * 100) / 100,
     equityCurve,
+    dailyPnl: [...daily.entries()]
+      .map(([date, pnl]) => ({ date, pnl: Math.round(pnl * 100) / 100 }))
+      .slice(-30),
   };
 }
 

@@ -2,31 +2,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   BarChart3,
-  Building2,
-  Check,
   CheckCircle2,
   ChevronDown,
   ClipboardList,
   Clock3,
   Download,
   FileText,
-  ListChecks,
   Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   Sparkles,
   Trash2,
-  X,
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { RiskRule } from '../store/types.js';
 import { saveStoreStatePatchNow, flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import { pushToast } from '../store/toastStore.js';
 import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
+import { lookupContract } from '../constants/futuresContracts.js';
 import './TradingPlan.css';
 
-type TradingPlanTab = 'trading-plan' | 'risk-rules' | 'prop-firm-rules' | 'pre-session-checklist';
+type TradingPlanTab = 'trading-plan' | 'risk-rules';
 type ColorTone = 'amber' | 'cobalt' | 'green' | 'red' | 'neutral';
 
 interface PlanBlock {
@@ -38,36 +35,9 @@ interface PlanBlock {
   isOpen: boolean;
 }
 
-interface PropFirmParam {
-  label: string;
-  value: string;
-  color: 'amber' | 'green' | 'default';
-}
-
-interface PropFirm {
-  id: string;
-  name: string;
-  phase: 'Eval' | 'Funded';
-  params: PropFirmParam[];
-  progress?: {
-    percent: number;
-    currentLabel: string;
-    targetLabel: string;
-  };
-}
-
-interface ChecklistItem {
-  id: string;
-  text: string;
-  done: boolean;
-}
-
-
 const TAB_ITEMS: Array<{ id: TradingPlanTab; label: string; icon: typeof FileText }> = [
   { id: 'trading-plan', label: 'Trading Plan', icon: FileText },
   { id: 'risk-rules', label: 'Risk Rules', icon: ShieldAlert },
-  { id: 'prop-firm-rules', label: 'Prop Firms', icon: Building2 },
-  { id: 'pre-session-checklist', label: 'Pre-session', icon: ListChecks },
 ];
 
 const PLAN_BLOCK_ICONS = {
@@ -121,10 +91,6 @@ const INITIAL_PLAN_BLOCKS: PlanBlock[] = [
   },
 ];
 
-const INITIAL_PROP_FIRMS: PropFirm[] = [];
-
-const INITIAL_CHECKLIST: ChecklistItem[] = [];
-
 function formatLastSaved(lastSaved: Date | null, now: number): string {
   if (!lastSaved) return 'Not saved yet';
   const delta = Math.max(0, now - lastSaved.getTime());
@@ -171,14 +137,6 @@ export default function TradingPlan() {
     });
   });
 
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(() => {
-    const stored = useFlyxaStore.getState().checklist;
-    const doneMap = new Map(stored.map(item => [item.id, item.done]));
-    return INITIAL_CHECKLIST.map(item => ({
-      ...item,
-      done: typeof doneMap.get(item.id) === 'boolean' ? Boolean(doneMap.get(item.id)) : item.done,
-    }));
-  });
   const storeRiskRules = useFlyxaStore(state => state.riskRules);
   const riskRules = useMemo(() => storeRiskRules.map(normalizeRiskRule), [storeRiskRules]);
 
@@ -203,8 +161,6 @@ export default function TradingPlan() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const propFirms = INITIAL_PROP_FIRMS;
-
   const firstMountRef = useRef(true);
   const firstRulesMountRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -227,12 +183,10 @@ export default function TradingPlan() {
     try {
       await saveStoreStatePatchNow({
         planBlocks,
-        checklist,
         riskRules: currentRiskRules,
       });
       hydrateSharedData({
         planBlocks: planBlocks as any,
-        checklist: checklist as any,
       });
       const savedAt = new Date();
       setLastSaved(savedAt);
@@ -244,9 +198,9 @@ export default function TradingPlan() {
         message: 'Trading plan could not sync. Your local changes are still preserved.',
       });
     }
-  }, [checklist, hydrateSharedData, planBlocks]);
+  }, [hydrateSharedData, planBlocks]);
 
-  // Plan blocks and checklist changes — debounced combined save
+  // Plan block changes - debounced save
   useEffect(() => {
     if (firstMountRef.current) {
       firstMountRef.current = false;
@@ -256,7 +210,7 @@ export default function TradingPlan() {
     saveTimerRef.current = setTimeout(() => {
       void persistState();
     }, 650);
-  }, [persistState, checklist, planBlocks]);
+  }, [persistState, planBlocks]);
 
   // Risk rules changes — separate debounced save that does NOT call hydrateSharedData,
   // breaking the infinite-loop where hydrateSharedData creates a new riskRules reference
@@ -277,16 +231,10 @@ export default function TradingPlan() {
     () => Math.round((completedBlocks / Math.max(1, planBlocks.length)) * 100),
     [completedBlocks, planBlocks.length]
   );
-  const checklistDoneCount = useMemo(() => checklist.filter(item => item.done).length, [checklist]);
-  const checklistPercent = useMemo(
-    () => Math.round((checklistDoneCount / Math.max(1, checklist.length)) * 100),
-    [checklistDoneCount, checklist.length]
-  );
   const strictRiskRules = useMemo(
     () => riskRules.filter(rule => rule.color === 'amber' || rule.color === 'red').length,
     [riskRules]
   );
-  const checklistRemaining = Math.max(0, checklist.length - checklistDoneCount);
 
   const togglePlanBlock = (id: string) => {
     setPlanBlocks(current => current.map(block => (block.id === id ? { ...block, isOpen: !block.isOpen } : block)));
@@ -296,21 +244,8 @@ export default function TradingPlan() {
     setPlanBlocks(current => current.map(block => (block.id === id ? { ...block, content } : block)));
   };
 
-  const toggleChecklist = (id: string) => {
-    setChecklist(current => current.map(item => (item.id === id ? { ...item, done: !item.done } : item)));
-  };
-
-  const completeChecklist = () => {
-    setChecklist(current => current.map(item => ({ ...item, done: true })));
-  };
-
-  const resetChecklist = () => {
-    setChecklist(current => current.map(item => ({ ...item, done: false })));
-  };
-
   const resetPlan = () => {
     setPlanBlocks(INITIAL_PLAN_BLOCKS);
-    setChecklist(INITIAL_CHECKLIST);
     useFlyxaStore.getState().updateRiskRules(DEFAULT_STRUCTURED_RULES);
   };
 
@@ -400,7 +335,6 @@ export default function TradingPlan() {
       exportedAt: new Date().toISOString(),
       planBlocks: planBlocks.map(block => ({ title: block.name, content: block.content })),
       riskRules,
-      checklist,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -446,11 +380,6 @@ export default function TradingPlan() {
             <p className="tp-kpi-label">Strategy Coverage</p>
             <p className="tp-kpi-value num">{strategyCoverage}%</p>
             <p className="tp-kpi-sub">{completedBlocks}/{planBlocks.length} core blocks documented</p>
-          </article>
-          <article className="tp-kpi tp-kpi-green">
-            <p className="tp-kpi-label">Checklist Ready</p>
-            <p className="tp-kpi-value num">{checklistPercent}%</p>
-            <p className="tp-kpi-sub">{checklistDoneCount} complete, {checklistRemaining} pending</p>
           </article>
           <article className="tp-kpi tp-kpi-red">
             <p className="tp-kpi-label">Guardrails</p>
@@ -524,36 +453,6 @@ export default function TradingPlan() {
 
               <article className="tp-card">
                 <div className="tp-side-head">
-                  <h3>Pre-session Readiness</h3>
-                  <span className="num">{checklistPercent}%</span>
-                </div>
-                <div className="tp-side-meta">
-                  <span>{checklistDoneCount}/{checklist.length} complete</span>
-                  <span>{checklistRemaining} left</span>
-                </div>
-                <div className="tp-progress tp-progress-side">
-                  <div style={{ width: `${checklistPercent}%` }} />
-                </div>
-                <div className="tp-side-list tp-side-list-spacious">
-                  {checklist.slice(0, 4).map(item => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`tp-check tp-check-preview ${item.done ? 'done' : ''}`}
-                      onClick={() => toggleChecklist(item.id)}
-                    >
-                      <span className="tp-check-box">{item.done ? <Check size={10} /> : null}</span>
-                      <span>{item.text}</span>
-                    </button>
-                  ))}
-                </div>
-                <button type="button" className="tp-inline-link" onClick={() => setActiveTab('pre-session-checklist')}>
-                  Open full checklist
-                </button>
-              </article>
-
-              <article className="tp-card">
-                <div className="tp-side-head">
                   <h3>Hard Stops</h3>
                 </div>
                 <div className="tp-side-list">
@@ -618,51 +517,76 @@ export default function TradingPlan() {
                     </div>
                   ) : rule.kind === 'max_contracts' ? (
                     <div className="tp-contract-limits">
-                      {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => (
-                        <div key={sym} className="tp-contract-row">
-                          <span className="tp-contract-ticker">{sym}</span>
-                          <div className="tp-contract-stepper">
-                            <button type="button" className="tp-contract-step-btn"
-                              onClick={() => setContractLimit(rule.id, sym, Math.max(1, max - 1))}>−</button>
-                            <span className="tp-contract-value num">{max}</span>
-                            <button type="button" className="tp-contract-step-btn"
-                              onClick={() => setContractLimit(rule.id, sym, max + 1)}>+</button>
+                      {Object.entries(rule.contractLimits ?? {}).length === 0 && (
+                        <p className="tp-contract-empty">No limits set — add an asset below.</p>
+                      )}
+                      {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => {
+                        const contract = lookupContract(sym);
+                        return (
+                          <div key={sym} className="tp-contract-row">
+                            <div className="tp-contract-sym-info">
+                              <span className="tp-contract-sym-name">{sym}</span>
+                              {contract && <span className="tp-contract-sym-full">{contract.name.replace(' Futures', '')}</span>}
+                            </div>
+                            <div className="tp-contract-stepper">
+                              <button type="button" className="tp-contract-step-btn"
+                                onClick={() => setContractLimit(rule.id, sym, Math.max(1, max - 1))}>−</button>
+                              <input
+                                type="number"
+                                className="tp-contract-value-input num"
+                                min={1}
+                                value={max}
+                                onChange={event => {
+                                  const v = parseInt(event.target.value);
+                                  if (!isNaN(v) && v >= 1) setContractLimit(rule.id, sym, v);
+                                }}
+                              />
+                              <button type="button" className="tp-contract-step-btn"
+                                onClick={() => setContractLimit(rule.id, sym, max + 1)}>+</button>
+                            </div>
+                            <button type="button" className="tp-contract-remove" title="Remove" onClick={() => removeContractLimit(rule.id, sym)}>
+                              <Trash2 size={13} />
+                            </button>
                           </div>
-                          <button type="button" className="tp-contract-remove" onClick={() => removeContractLimit(rule.id, sym)}>
-                            <X size={9} />
+                        );
+                      })}
+                      <div className="tp-contract-add-section">
+                        <span className="tp-contract-add-label">Add asset</span>
+                        <div className="tp-contract-add-row">
+                          <input
+                            className="tp-rule-input tp-contract-sym-input"
+                            placeholder="Symbol (e.g. MNQ)"
+                            value={pendingContracts[rule.id]?.symbol ?? ''}
+                            onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], symbol: event.target.value.toUpperCase() } }))}
+                            onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
+                          />
+                          <input
+                            className="tp-rule-input num"
+                            type="number" min="1" step="1"
+                            placeholder="Max"
+                            value={pendingContracts[rule.id]?.max ?? ''}
+                            onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], max: event.target.value } }))}
+                            onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
+                          />
+                          <button type="button" className="tp-contract-add-btn" onClick={() => commitPendingContract(rule.id)}>
+                            Add
                           </button>
                         </div>
-                      ))}
-                      {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).length > 0 && (
-                        <div className="tp-contract-quick">
-                          <span className="tp-contract-quick-label">Quick add</span>
-                          {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).map(sym => (
-                            <button key={sym} type="button" className="tp-contract-chip"
-                              onClick={() => setContractLimit(rule.id, sym, 1)}>
-                              <Plus size={8} />{sym}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <div className="tp-contract-add-row">
-                        <input
-                          className="tp-rule-input tp-contract-sym-input"
-                          placeholder="Symbol"
-                          value={pendingContracts[rule.id]?.symbol ?? ''}
-                          onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], symbol: event.target.value.toUpperCase() } }))}
-                          onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
-                        />
-                        <input
-                          className="tp-rule-input num"
-                          type="number" min="1" step="1"
-                          placeholder="Max"
-                          value={pendingContracts[rule.id]?.max ?? ''}
-                          onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], max: event.target.value } }))}
-                          onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
-                        />
-                        <button type="button" className="tp-contract-add-btn" title="Add" onClick={() => commitPendingContract(rule.id)}>
-                          <Plus size={11} />
-                        </button>
+                        {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).length > 0 && (
+                          <div className="tp-contract-quick">
+                            {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).map(sym => {
+                              const c = lookupContract(sym);
+                              return (
+                                <button key={sym} type="button" className="tp-contract-chip"
+                                  onClick={() => setContractLimit(rule.id, sym, 1)}>
+                                  <Plus size={9} />
+                                  <span className="tp-contract-chip-sym">{sym}</span>
+                                  {c && <span className="tp-contract-chip-name">{c.name.replace(' Futures', '')}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : rule.kind !== 'manual' ? (
@@ -677,7 +601,7 @@ export default function TradingPlan() {
                         <input
                           className="tp-rule-input tp-rule-name-input"
                           value={rule.label}
-                          placeholder="e.g. No trades before pre-session is complete"
+                          placeholder="e.g. No trades outside my planned setup"
                           onChange={event => updateRiskRule(rule.id, { label: event.target.value })}
                         />
                       </label>
@@ -708,88 +632,6 @@ export default function TradingPlan() {
                 <p>Automatic does not mean guessed.</p>
                 <span>Flyxa verifies only rules supported by logged trade data. Missing timestamps or values remain unverified.</span>
               </div>
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'prop-firm-rules' && (
-          <section className="tp-panel">
-            <div className="tp-section-head">
-              <h2>Prop Firm Rulebook</h2>
-              <p>Track each firm context separately to avoid accidental rule violations.</p>
-            </div>
-
-            <div className="tp-firm-grid">
-              {propFirms.map(firm => (
-                <article key={firm.id} className="tp-card">
-                  <div className="tp-firm-head">
-                    <h3>{firm.name}</h3>
-                    <span className={`tp-phase ${firm.phase === 'Eval' ? 'eval' : 'funded'}`}>{firm.phase}</span>
-                  </div>
-                  <div className="tp-side-list">
-                    {firm.params.map(param => (
-                      <div key={`${firm.id}-${param.label}`} className="tp-mini-rule">
-                        <span>{param.label}</span>
-                        <span className={`num ${param.color === 'amber' ? 'tp-rule-value-amber' : param.color === 'green' ? 'tp-rule-value-green' : ''}`}>
-                          {param.value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {firm.progress && (
-                    <div className="tp-firm-progress">
-                      <div className="tp-firm-progress-labels">
-                        <span className="num">{firm.progress.currentLabel}</span>
-                        <span className="num">{firm.progress.targetLabel}</span>
-                      </div>
-                      <div className="tp-progress">
-                        <div style={{ width: `${firm.progress.percent}%` }} />
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'pre-session-checklist' && (
-          <section className="tp-panel">
-            <div className="tp-section-head">
-              <h2>Pre-session Checklist</h2>
-              <p>Run this checklist before every session. Consistency here protects your execution quality.</p>
-            </div>
-
-            <div className="tp-checklist-tools">
-              <button type="button" className="tp-btn tp-btn-muted" onClick={completeChecklist}>
-                <Check size={12} />
-                Complete all
-              </button>
-              <button type="button" className="tp-btn tp-btn-muted" onClick={resetChecklist}>
-                <RefreshCw size={12} />
-                Clear all
-              </button>
-              <span className="tp-saved">
-                {checklistDoneCount}/{checklist.length} complete
-              </span>
-            </div>
-
-            <div className="tp-progress">
-              <div style={{ width: `${checklistPercent}%` }} />
-            </div>
-
-            <div className="tp-stack">
-              {checklist.map(item => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`tp-check tp-check-row ${item.done ? 'done' : ''}`}
-                  onClick={() => toggleChecklist(item.id)}
-                >
-                  <span className="tp-check-box">{item.done ? <Check size={10} /> : null}</span>
-                  <span>{item.text}</span>
-                </button>
-              ))}
             </div>
           </section>
         )}

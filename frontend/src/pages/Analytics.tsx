@@ -716,14 +716,24 @@ export default function Analytics() {
         recovered: Math.max(0, row.netPnL),
       }))
       .sort((a, b) => b.cost - a.cost || b.count - a.count);
+    const costingRows = rows.filter(row => row.cost > 0);
+    const topRows = costingRows.slice(0, 5);
+    const otherRows = costingRows.slice(5);
 
     const avoidableCost = rows.reduce((sum, row) => sum + row.cost, 0);
+    const otherCost = otherRows.reduce((sum, row) => sum + row.cost, 0);
+    const otherCount = otherRows.reduce((sum, row) => sum + row.count, 0);
+    const totalOccurrences = costingRows.reduce((sum, row) => sum + row.count, 0);
     const topLeak = rows.find(row => row.cost > 0) ?? null;
     const profitableFlags = rows.filter(row => row.recovered > 0).reduce((sum, row) => sum + row.recovered, 0);
     const netIfFixed = metrics.netPnL + avoidableCost;
 
     return {
       rows,
+      topRows,
+      otherCost,
+      otherCount,
+      totalOccurrences,
       avoidableCost,
       topLeak,
       profitableFlags,
@@ -742,11 +752,11 @@ export default function Analytics() {
   const periodSubtitle = getPeriodLabel(period, periodOffset, today);
   const winLossTotal = metrics.wins.length + metrics.losses.length;
   const strongestConfluences = useMemo(
-    () => confluenceRows.filter(row => row.netPnL > 0).slice(0, 5),
+    () => confluenceRows.filter(row => row.netPnL > 0).slice(0, 3),
     [confluenceRows],
   );
   const weakestConfluences = useMemo(
-    () => confluenceRows.filter(row => row.netPnL < 0).sort((a, b) => a.netPnL - b.netPnL).slice(0, 5),
+    () => confluenceRows.filter(row => row.netPnL < 0).sort((a, b) => a.netPnL - b.netPnL).slice(0, 3),
     [confluenceRows],
   );
 
@@ -882,45 +892,37 @@ export default function Analytics() {
 
       {/* Row 2 — supporting detail (compact tier) */}
       {filteredTrades.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricCard size="compact" label="Avg P/L" value={formatSignedCurrency(metrics.avgPnL)} sub={`${metrics.totalTrades} trade${metrics.totalTrades === 1 ? '' : 's'} average`} valueTone={metrics.avgPnL >= 0 ? 'positive' : 'negative'} />
-          <MetricCard size="compact" label="Avg Win" value={metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'} sub={`${metrics.wins.length} winning trade${metrics.wins.length !== 1 ? 's' : ''}`} valueTone="positive" />
-          <MetricCard size="compact" label="Avg Loss" value={metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'} sub={`${metrics.losses.length} losing trade${metrics.losses.length !== 1 ? 's' : ''}`} valueTone="negative" />
-          <MetricCard size="compact" label="Avg RR" value={metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'} sub={metrics.avgRR !== null ? `${metrics.rrCount} trade${metrics.rrCount !== 1 ? 's' : ''} with SL/TP set` : 'Log SL & TP to calculate'} />
+        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
+          <div className="grid grid-cols-2 gap-4 text-xs sm:grid-cols-4">
+            <div>
+              <p className="text-[var(--app-text-muted)]">Avg P/L</p>
+              <p className={`mt-1 text-sm font-semibold tabular-nums ${metrics.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSignedCurrency(metrics.avgPnL)}</p>
+            </div>
+            <div>
+              <p className="text-[var(--app-text-muted)]">Avg Win</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums text-emerald-400">{metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'}</p>
+            </div>
+            <div>
+              <p className="text-[var(--app-text-muted)]">Avg Loss</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums text-red-400">{metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'}</p>
+            </div>
+            <div>
+              <p className="text-[var(--app-text-muted)]">Avg RR</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--app-text)]">{metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'}</p>
+            </div>
+          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
         <section data-tour-id="analytics-equity-curve" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[var(--app-text)]">Cumulative P&amp;L</h2>
-            <div className="flex items-center gap-3 text-xs text-[var(--app-text-muted)]">
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                P&amp;L
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full bg-[var(--accent)]" />
-                Breakeven
-              </span>
-              {curveStats && (
-                <>
-                  <span className="inline-flex items-center gap-2">
-                    <span style={{ display: 'inline-block', width: 16, height: 0, border: `1.5px dashed ${DASHBOARD_GREEN}`, opacity: 0.75 }} />
-                    Peak
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <span style={{ display: 'inline-block', width: 16, height: 0, border: `1.5px dashed ${DASHBOARD_RED}`, opacity: 0.75 }} />
-                    Trough
-                  </span>
-                </>
-              )}
-              {accountPayouts.length > 0 && (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full" style={{ background: '#f59e0b' }} />
-                  Payout
-                </span>
-              )}
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--app-text)]">Cumulative P&amp;L</h2>
+              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Net result over {periodSubtitle}</p>
+            </div>
+            <div className={`text-right text-sm font-semibold tabular-nums ${metrics.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {formatSignedCurrency(metrics.netPnL)}
             </div>
           </div>
 
@@ -957,7 +959,7 @@ export default function Analytics() {
                   }}
                 />
                 <ReferenceLine y={0} stroke="var(--accent)" strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.85} />
-                {curveStats && curveStats.peak !== 0 && (
+                {false && curveStats && curveStats.peak !== 0 && (
                   <ReferenceLine
                     y={curveStats.peak}
                     stroke={DASHBOARD_GREEN}
@@ -977,7 +979,7 @@ export default function Analytics() {
                     }}
                   />
                 )}
-                {curveStats && curveStats.trough !== 0 && (
+                {false && curveStats && curveStats.trough !== 0 && (
                   <ReferenceLine
                     y={curveStats.trough}
                     stroke={DASHBOARD_RED}
@@ -1005,14 +1007,10 @@ export default function Analytics() {
                   fill="url(#pnl-fill)"
                   dot={(props: { cx?: number; cy?: number; index?: number; payload?: { payoutAmount?: number } }) => {
                     const hasPayout = !!props.payload?.payoutAmount;
-                    const isPeak = curveStats != null && props.index === curveStats.peakIdx;
-                    const isTrough = curveStats != null && props.index === curveStats.troughIdx;
-                    if (!hasPayout && !isPeak && !isTrough) return <g key={`${props.cx}-${props.cy}`} />;
+                    if (!hasPayout) return <g key={`${props.cx}-${props.cy}`} />;
                     return (
                       <g key={`dot-${props.index}-${props.cx}-${props.cy}`}>
                         {hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill="#f59e0b" stroke="#0e0d0d" strokeWidth={1.5} />}
-                        {isPeak && !hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill={DASHBOARD_GREEN} stroke="#0e0d0d" strokeWidth={1.5} />}
-                        {isTrough && !hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill={DASHBOARD_RED} stroke="#0e0d0d" strokeWidth={1.5} />}
                       </g>
                     );
                   }}
@@ -1027,80 +1025,59 @@ export default function Analytics() {
         </section>
 
         <section data-tour-id="analytics-win-loss" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-1 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-[var(--app-text)]">Win Rate</h2>
-          </div>
-          <div className="mb-3 flex items-baseline gap-2">
-            <span style={{
-              fontSize: 24,
-              fontWeight: 700,
-              lineHeight: 1,
-              color: metrics.winRate >= 50 ? 'var(--green, #34d399)' : 'var(--red, #f87171)',
-              fontVariantNumeric: 'tabular-nums',
-              WebkitFontSmoothing: 'antialiased',
-            }}>
-              {metrics.winRate.toFixed(0)}%
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--app-text-muted)', fontWeight: 400 }}>
-              {metrics.wins.length}W / {metrics.losses.length}L
-            </span>
-          </div>
+          <h2 className="text-sm font-semibold text-[var(--app-text)] mb-4">Win Rate</h2>
 
-          <div className="mt-4 grid grid-cols-[1fr_auto] items-start gap-3">
-            <div className="h-[190px] min-h-[190px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={winLossData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={48}
-                    outerRadius={82}
-                    stroke="none"
-                  >
-                    {winLossData.map(segment => (
-                      <Cell key={segment.name} fill={segment.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="space-y-2.5 text-sm">
-              <div className="flex items-center justify-between gap-5">
-                <span className="inline-flex items-center gap-2 text-[var(--app-text-muted)]">
-                  <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                  Wins
-                </span>
-                <span className="text-emerald-400">{metrics.wins.length}</span>
-              </div>
-              <div className="flex items-center justify-between gap-5">
-                <span className="inline-flex items-center gap-2 text-[var(--app-text-muted)]">
-                  <span className="h-3 w-3 rounded-full bg-red-400" />
-                  Losses
-                </span>
-                <span className="text-red-400">{metrics.losses.length}</span>
-              </div>
-              <div className="border-t border-[var(--app-border)] pt-3 text-xs">
-                <div className="mb-2 flex items-center justify-between gap-3 text-[var(--app-text-muted)]">
-                  <span>Avg hold (wins)</span>
-                  <span className="text-[var(--app-text)]">{formatHoldDuration(metrics.avgWinHold)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-[var(--app-text-muted)]">
-                  <span>Avg hold (losses)</span>
-                  <span className="text-[var(--app-text)]">{formatHoldDuration(metrics.avgLossHold)}</span>
-                </div>
-                {winLossTotal === 0 && (
-                  <p className="mt-3 text-[var(--app-text-muted)]">No scored trades yet.</p>
-                )}
-              </div>
+          {/* Donut with % overlaid in center */}
+          <div style={{ position: 'relative', height: 190 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={winLossData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={58}
+                  outerRadius={84}
+                  stroke="none"
+                >
+                  {winLossData.map(segment => (
+                    <Cell key={segment.name} fill={segment.color} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <span style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, fontVariantNumeric: 'tabular-nums', WebkitFontSmoothing: 'antialiased', color: metrics.winRate >= 50 ? '#34d399' : '#f87171' }}>
+                {metrics.winRate.toFixed(0)}%
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--app-text-subtle)', marginTop: 5, letterSpacing: '.04em' }}>
+                {metrics.wins.length}W · {metrics.losses.length}L
+              </span>
             </div>
           </div>
+
+          {/* Horizontal wins / losses legend */}
+          <div style={{ display: 'flex', borderTop: '1px solid var(--app-border)', marginTop: 12 }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Wins</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#34d399', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{metrics.wins.length}</span>
+            </div>
+            <div style={{ width: 1, background: 'var(--app-border)' }} />
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f87171', flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Losses</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#f87171', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{metrics.losses.length}</span>
+            </div>
+          </div>
+
+          {winLossTotal === 0 && (
+            <p style={{ fontSize: 11, color: 'var(--app-text-muted)', textAlign: 'center', marginTop: 8 }}>No scored trades yet.</p>
+          )}
         </section>
 
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4 xl:col-span-2">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-[var(--app-text)]">Trading Plan adherence</h3>
@@ -1115,22 +1092,13 @@ export default function Analytics() {
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
-              <p className="text-[var(--app-text-muted)]">Checked</p>
-              <p className="mt-1 font-mono text-base text-[var(--app-text)]">{planReport.checked}</p>
-            </div>
-            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
-              <p className="text-[var(--app-text-muted)]">Broken days</p>
-              <p className="mt-1 font-mono text-base text-red-400">{planReport.brokenDays}</p>
-            </div>
-            <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3">
-              <p className="text-[var(--app-text-muted)]">Perfect days</p>
-              <p className="mt-1 font-mono text-base text-emerald-400">{planReport.perfectDays}</p>
-            </div>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-[var(--app-border)] py-3 text-xs">
+            <span className="text-[var(--app-text-muted)]">Checked <b className="ml-1 font-mono text-[var(--app-text)]">{planReport.checked}</b></span>
+            <span className="text-[var(--app-text-muted)]">Broken days <b className="ml-1 font-mono text-red-400">{planReport.brokenDays}</b></span>
+            <span className="text-[var(--app-text-muted)]">Perfect days <b className="ml-1 font-mono text-emerald-400">{planReport.perfectDays}</b></span>
           </div>
 
-          <div className="mt-4 border-t border-[var(--app-border)] pt-3 text-xs">
+          <div className="mt-3 text-xs">
             {planReport.mostBrokenRule ? (
               <>
                 <p className="text-[var(--app-text-muted)]">Most repeated break</p>
@@ -1260,7 +1228,8 @@ export default function Analytics() {
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L Distribution</h3>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Trade outcomes by dollar result</p>
+              <div className="hidden">
                 <span style={{ color: metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 700, fontSize: 13 }}>
                   {metrics.winRate.toFixed(0)}%
                 </span>
@@ -1277,7 +1246,7 @@ export default function Analytics() {
               </div>
             </div>
             {/* Size legend hint */}
-            <span className="mt-0.5 shrink-0 flex items-center gap-1 text-[10px]" style={{ color: 'var(--app-text-subtle)' }}>
+            <span className="hidden">
               <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', opacity: 0.5 }} />
               <span style={{ width: 11, height: 11, borderRadius: '50%', background: 'currentColor', display: 'inline-block', opacity: 0.5 }} />
               <span style={{ marginLeft: 3 }}>size = |P&amp;L|</span>
@@ -1300,7 +1269,7 @@ export default function Analytics() {
               {/* dot area scales with |P&L|: ~2px to ~7px radius */}
               <ZAxis dataKey="size" range={[14, 160]} />
               {/* Mean / expectancy line — gray, thinner, doesn't compete with $0 */}
-              {Math.abs(pnlDistribution.meanPnL) > pnlDistribution.domainMax * 0.01 && (
+              {false && Math.abs(pnlDistribution.meanPnL) > pnlDistribution.domainMax * 0.01 && (
                 <ReferenceLine
                   x={pnlDistribution.meanPnL}
                   stroke="rgba(148,163,184,0.5)"
@@ -1336,7 +1305,7 @@ export default function Analytics() {
                 }}
               />
               {/* Zone count labels at the top of each side */}
-              <ReferenceLine
+              {false && <ReferenceLine
                 x={pnlDistribution.domainMin / 2}
                 stroke="transparent"
                 label={(props: any) => {
@@ -1350,8 +1319,8 @@ export default function Analytics() {
                     </text>
                   );
                 }}
-              />
-              <ReferenceLine
+              />}
+              {false && <ReferenceLine
                 x={pnlDistribution.domainMax / 2}
                 stroke="transparent"
                 label={(props: any) => {
@@ -1365,7 +1334,7 @@ export default function Analytics() {
                     </text>
                   );
                 }}
-              />
+              />}
               <Tooltip
                 cursor={false}
                 content={({ payload }) => {
@@ -1442,7 +1411,7 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-between">
+        <div className="hidden">
           <span className="text-xs text-[var(--app-text-muted)]">Mon-Fri</span>
           <div className="flex items-center gap-2 text-xs text-[var(--app-text-muted)]">
             <span>Loss</span>
@@ -1539,7 +1508,45 @@ export default function Analytics() {
         )}
       </section>
 
-      {mistakeCost.rows.length > 0 && (() => {
+      {mistakeCost.topRows.length > 0 && (
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text)]">Mistake Cost</h3>
+              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Top recurring leaks this period</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] text-[var(--app-text-muted)]">Avoidable loss</p>
+              <p className="mt-1 text-base font-semibold tabular-nums text-red-400">-{formatCurrency(mistakeCost.avoidableCost)}</p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-[var(--app-border)]">
+            {mistakeCost.topRows.map((row, index) => (
+              <div key={row.label} className="grid grid-cols-[24px_minmax(0,1fr)_70px_110px] items-center gap-3 py-2.5 text-sm">
+                <span className="font-mono text-[11px] text-[var(--app-text-subtle)]">{index + 1}</span>
+                <span className="truncate text-[var(--app-text)]">{row.label}</span>
+                <span className="text-right font-mono text-[11px] text-[var(--app-text-muted)]">{row.count}x</span>
+                <span className="text-right font-mono text-xs font-semibold tabular-nums text-red-400">-{formatCurrency(row.cost)}</span>
+              </div>
+            ))}
+            {mistakeCost.otherCost > 0 && (
+              <div className="grid grid-cols-[24px_minmax(0,1fr)_70px_110px] items-center gap-3 py-2.5 text-sm">
+                <span className="font-mono text-[11px] text-[var(--app-text-subtle)]">+</span>
+                <span className="truncate text-[var(--app-text-muted)]">Other flags</span>
+                <span className="text-right font-mono text-[11px] text-[var(--app-text-muted)]">{mistakeCost.otherCount}x</span>
+                <span className="text-right font-mono text-xs font-semibold tabular-nums text-red-400">-{formatCurrency(mistakeCost.otherCost)}</span>
+              </div>
+            )}
+          </div>
+
+          <p className="mt-3 text-xs text-[var(--app-text-muted)]">
+            Fixing the top leak first would have the highest impact: <span className="text-[var(--app-text)]">{mistakeCost.topLeak?.label}</span>.
+          </p>
+        </section>
+      )}
+
+      {false && mistakeCost.rows.length > 0 && (() => {
         const totalOccurrences = mistakeCost.rows.reduce((s, r) => s + r.count, 0);
         const maxCost = Math.max(1, ...mistakeCost.rows.map(row => row.cost));
         return (

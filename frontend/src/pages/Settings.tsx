@@ -306,6 +306,98 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SafetyBox({
+  label,
+  children,
+  description,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+  description?: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        minWidth: 0,
+        border: `1px solid ${BORDER}`,
+        borderRadius: '8px',
+        background: 'rgba(255,255,255,0.018)',
+        padding: '12px',
+      }}
+    >
+      <div
+        style={{
+          marginBottom: '9px',
+          color: T3,
+          fontSize: '10px',
+          fontWeight: 650,
+          letterSpacing: '0.02em',
+        }}
+      >
+        {label}
+      </div>
+      {children}
+      {description && (
+        <p style={{ marginTop: '8px', color: T3, fontSize: '10px', lineHeight: 1.45, fontFamily: SANS }}>
+          {description}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SafetyActionButton({
+  children,
+  icon,
+  onClick,
+  disabled = false,
+  tone = 'neutral',
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: 'neutral' | 'primary';
+}) {
+  const [hovered, setHovered] = useState(false);
+  const primary = tone === 'primary';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        minWidth: 0,
+        height: '36px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '7px',
+        paddingInline: '12px',
+        borderRadius: '6px',
+        border: `1px solid ${disabled ? BORDER : primary ? 'rgba(245,158,11,0.38)' : 'rgba(255,255,255,0.11)'}`,
+        background: disabled
+          ? 'transparent'
+          : hovered
+            ? primary ? 'rgba(245,158,11,0.11)' : 'rgba(255,255,255,0.04)'
+            : primary ? 'rgba(245,158,11,0.055)' : 'rgba(255,255,255,0.018)',
+        color: disabled ? T3 : primary ? AMBER : T1,
+        font: `650 11px ${SANS}`,
+        whiteSpace: 'nowrap',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+      }}
+    >
+      <span style={{ color: disabled ? T3 : primary ? AMBER : T2, display: 'inline-flex' }}>{icon}</span>
+      {children}
+    </button>
+  );
+}
+
 function StyledSelect({
   value,
   onChange,
@@ -1432,234 +1524,95 @@ export default function Settings() {
           title="Data safety"
           subtitle="Confirm which login owns the data currently loaded on this device."
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
-
-            {/* Account */}
-            <div>
-              <FieldLabel>Account</FieldLabel>
-              <div
-                style={{
-                  height: '38px',
-                  borderRadius: '6px',
-                  border: `1px solid ${BORDER}`,
-                  background: S2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '0 10px',
-                  gap: '8px',
-                  overflow: 'hidden',
-                }}
-              >
-                <User size={12} style={{ color: T3, flexShrink: 0 }} />
-                <span
-                  style={{
-                    fontSize: '12px',
-                    color: T1,
-                    fontFamily: 'var(--font-mono)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    minWidth: 0,
-                  }}
-                >
-                  {user?.email ?? 'Not signed in'}
-                </span>
-              </div>
-            </div>
-
-            {/* Journal data */}
-            <div>
-              <FieldLabel>Journal data</FieldLabel>
-              <div
-                style={{
-                  height: '38px',
-                  borderRadius: '6px',
-                  border: `1px solid ${BORDER}`,
-                  background: S2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '0 12px',
-                  gap: '8px',
-                }}
-              >
-                <span style={{ fontSize: '14px', fontWeight: 600, color: T1, lineHeight: 1 }}>{journalEntries.length}</span>
-                <span style={{ fontSize: '11px', color: T3 }}>{journalEntries.length === 1 ? 'day' : 'days'}</span>
-                <span style={{ fontSize: '11px', color: T3, opacity: 0.3 }}>·</span>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: T1, lineHeight: 1 }}>{loadedTradeCount}</span>
-                <span style={{ fontSize: '11px', color: T3 }}>{loadedTradeCount === 1 ? 'trade' : 'trades'}</span>
-              </div>
-            </div>
-
-            {/* Export backup */}
-            <div>
-              <FieldLabel>Export backup</FieldLabel>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {([
-                  {
-                    label: 'JSON',
-                    icon: <FileJson size={13} />,
-                    onClick: handleExportJson,
-                    disabled: journalEntries.length === 0,
-                    color: '#4f8ef7',
-                    bg: 'rgba(79,142,247,0.09)',
-                    bgHover: 'rgba(79,142,247,0.17)',
-                    border: 'rgba(79,142,247,0.35)',
-                    borderHover: 'rgba(79,142,247,0.6)',
-                  },
-                  {
-                    label: 'CSV',
-                    icon: <FileSpreadsheet size={13} />,
-                    onClick: handleExportCsv,
-                    disabled: loadedTradeCount === 0,
-                    color: '#34d399',
-                    bg: 'rgba(52,211,153,0.09)',
-                    bgHover: 'rgba(52,211,153,0.17)',
-                    border: 'rgba(52,211,153,0.35)',
-                    borderHover: 'rgba(52,211,153,0.6)',
-                  },
-                ] as const).map(btn => (
-                  <button
-                    key={btn.label}
-                    type="button"
-                    onClick={btn.onClick}
-                    disabled={btn.disabled}
+          <div style={{ display: 'grid', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+              <SafetyBox label="Signed-in account">
+                <div style={{ height: '36px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                  <User size={13} style={{ color: T3, flexShrink: 0 }} />
+                  <span
                     style={{
-                      flex: 1,
-                      height: '38px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '5px',
-                      borderRadius: '6px',
-                      border: `1px solid ${btn.disabled ? BORDER : btn.border}`,
-                      background: btn.disabled ? 'transparent' : btn.bg,
-                      color: btn.disabled ? T3 : btn.color,
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      fontFamily: SANS,
-                      cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                      opacity: btn.disabled ? 0.38 : 1,
-                      transition: 'background 0.15s, border-color 0.15s',
-                    }}
-                    onMouseEnter={e => {
-                      if (!btn.disabled) {
-                        const el = e.currentTarget as HTMLButtonElement;
-                        el.style.background = btn.bgHover;
-                        el.style.borderColor = btn.borderHover;
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!btn.disabled) {
-                        const el = e.currentTarget as HTMLButtonElement;
-                        el.style.background = btn.bg;
-                        el.style.borderColor = btn.border;
-                      }
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: T1,
+                      font: `650 12px ${SANS}`,
                     }}
                   >
-                    {btn.icon}
-                    {btn.label}
-                  </button>
-                ))}
-              </div>
+                    {user?.email ?? 'Not signed in'}
+                  </span>
+                </div>
+              </SafetyBox>
+
+              <SafetyBox label="Journal snapshot">
+                <div style={{ height: '36px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                  <strong style={{ color: T1, font: '650 20px var(--font-sans)', letterSpacing: '-0.02em', lineHeight: 1 }}>{journalEntries.length}</strong>
+                  <span style={{ color: T3, fontSize: '11px' }}>{journalEntries.length === 1 ? 'day' : 'days'}</span>
+                  <span style={{ width: '1px', height: '14px', background: BSUB }} />
+                  <strong style={{ color: T1, font: '650 20px var(--font-sans)', letterSpacing: '-0.02em', lineHeight: 1 }}>{loadedTradeCount}</strong>
+                  <span style={{ color: T3, fontSize: '11px' }}>{loadedTradeCount === 1 ? 'trade' : 'trades'}</span>
+                </div>
+              </SafetyBox>
+
+              <SafetyBox
+                label="Backup controls"
+                description="Export before major imports or account changes. JSON restores Flyxa data; CSV is for spreadsheet review."
+              >
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleImportJson}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+                  <SafetyActionButton icon={<FileJson size={13} />} onClick={handleExportJson} disabled={journalEntries.length === 0}>
+                    Export JSON
+                  </SafetyActionButton>
+                  <SafetyActionButton icon={<FileSpreadsheet size={13} />} onClick={handleExportCsv} disabled={loadedTradeCount === 0}>
+                    Export CSV
+                  </SafetyActionButton>
+                  <SafetyActionButton icon={<Upload size={13} />} onClick={() => importFileRef.current?.click()}>
+                    Import JSON
+                  </SafetyActionButton>
+                </div>
+                {importFeedback && (
+                  <p
+                    style={{
+                      marginTop: '9px',
+                      fontSize: '11px',
+                      color: importFeedback.ok ? '#4ade80' : '#f87171',
+                      fontFamily: SANS,
+                    }}
+                  >
+                    {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
+                  </p>
+                )}
+              </SafetyBox>
             </div>
 
-            {/* Import / restore */}
-            <div>
-              <FieldLabel>Restore from backup</FieldLabel>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept=".json"
-                style={{ display: 'none' }}
-                onChange={handleImportJson}
-              />
-              <button
-                type="button"
-                onClick={() => importFileRef.current?.click()}
-                style={{
-                  height: '38px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  paddingInline: '14px',
-                  borderRadius: '6px',
-                  border: `1px solid rgba(251,191,36,0.35)`,
-                  background: 'rgba(251,191,36,0.07)',
-                  color: '#fbbf24',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  fontFamily: SANS,
-                  cursor: 'pointer',
-                  transition: 'background 0.15s, border-color 0.15s',
-                }}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = 'rgba(251,191,36,0.14)';
-                  el.style.borderColor = 'rgba(251,191,36,0.6)';
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = 'rgba(251,191,36,0.07)';
-                  el.style.borderColor = 'rgba(251,191,36,0.35)';
-                }}
-              >
-                <Upload size={13} />
-                Import JSON
-              </button>
-              {importFeedback && (
-                <p style={{
-                  marginTop: '8px',
-                  fontSize: '12px',
-                  color: importFeedback.ok ? '#4ade80' : '#f87171',
-                  fontFamily: SANS,
-                }}>
-                  {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                border: `1px solid ${BORDER}`,
+                borderRadius: '8px',
+                background: 'rgba(255,255,255,0.012)',
+                padding: '12px',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: T1, font: `650 12px ${SANS}` }}>Browser recovery</div>
+                <p style={{ marginTop: '4px', maxWidth: '620px', color: T3, fontSize: '11px', fontFamily: SANS, lineHeight: 1.45 }}>
+                  Merge trades from this browser’s local backup when recent cloud journal trades are missing.
                 </p>
-              )}
-            </div>
-
-            {/* Recover from browser cache */}
-            <div>
-              <FieldLabel>Recover from browser cache</FieldLabel>
-              <button
-                type="button"
-                onClick={() => { void handleRecoverFromLocalCache(); }}
-                style={{
-                  height: '38px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  paddingInline: '14px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(251,191,36,0.35)',
-                  background: 'rgba(251,191,36,0.07)',
-                  color: '#fbbf24',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  fontFamily: SANS,
-                  cursor: 'pointer',
-                  transition: 'background 0.15s, border-color 0.15s',
-                }}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = 'rgba(251,191,36,0.14)';
-                  el.style.borderColor = 'rgba(251,191,36,0.6)';
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = 'rgba(251,191,36,0.07)';
-                  el.style.borderColor = 'rgba(251,191,36,0.35)';
-                }}
-              >
-                <RotateCcw size={13} />
+              </div>
+              <SafetyActionButton icon={<RotateCcw size={13} />} tone="primary" onClick={() => { void handleRecoverFromLocalCache(); }}>
                 Recover missing trades
-              </button>
-              <p style={{ marginTop: '6px', fontSize: '11px', color: T3, fontFamily: SANS, lineHeight: 1.4 }}>
-                Merges trades from this browser's local backup that are missing from your cloud journal.
-                Use this if trades you logged recently have disappeared.
-              </p>
+              </SafetyActionButton>
             </div>
-
           </div>
         </SectionPanel>
         <SectionPanel

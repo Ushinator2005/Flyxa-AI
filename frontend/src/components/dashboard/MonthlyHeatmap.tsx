@@ -917,8 +917,17 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
       if (Number.isNaN(parsed.getTime())) return;
       if (parsed.getFullYear() !== year || parsed.getMonth() + 1 !== month) return;
       const day = parsed.getDate();
-      const tradeCount = Array.isArray(entry.trades) ? entry.trades.length : 0;
-      const isBlankDay = tradeCount === 0;
+      const rawTrades = Array.isArray(entry.trades)
+        ? (entry.trades as Array<{ entry?: number; pnl?: number; exit?: number | null }>)
+        : [];
+      // isBlankDay = true when there are no trades, OR when every trade is a skeleton
+      // record (entry=0, pnl=0, exit=null/0) — these are rows where the DB had null
+      // values that were normalised to 0 by toStoreTrade, not real executed trades.
+      const isBlankDay = rawTrades.every(t =>
+        (t.entry === 0 || t.entry == null) &&
+        (t.pnl === 0 || t.pnl == null) &&
+        (t.exit === 0 || t.exit == null)
+      );
       const accountIds = Array.isArray(entry.accountIds) ? entry.accountIds as string[]
         : entry.account ? [entry.account]
         : undefined;
@@ -1315,8 +1324,8 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
                     )}
                     {pnl !== undefined ? (
                       <div className="mt-auto flex flex-col" style={{ gap: isMobile ? 0 : 2 }}>
-                        <span className={`font-semibold ${pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ fontSize: isMobile ? 10 : 14, lineHeight: 1.2 }}>
-                          {pnl >= 0 ? '+' : ''}
+                        <span className={`font-semibold ${pnl > 0 ? 'text-emerald-300' : pnl < 0 ? 'text-red-300' : 'text-slate-500'}`} style={{ fontSize: isMobile ? 10 : 14, lineHeight: 1.2 }}>
+                          {pnl > 0 ? '+' : ''}
                           {Math.abs(pnl) >= 1000
                             ? `${(pnl / 1000).toFixed(1)}k`
                             : pnl.toFixed(0)}

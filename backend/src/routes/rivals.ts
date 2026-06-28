@@ -19,6 +19,7 @@ type RivalPeriodStats = {
   ruleAdherence: number;
   riskAdjusted: number;
   equityCurve: number[];
+  dailyPnl?: Array<{ date: string; pnl: number }>;
 };
 type RivalStats = {
   lifetimeXp: number;
@@ -173,7 +174,7 @@ function periodBounds(period: Exclude<LeaderboardPeriod, 'allTime'>, previous = 
 }
 
 function emptyPeriodStats(): RivalPeriodStats {
-  return { netPnl: 0, winRate: 0, avgR: null, tradeCount: 0, tradingDays: 0, greenDays: 0, maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [] };
+  return { netPnl: 0, winRate: 0, avgR: null, tradeCount: 0, tradingDays: 0, greenDays: 0, maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [], dailyPnl: [] };
 }
 
 function normalizePeriodStats(value: unknown): RivalPeriodStats | null {
@@ -190,6 +191,18 @@ function normalizePeriodStats(value: unknown): RivalPeriodStats | null {
       .slice(-24)
       .map(point => Math.round(point * 100) / 100)
     : [];
+  const dailyPnl = Array.isArray(raw.dailyPnl)
+    ? raw.dailyPnl
+      .map(point => {
+        if (!point || typeof point !== 'object' || Array.isArray(point)) return null;
+        const rawPoint = point as Record<string, unknown>;
+        const date = typeof rawPoint.date === 'string' ? rawPoint.date : '';
+        const pnl = Number(rawPoint.pnl);
+        return date && Number.isFinite(pnl) ? { date, pnl: Math.round(pnl * 100) / 100 } : null;
+      })
+      .filter((point): point is { date: string; pnl: number } => point !== null)
+      .slice(-30)
+    : [];
   return {
     netPnl: finiteNumber('netPnl'),
     winRate: clampScore(raw.winRate),
@@ -202,6 +215,7 @@ function normalizePeriodStats(value: unknown): RivalPeriodStats | null {
     ruleAdherence: clampScore(raw.ruleAdherence),
     riskAdjusted: finiteNumber('riskAdjusted'),
     equityCurve,
+    dailyPnl,
   };
 }
 
@@ -271,6 +285,9 @@ function summarizeTrades(trades: Array<Record<string, unknown>>, bounds?: [strin
     ruleAdherence: evaluated ? Math.round((followed / evaluated) * 100) : 0,
     riskAdjusted: Math.round((cumulative / Math.max(maxDrawdown, 1)) * 100) / 100,
     equityCurve: equityCurve.slice(-24),
+    dailyPnl: [...daily.entries()]
+      .map(([date, pnl]) => ({ date, pnl: Math.round(pnl * 100) / 100 }))
+      .slice(-30),
   };
 }
 

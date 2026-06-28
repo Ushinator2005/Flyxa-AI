@@ -12,17 +12,10 @@ import { useTrades } from '../hooks/useTrades.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
 import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
 import ScreenshotImportModal from '../components/scanner/ScreenshotImportModal.js';
-import RankMedallion, {
-  getRankFromXP,
-  getXPProgress,
-  RANK_LABELS,
-  RANK_COLORS,
-  RANK_XP_THRESHOLDS,
-  type RankTier,
-} from '../components/rivals/RankMedallion.js';
 import '../components/rivals/rivals.css';
 
 type League = { id: string; name: string; memberIds: string[] };
+type FormDot = { tone: 'win' | 'loss' | 'empty'; label: string };
 
 const PERIODS: Array<{ value: LeaderboardPeriod; label: string }> = [
   { value: 'week', label: 'This week' },
@@ -31,19 +24,16 @@ const PERIODS: Array<{ value: LeaderboardPeriod; label: string }> = [
   { value: 'allTime', label: 'All time' },
 ];
 
-const MODES: Array<{ value: LeaderboardMetric; label: string }> = [
+const MODES: Array<{ value: LeaderboardMetric; label: string; help?: string }> = [
   { value: 'netPnl', label: 'Net P&L' },
   { value: 'consistency', label: 'Consistency' },
-  { value: 'riskAdjusted', label: 'Risk adjusted' },
+  { value: 'riskAdjusted', label: 'Risk adjusted', help: 'Net P&L divided by max drawdown. 1x is okay, 2x is strong, 4x+ is elite.' },
   { value: 'processScore', label: 'Process' },
-  { value: 'journalStreak', label: 'Journal streak' },
 ];
-
-const RANK_TIERS: RankTier[] = ['bronze', 'silver', 'gold', 'diamond', 'master', 'grandmaster'];
 
 const EMPTY_PERIOD: RivalPeriodStats = {
   netPnl: 0, winRate: 0, avgR: null, tradeCount: 0, tradingDays: 0, greenDays: 0,
-  maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [],
+  maxDrawdown: 0, consistency: 0, ruleAdherence: 0, riskAdjusted: 0, equityCurve: [], dailyPnl: [],
 };
 
 function formatCurrency(value: number): string {
@@ -54,13 +44,18 @@ function formatCurrency(value: number): string {
 function getPeriodStats(rival: Rival, period: LeaderboardPeriod): RivalPeriodStats {
   const saved = rival.mascot.stats.periods?.[period];
   if (saved) return saved;
-  return {
-    ...EMPTY_PERIOD,
-    netPnl: rival.mascot.stats.netPnl ?? 0,
-    winRate: rival.mascot.stats.winRate ?? 0,
-    avgR: rival.mascot.stats.avgR ?? null,
-    consistency: rival.mascot.stats.processScore,
-  };
+  // Only fall back to top-level all-time stats for 'allTime'.
+  // For week/month/season with no period data, return empty so the filter is clearly reflected.
+  if (period === 'allTime') {
+    return {
+      ...EMPTY_PERIOD,
+      netPnl: rival.mascot.stats.netPnl ?? 0,
+      winRate: rival.mascot.stats.winRate ?? 0,
+      avgR: rival.mascot.stats.avgR ?? null,
+      consistency: rival.mascot.stats.processScore,
+    };
+  }
+  return { ...EMPTY_PERIOD };
 }
 
 function metricValue(rival: Rival, metric: LeaderboardMetric, period: LeaderboardPeriod): number {
@@ -79,9 +74,13 @@ function metricValue(rival: Rival, metric: LeaderboardMetric, period: Leaderboar
 
 function formatMetric(rival: Rival, metric: LeaderboardMetric, period: LeaderboardPeriod): string {
   const value = metricValue(rival, metric, period);
+  return formatMetricValue(value, metric);
+}
+
+function formatMetricValue(value: number, metric: LeaderboardMetric): string {
   if (metric === 'netPnl') return formatCurrency(value);
   if (metric === 'riskAdjusted') return `${value.toFixed(2)}x`;
-  if (metric === 'journalStreak') return `${value}d`;
+  if (metric === 'journalStreak') return `${Math.round(value)}d`;
   return `${Math.round(value)}`;
 }
 
@@ -92,10 +91,20 @@ function formatMetricGap(value: number, metric: LeaderboardMetric): string {
   return `${Math.ceil(Math.max(0, value))} points`;
 }
 
-function rivalXP(rival: Rival): number {
-  const s = rival.mascot.stats;
-  if (typeof s.lifetimeXp === 'number' && Number.isFinite(s.lifetimeXp)) return Math.max(0, Math.round(s.lifetimeXp));
-  return s.dailyJournalStreak * 2 + s.dailyJournalScore + s.tradingJournalScore + s.processScore + (s.backtestSessions ?? 0) * 2;
+function riskAdjustedGrade(value: number): string {
+  if (value < 0) return 'Losing after drawdown';
+  if (value < 1) return 'Below 1x: risk is not paying yet';
+  if (value < 2) return '1x+: acceptable';
+  if (value < 4) return '2x+: strong';
+  return '4x+: elite';
+}
+
+function positionStripeColor(position: number, isMe: boolean | undefined): string {
+  if (isMe) return 'var(--rv-blue)';
+  if (position === 1) return 'var(--rv-gold)';
+  if (position === 2) return 'var(--rv-silver)';
+  if (position === 3) return 'var(--rv-bronze)';
+  return 'var(--rv-text-3)';
 }
 
 function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, period: LeaderboardPeriod): number {
@@ -112,6 +121,59 @@ function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, 
   const currentRank = [...rivals].sort((a, b) => metricValue(b, metric, period) - metricValue(a, metric, period)).findIndex(item => item.id === rival.id);
   const previousRank = [...rivals].sort((a, b) => previousValue(b) - previousValue(a)).findIndex(item => item.id === rival.id);
   return previousRank - currentRank;
+}
+
+function dateToLocalIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isMarketDay(date: Date): boolean {
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function recentMarketDates(): string[] {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const dates: string[] = [];
+  const cursor = new Date(now);
+  while (dates.length < 5) {
+    if (isMarketDay(cursor)) dates.push(dateToLocalIso(cursor));
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return dates.reverse();
+}
+
+function getFormDots(rival: Rival): FormDot[] {
+  const stats = getPeriodStats(rival, 'allTime');
+  const byDate = new Map((stats.dailyPnl ?? []).map(day => [day.date, day.pnl]));
+  return recentMarketDates().map((date) => {
+    const pnl = byDate.get(date);
+    if (pnl === undefined) return { tone: 'empty', label: `${date}: no trades` };
+    if (pnl > 0) return { tone: 'win', label: `${date}: winning day ${formatCurrency(pnl)}` };
+    if (pnl < 0) return { tone: 'loss', label: `${date}: losing day ${formatCurrency(pnl)}` };
+    return { tone: 'empty', label: `${date}: breakeven day` };
+  });
+}
+
+function getSeasonProgress() {
+  const now = new Date();
+  const season = String(now.getMonth() + 1).padStart(2, '0');
+  const day = Math.max(1, Math.min(90, now.getDate()));
+  return { label: `SEASON ${season} · DAY ${day} / 90`, pct: Math.min(100, (day / 90) * 100) };
+}
+
+function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
+  const stats = getPeriodStats(rival, period);
+  if (stats.tradeCount === 0) return 'No logged trades yet — the table moves when the journal fills.';
+  if (stats.ruleAdherence > 0 && stats.ruleAdherence < 80) return `Process under pressure — ${Math.round(stats.ruleAdherence)}% rule adherence.`;
+  if (stats.netPnl < 0) return 'Protect downside first — one clean day gets you back in motion.';
+  if (stats.consistency < 65) return 'Profitable, but consistency is the fastest ranking lever.';
+  return 'Momentum intact — keep pressing the repeatable setup.';
 }
 
 export default function Rivals() {
@@ -162,6 +224,7 @@ export default function Rivals() {
   const gapToNext = currentUser && nextRival
     ? metricValue(nextRival, metric, period) - metricValue(currentUser, metric, period)
     : 0;
+  const seasonProgress = useMemo(() => getSeasonProgress(), []);
   const pendingRequests = rivalRequests.filter(request => request.status === 'pending');
 
   // Reset share state when switching rivals
@@ -201,11 +264,7 @@ export default function Rivals() {
   if (!currentUser || !selectedRival) return null;
 
   const selectedStats = getPeriodStats(selectedRival, period);
-  const selectedXP = rivalXP(selectedRival);
-  const selectedRankTier = getRankFromXP(selectedXP);
-  const myXP = rivalXP(currentUser);
-  const myXPProgress = getXPProgress(myXP);
-  const myRankTier = myXPProgress.rank;
+  const selectedPeriodLabel = PERIODS.find(item => item.value === period)?.label ?? 'selected period';
 
   async function handleRequestAction(id: string, action: 'accept' | 'decline' | 'cancel') {
     setRequestBusyId(id);
@@ -228,9 +287,9 @@ export default function Rivals() {
       <div className="rivals-shell rv-league-shell">
         <header className="rv-league-header">
           <div>
-            <div className="rv-page-kicker">RIVALS / SEASON {String(new Date().getMonth() + 1).padStart(2, '0')}</div>
-            <h1>Trading league</h1>
-            <p>Compete on profitability, discipline and repeatable execution.</p>
+            <div className="rv-page-kicker">RIVALS</div>
+            <h1>Leaderboard</h1>
+            <p>Compare verified P&L, consistency, and process with your trading circle.</p>
           </div>
           <div className="rv-header-actions">
             <button className="rv-secondary-button" type="button" onClick={() => setLeagueBuilderOpen(open => !open)}>
@@ -281,12 +340,9 @@ export default function Rivals() {
 
         <section className="rv-command-bar">
           <div className="rv-command-selects">
-            <label className="rv-control-field">
-              <span>Rank by</span>
-              <select value={metric} onChange={event => setMetric(event.target.value as LeaderboardMetric)}>
-                {MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-              </select>
-            </label>
+            <div className="rv-metric-tabs">
+              {MODES.map(mode => <button type="button" key={mode.value} title={mode.help} className={metric === mode.value ? 'active' : ''} onClick={() => setMetric(mode.value)}>{mode.label}</button>)}
+            </div>
             <div className="rv-period-tabs">
               {PERIODS.map(item => <button type="button" key={item.value} className={period === item.value ? 'active' : ''} onClick={() => setPeriod(item.value)}>{item.label}</button>)}
             </div>
@@ -301,19 +357,31 @@ export default function Rivals() {
             <RivalAvatar rival={currentUser} />
             <div><span>Your standing</span><strong>#{myRank || '—'} of {ranked.length}</strong></div>
           </div>
+          <div className="rv-season-progress">
+            <span>{seasonProgress.label}</span>
+            <i><u style={{ width: `${seasonProgress.pct}%` }} /></i>
+          </div>
           <div className="rv-summary-metric">
             <span>{MODES.find(mode => mode.value === metric)?.label}</span>
-            <strong className={metricValue(currentUser, metric, period) >= 0 ? 'positive' : 'negative'}>{formatMetric(currentUser, metric, period)}</strong>
+            <AnimatedMetric rival={currentUser} metric={metric} period={period} className={metricValue(currentUser, metric, period) >= 0 ? 'positive' : 'negative'} />
+            {metric === 'riskAdjusted' && (
+              <small className="rv-risk-inline-key">
+                <span>{riskAdjustedGrade(metricValue(currentUser, metric, period))}</span>
+                <i title="Risk adjusted = net P&L / max drawdown"><b>1x</b><b>2x</b><b>4x+</b></i>
+              </small>
+            )}
           </div>
           <div className="rv-summary-context">
-            {myRank === 1 ? <><Trophy size={14} /> Leading this board</> : <>{formatMetricGap(gapToNext, metric)} to rank #{Math.max(1, myRank - 1)}</>}
+            {myRank === 1 ? (
+              <><Trophy size={14} /> Leading this board</>
+            ) : (
+              <>
+                <span className="rv-summary-gap">{formatMetricGap(gapToNext, metric)}</span>
+                <span>to rank</span>
+                <span className="rv-summary-rank-target">#{Math.max(1, myRank - 1)}</span>
+              </>
+            )}
           </div>
-          <div className="rv-summary-division">
-            <RankMedallion rank={myRankTier} size={38} />
-            <div><span style={{ color: RANK_COLORS[myRankTier] }}>{RANK_LABELS[myRankTier]} rank</span><small>{myXP} XP{myXPProgress.next ? ` · ${myXPProgress.xpToNext} to ${RANK_LABELS[myXPProgress.next]}` : ' · Max rank'}</small></div>
-            <i><u style={{ width: `${myXPProgress.pct}%` }} /></i>
-          </div>
-          <Sparkline values={getPeriodStats(currentUser, period).equityCurve} />
         </section>
 
         <div className="rv-competition-layout">
@@ -324,28 +392,36 @@ export default function Rivals() {
                 const stats = getPeriodStats(rival, period);
                 const movement = rankMovement(rival, leagueRivals, metric, period);
                 const position = ranked.findIndex(item => item.id === rival.id) + 1;
-                const tier = getRankFromXP(rivalXP(rival));
-                const tierColor = RANK_COLORS[tier];
+                const stripeColor = positionStripeColor(position, rival.isMe);
                 const isSelected = selectedRival.id === rival.id;
+                const formDots = getFormDots(rival);
+                const rivalValue = metricValue(rival, metric, period);
+                const ahead = position > 1 ? ranked[position - 2] : null;
+                const gapToAhead = ahead ? Math.max(0, metricValue(ahead, metric, period) - rivalValue) : 0;
                 return (
                   <button
                     key={rival.id}
                     type="button"
                     aria-pressed={isSelected}
-                    className={['rv-rival-card', rival.isMe ? 'me' : '', isSelected ? 'selected' : ''].filter(Boolean).join(' ')}
-                    style={{ '--rv-card-tier-color': tierColor } as React.CSSProperties}
+                    className={['rv-rival-card', rival.isMe ? 'me' : '', isSelected ? 'selected' : '', movement !== 0 ? 'rank-flash' : ''].filter(Boolean).join(' ')}
+                    style={{ '--rv-card-tier-color': stripeColor } as React.CSSProperties}
                     onClick={() => setSelectedRivalId(rival.id)}
                   >
                     <div className="rv-card-rank">
-                      <RankMedallion rank={tier} size={30} />
                       <span className="rv-card-pos">#{position}</span>
-                      <span className="rv-card-tier-label">{RANK_LABELS[tier]}</span>
                     </div>
                     <RivalAvatar rival={rival} />
                     <div className="rv-card-identity">
                       <strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong>
                       <small>@{rival.username}</small>
+                      {rival.isMe && <span className="rv-card-coach">{coachingInsight(rival, period)}</span>}
                     </div>
+                    <div className="rv-form-dots" aria-label="Last 5 market days. Green means winning day, red means losing day, hollow means no trades." title="Last 5 market days: green = winning day, red = losing day, hollow = no trades.">
+                      {formDots.map((dot, index) => <span key={`${rival.id}-${index}-${dot.tone}`} className={`rv-form-dot ${dot.tone}`} title={dot.label} />)}
+                    </div>
+                    <span className="rv-card-volume" title={`Trades in ${selectedPeriodLabel}`}>
+                      <b>{stats.tradeCount}</b> trade{stats.tradeCount === 1 ? '' : 's'}
+                    </span>
                     <div className="rv-card-stats">
                       <div className="rv-card-stat">
                         <span>Win</span>
@@ -362,7 +438,8 @@ export default function Rivals() {
                       </div>
                     </div>
                     <div className="rv-card-pnl">
-                      <span className={stats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(stats.netPnl)}</span>
+                      <AnimatedMetric rival={rival} metric={metric} period={period} className={rivalValue >= 0 ? 'positive' : 'negative'} />
+                      <small className="rv-row-hover-meta">{ahead ? `${formatMetricGap(gapToAhead, metric)} behind #${position - 1}` : 'View profile'}</small>
                       <span className={`rv-movement ${movement > 0 ? 'up' : movement < 0 ? 'down' : ''}`}>
                         {movement > 0 ? <><TrendingUp size={11} />{movement}</> : movement < 0 ? <><TrendingDown size={11} />{Math.abs(movement)}</> : <span className="rv-card-neutral">—</span>}
                       </span>
@@ -385,14 +462,13 @@ export default function Rivals() {
               {inspectorTab === 'overview' ? (
                 <>
                   <div className="rv-inspector-meta">
-                    <div className="rv-division-badge"><RankMedallion rank={selectedRankTier} size={24} /><span style={{ color: RANK_COLORS[selectedRankTier] }}>{RANK_LABELS[selectedRankTier]}</span></div>
-                    <span>Rank #{ranked.findIndex(rival => rival.id === selectedRival.id) + 1}</span>
+                    <span>Rank #{ranked.findIndex(rival => rival.id === selectedRival.id) + 1} of {ranked.length}</span>
                   </div>
                   <div className="rv-insight-equity"><div><span>{PERIODS.find(item => item.value === period)?.label} equity</span><strong className={selectedStats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(selectedStats.netPnl)}</strong></div><Sparkline values={selectedStats.equityCurve} large /></div>
                   <div className="rv-insight-kpis">
+                    <Stat label="Trades" value={String(selectedStats.tradeCount)} />
                     <Stat label="Trading days" value={String(selectedStats.tradingDays)} />
                     <Stat label="Win rate" value={`${selectedStats.winRate}%`} />
-                    <Stat label="Max drawdown" value={formatCurrency(-selectedStats.maxDrawdown)} />
                     <Stat label="Consistency" value={`${selectedStats.consistency}/100`} />
                   </div>
                   <p className="rv-trader-note">{selectedStats.consistency >= 75 ? 'High consistency with controlled downside.' : selectedStats.netPnl > 0 ? 'Profitable, with room to tighten consistency.' : 'Process metrics are the clearest route back up the table.'}</p>
@@ -412,39 +488,16 @@ export default function Rivals() {
                   </div>
                 </div>
               ) : inspectorTab === 'ranks' ? (
-                <div className="rv-rank-catalog">
-                  <div className="rv-rank-catalog-summary">
-                    <RankMedallion rank={selectedRankTier} size={52} />
-                    <div>
-                      <span>Current division</span>
-                      <strong style={{ color: RANK_COLORS[selectedRankTier] }}>{RANK_LABELS[selectedRankTier]}</strong>
-                      <small>{selectedXP.toLocaleString('en-US')} lifetime XP</small>
-                    </div>
+                <div className="rv-inspector-progress">
+                  <div className="rv-inspector-section-head"><h4>Milestone achievements</h4><span>Verified data</span></div>
+                  <div className="rv-achievement-list">
+                    <Badge unlocked={selectedStats.greenDays >= 5} icon={<TrendingUp size={14} />} title="Five green days" />
+                    <Badge unlocked={selectedStats.ruleAdherence >= 90} icon={<ShieldCheck size={14} />} title="90% rule adherence" />
+                    <Badge unlocked={selectedStats.maxDrawdown <= Math.max(100, Math.abs(selectedStats.netPnl) * .3)} icon={<Gauge size={14} />} title="Controlled drawdown" />
+                    <Badge unlocked={selectedStats.tradeCount >= 10} icon={<BookOpen size={14} />} title="10 documented trades" />
+                    <Badge unlocked={selectedStats.winRate >= 60} icon={<Trophy size={14} />} title="60% win rate" />
+                    <Badge unlocked={selectedStats.consistency >= 75} icon={<ShieldCheck size={14} />} title="75 consistency score" />
                   </div>
-                  <div className="rv-rank-catalog-list">
-                    {RANK_TIERS.map((tier, index) => {
-                      const threshold = RANK_XP_THRESHOLDS[tier];
-                      const isCurrent = tier === selectedRankTier;
-                      const isUnlocked = selectedXP >= threshold;
-                      const nextTier = RANK_TIERS[index + 1];
-                      return (
-                        <div key={tier} className={`rv-rank-catalog-row${isCurrent ? ' current' : ''}${isUnlocked ? ' unlocked' : ' locked'}`}>
-                          <span className="rv-rank-catalog-medal"><RankMedallion rank={tier} size={38} /></span>
-                          <span className="rv-rank-catalog-copy">
-                            <strong style={{ color: isUnlocked || isCurrent ? RANK_COLORS[tier] : undefined }}>{RANK_LABELS[tier]}</strong>
-                            <small>
-                              {threshold.toLocaleString('en-US')} XP
-                              {nextTier ? ` · ${RANK_XP_THRESHOLDS[nextTier].toLocaleString('en-US')} next` : ' · Final division'}
-                            </small>
-                          </span>
-                          <span className="rv-rank-catalog-state">
-                            {isCurrent ? 'Active' : isUnlocked ? <Check size={12} /> : <LockKeyhole size={11} />}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="rv-rank-catalog-note">Ranks reflect documented process activity and update as XP is earned.</p>
                 </div>
               ) : (
                 /* Trades tab */
@@ -561,7 +614,7 @@ export default function Rivals() {
   );
 }
 
-function Sparkline({ values, compact = false, large = false }: { values: number[]; compact?: boolean; large?: boolean }) {
+function Sparkline({ values, compact = false, large = false, ambient = false }: { values: number[]; compact?: boolean; large?: boolean; ambient?: boolean }) {
   const pts = values.length > 1 ? values : [0, values[0] ?? 0];
   const min = Math.min(...pts);
   const max = Math.max(...pts);
@@ -575,9 +628,9 @@ function Sparkline({ values, compact = false, large = false }: { values: number[
   const areaPts = [`${PAD},${H}`, ...pts.map((v, i) => `${xOf(i)},${yOf(v)}`), `${W - PAD},${H}`].join(' ');
   const positive = pts[pts.length - 1] >= pts[0];
   const color = positive ? '#34d399' : '#f87171';
-  const fillId = positive ? 'rv-spk-fill-pos' : 'rv-spk-fill-neg';
+  const fillId = `rv-spk-fill-${React.useId().replace(/:/g, '')}`;
   return (
-    <svg className={`rv-sparkline ${large ? 'large' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+    <svg className={`rv-sparkline ${large ? 'large' : ''} ${ambient ? 'ambient' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
       <defs>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.22" />
@@ -585,9 +638,30 @@ function Sparkline({ values, compact = false, large = false }: { values: number[
         </linearGradient>
       </defs>
       <polygon points={areaPts} fill={`url(#${fillId})`} />
-      <polyline points={linePts} fill="none" stroke={color} strokeWidth={large ? 1.5 : 1.2} vectorEffect="non-scaling-stroke" />
+      <polyline className="rv-sparkline-path" points={linePts} fill="none" stroke={color} strokeWidth={ambient ? 2.2 : large ? 1.5 : 1.2} vectorEffect="non-scaling-stroke" pathLength={1} />
     </svg>
   );
+}
+
+function AnimatedMetric({ rival, metric, period, className }: { rival: Rival; metric: LeaderboardMetric; period: LeaderboardPeriod; className?: string }) {
+  const target = metricValue(rival, metric, period);
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    let frame = 0;
+    const start = performance.now();
+    const duration = 420;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(target * eased);
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
+
+  return <strong className={className}>{formatMetricValue(displayValue, metric)}</strong>;
 }
 
 function RivalAvatar({ rival, large = false }: { rival: Rival; large?: boolean }) {

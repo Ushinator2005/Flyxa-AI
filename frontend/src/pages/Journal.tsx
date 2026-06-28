@@ -726,10 +726,7 @@ export default function Journal() {
     return Array.from(bucket.entries());
   }, [filtered]);
 
-  const totalWords = useMemo(
-    () => entries.reduce((sum, entry) => sum + wordCount(getEntryContent(entry)), 0),
-    [entries]
-  );
+  const totalJournalEntries = entries.length;
   const selectedWordCount = selected ? wordCount(getEntryContent(selected)) : 0;
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
@@ -774,7 +771,7 @@ export default function Journal() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {selected && !isMobile && (
             <span style={{ fontSize: '11px', color: T3, fontFamily: 'var(--font-mono)' }}>
-              {totalWords} words total
+              {totalJournalEntries} journal {totalJournalEntries === 1 ? 'entry' : 'entries'}
             </span>
           )}
           {!isMobile && (

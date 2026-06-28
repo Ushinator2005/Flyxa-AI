@@ -98,6 +98,10 @@ export function buildMonthlyHeatmapData(trades: Trade[], year: number, month: nu
     const grossPnl = typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride)
       ? trade.pnlOverride
       : trade.pnl;
+    // Skip skeleton records — trades where entry_price, exit_price, AND pnl all defaulted
+    // to 0 because the source row had null values. Real breakeven trades always have a
+    // non-zero entry/exit price (they closed at the same level, not at zero).
+    if (grossPnl === 0 && trade.entry_price === 0 && trade.exit_price === 0) return;
     days[day] = (days[day] ?? 0) + (grossPnl - (trade.commission ?? 0));
     counts[day] = (counts[day] ?? 0) + 1;
   });

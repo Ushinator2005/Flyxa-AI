@@ -242,6 +242,60 @@ function mergeRemoteEntryIntoLocal(
   };
 }
 
+/**
+ * If the merged blob is missing important user state (accounts, tradingPlan,
+ * rivals, etc.) but the remote blob has it, copy it back in. This prevents
+ * blank initial Zustand state from silently wiping user data even when the
+ * entry-merge guard or the setItem guard misfires.
+ */
+function recoverMissingStateFromRemote(
+  mergedBlob: Record<string, unknown>,
+  remoteBlob: Record<string, unknown> | null
+): Record<string, unknown> {
+  if (!remoteBlob) return mergedBlob;
+
+  const mergedState = (mergedBlob.state ?? {}) as Record<string, unknown>;
+  const remoteState = ((remoteBlob as Record<string, unknown>).state ?? {}) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+
+  // Accounts: only recover when merged has no non-default accounts but remote does
+  const mAccounts = mergedState.accounts as Array<Record<string, unknown>> | undefined;
+  const rAccounts = remoteState.accounts as Array<Record<string, unknown>> | undefined;
+  if (
+    Array.isArray(rAccounts) && rAccounts.some(a => a.id !== 'default-account') &&
+    !(Array.isArray(mAccounts) && mAccounts.some(a => a.id !== 'default-account'))
+  ) {
+    patch.accounts = rAccounts;
+  }
+
+  // Arrays: recover when local is empty but remote is not
+  for (const key of ['tradingPlanRules', 'rivals', 'goals']) {
+    const mArr = mergedState[key];
+    const rArr = remoteState[key];
+    if (Array.isArray(rArr) && rArr.length > 0 && !(Array.isArray(mArr) && mArr.length > 0)) {
+      patch[key] = rArr;
+    }
+  }
+
+  // Objects (moods, titles): recover when local has no keys but remote does
+  for (const key of ['journalMoods', 'journalTitles']) {
+    const mObj = mergedState[key];
+    const rObj = remoteState[key];
+    if (rObj && typeof rObj === 'object' && Object.keys(rObj as object).length > 0 &&
+        !(mObj && typeof mObj === 'object' && Object.keys(mObj as object).length > 0)) {
+      patch[key] = rObj;
+    }
+  }
+
+  // tradingPlan: recover if local is null/undefined
+  if (remoteState.tradingPlan != null && mergedState.tradingPlan == null) {
+    patch.tradingPlan = remoteState.tradingPlan;
+  }
+
+  if (Object.keys(patch).length === 0) return mergedBlob;
+  return { ...mergedBlob, state: { ...mergedState, ...patch } };
+}
+
 function mergeRemoteEntriesIntoStoreBlob(
   localBlob: unknown,
   remoteBlob: unknown,
@@ -339,6 +393,16 @@ function mirrorLocalEntriesSafe(
     const existing = readLocalEntriesSafe(userId);
     const next: Record<string, unknown> = {};
 
+    // An entry is worth keeping in the local backup if it has trades OR if it
+    // has meaningful content beyond the bare id/date/trades skeleton (e.g. a
+    // blank trading day created by createEmptyJournalEntry always has
+    // reflection, rules, psychology, emotions, account, etc.).
+    const isWorthKeeping = (e: Record<string, unknown>) => {
+      const trades = Array.isArray(e.trades) ? e.trades : [];
+      if (trades.length > 0) return true;
+      return Object.keys(e).some(k => !['id', 'date', 'trades'].includes(k));
+    };
+
     // Seed from existing safe backup — but ONLY for entries that are NOT in the
     // current state (e.g. an entry synced from another device that this device
     // hasn't loaded yet). Entries that ARE in the current state will be written
@@ -349,8 +413,7 @@ function mirrorLocalEntriesSafe(
       if (incomingIds.has(id)) continue; // Handled by authoritative write below
       if (typeof entry.date === 'string' && deletedEntryDates.has(entry.date)) continue;
       const cleaned = removeDeletedTradesFromEntry(entry, deletedTradeIds);
-      const trades = Array.isArray(cleaned.trades) ? cleaned.trades : [];
-      if (trades.length > 0) next[id] = cleaned;
+      if (isWorthKeeping(cleaned)) next[id] = cleaned;
     }
 
     // Write all incoming entries directly — always prefer the current state over
@@ -364,8 +427,7 @@ function mirrorLocalEntriesSafe(
       const stripped = stripBase64Images(
         removeDeletedTradesFromEntry(entry, deletedTradeIds)
       ) as Record<string, unknown>;
-      const trades = Array.isArray(stripped.trades) ? stripped.trades : [];
-      if (trades.length > 0) next[id] = stripped;
+      if (isWorthKeeping(stripped)) next[id] = stripped;
     }
 
     localStorage.setItem(localEntriesSafeKey(userId), JSON.stringify(next));
@@ -535,6 +597,8 @@ async function flushSave(userId: string, value: string): Promise<void> {
     ...deletedEntryDatesFromBlob(parsed),
   ].filter((date) => !restoredEntryDates.has(date)));
   parsed = mergeRemoteEntriesIntoStoreBlob(parsed, remoteBlob, deletedTradeIds, deletedEntryDates);
+  // Ensure accounts, tradingPlan, etc. are never wiped by a blank incoming snapshot
+  parsed = recoverMissingStateFromRemote(parsed, remoteBlob);
   parsed = {
     ...parsed,
     state: {
@@ -847,9 +911,11 @@ export const supabaseZustandStorage: StateStorage = {
           // Never let a blank local snapshot (e.g. from HMR) override Supabase entries.
           if (localEntries.length > 0 || !remoteHasEntries) {
             const localBlob = JSON.parse(sanitizedLocal) as Record<string, unknown>;
-            const mergedLocal = sanitizeStoreValue(JSON.stringify(
-              mergeRemoteEntriesIntoStoreBlob(localBlob, data.flyxa_data)
-            ));
+            // Merge remote entries in, then recover any non-entry state that may
+            // have been wiped by a blank initial snapshot (accounts, tradingPlan, etc.)
+            const entryMerged = mergeRemoteEntriesIntoStoreBlob(localBlob, data.flyxa_data);
+            const recovered = recoverMissingStateFromRemote(entryMerged, data.flyxa_data as Record<string, unknown>);
+            const mergedLocal = sanitizeStoreValue(JSON.stringify(recovered));
             // The browser has a newer accepted edit than Supabase. Hydrate from
             // that snapshot immediately, but first merge in any remote trades
             // that this browser had not loaded yet.
@@ -886,9 +952,32 @@ export const supabaseZustandStorage: StateStorage = {
 
         const remoteEntries = (flyxaData as { state?: { entries?: unknown[] } })?.state?.entries;
         if (Array.isArray(remoteEntries) && remoteEntries.length > 0) {
-          // A populated user_store is authoritative. Recovery sources are only
-          // used when the main store is missing/empty; merging them on every
-          // startup allowed stale backups to overwrite freshly edited trades.
+          // user_store has entries — it is the authority. However, individual
+          // dates can go missing if a write race or merge dropped them. Check
+          // store_entries_backup for any dates not present in the main store
+          // and merge them back in. Intentionally-deleted dates are still
+          // excluded because mergeRemoteEntriesIntoStoreBlob respects
+          // deletedEntryDates.
+          try {
+            const existingDates = new Set(
+              (remoteEntries as Record<string, unknown>[])
+                .filter(e => typeof (e as Record<string, unknown>).date === 'string')
+                .map(e => (e as Record<string, unknown>).date as string)
+            );
+            const backupEntries = await readBackupEntries(userId);
+            const missingEntries = backupEntries.filter(
+              e => typeof e.date === 'string' && !existingDates.has(e.date)
+            );
+            if (missingEntries.length > 0) {
+              const mergedBlob = mergeRemoteEntriesIntoStoreBlob(
+                flyxaData,
+                { state: { entries: missingEntries } } as unknown
+              );
+              const mergedValue = sanitizeStoreValue(JSON.stringify(mergedBlob));
+              void enqueueStoreSave(userId, mergedValue);
+              return mergedValue;
+            }
+          } catch { /* non-fatal — return main store as-is */ }
           return sanitizeStoreValue(JSON.stringify(flyxaData));
         }
 
@@ -964,8 +1053,8 @@ export const supabaseZustandStorage: StateStorage = {
   setItem: async (_key: string, value: string): Promise<void> => {
     const sanitizedValue = sanitizeStoreValue(value);
 
-    // Guard: never overwrite existing journal data with a blank/default state
-    // (protects against HMR in dev transiently wiping data).
+    // Guard: never overwrite existing user data with a blank/default initial state
+    // (protects against HMR in dev and auth/hydration races after hard refresh).
     const incomingEntries = extractEntries(sanitizedValue);
     const incomingHasUserData = (() => {
       try {
@@ -973,9 +1062,17 @@ export const supabaseZustandStorage: StateStorage = {
         const st = parsed?.state ?? {};
         const moods = st.journalMoods;
         const titles = st.journalTitles;
+        const accounts = st.accounts as Array<Record<string, unknown>> | undefined;
+        const rivals = st.rivals as unknown[] | undefined;
+        const goals = st.goals as unknown[] | undefined;
         return (
           (moods != null && typeof moods === 'object' && Object.keys(moods).length > 0) ||
-          (titles != null && typeof titles === 'object' && Object.keys(titles).length > 0)
+          (titles != null && typeof titles === 'object' && Object.keys(titles).length > 0) ||
+          // User has created accounts beyond the built-in default
+          (Array.isArray(accounts) && accounts.some(a => a.id !== 'default-account')) ||
+          // User has rivals or goals
+          (Array.isArray(rivals) && rivals.length > 0) ||
+          (Array.isArray(goals) && goals.length > 0)
         );
       } catch { return false; }
     })();
@@ -988,12 +1085,22 @@ export const supabaseZustandStorage: StateStorage = {
         const existing = uid
           ? (localStorage.getItem(localStoreKey(uid)) ?? localStorage.getItem(LEGACY_STORE_KEY))
           : localStorage.getItem(LEGACY_STORE_KEY);
-        if (existing && extractEntries(existing).length > 0) return;
+        if (existing) {
+          // Return if local cache has entries OR any meaningful non-default state
+          if (extractEntries(existing).length > 0) return;
+          try {
+            const parsed = JSON.parse(existing) as { state?: Record<string, unknown> };
+            const st = parsed?.state ?? {};
+            const accounts = st.accounts as Array<Record<string, unknown>> | undefined;
+            if (Array.isArray(accounts) && accounts.some(a => a.id !== 'default-account')) return;
+          } catch { /* ignore */ }
+        }
       } catch { /* ignore */ }
 
-      // If the browser has no local entries but Supabase does, this is almost
-      // certainly an auth/hydration race after hard refresh. Do not allow the
-      // empty initial Zustand state to overwrite the cloud store.
+      // If Supabase has ANY existing record for this user, restore from it
+      // rather than letting the blank initial Zustand state overwrite real data.
+      // This fires on hard refresh before getItem has hydrated the store, and
+      // also protects users who have accounts/plans but no journal entries yet.
       resolvedUserId = await getUserId();
       if (!resolvedUserId) return;
       try {
@@ -1002,10 +1109,7 @@ export const supabaseZustandStorage: StateStorage = {
           .select('flyxa_data, updated_at')
           .eq('user_id', resolvedUserId)
           .maybeSingle();
-        const remoteEntries = Array.isArray(data?.flyxa_data?.state?.entries)
-          ? data.flyxa_data.state.entries
-          : [];
-        if (!error && remoteEntries.length > 0 && data?.flyxa_data) {
+        if (!error && data?.flyxa_data && Object.keys(data.flyxa_data).length > 0) {
           const remoteValue = sanitizeStoreValue(JSON.stringify(data.flyxa_data));
           localStorage.setItem(localStoreKey(resolvedUserId), remoteValue);
           localStorage.setItem(localSavedAtKey(resolvedUserId), Date.now().toString());
@@ -1014,7 +1118,7 @@ export const supabaseZustandStorage: StateStorage = {
           return;
         }
       } catch {
-        // Network failures should not turn into a destructive blank save.
+        // Network failures must not turn into a destructive blank save.
         return;
       }
     }

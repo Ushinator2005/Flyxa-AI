@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronDown, Download, ShieldCheck, Trophy } from 'lucide-react';
+import { ChevronDown, Download, ShieldCheck, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account } from '../store/types.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -59,32 +59,6 @@ function EmptyEvaluation() {
   );
 }
 
-function ProbabilityGauge({ pct, color }: { pct: number; color: string }) {
-  const r = 44, cx = 60, cy = 60;
-  const circ = 2 * Math.PI * r;
-  const arcLen = circ * 0.75;
-  const fillLen = arcLen * Math.min(pct, 100) / 100;
-  return (
-    <svg viewBox="0 0 120 120" className="eval-gauge-svg" aria-hidden="true">
-      <circle
-        cx={cx} cy={cy} r={r}
-        fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8"
-        strokeDasharray={`${arcLen} ${circ - arcLen}`}
-        strokeLinecap="round"
-        transform={`rotate(135 ${cx} ${cy})`}
-      />
-      <circle
-        cx={cx} cy={cy} r={r}
-        fill="none" stroke={color} strokeWidth="8"
-        strokeDasharray={`${fillLen} ${circ - fillLen}`}
-        strokeLinecap="round"
-        transform={`rotate(135 ${cx} ${cy})`}
-        className="eval-gauge-fill"
-      />
-    </svg>
-  );
-}
-
 export default function EvaluationCoach() {
   const accounts = useFlyxaStore(state => state.accounts);
   const entries = useFlyxaStore(state => state.entries);
@@ -103,7 +77,6 @@ export default function EvaluationCoach() {
     [accounts, statusById],
   );
 
-  // Returns the ISO date of the most recent journal entry for an account, or ''
   const latestEntryDateForAccount = useCallback((accountId: string): string => {
     let latest = '';
     for (const entry of entries) {
@@ -113,14 +86,10 @@ export default function EvaluationCoach() {
     return latest;
   }, [entries]);
 
-  // Picks the best default eval account: prefer appSelected/active if they are
-  // eval accounts, otherwise fall back to the most recently logged non-blown
-  // account, then the most recently logged of any eval account.
   const pickDefaultEvalAccount = useCallback(() => {
     const explicit = evaluationAccounts.find(a => a.id === appSelectedId)
       ?? evaluationAccounts.find(a => a.id === activeAccountId);
     if (explicit) return explicit;
-
     const sorted = [...evaluationAccounts].sort((a, b) => {
       const blownA = statusById.get(a.id) === 'Blown' ? 1 : 0;
       const blownB = statusById.get(b.id) === 'Blown' ? 1 : 0;
@@ -131,15 +100,14 @@ export default function EvaluationCoach() {
   }, [evaluationAccounts, appSelectedId, activeAccountId, statusById, latestEntryDateForAccount]);
 
   const [selectedId, setSelectedId] = useState(() => pickDefaultEvalAccount()?.id ?? '');
-
   useEffect(() => {
     if (selectedId && evaluationAccounts.find(a => a.id === selectedId)) return;
     const preferred = pickDefaultEvalAccount();
     if (preferred) setSelectedId(preferred.id);
   }, [evaluationAccounts, pickDefaultEvalAccount]);
+
   const [templateId, setTemplateId] = useState('');
   const [remoteTopstepTemplates, setRemoteTopstepTemplates] = useState<EvaluationTemplate[]>([]);
-  const [rulesCatalogSource, setRulesCatalogSource] = useState('bundled verified catalog');
   const [useOptionalDailyLoss, setUseOptionalDailyLoss] = useState(false);
   const [dismissPass, setDismissPass] = useState(false);
   const [acctDropOpen, setAcctDropOpen] = useState(false);
@@ -158,14 +126,9 @@ export default function EvaluationCoach() {
     propFirmRulesApi.getTopstep()
       .then(result => {
         if (cancelled) return;
-        setRemoteTopstepTemplates(
-          result.rules.map(rule => ruleRecordToTemplate(rule as PropFirmRuleRecord)),
-        );
-        setRulesCatalogSource(result.fallback ? 'bundled verified catalog' : 'versioned rules database');
+        setRemoteTopstepTemplates(result.rules.map(rule => ruleRecordToTemplate(rule as PropFirmRuleRecord)));
       })
-      .catch(() => {
-        if (!cancelled) setRulesCatalogSource('bundled verified catalog');
-      });
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -173,20 +136,20 @@ export default function EvaluationCoach() {
     () => decorateTrades(entries.flatMap(e => e.trades)),
     [entries, decorateTrades],
   );
+
   const selected = evaluationAccounts.find(a => a.id === selectedId) ?? evaluationAccounts[0];
+
   const templates = useMemo(() => {
     const bundled = getEvaluationTemplates();
     if (!remoteTopstepTemplates.length) return bundled;
-    return [
-      ...remoteTopstepTemplates,
-      ...bundled.filter(template => template.firm !== 'Topstep'),
-    ];
+    return [...remoteTopstepTemplates, ...bundled.filter(t => t.firm !== 'Topstep')];
   }, [remoteTopstepTemplates]);
 
   const progress = useMemo(
     () => selected ? computeEvaluationProgress(selected, allTrades) : null,
     [allTrades, selected],
   );
+
   const alerts = useMemo(
     () => selected && progress ? buildEvaluationAgentAlerts(selected, allTrades, progress) : [],
     [allTrades, progress, selected],
@@ -208,9 +171,7 @@ export default function EvaluationCoach() {
     const dayValues = [...byDay.values()];
     const bestDay = dayValues.length ? Math.max(...dayValues) : 0;
     const worstDay = dayValues.length ? Math.min(...dayValues) : 0;
-    const greenDayPct = dayValues.length
-      ? Math.round((dayValues.filter(v => v > 0).length / dayValues.length) * 100)
-      : 0;
+    const greenDayPct = dayValues.length ? Math.round((dayValues.filter(v => v > 0).length / dayValues.length) * 100) : 0;
     return { tradeCount: nets.length, winRate, avgPnl, bestDay, worstDay, greenDayPct };
   }, [accountTrades]);
 
@@ -251,9 +212,10 @@ export default function EvaluationCoach() {
       ? { label: 'Conditions reached', tone: 'good' as const, reason: 'Protect the result and verify the pass in your firm dashboard.' }
       : progress.warnings.length
         ? { label: 'Reduce risk', tone: 'warning' as const, reason: progress.warnings[0] }
-        : { label: 'Within limits', tone: 'good' as const, reason: 'No current evaluation rule is close to its limit.' };
+        : { label: 'Within limits', tone: 'good' as const, reason: '' };
 
   const probColor = progress.passProbability >= 65 ? '#34d399' : progress.passProbability >= 35 ? '#f59e0b' : '#f87171';
+  const toneColor = { good: '#34d399', warning: '#f59e0b', danger: '#f87171' } as const;
 
   function applyTemplate(account: Account) {
     updateAccount(account.id, {
@@ -291,7 +253,6 @@ export default function EvaluationCoach() {
     URL.revokeObjectURL(url);
   }
 
-  // Dropdown
   const selStatus = statusById.get(selected.id) ?? 'Eval';
   const triggerColor = STATUS_COLOR[selStatus] ?? 'var(--app-text-subtle)';
   const dropEval   = comparisons.filter(c => c.status === 'Eval');
@@ -316,7 +277,6 @@ export default function EvaluationCoach() {
     );
   }
 
-  // Derived values
   const drawdownPct = maxDrawdown > 0 ? Math.round((progress.drawdownUsed / maxDrawdown) * 100) : 0;
   const drawdownTone = drawdownPct >= 75 ? 'danger' : drawdownPct >= 50 ? 'warning' : 'good';
   const dailyPct = dailyLimit > 0 && Number.isFinite(progress.dailyLossRemaining)
@@ -324,323 +284,219 @@ export default function EvaluationCoach() {
     : null;
   const dailyTone = dailyPct !== null && dailyPct >= 75 ? 'danger' : dailyPct !== null && dailyPct >= 50 ? 'warning' : 'good';
   const daysMet = progress.tradingDays >= progress.minimumTradingDays;
-  const toneColor = { good: '#34d399', warning: '#f59e0b', danger: '#f87171' } as const;
 
-  // Pace projections
   const avgDailyPnl = progress.tradingDays > 0 ? progress.netPnl / progress.tradingDays : 0;
-  const daysToTarget = avgDailyPnl > 0 && progress.targetRemaining > 0
-    ? Math.ceil(progress.targetRemaining / avgDailyPnl) : null;
-
+  const daysToTarget = avgDailyPnl > 0 && progress.targetRemaining > 0 ? Math.ceil(progress.targetRemaining / avgDailyPnl) : null;
   const s = (n: number) => n !== 1 ? 's' : '';
-  const paceText = progress.tradingDays === 0
-    ? 'No trades recorded yet — start trading to see pace projections.'
+  const paceText = progress.tradingDays === 0 ? ''
     : avgDailyPnl > 0 && daysToTarget !== null
-      ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. At this pace, approximately ${daysToTarget} more session${s(daysToTarget)} to reach the ${money(target)} target.`
+      ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. At this pace, ~${daysToTarget} more session${s(daysToTarget)} to reach the ${money(target)} target.`
       : avgDailyPnl > 0
         ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}.`
         : `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. ${money(progress.targetRemaining)} still needed to reach the ${money(target)} target.`;
-
   const paceNegative = progress.tradingDays > 0 && avgDailyPnl < 0;
 
-  // Probability factor breakdown
-  const { targetScore, survivalScore, recentWinRate, dayQuality } = progress.probabilityFactors;
-  const factorColor = (v: number) => v >= 60 ? '#34d399' : v >= 30 ? '#f59e0b' : '#f87171';
-  const probFactors = [
-    {
-      label: 'Target pace',
-      score: targetScore,
-      weight: 36,
-      hint: progress.tradingDays === 0
-        ? `No trades yet — start building toward ${money(target)}`
-        : targetScore === 0
-          ? `No net profit toward ${money(target)} — post a profitable session to move this`
-          : targetScore < 30
-            ? `${targetScore}% of the way to ${money(target)} — focus on consistent profitable sessions`
-            : targetScore < 70
-              ? `${targetScore}% there — keep compounding; ${money(progress.targetRemaining)} remaining`
-              : `Nearly at target — protect your progress and avoid unnecessary risk`,
-    },
-    {
-      label: 'Survival',
-      score: survivalScore,
-      weight: 26,
-      hint: survivalScore < 25
-        ? `Critical — only ${money(progress.drawdownRemaining)} left before violation. Stop trading and reassess`
-        : survivalScore < 50
-          ? `Over half the buffer used — size down to preserve the remaining ${money(progress.drawdownRemaining)}`
-          : survivalScore < 75
-            ? `${money(progress.drawdownRemaining)} of buffer intact — stay risk-aware and avoid overtrading`
-            : `Buffer is healthy at ${money(progress.drawdownRemaining)} — keep respecting your limits`,
-    },
-    {
-      label: 'Win rate',
-      score: recentWinRate,
-      weight: 12,
-      hint: recentWinRate < 30
-        ? 'Under 30% on last 20 trades — only take A-grade setups until this stabilises'
-        : recentWinRate < 50
-          ? 'Below 50% — be more selective; skip setups that don\'t fully meet your criteria'
-          : recentWinRate < 65
-            ? 'Decent — tighten entry rules and cut B-grade setups to push above 65%'
-            : 'Strong win rate — keep filtering out low-conviction setups',
-    },
-    {
-      label: 'Day quality',
-      score: dayQuality,
-      weight: 8,
-      hint: dayQuality < 30
-        ? 'Most sessions end negative — set a hard daily stop and walk away when hit'
-        : dayQuality < 50
-          ? 'Under half your sessions are green — respect your daily loss limit every session'
-          : dayQuality < 70
-            ? 'Mixed results — aim to end flat rather than force trades on bad days'
-            : 'Most sessions profitable — maintain the discipline that\'s working',
-    },
-  ];
+  const firmMeta = [
+    selected.firm,
+    selected.size ? money(selected.size) : null,
+    (selected.drawdownType ?? activeTemplate.drawdownType)
+      ? `${(selected.drawdownType ?? activeTemplate.drawdownType)?.replace(/_/g, ' ')} drawdown`
+      : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div className="eval-page">
 
-      {/* Top bar */}
-      <div className="eval-topbar">
-        <div ref={acctDropRef} className="eval-acct-drop">
-          <button type="button" className="eval-acct-trigger" onClick={() => setAcctDropOpen(o => !o)}>
-            <span className="eval-acct-dot" style={{ background: triggerColor }} />
-            <span className="eval-acct-trigger-name">{selected.name}</span>
-            <ChevronDown size={11} />
-          </button>
-          {acctDropOpen && (
-            <div className="eval-acct-menu">
-              {dropEval.map(({ account }) => <DropRow key={account.id} account={account} />)}
-              {dropPassed.length > 0 && (<><div className="eval-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
-              {dropBlown.length > 0 && (<><div className="eval-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
-            </div>
-          )}
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="eval-header">
+        <div className="eval-header-left">
+          <div ref={acctDropRef} className="eval-acct-drop">
+            <button type="button" className="eval-acct-trigger" onClick={() => setAcctDropOpen(o => !o)}>
+              <span className="eval-acct-dot" style={{ background: triggerColor }} />
+              <span className="eval-acct-trigger-name">{selected.name}</span>
+              <ChevronDown size={11} />
+            </button>
+            {acctDropOpen && (
+              <div className="eval-acct-menu">
+                {dropEval.map(({ account }) => <DropRow key={account.id} account={account} />)}
+                {dropPassed.length > 0 && (<><div className="eval-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
+                {dropBlown.length > 0 && (<><div className="eval-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
+              </div>
+            )}
+          </div>
+          {firmMeta && <span className="eval-header-firm">{firmMeta}</span>}
         </div>
-        <button type="button" className="eval-topbar-btn" onClick={exportReport}>
-          <Download size={13} /> Export
-        </button>
-      </div>
-
-      {/* Pass probability hero */}
-      <div className="eval-prob-hero">
-        <div className="eval-prob-left">
-          <p className="eval-prob-kicker">{selected.firm} · {money(selected.size)} · {selected.drawdownType ?? activeTemplate.drawdownType} drawdown</p>
-          <h1 className="eval-prob-name">{selected.name}</h1>
-          {selectedTemplate.firm === 'Topstep' && (
-            <div className="eval-template-strip">
-              <span className="eval-template-strip-path">
-                {selectedTemplate.path === 'no_activation_fee' ? 'No Activation Fee' : 'Standard'} path
-              </span>
-              <span className="eval-template-strip-dot" />
-              <span className="eval-template-strip-price">
-                {money(selectedTemplate.monthlyPrice ?? 0)}/mo · {selectedTemplate.activationFee ? `${money(selectedTemplate.activationFee)} activation` : 'no activation fee'}
-              </span>
-              {selectedTemplate.optionalDailyLossLimit && (
-                <>
-                  <span className="eval-template-strip-dot" />
-                  <label className="eval-template-strip-dll">
-                    <input
-                      type="checkbox"
-                      checked={useOptionalDailyLoss}
-                      onChange={e => setUseOptionalDailyLoss(e.target.checked)}
-                    />
-                    {money(selectedTemplate.optionalDailyLossLimit)} daily limit
-                  </label>
-                </>
-              )}
-              {selectedTemplate.sourceUrl && (
-                <>
-                  <span className="eval-template-strip-dot" />
-                  <a className="eval-template-strip-src" href={selectedTemplate.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a>
-                </>
-              )}
-            </div>
-          )}
-          <div className="eval-current-balance">
-            <span className="eval-balance-label">Current balance</span>
-            <span className={`eval-balance-value${progress.netPnl >= 0 ? ' positive' : ' negative'}`}>
+        <div className="eval-header-right">
+          <div className="eval-header-bal-group">
+            <span className={`eval-header-bal${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>
               {money(progress.currentBalance)}
             </span>
             {progress.netPnl !== 0 && (
-              <span className={`eval-balance-delta${progress.netPnl >= 0 ? ' positive' : ' negative'}`}>
-                {progress.netPnl >= 0 ? '+' : ''}{money(progress.netPnl)}
+              <span className={`eval-header-delta${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>
+                {progress.netPnl > 0 ? '+' : ''}{money(progress.netPnl)}
               </span>
             )}
           </div>
-          <div className={`eval-prob-badge eval-prob-badge-${decision.tone}`}>
-            <span className="eval-prob-badge-dot" style={{ background: toneColor[decision.tone] }} />
-            {decision.label}
-          </div>
-          <p className="eval-prob-reason">{decision.reason}</p>
-
-          {tradeStats ? (
-            <div className="eval-mini-stats">
-              <div className="eval-mini-stat">
-                <strong>{tradeStats.tradeCount}</strong>
-                <span>Trades</span>
-              </div>
-              <div className="eval-mini-stat">
-                <strong style={{ color: tradeStats.winRate >= 50 ? '#34d399' : '#f87171' }}>
-                  {tradeStats.winRate}%
-                </strong>
-                <span>Win rate</span>
-              </div>
-              <div className="eval-mini-stat">
-                <strong style={{ color: tradeStats.avgPnl >= 0 ? '#34d399' : '#f87171' }}>
-                  {tradeStats.avgPnl >= 0 ? '+' : ''}{money(tradeStats.avgPnl)}
-                </strong>
-                <span>Avg / trade</span>
-              </div>
-              <div className="eval-mini-stat">
-                <strong style={{ color: tradeStats.bestDay >= 0 ? '#34d399' : '#f87171' }}>
-                  {tradeStats.bestDay >= 0 ? '+' : ''}{money(tradeStats.bestDay)}
-                </strong>
-                <span>Best day</span>
-              </div>
-              <div className="eval-mini-stat">
-                <strong style={{ color: tradeStats.worstDay >= 0 ? '#34d399' : '#f87171' }}>
-                  {money(tradeStats.worstDay)}
-                </strong>
-                <span>Worst day</span>
-              </div>
-              <div className="eval-mini-stat">
-                <strong style={{ color: tradeStats.greenDayPct >= 50 ? '#34d399' : '#f87171' }}>
-                  {tradeStats.greenDayPct}%
-                </strong>
-                <span>Green days</span>
-              </div>
-            </div>
-          ) : (
-            <div className="eval-mini-empty">
-              No trades recorded yet. Start trading to see your performance stats.
-            </div>
-          )}
-        </div>
-        <div className="eval-prob-dial">
-          <div className="eval-gauge-wrap">
-            <ProbabilityGauge pct={progress.passProbability} color={probColor} />
-            <div className="eval-gauge-inner">
-              <span className="eval-prob-pct">{progress.passProbability}<span className="eval-prob-pct-sign">%</span></span>
-              <span className="eval-prob-label">pass probability</span>
-            </div>
-          </div>
-          <div className="eval-prob-factors">
-            {probFactors.map(f => (
-              <div key={f.label} className="eval-prob-factor">
-                <div className="eval-prob-factor-head">
-                  <span className="eval-prob-factor-lbl">{f.label}</span>
-                  <span className="eval-prob-factor-val" style={{ color: factorColor(f.score) }}>{f.score}<span className="eval-prob-factor-weight"> /{f.weight}%</span></span>
-                </div>
-                <div className="eval-prob-factor-track">
-                  <div className="eval-prob-factor-fill" style={{ width: `${f.score}%`, background: factorColor(f.score) }} />
-                </div>
-                <p className="eval-prob-factor-hint">{f.hint}</p>
-              </div>
-            ))}
-          </div>
+          <div className={`eval-status-pill eval-status-pill-${decision.tone}`}>{decision.label}</div>
+          <button type="button" className="eval-export-btn" onClick={exportReport}>
+            <Download size={12} /> Export
+          </button>
         </div>
       </div>
 
-      {/* Path to pass — 3 cards */}
-      <div className="eval-path">
+      {/* ── Warning / danger reason ─────────────────────────────────── */}
+      {decision.tone !== 'good' && decision.reason && (
+        <div className={`eval-reason-bar eval-reason-bar-${decision.tone}`}>{decision.reason}</div>
+      )}
+
+      {/* ── 3 Key metrics ───────────────────────────────────────────── */}
+      <div className="eval-metrics">
 
         {/* Profit progress */}
-        <div className="eval-path-card" style={{ '--card-accent': '#f59e0b' } as React.CSSProperties}>
-          <span className="eval-path-label">Profit needed</span>
-          <strong className="eval-path-value">{money(progress.targetRemaining)}</strong>
-          <div className="eval-path-track">
-            <div className="eval-path-fill" style={{ width: `${Math.min(100, progress.targetProgressPct)}%`, background: '#f59e0b' }} />
+        <div className="eval-metric" style={{ '--mc-acc': '#f59e0b' } as React.CSSProperties}>
+          <span className="eval-metric-lbl">Profit needed</span>
+          <strong className="eval-metric-val">{money(progress.targetRemaining)}</strong>
+          <div className="eval-metric-track">
+            <div className="eval-metric-fill" style={{ width: `${Math.min(100, progress.targetProgressPct)}%` }} />
           </div>
-          <span className="eval-path-note">{Math.round(progress.targetProgressPct)}% of {money(target)} reached · {money(progress.currentBalance)} balance</span>
+          <span className="eval-metric-note">
+            {Math.round(progress.targetProgressPct)}% of {money(target)} target
+            <span className="eval-metric-note-sep">·</span>
+            balance {money(progress.currentBalance)}
+          </span>
         </div>
 
         {/* Drawdown buffer */}
-        <div className="eval-path-card" style={{ '--card-accent': toneColor[drawdownTone] } as React.CSSProperties}>
-          <span className="eval-path-label">Drawdown buffer</span>
-          <strong className="eval-path-value" style={{ color: toneColor[drawdownTone] }}>{money(progress.drawdownRemaining)}</strong>
-          <div className="eval-path-track">
-            <div className="eval-path-fill" style={{ width: `${drawdownPct}%`, background: toneColor[drawdownTone] }} />
+        <div className="eval-metric" style={{ '--mc-acc': toneColor[drawdownTone] } as React.CSSProperties}>
+          <span className="eval-metric-lbl">Drawdown buffer</span>
+          <strong className="eval-metric-val" style={{ color: toneColor[drawdownTone] }}>
+            {money(progress.drawdownRemaining)}
+          </strong>
+          <div className="eval-metric-track">
+            <div className="eval-metric-fill" style={{ width: `${drawdownPct}%` }} />
           </div>
-          <span className="eval-path-note">MLL {money(progress.drawdownFloor)} · {drawdownPct}% of {money(maxDrawdown)} used</span>
+          <span className="eval-metric-note">
+            {drawdownPct}% of {money(maxDrawdown)} used
+            <span className="eval-metric-note-sep">·</span>
+            floor {money(progress.drawdownFloor)}
+          </span>
         </div>
 
         {/* Daily budget or trading days */}
         {dailyLimit > 0 ? (
-          <div className="eval-path-card" style={{ '--card-accent': toneColor[dailyTone] } as React.CSSProperties}>
-            <span className="eval-path-label">Daily budget left</span>
-            <strong className="eval-path-value" style={{ color: dailyTone !== 'good' ? toneColor[dailyTone] : 'var(--app-text)' }}>
+          <div className="eval-metric" style={{ '--mc-acc': toneColor[dailyTone] } as React.CSSProperties}>
+            <span className="eval-metric-lbl">Daily budget left</span>
+            <strong className="eval-metric-val" style={{ color: dailyTone !== 'good' ? toneColor[dailyTone] : undefined }}>
               {money(Math.max(0, progress.dailyLossRemaining))}
             </strong>
-            <div className="eval-path-track">
-              <div className="eval-path-fill" style={{ width: `${dailyPct ?? 0}%`, background: toneColor[dailyTone] }} />
+            <div className="eval-metric-track">
+              <div className="eval-metric-fill" style={{ width: `${dailyPct ?? 0}%` }} />
             </div>
-            <span className="eval-path-note">{money(dailyLimit)} limit · {money(progress.dailyPnl)} today</span>
+            <span className="eval-metric-note">
+              {dailyPct ?? 0}% of {money(dailyLimit)} used
+              <span className="eval-metric-note-sep">·</span>
+              {money(progress.dailyPnl)} today
+            </span>
           </div>
         ) : (
-          <div className="eval-path-card" style={{ '--card-accent': daysMet ? '#34d399' : '#f59e0b' } as React.CSSProperties}>
-            <span className="eval-path-label">Trading days</span>
-            <strong className="eval-path-value" style={{ color: progress.minimumTradingDays > 0 && daysMet ? '#34d399' : 'var(--app-text)' }}>
+          <div className="eval-metric" style={{ '--mc-acc': daysMet ? '#34d399' : '#f59e0b' } as React.CSSProperties}>
+            <span className="eval-metric-lbl">Trading days</span>
+            <strong className="eval-metric-val" style={{ color: progress.minimumTradingDays > 0 && daysMet ? '#34d399' : undefined }}>
               {progress.tradingDays}
-              {progress.minimumTradingDays > 0 && <span className="eval-path-denom">/{progress.minimumTradingDays}</span>}
+              {progress.minimumTradingDays > 0 && <span className="eval-metric-denom">/{progress.minimumTradingDays}</span>}
             </strong>
-            <div className="eval-path-track">
+            <div className="eval-metric-track">
               {progress.minimumTradingDays > 0 && (
-                <div className="eval-path-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%`, background: daysMet ? '#34d399' : '#f59e0b' }} />
+                <div className="eval-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%` }} />
               )}
             </div>
-            <span className="eval-path-note">{progress.minimumTradingDays > 0 ? (daysMet ? 'Minimum met' : `${progress.minimumTradingDays - progress.tradingDays} more required`) : 'No minimum day requirement'}</span>
+            <span className="eval-metric-note">
+              {progress.minimumTradingDays > 0
+                ? daysMet
+                  ? 'Minimum day requirement met'
+                  : `${progress.minimumTradingDays - progress.tradingDays} more day${progress.minimumTradingDays - progress.tradingDays === 1 ? '' : 's'} required`
+                : 'No minimum day requirement'}
+            </span>
           </div>
         )}
       </div>
 
-      {/* Pace insight */}
-      <div className={`eval-insight${paceNegative ? ' eval-insight-warning' : ''}`}>
-        {paceText}
-      </div>
-
-      {/* Risk alerts */}
-      <section className="eval-section">
-        <div className="eval-section-head">
-          <span>Risk alerts</span>
-          <small>{alerts.length ? `${alerts.length} active` : 'Clear'}</small>
+      {/* ── Stats grid ──────────────────────────────────────────────── */}
+      {tradeStats ? (
+        <div className="eval-stats">
+          {([
+            { lbl: 'Trades',      val: String(tradeStats.tradeCount),                                              color: undefined },
+            { lbl: 'Win rate',    val: `${tradeStats.winRate}%`,                                                   color: tradeStats.winRate >= 50 ? '#34d399' : '#f87171' },
+            { lbl: 'Avg / trade', val: `${tradeStats.avgPnl >= 0 ? '+' : ''}${money(tradeStats.avgPnl)}`,          color: tradeStats.avgPnl >= 0 ? '#34d399' : '#f87171' },
+            { lbl: 'Best day',    val: `${tradeStats.bestDay > 0 ? '+' : ''}${money(tradeStats.bestDay)}`,         color: tradeStats.bestDay >= 0 ? '#34d399' : '#f87171' },
+            { lbl: 'Worst day',   val: money(tradeStats.worstDay),                                                  color: tradeStats.worstDay < 0 ? '#f87171' : '#34d399' },
+            { lbl: 'Green days',  val: `${tradeStats.greenDayPct}%`,                                               color: tradeStats.greenDayPct >= 50 ? '#34d399' : '#f87171' },
+          ] as { lbl: string; val: string; color: string | undefined }[]).map(({ lbl, val, color }) => (
+            <div key={lbl} className="eval-stat">
+              <span className="eval-stat-val" style={{ color }}>{val}</span>
+              <span className="eval-stat-lbl">{lbl}</span>
+            </div>
+          ))}
+          <div className="eval-stat eval-stat-prob">
+            <span className="eval-stat-val" style={{ color: probColor }}>{progress.passProbability}%</span>
+            <span className="eval-stat-lbl">Pass probability</span>
+          </div>
+          {progress.minimumTradingDays > 0 && (
+            <div className="eval-stat">
+              <span className="eval-stat-val" style={{ color: daysMet ? '#34d399' : undefined }}>
+                {progress.tradingDays}/{progress.minimumTradingDays}
+              </span>
+              <span className="eval-stat-lbl">Min days</span>
+            </div>
+          )}
         </div>
-        {alerts.length ? (
-          <div className="eval-alerts">
-            {alerts.map(alert => (
-              <div key={alert.id} className={`eval-alert eval-alert-${alert.severity}`}>
-                <div>
-                  <strong>{alert.title}</strong>
-                  <p>{alert.message}</p>
-                </div>
-                <span>{alert.action}</span>
+      ) : (
+        <div className="eval-no-trades">No trades recorded for this account yet.</div>
+      )}
+
+      {/* ── Pace note ───────────────────────────────────────────────── */}
+      {paceText && (
+        <p className={`eval-pace${paceNegative ? ' neg' : ''}`}>{paceText}</p>
+      )}
+
+      {/* ── Alerts ──────────────────────────────────────────────────── */}
+      {alerts.length > 0 && (
+        <div className="eval-alerts">
+          {alerts.map(alert => (
+            <div key={alert.id} className={`eval-alert eval-alert-${alert.severity}`}>
+              <div className="eval-alert-main">
+                <strong>{alert.title}</strong>
+                <p>{alert.message}</p>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="eval-no-alerts">
-            <CheckCircle2 size={15} />
-            <div>
-              <strong>No active alerts</strong>
-              <p>No material process risks detected from your recorded trades.</p>
+              <span className="eval-alert-action">{alert.action}</span>
             </div>
-          </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Rules preset ────────────────────────────────────────────── */}
+      <div className="eval-preset">
+        <div className="eval-preset-info">
+          <span className="eval-preset-lbl">Rules preset</span>
+          <span className="eval-preset-sub">
+            {selectedTemplate.program ?? 'Evaluation'} · verified {selectedTemplate.verifiedAt ? new Date(selectedTemplate.verifiedAt).toLocaleDateString() : 'locally'}
+          </span>
+        </div>
+        {selectedTemplate.optionalDailyLossLimit && (
+          <label className="eval-dll-toggle">
+            <input type="checkbox" checked={useOptionalDailyLoss} onChange={e => setUseOptionalDailyLoss(e.target.checked)} />
+            {money(selectedTemplate.optionalDailyLossLimit)} daily limit
+          </label>
         )}
-      </section>
+        <select value={selectedTemplate.id} onChange={e => setTemplateId(e.target.value)}>
+          {templates.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+        <button type="button" onClick={() => applyTemplate(selected)}>Apply</button>
+      </div>
 
-      {/* Rules preset */}
-          <div className="eval-preset">
-            <div>
-              <label htmlFor="eval-tpl">Rules preset</label>
-              <p>{selectedTemplate.program ?? 'Evaluation'} · verified {selectedTemplate.verifiedAt ? new Date(selectedTemplate.verifiedAt).toLocaleDateString() : 'locally'}</p>
-            </div>
-            <select id="eval-tpl" value={selectedTemplate.id} onChange={e => setTemplateId(e.target.value)}>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </select>
-            <button type="button" onClick={() => applyTemplate(selected)}>Apply</button>
-          </div>
-
-      <p className="eval-disclaimer">Firm rules can change. Flyxa's presets are monitoring aids, not the legal source of truth. Verify every limit against your firm dashboard and agreement.</p>
+      <p className="eval-disclaimer">
+        Firm rules can change. Flyxa's presets are monitoring aids, not the legal source of truth. Verify every limit against your firm dashboard and agreement.
+      </p>
     </div>
   );
 }

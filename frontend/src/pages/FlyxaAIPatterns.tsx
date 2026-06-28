@@ -1199,15 +1199,20 @@ export default function FlyxaAIPatterns() {
 
   return (
     <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ backgroundColor: colors.d0, color: colors.t0 }}>
-      <div className="grid h-full grid-cols-[178px_minmax(0,1fr)] overflow-hidden">
+      <div className="grid h-full grid-cols-[190px_minmax(0,1fr)] overflow-hidden">
         <FlyxaNav />
 
-        <main className="min-h-0 overflow-hidden" style={{ backgroundColor: colors.d0 }}>
+        <main className="min-h-0 overflow-y-auto" style={{ backgroundColor: colors.d0 }}>
           <div className="flex h-full min-h-0 flex-col">
-            <section className="border-b px-6 py-5" style={{ borderColor: colors.b0 }}>
-              <p className="text-[9.5px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Flyxa AI</p>
-              <div className="mt-2 flex items-center gap-3">
-                <h1 className="text-[24px] font-bold tracking-[-0.02em]" style={{ color: colors.t0 }}>Pattern library</h1>
+            <section className="border-b px-8 py-7" style={{ borderColor: colors.b0 }}>
+              <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: colors.t2 }}>Patterns</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-[34px] font-semibold tracking-[-0.04em]" style={{ color: colors.t0 }}>Edges and leaks.</h1>
+                  <p className="mt-2 max-w-2xl text-[13px] leading-relaxed" style={{ color: colors.t1 }}>
+                    Flyxa groups your trade history into practical patterns: what is helping, what is costing, and what deserves attention next.
+                  </p>
+                </div>
                 <div className="flex gap-0.5 rounded-[5px] p-0.5" style={{ backgroundColor: colors.d3 }}>
                   {(['1M', '3M', '6M', 'All'] as DetectedTimeFrame[]).map(tf => (
                     <button
@@ -1307,7 +1312,7 @@ export default function FlyxaAIPatterns() {
                   )}
                 </div>
               </div>
-              <p className="mt-1 text-[12px]" style={{ color: colors.t2 }}>Patterns auto-detected from your trade history &middot; {detectedPatterns.length} found over {detectedTf === 'All' ? 'all time' : detectedTf === '1M' ? 'the last month' : detectedTf === '3M' ? 'the last 3 months' : 'the last 6 months'}</p>
+              <p className="mt-4 text-[12px]" style={{ color: colors.t2 }}>{detectedPatterns.length} detected over {detectedTf === 'All' ? 'all time' : detectedTf === '1M' ? 'the last month' : detectedTf === '3M' ? 'the last 3 months' : 'the last 6 months'}.</p>
               {hasSourceContext && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[6px] border px-3 py-2 text-[11px]" style={{ borderColor: `${colors.acc}30`, backgroundColor: 'rgba(245,158,11,0.07)', color: colors.t1 }}>
                   <span className="font-semibold uppercase tracking-[0.1em]" style={{ color: colors.acc }}>From trade analysis</span>
@@ -1319,8 +1324,8 @@ export default function FlyxaAIPatterns() {
               )}
             </section>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <div className="space-y-4">
+            <div className="min-h-0 flex-1 px-8 py-5">
+              <div className="mx-auto max-w-[1120px] space-y-5">
                 {renderPatternControls()}
 
                 {/* ── Auto-detected patterns ── */}
@@ -1351,7 +1356,13 @@ export default function FlyxaAIPatterns() {
                   </div>
                 )}
 
-                <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <details className="rounded-[12px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                  <summary className="cursor-pointer text-[12px] font-semibold" style={{ color: colors.t1 }}>
+                    Legacy manual pattern tracking
+                    <span className="ml-2 font-normal" style={{ color: colors.t2 }}>summary, saved patterns, and resolved archive</span>
+                  </summary>
+
+                <section className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div className="rounded-[8px] p-3" style={{ border: cardBorder, backgroundColor: colors.d2 }}>
                     <p style={tinyMetaLabelStyle}>Costing you</p>
                     <p className="mt-1 text-[22px] font-semibold" style={{ color: colors.red }}>{formatSignedCurrency(summary.totalLost)}</p>
@@ -1443,6 +1454,8 @@ export default function FlyxaAIPatterns() {
                     </div>
                   )}
                 </section>
+
+                </details>
               </div>
             </div>
           </div>

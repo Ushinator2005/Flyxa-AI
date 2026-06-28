@@ -1,6 +1,7 @@
 import { CSSProperties, useMemo, useState } from 'react';
 import { Clock3, AlertTriangle } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -1543,6 +1544,35 @@ export default function FlyxaAI() {
     return Array.from(new Set(items)).slice(0, 3);
   }, [dedupedFocusItems, displayedInsights, weakestProcess, weeklyWindow.weeklyTrades]);
 
+  const periodWindow = getPeriodWindow(timeframe, weekOffset);
+  const navItems = [
+    { key: 'weekly', label: 'Debrief', to: '/flyxa-ai', end: true },
+    { key: 'weekly-report', label: 'Weekly report', to: '/flyxa-ai/weekly-report', end: false },
+    { key: 'pattern', label: 'Pattern library', to: '/flyxa-ai/patterns', end: false },
+    { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai/ask', end: false },
+  ];
+  const primaryAction = actionItems[0] ?? gradeHint;
+  const topInsights = displayedInsights.slice(0, 3);
+  const keyMetrics = [
+    weeklyDebriefData.stats.netR,
+    weeklyDebriefData.stats.winRate,
+    weeklyDebriefData.stats.processScore,
+    { label: 'Trades', value: String(weeklyDebriefData.tradeCount), subLabel: `${weeklyDebriefData.sessionCount} sessions`, tone: 'neutral' as const },
+  ];
+  const coachHeadline = boundedScore >= 75
+    ? 'Your process is stable enough to refine, not rebuild.'
+    : 'Your edge needs fewer decisions and cleaner execution.';
+  const coachSubcopy = safeAccountTrades.length === 0
+    ? 'Log a few trades and Flyxa will turn the journal into a practical debrief.'
+    : primaryAction;
+  const gradeSoftBackground = weekGrade === 'A'
+    ? 'rgba(34,214,138,0.10)'
+    : weekGrade === 'B'
+      ? 'rgba(245,158,11,0.11)'
+      : weekGrade === 'C'
+        ? 'rgba(245,158,11,0.08)'
+        : 'rgba(240,82,82,0.10)';
+
   if (loading) {
     return (
       <div className="animate-fade-in flex h-[calc(100vh-3.5rem)] items-center justify-center rounded-2xl" style={{ ...themeVars, backgroundColor: colors.d0 }}>
@@ -1550,6 +1580,406 @@ export default function FlyxaAI() {
       </div>
     );
   }
+
+  return (
+    <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ ...themeVars, backgroundColor: colors.d0, color: colors.t0 }}>
+      <div className="grid h-full grid-cols-1 overflow-hidden lg:grid-cols-[190px_minmax(0,1fr)]">
+        <FlyxaNav />
+
+        <main className="min-h-0 overflow-y-auto" style={{ backgroundColor: colors.d0 }}>
+          <nav className="flex overflow-x-auto border-b lg:hidden" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+            {navItems.map(item => (
+              <NavLink key={item.key} to={item.to} end={item.end} style={{ textDecoration: 'none', flexShrink: 0 }}>
+                {({ isActive }) => (
+                  <span
+                    className="block px-4 py-3 text-[12px]"
+                    style={{
+                      borderBottom: `2px solid ${isActive ? colors.acc : 'transparent'}`,
+                      color: isActive ? colors.acc : colors.t1,
+                      fontWeight: isActive ? 650 : 500,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="mx-auto max-w-[1180px] px-4 py-5 lg:px-8 lg:py-7">
+            <section data-tour-id="flyxa-ai-header" className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: colors.t2 }}>AI debrief</p>
+                <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.04em] lg:text-[36px]" style={{ color: colors.t0 }}>
+                  {weeklyDebriefData.weekRange}
+                </h1>
+                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed" style={{ color: colors.t1 }}>
+                  A simplified read on what mattered, what changed, and what to do next.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex gap-1 rounded-[9px] border p-1" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                  {(['1W', '1M', '3M', 'All'] as TimeFrame[]).map(tf => (
+                    <button
+                      key={tf}
+                      type="button"
+                      onClick={() => { setTimeframe(tf); setWeekOffset(0); }}
+                      className="rounded-[6px] px-3 py-1.5 text-[11px] font-semibold transition-colors"
+                      style={{
+                        backgroundColor: timeframe === tf ? colors.acc : 'transparent',
+                        color: timeframe === tf ? colors.d0 : colors.t1,
+                      }}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
+
+                {(timeframe === '1W' || timeframe === '1M') && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset(w => w + 1)}
+                      className="rounded-[7px] border px-2.5 py-1.5 text-[12px] transition-colors hover:bg-white/[0.05]"
+                      style={{ color: colors.t1, borderColor: colors.b0, backgroundColor: colors.d1 }}
+                      title={timeframe === '1W' ? 'Previous week' : 'Previous month'}
+                    >
+                      ←
+                    </button>
+                    {weekOffset > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setWeekOffset(0)}
+                        className="rounded-[7px] border px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-white/[0.05]"
+                        style={{ color: colors.acc, borderColor: colors.b0, backgroundColor: colors.d1 }}
+                      >
+                        Current
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
+                      disabled={weekOffset === 0}
+                      className="rounded-[7px] border px-2.5 py-1.5 text-[12px] transition-colors"
+                      style={{
+                        color: weekOffset === 0 ? colors.t2 : colors.t1,
+                        borderColor: colors.b0,
+                        backgroundColor: colors.d1,
+                        opacity: weekOffset === 0 ? 0.45 : 1,
+                      }}
+                      title={timeframe === '1W' ? 'Next week' : 'Next month'}
+                    >
+                      →
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {safeAccountTrades.length === 0 ? (
+              <section className="mt-6 rounded-[16px] border p-6 lg:p-8" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.acc }}>Flyxa AI locked</p>
+                <h2 className="mt-3 text-[24px] font-semibold tracking-[-0.03em]" style={{ color: colors.t0 }}>Log trades before asking for analysis</h2>
+                <p className="mt-3 max-w-2xl text-[13px] leading-7" style={{ color: colors.t1 }}>
+                  Flyxa needs real journal data before it can identify process leaks, setup quality, and coaching patterns.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/scanner')}
+                  className="mt-5 rounded-[9px] px-4 py-2.5 text-[13px] font-semibold"
+                  style={{ backgroundColor: colors.acc, color: colors.d0 }}
+                >
+                  Log first trade
+                </button>
+              </section>
+            ) : (
+              <>
+                <section className="mt-6 grid gap-4 rounded-[18px] border p-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:p-5" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.12em]" style={{ borderColor: colors.b0, color: colors.t2 }}>
+                        Coach read
+                      </span>
+                      <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ backgroundColor: gradeSoftBackground, color: gradeColor(weekGrade) }}>
+                        Process {boundedScore}/100
+                      </span>
+                      <span className="text-[11px]" style={{ color: colors.t2 }}>
+                        {weeklyDebriefData.sessionCount} sessions · {weeklyDebriefData.tradeCount} trades · {weeklyDebriefData.instruments[0] ?? 'All markets'}
+                      </span>
+                    </div>
+
+                    <h2 className="mt-4 max-w-3xl text-[24px] font-semibold leading-tight tracking-[-0.035em] lg:text-[30px]" style={{ color: colors.t0 }}>
+                      {coachHeadline}
+                    </h2>
+                    <p className="mt-3 max-w-3xl text-[13px] leading-7" style={{ color: colors.t1 }}>
+                      {coachSubcopy}
+                    </p>
+
+                    <div data-tour-id="flyxa-ai-reflection" className="mt-5 rounded-[12px] border p-3.5" style={{ borderColor: colors.b0, backgroundColor: colors.d0 }}>
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border" style={{ borderColor: 'rgba(245,158,11,0.22)', backgroundColor: 'rgba(245,158,11,0.08)' }}>
+                          <Clock3 size={15} color={colors.acc} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Reflection prompt</p>
+                          <p className="mt-1 text-[13px] leading-relaxed" style={{ color: colors.t1 }}>{weeklyDebriefData.question}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-[7px] border px-3 py-1.5 text-[12px] font-semibold"
+                          style={{ borderColor: colors.b0, color: respondOpen ? colors.t1 : colors.acc, backgroundColor: colors.d1 }}
+                          onClick={() => setRespondOpen(prev => !prev)}
+                        >
+                          {respondOpen ? 'Cancel' : 'Respond'}
+                        </button>
+                      </div>
+
+                      {respondOpen && (
+                        <div className="mt-3">
+                          <textarea
+                            className="w-full resize-none rounded-[10px] text-[13px] leading-relaxed"
+                            style={{
+                              backgroundColor: colors.d2,
+                              border: `1px solid ${colors.b1}`,
+                              color: colors.t0,
+                              padding: '12px 13px',
+                              fontFamily: 'var(--font-sans)',
+                              outline: 'none',
+                              minHeight: 92,
+                            }}
+                            placeholder="Write the one thing you need to remember before your next session..."
+                            value={respondText}
+                            onChange={e => setRespondText(e.target.value)}
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              disabled={!respondText.trim()}
+                              className="rounded-[8px] px-3.5 py-2 text-[12px] font-semibold disabled:opacity-40"
+                              style={{ backgroundColor: colors.acc, color: colors.d0 }}
+                              onClick={saveReflection}
+                            >
+                              Save reflection
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[14px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d0 }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Net P&L</p>
+                        <p className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.06em]" style={{ color: netRNumeric >= 0 ? colors.grn : colors.red, fontFamily: colors.mono }}>
+                          {weeklyDebriefData.stats.netR.value}
+                        </p>
+                        <p className="mt-2 text-[11px]" style={{ color: colors.t2 }}>
+                          {timeframe !== 'All' ? `vs ${formatSignedCurrency(previousWeekPnl)} ${periodWindow.prevLabel}` : `${weeklyWindow.weeklyTrades.length} trades total`}
+                        </p>
+                      </div>
+                      <p className="rounded-[10px] px-3 py-2 text-[26px] font-semibold leading-none" style={{ color: gradeColor(weekGrade), backgroundColor: gradeSoftBackground, fontFamily: colors.mono }}>
+                        {weekGrade}
+                      </p>
+                    </div>
+
+                    <svg width="100%" height={78} viewBox={`0 0 ${sparkline.width} ${sparkline.height}`} preserveAspectRatio="none" className="mt-5 block">
+                      <line x1={6} y1={sparkline.baselineY} x2={sparkline.width - 6} y2={sparkline.baselineY} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
+                      <path d={sparkline.areaPath} fill={netRNumeric >= 0 ? 'rgba(34,214,138,0.08)' : 'rgba(240,82,82,0.09)'} />
+                      <path d={sparkline.linePath} fill="none" stroke={netRNumeric >= 0 ? colors.grn : colors.red} strokeWidth="1.8" />
+                    </svg>
+                  </div>
+                </section>
+
+                {dataCompleteness && (dataCompleteness.emotionPct < 80 || dataCompleteness.planPct < 80) && (
+                  <div className="mt-4 flex flex-col gap-3 rounded-[12px] border px-4 py-3 sm:flex-row sm:items-center" style={{ borderColor: 'rgba(245,158,11,0.22)', backgroundColor: 'rgba(245,158,11,0.055)' }}>
+                    <AlertTriangle size={15} color={colors.amb} style={{ flexShrink: 0 }} />
+                    <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed" style={{ color: colors.t1 }}>
+                      Some context is missing: emotion tagged on {dataCompleteness.emotionPct}% and plan logged on {dataCompleteness.planPct}% of trades.
+                    </p>
+                    <button
+                      type="button"
+                      className="self-start rounded-[7px] border px-3 py-1.5 text-[12px] font-semibold sm:self-auto"
+                      style={{ color: colors.acc, borderColor: 'rgba(245,158,11,0.25)', backgroundColor: 'rgba(245,158,11,0.06)' }}
+                      onClick={() => navigate('/journal')}
+                    >
+                      Fill journal gaps
+                    </button>
+                  </div>
+                )}
+
+                <section data-tour-id="flyxa-ai-stats" className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {keyMetrics.map(metric => (
+                    <div key={metric.label} className="rounded-[13px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                      <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>{metric.label}</p>
+                      <p className="mt-2 text-[22px] font-semibold tracking-[-0.04em]" style={{ color: statToneColor(metric.tone), fontFamily: colors.mono }}>
+                        {metric.value}
+                      </p>
+                      <p className="mt-1 text-[11px]" style={{ color: colors.t2 }}>{metric.subLabel}</p>
+                    </div>
+                  ))}
+                </section>
+
+                <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                  <section data-tour-id="flyxa-ai-insights" className="rounded-[16px] border" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                    <div className="border-b px-4 py-4" style={{ borderColor: colors.b0 }}>
+                      <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>What Flyxa noticed</p>
+                      <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.02em]" style={{ color: colors.t0 }}>
+                        {topInsights.length} priority insight{topInsights.length === 1 ? '' : 's'}
+                      </h2>
+                    </div>
+
+                    <div className="divide-y" style={{ borderColor: colors.b0 }}>
+                      {topInsights.map((insight, index) => {
+                        const style = insightTypeStyles[insight.type];
+                        return (
+                          <article key={insight.title} className="px-4 py-4">
+                            <div className="flex items-start gap-3">
+                              <span className="mt-0.5 w-6 shrink-0 text-[11px] font-semibold" style={{ color: colors.t2, fontFamily: colors.mono }}>
+                                {String(index + 1).padStart(2, '0')}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: style.accent, backgroundColor: `color-mix(in srgb, ${style.accent} 11%, transparent)` }}>
+                                    {insight.badge}
+                                  </span>
+                                  <span className="text-[11px]" style={{ color: colors.t2 }}>{insight.frequency}</span>
+                                </div>
+                                <h3 className="mt-2 text-[15px] font-semibold leading-snug" style={{ color: colors.t0 }}>{insight.title}</h3>
+                                <p className="mt-2 text-[13px] leading-7" style={{ color: colors.t1 }}>
+                                  {renderBodyWithHighlights(insight.body, insight.keyPhrases)}
+                                </p>
+                                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {insight.tags.slice(0, 3).map(tag => (
+                                      <span key={tag.label} style={tagStyle(tag.tone)}>{tag.label}</span>
+                                    ))}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="text-[12px] font-semibold"
+                                    style={{ color: colors.acc }}
+                                    onClick={() => {
+                                      const label = insight.actionLabel.toLowerCase();
+                                      if (label.includes('pre-session')) navigate('/pre-session');
+                                      else if (label.includes('pattern library') || label.includes('confluence')) navigate('/flyxa-ai/patterns');
+                                      else if (label.includes('keep logging')) navigate('/scanner');
+                                      else navigate('/journal');
+                                    }}
+                                  >
+                                    {insight.actionLabel}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <aside className="space-y-4">
+                    <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                      <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Next action</p>
+                      <h2 className="mt-2 text-[17px] font-semibold tracking-[-0.02em]" style={{ color: colors.t0 }}>Do this before adding more trades</h2>
+                      <div className="mt-3 space-y-3">
+                        {actionItems.map((item, index) => (
+                          <div key={`${index}-${item}`} className="rounded-[12px] border p-3" style={{ borderColor: colors.b0, backgroundColor: colors.d0 }}>
+                            <p className="text-[10px] font-semibold" style={{ color: colors.acc, fontFamily: colors.mono }}>{String(index + 1).padStart(2, '0')}</p>
+                            <p className="mt-1 text-[12.5px] leading-6" style={{ color: colors.t1 }}>{item}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Process</p>
+                          <p className="mt-1 text-[14px] font-semibold" style={{ color: colors.t0 }}>{weakestProcess?.label ?? 'Execution quality'}</p>
+                        </div>
+                        <p className="text-[22px] font-semibold" style={{ color: gradeColor(weekGrade), fontFamily: colors.mono }}>{boundedScore}</p>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {weeklyDebriefData.processBreakdown.map(item => {
+                          const color = item.noData ? colors.t2 : breakdownColor(item.value);
+                          return (
+                            <div key={item.label}>
+                              <div className="mb-1.5 flex items-center justify-between gap-2">
+                                <span className="text-[12px]" style={{ color: colors.t1 }}>{item.label}</span>
+                                <span className="text-[12px] font-semibold" style={{ color, fontFamily: colors.mono }}>{item.noData ? 'N/A' : `${item.value}%`}</span>
+                              </div>
+                              <div className="h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: colors.d4 }}>
+                                {!item.noData && <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: color }} />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+
+                    <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                      <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Session split</p>
+                      <div className="mt-3 space-y-3">
+                        {sessionBreakdownRows.map(row => (
+                          <div key={row.label}>
+                            <div className="mb-1.5 flex items-center justify-between gap-3">
+                              <span className="text-[12px]" style={{ color: colors.t1 }}>{row.label}</span>
+                              <span className="text-[12px] font-semibold" style={{ color: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2, fontFamily: colors.mono }}>
+                                {row.trades ? formatSignedCompactCurrency(row.netPnl) : '--'}
+                              </span>
+                            </div>
+                            <div className="h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: colors.d4 }}>
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: `${row.barWidth}%`, backgroundColor: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2 }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+
+                    {bestTrade && (
+                      <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Best execution</p>
+                          <span className="text-[11px]" style={{ color: colors.t2 }}>{bestTrade.date}</span>
+                        </div>
+                        <div className="mt-3 flex items-end justify-between gap-3">
+                          <div>
+                            <p className="text-[16px] font-semibold" style={{ color: colors.t0, fontFamily: colors.mono }}>{bestTrade.symbol}</p>
+                            <p className="mt-1 text-[11px]" style={{ color: colors.t2 }}>{bestTrade.session} · {bestTrade.direction}</p>
+                          </div>
+                          <p className="text-[16px] font-semibold" style={{ color: colors.grn, fontFamily: colors.mono }}>{bestTrade.resultPnl}</p>
+                        </div>
+                        <p className="mt-3 text-[12px] leading-6" style={{ color: colors.t1 }}>{bestTrade.journal}</p>
+                      </section>
+                    )}
+
+                    {recentReflections.length > 0 && (
+                      <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                        <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Recent reflections</p>
+                        <div className="mt-3 space-y-3">
+                          {recentReflections.slice(0, 2).map(reflection => (
+                            <div key={reflection.id} className="border-l-2 pl-3" style={{ borderLeftColor: colors.acc }}>
+                              <p className="truncate text-[11px]" style={{ color: colors.t2 }}>{reflection.periodLabel}</p>
+                              <p className="mt-1 text-[12px] leading-6" style={{ color: colors.t1 }}>{reflection.answer}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </aside>
+                </div>
+              </>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 
   return (
     <div className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl" style={{ ...themeVars, backgroundColor: colors.d0, color: colors.t0 }}>

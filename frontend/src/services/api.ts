@@ -371,8 +371,10 @@ export const rivalsApi = (() => {
       invalidateProfileCache();
       return api.put<RivalProfileResponse>('/api/rivals/profile', data);
     },
-    updateStats: (stats: NonNullable<RivalProfileResponse['stats']>) =>
-      api.put<RivalProfileResponse>('/api/rivals/profile/stats', { stats }),
+    updateStats: (stats: NonNullable<RivalProfileResponse['stats']>) => {
+      invalidateProfileCache();
+      return api.put<RivalProfileResponse>('/api/rivals/profile/stats', { stats });
+    },
     search: (username: string) =>
       api.get<RivalProfileResponse | null>(`/api/rivals/search?username=${encodeURIComponent(username)}`),
     getAll: () => api.get<RivalRequestResponse[]>('/api/rivals'),

@@ -690,73 +690,109 @@
 .tp-contract-limits {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+}
+
+.tp-contract-empty {
+  font-size: 11px;
+  color: var(--txt-3);
+  margin: 0;
+  padding: 4px 0 2px;
 }
 
 .tp-contract-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--surface-1);
+  transition: border-color .12s;
+}
+.tp-contract-row:hover {
+  border-color: var(--app-border-strong, var(--app-border));
 }
 
-.tp-contract-ticker {
-  font: 600 11px var(--font-mono);
-  letter-spacing: .06em;
-  color: var(--amber);
-  background: var(--amber-dim);
-  border: 1px solid var(--amber-border);
-  border-radius: 4px;
-  padding: 2px 7px;
-  flex-shrink: 0;
+.tp-contract-sym-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tp-contract-sym-name {
+  font: 700 13px var(--font-mono);
+  letter-spacing: .05em;
+  color: var(--txt);
+}
+
+.tp-contract-sym-full {
+  font-size: 10px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tp-contract-stepper {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .tp-contract-step-btn {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--app-border);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--surface-2);
   color: var(--txt-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 15px;
+  font-weight: 300;
   line-height: 1;
   padding: 0;
-  transition: border-color .12s, color .12s;
+  transition: border-color .12s, color .12s, background .12s;
+  flex-shrink: 0;
 }
 .tp-contract-step-btn:hover {
   border-color: var(--amber-border);
   color: var(--amber);
+  background: var(--amber-dim);
 }
 
-.tp-contract-value {
+.tp-contract-value-input {
+  width: 48px;
+  height: 28px;
+  border: 1px solid var(--app-border);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--txt);
   font-size: 13px;
   font-weight: 600;
-  color: var(--txt);
-  min-width: 20px;
   text-align: center;
+  padding: 0 4px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.tp-contract-value-input::-webkit-inner-spin-button,
+.tp-contract-value-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.tp-contract-value-input:focus {
+  border-color: var(--amber-border);
 }
 
 .tp-contract-remove {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: var(--txt-3);
   display: inline-flex;
@@ -772,35 +808,70 @@
   background: rgba(239, 68, 68, .07);
 }
 
-/* Quick-add: label + chips inline */
+/* Add asset section */
+.tp-contract-add-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--app-border);
+  margin-top: 2px;
+}
+
+.tp-contract-add-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+}
+
+.tp-contract-add-row {
+  display: grid;
+  grid-template-columns: 1fr 72px auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.tp-contract-sym-input { }
+
+.tp-contract-add-btn {
+  height: 35px;
+  padding: 0 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--txt-2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .12s, background .12s, border-color .12s;
+}
+.tp-contract-add-btn:hover {
+  border-color: rgba(34, 197, 94, .4);
+  color: var(--green);
+  background: rgba(34, 197, 94, .07);
+}
+
+/* Quick-add chips */
 .tp-contract-quick {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 5px 0 3px;
-  border-top: 1px solid var(--app-border);
-}
-
-.tp-contract-quick-label {
-  font-size: 10px;
-  color: var(--txt-3);
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .tp-contract-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  height: 22px;
-  padding: 0 8px;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--app-border);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--surface-1);
   color: var(--txt-2);
-  font: 600 10px var(--font-mono);
-  letter-spacing: .04em;
   cursor: pointer;
   white-space: nowrap;
   transition: border-color .12s, color .12s, background .12s;
@@ -810,38 +881,18 @@
   color: var(--cobalt);
   background: var(--cobalt-dim);
 }
-
-.tp-contract-add-row {
-  display: grid;
-  grid-template-columns: 1fr 58px 28px;
-  gap: 5px;
-  align-items: center;
-  padding-top: 6px;
-  border-top: 1px solid var(--app-border);
-  margin-top: 1px;
+.tp-contract-chip-sym {
+  font: 700 10px var(--font-mono);
+  letter-spacing: .06em;
 }
-
-.tp-contract-add-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 35px;
-  padding: 0;
-  border: 1px solid var(--app-border);
-  border-radius: 5px;
-  background: transparent;
+.tp-contract-chip-name {
+  font-size: 10px;
   color: var(--txt-3);
-  cursor: pointer;
-  transition: color .12s, background .12s, border-color .12s;
 }
-.tp-contract-add-btn:hover {
-  border-color: rgba(34, 197, 94, .4);
-  color: var(--green);
-  background: rgba(34, 197, 94, .07);
+.tp-contract-chip:hover .tp-contract-chip-name {
+  color: inherit;
+  opacity: .75;
 }
-
-.tp-contract-sym-input { }
 
 .tp-rule-delete {
   align-self: flex-start;

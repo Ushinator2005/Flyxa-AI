@@ -2258,7 +2258,7 @@
   outline: 0;
   background: transparent;
   color: var(--rv-text);
-  font: 10px var(--rv-sans);
+  font: 11px var(--rv-sans);
 }
 
 .rv-command-tools select,
@@ -2270,7 +2270,7 @@
   outline: none;
   background: var(--rv-bg);
   color: var(--rv-text-2);
-  font: 10px var(--rv-sans);
+  font: 11px var(--rv-sans);
 }
 
 .rv-position-grid {
@@ -2843,24 +2843,27 @@
 
 /* Professional refinement */
 .rv-league-shell {
-  max-width: 1380px;
-  padding: 30px 34px 52px;
+  max-width: 1420px;
+  padding: 32px 36px 56px;
 }
 
 .rv-league-header {
-  margin-bottom: 24px;
+  margin-bottom: 26px;
 }
 
 .rv-league-header h1 {
   margin-top: 6px;
-  font-size: 26px;
-  font-weight: 680;
+  font-size: 29px;
+  font-family: var(--rv-sans);
+  font-weight: 720;
+  letter-spacing: -0.025em;
 }
 
 .rv-page-kicker {
   color: var(--rv-text-3);
-  font-size: 8px;
-  letter-spacing: .08em;
+  font: 650 9px var(--rv-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
 }
 
 .rv-header-actions .rivals-cta,
@@ -2890,7 +2893,12 @@
 .rv-command-selects {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rv-metric-tabs {
+  overflow-x: auto;
 }
 
 .rv-control-field {
@@ -2916,8 +2924,9 @@
   font: 500 10px var(--rv-sans);
 }
 
-.rv-period-tabs {
-  height: 34px;
+.rv-period-tabs,
+.rv-metric-tabs {
+  height: 37px;
   padding: 3px;
   border: 1px solid var(--rv-border);
   border-radius: 7px;
@@ -2926,43 +2935,47 @@
   gap: 2px;
 }
 
-.rv-period-tabs button {
-  padding: 0 10px;
+.rv-period-tabs button,
+.rv-metric-tabs button {
+  padding: 0 12px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--rv-text-3);
-  font: 500 9px var(--rv-sans);
+  font: 500 10px var(--rv-sans);
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.rv-period-tabs button:hover {
+.rv-period-tabs button:hover,
+.rv-metric-tabs button:hover {
   color: var(--rv-text-2);
 }
 
-.rv-period-tabs button.active {
+.rv-period-tabs button.active,
+.rv-metric-tabs button.active {
   background: var(--rv-layer-2);
   color: var(--rv-text);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.045);
 }
 
 .rv-command-tools label {
-  width: 190px;
-  height: 34px;
+  width: 205px;
+  height: 37px;
   border-radius: 6px;
 }
 
 .rv-summary-bar {
-  min-height: 92px;
+  min-height: 104px;
   margin: 10px 0;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 1px solid var(--rv-border);
   border-radius: 9px;
   background: var(--rv-layer);
   display: grid;
-  grid-template-columns: minmax(145px, .8fr) minmax(105px, .55fr) minmax(145px, .8fr) minmax(180px, 1fr) 125px;
+  grid-template-columns: minmax(145px, .8fr) minmax(105px, .55fr) minmax(145px, .8fr) 125px;
   align-items: center;
-  gap: 18px;
+  gap: 22px;
 }
 
 .rv-summary-identity {
@@ -2983,11 +2996,11 @@
 .rv-summary-bar span,
 .rv-summary-division small {
   color: var(--rv-text-3);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .rv-summary-identity strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .rv-summary-metric {
@@ -3052,8 +3065,8 @@
 }
 
 .rv-competition-layout {
-  grid-template-columns: minmax(480px, 1fr) 288px;
-  gap: 12px;
+  grid-template-columns: minmax(520px, 1fr) 312px;
+  gap: 14px;
 }
 
 .rv-ranking-card,
@@ -3065,15 +3078,15 @@
 }
 
 .rv-ranking-title {
-  min-height: 64px;
-  padding: 14px 18px;
+  min-height: 72px;
+  padding: 16px 19px;
 }
 
 .rv-ranking-title h2,
 .rv-rail-title h3 {
   margin: 0;
   color: var(--rv-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -3081,7 +3094,7 @@
 .rv-rail-title p {
   margin: 4px 0 0;
   color: var(--rv-text-3);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .rv-leader-avatar {
@@ -3089,8 +3102,8 @@
 }
 
 .rv-leader-avatar.large {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 9px;
 }
 
@@ -3099,13 +3112,13 @@
 }
 
 .rv-insight-head h3 {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
 }
 
 .rv-inspector-tabs {
-  height: 39px;
-  padding: 0 16px;
+  height: 42px;
+  padding: 0 17px;
   border-bottom: 1px solid var(--rv-border);
   display: flex;
   gap: 18px;
@@ -3117,7 +3130,7 @@
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--rv-text-3);
-  font: 600 9px var(--rv-sans);
+  font: 600 10px var(--rv-sans);
   cursor: pointer;
 }
 
@@ -3144,7 +3157,7 @@
 
 .rv-inspector-meta > span {
   color: var(--rv-text-3);
-  font: 9px var(--rv-mono);
+  font: 10px var(--rv-mono);
 }
 
 .rv-division-badge {
@@ -3158,9 +3171,34 @@
 }
 
 .rv-insight-kpis > div {
-  min-height: 48px;
+  min-height: 54px;
+  padding: 10px;
   border-radius: 6px;
   background: transparent;
+}
+
+.rv-insight-kpis span {
+  font-size: 9px;
+}
+
+.rv-insight-equity strong,
+.rv-insight-kpis strong {
+  color: var(--rv-text);
+  font-family: var(--rv-sans);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
+  text-shadow: none !important;
+  filter: none !important;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+.rv-insight-kpis strong {
+  font-size: 15px;
 }
 
 .rv-trader-note {
@@ -3168,7 +3206,7 @@
   padding-top: 11px;
   border-top: 1px solid var(--rv-border);
   color: var(--rv-text-3);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.55;
 }
 
@@ -3562,7 +3600,7 @@
 
 @media (max-width: 1120px) {
   .rv-summary-bar {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .rv-summary-bar > .rv-sparkline {
@@ -3585,11 +3623,13 @@
     flex-direction: column;
   }
 
-  .rv-period-tabs {
+  .rv-period-tabs,
+  .rv-metric-tabs {
     overflow-x: auto;
   }
 
-  .rv-period-tabs button {
+  .rv-period-tabs button,
+  .rv-metric-tabs button {
     flex: 1;
     white-space: nowrap;
   }
@@ -3689,7 +3729,7 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 50px;
+  width: 36px;
   flex-shrink: 0;
   padding-right: 6px;
   border-right: 1px solid rgba(255,255,255,0.06);
@@ -3814,3 +3854,402 @@
   background: var(--rv-blue);
 }
 
+/* Rivals competitive polish: density + motion, not decoration */
+
+.rv-league-tabs button.active {
+  border-bottom-color: color-mix(in srgb, var(--rv-amber) 55%, transparent);
+}
+
+.rv-metric-tabs button.active {
+  color: var(--rv-amber);
+  background: color-mix(in srgb, var(--rv-amber) 9%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--rv-amber) 22%, transparent),
+    inset 0 -2px 0 var(--rv-amber);
+}
+
+.rv-summary-bar {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--rv-border) 65%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--rv-layer) 92%, transparent), color-mix(in srgb, var(--rv-layer-2) 78%, transparent)),
+    var(--rv-layer);
+  grid-template-columns: minmax(165px, .85fr) minmax(220px, .9fr) minmax(120px, .55fr) minmax(170px, .85fr);
+}
+
+.rv-summary-bar > :not(.rv-summary-spark-bg) {
+  position: relative;
+  z-index: 1;
+}
+
+.rv-summary-spark-bg {
+  position: absolute;
+  inset: 12px 16px 12px 34%;
+  z-index: 0;
+  opacity: .08;
+  pointer-events: none;
+}
+
+.rv-summary-spark-bg .rv-sparkline {
+  width: 100%;
+  height: 100%;
+}
+
+.rv-summary-spark-bg polygon {
+  opacity: .18;
+}
+
+.rv-summary-spark-bg .rv-sparkline-path {
+  stroke-width: 1.15;
+}
+
+.rv-summary-bar .rv-season-progress {
+  grid-column: auto;
+  height: auto;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  overflow: visible;
+  padding-left: 18px;
+  border-left: 1px solid color-mix(in srgb, var(--rv-border) 72%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.rv-summary-bar .rv-season-progress span {
+  display: inline;
+  height: auto;
+  background: transparent;
+  color: var(--rv-text-2);
+  font: 800 9px var(--rv-mono);
+  letter-spacing: .11em;
+  white-space: nowrap;
+}
+
+.rv-summary-bar .rv-season-progress i {
+  display: block;
+  width: min(230px, 100%);
+  height: 4px;
+  max-width: 230px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--rv-amber) 12%, transparent);
+}
+
+.rv-summary-bar .rv-season-progress u {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--rv-amber) 78%, transparent);
+}
+
+.rv-summary-context {
+  color: var(--rv-text);
+  font: 650 17px/1.1 var(--rv-sans);
+  letter-spacing: -0.02em;
+}
+
+.rv-summary-context svg {
+  color: var(--rv-amber);
+}
+
+.rv-summary-context span {
+  color: inherit;
+  font: inherit;
+}
+
+.rv-summary-context .rv-summary-gap {
+  color: var(--rv-text);
+}
+
+.rv-summary-context .rv-summary-rank-target {
+  color: var(--rv-amber);
+}
+
+.rv-summary-metric strong {
+  font: 680 32px/1 var(--rv-mono);
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+.rv-summary-metric small {
+  color: var(--rv-text-3);
+  font: 600 9px var(--rv-sans);
+  line-height: 1.35;
+}
+
+.rv-summary-metric .rv-risk-inline-key {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.rv-risk-inline-key > span {
+  color: var(--rv-text-3);
+}
+
+.rv-risk-inline-key i {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-style: normal;
+}
+
+.rv-risk-inline-key b {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rv-text) 5%, transparent);
+  color: var(--rv-text-3);
+  font: 700 7px var(--rv-mono);
+}
+
+.rv-live-indicator i {
+  animation: rv-live-pulse 2s ease-in-out infinite;
+}
+
+.rv-sparkline-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: rv-line-draw .62s cubic-bezier(.22, .75, .25, 1) forwards;
+}
+
+.rv-rival-card {
+  min-height: 74px;
+  gap: 13px;
+  padding: 12px 16px 12px 14px;
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: color-mix(in srgb, var(--rv-border) 85%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background .14s ease, transform .14s ease, border-color .14s ease;
+}
+
+.rv-rival-card:hover {
+  background: color-mix(in srgb, var(--rv-text) 3%, transparent);
+  transform: none;
+}
+
+.rv-rival-card.selected {
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: color-mix(in srgb, var(--rv-blue) 24%, var(--rv-border));
+  box-shadow: inset 2px 0 0 var(--rv-blue);
+  background: color-mix(in srgb, var(--rv-blue) 5%, transparent);
+}
+
+.rv-rival-card.me {
+  min-height: 80px;
+  background: transparent;
+}
+
+.rv-rival-card.me.selected {
+  box-shadow: inset 2px 0 0 var(--rv-blue);
+}
+
+.rv-card-rank {
+  width: 40px;
+  align-items: center;
+  justify-content: center;
+  border-right: 0;
+  padding-right: 0;
+}
+
+.rv-card-pos {
+  min-width: 32px;
+  color: var(--rv-text-2);
+  font: 650 19px/1 var(--rv-mono);
+  letter-spacing: -0.04em;
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.rv-rival-card:first-child .rv-card-pos {
+  color: var(--rv-text);
+  font-size: 20px;
+}
+
+.rv-card-identity {
+  gap: 4px;
+}
+
+.rv-card-identity strong {
+  font-size: 12px;
+}
+
+.rv-card-identity small {
+  font-size: 9px;
+}
+
+.rv-card-coach {
+  max-width: 360px;
+  overflow: hidden;
+  color: var(--rv-text-3);
+  font: 500 9px var(--rv-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rv-form-dots {
+  width: 66px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.rv-form-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rv-text-3) 58%, transparent);
+}
+
+.rv-form-dot.win {
+  background: var(--rv-green);
+  box-shadow: none;
+}
+
+.rv-form-dot.loss {
+  background: var(--rv-red);
+  box-shadow: none;
+}
+
+.rv-form-dot.empty {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rv-text-3) 58%, transparent);
+}
+
+.rv-card-volume {
+  min-width: 66px;
+  flex-shrink: 0;
+  padding-left: 11px;
+  border-left: 1px solid color-mix(in srgb, var(--rv-border) 82%, transparent);
+  color: var(--rv-text-3);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font: 600 9px var(--rv-sans);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.rv-card-volume b {
+  color: var(--rv-text);
+  font: 650 13px/1 var(--rv-mono);
+  letter-spacing: -0.04em;
+}
+
+.rv-card-stats {
+  margin-left: auto;
+  opacity: .94;
+}
+
+.rv-card-stat {
+  min-width: 66px;
+  padding: 0 11px;
+}
+
+.rv-card-stat > span {
+  font-size: 8px;
+}
+
+.rv-card-stat > strong {
+  font-size: 13px;
+}
+
+.rv-card-stat-bar {
+  width: 40px;
+}
+
+.rv-card-pnl {
+  min-width: 114px;
+  position: relative;
+}
+
+.rv-card-pnl > .positive,
+.rv-card-pnl > .negative {
+  font-size: 14px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+.rv-row-hover-meta {
+  max-width: 118px;
+  overflow: hidden;
+  color: var(--rv-text-3);
+  font: 700 8px var(--rv-mono);
+  letter-spacing: .02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+
+.rv-rival-card:hover .rv-row-hover-meta,
+.rv-rival-card.selected .rv-row-hover-meta {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.rv-rival-card.rank-flash .rv-card-pos {
+  animation: rv-rank-flash .42s ease-out;
+}
+
+@keyframes rv-live-pulse {
+  0%, 100% {
+    opacity: .65;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--rv-green) 32%, transparent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--rv-green) 0%, transparent);
+  }
+}
+
+@keyframes rv-line-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes rv-rank-flash {
+  0% { color: var(--rv-amber); filter: brightness(1.45); }
+  100% { color: var(--rv-card-tier-color, var(--rv-text-3)); filter: brightness(1); }
+}
+
+@media (max-width: 980px) {
+  .rv-summary-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rv-summary-bar .rv-season-progress,
+  .rv-summary-metric,
+  .rv-summary-context {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .rv-rival-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .rv-card-stats {
+    order: 10;
+    width: 100%;
+    margin-left: 52px;
+    justify-content: flex-start;
+  }
+}

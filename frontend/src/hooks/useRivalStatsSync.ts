@@ -19,7 +19,6 @@ export function useRivalStatsSync() {
   const [dailyJournalEntries, setDailyJournalEntries] = useState<DailyJournalEntry[]>([]);
   const [hasProfile, setHasProfile] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
-  const [storedPeriods, setStoredPeriods] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +30,6 @@ export function useRivalStatsSync() {
       setDailyJournalEntries(journal as DailyJournalEntry[]);
       setHasProfile(Boolean(profile));
       setProfileAvatarUrl(profile?.avatarUrl ?? null);
-      setStoredPeriods((profile?.stats?.periods ?? {}) as Record<string, unknown>);
     });
     return () => { cancelled = true; };
   }, []);
@@ -49,13 +47,28 @@ export function useRivalStatsSync() {
     const dailyJournalStreak = computeDailyJournalStreak(dailyJournalEntries);
     const tradingJournalScore = computeTradingJournalScore(entries);
     const ruleFollowing = computeRuleFollowingScore(entries, entries.flatMap(e => e.trades), riskRules);
-    const allTrades = entries.flatMap(e => e.trades).filter(t => t.result === 'win' || t.result === 'loss');
+    const allSavedTrades = entries.flatMap(e => e.trades);
+    const allTrades = allSavedTrades.filter(t => t.result === 'win' || t.result === 'loss');
     const winRate = allTrades.length > 0 ? Math.round((allTrades.filter(t => t.result === 'win').length / allTrades.length) * 100) : null;
     const tradesWithRR = allTrades.filter(t => typeof t.rr === 'number' && isFinite(t.rr) && t.rr !== 0);
     const avgR = tradesWithRR.length > 0
       ? Math.round((tradesWithRR.reduce((sum, t) => sum + t.rr, 0) / tradesWithRR.length) * 100) / 100
       : null;
-    return JSON.stringify({ dailyJournalStreak, tradingJournalScore, ruleFollowing, winRate, avgR, tradeCount: allTrades.length });
+    const tradeSignature = allSavedTrades
+      .map(t => [
+        t.id,
+        t.date,
+        t.time,
+        t.pnl,
+        t.commission ?? 0,
+        t.result,
+        t.rr,
+        t.contracts,
+        t.reflection?.followedPlan,
+      ].join(':'))
+      .sort()
+      .join('|');
+    return JSON.stringify({ dailyJournalStreak, tradingJournalScore, ruleFollowing, winRate, avgR, tradeSignature });
   }, [dailyJournalEntries, entries, riskRules]);
 
   useEffect(() => {
@@ -94,7 +107,7 @@ export function useRivalStatsSync() {
       month: computePeriodStats(allSavedTrades, periodBounds('month', true)),
       season: computePeriodStats(allSavedTrades, periodBounds('season', true)),
     };
-    const periods = { ...storedPeriods, ...localPeriods };
+    const periods = localPeriods;
     const previousPeriods = localPreviousPeriods;
 
     rivalsApi.updateStats({

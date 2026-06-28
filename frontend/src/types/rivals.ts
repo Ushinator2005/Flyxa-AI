@@ -13,6 +13,7 @@ export interface RivalPeriodStats {
   ruleAdherence: number;
   riskAdjusted: number;
   equityCurve: number[];
+  dailyPnl?: Array<{ date: string; pnl: number }>;
 }
 
 export interface MascotStats {

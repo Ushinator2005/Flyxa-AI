@@ -1,6 +1,7 @@
 import React, { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Send, RotateCcw, Sparkles, X, ArrowRight } from 'lucide-react';
+import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import { useTrades, toApiTrade } from '../hooks/useTrades.js';
 import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
 import { api, aiApi } from '../services/api.js';
@@ -583,58 +584,28 @@ export default function FlyxaAIAsk() {
       className="animate-fade-in h-[calc(100vh-3.5rem)] overflow-hidden rounded-2xl"
       style={{ ...themeVars, backgroundColor: C.d0, color: C.t0, fontFamily: C.sans }}
     >
-      <div className="grid h-full grid-cols-1 overflow-hidden lg:grid-cols-[178px_minmax(0,1fr)_252px]">
+      <div className="grid h-full grid-cols-1 overflow-hidden lg:grid-cols-[190px_minmax(0,1fr)]">
 
         {/* ── Left sub-nav ── */}
-        <aside className="min-h-0 overflow-y-auto border-r px-2 py-4" style={{ backgroundColor: C.d1, borderColor: C.b0 }}>
-          <div className="px-2">
-            <p className="text-[14px] font-bold tracking-[0.1em]" style={{ color: C.t0 }}>FLYXA</p>
-            <p className="mt-0.5 text-[9.5px]" style={{ color: C.t2 }}>Trading Intelligence</p>
-          </div>
-          <nav className="mt-4 space-y-0.5">
-            {[
-              { label: 'Debrief', to: '/flyxa-ai' },
-              { label: 'Pattern library', to: '/flyxa-ai/patterns' },
-              { label: 'Post-session', to: '/flyxa-ai/post-session' },
-              { label: 'Ask Flyxa', to: '/flyxa-ai/ask', active: true },
-            ].map(item => (
-              <button
-                key={item.to}
-                type="button"
-                onClick={() => navigate(item.to)}
-                className="block w-full px-2.5 py-2 text-left text-[12.5px] transition-colors hover:bg-white/[0.04]"
-                style={{
-                  borderLeft: `2px solid ${item.active ? C.acc : 'transparent'}`,
-                  borderTop: 'none', borderRight: 'none', borderBottom: 'none',
-                  backgroundColor: item.active ? 'rgba(245,158,11,0.07)' : 'transparent',
-                  color: item.active ? C.acc : C.t1,
-                  fontFamily: C.sans,
-                  cursor: 'pointer',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
+        <FlyxaNav />
 
         {/* ── Main content ── */}
         <main className="min-h-0 overflow-y-auto flex flex-col" style={{ backgroundColor: C.d0 }}>
 
           {/* Header */}
-          <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.b0}` }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+          <div style={{ padding: '28px 32px 20px', borderBottom: `1px solid ${C.b0}` }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20 }}>
               <div>
                 <div style={{
                   fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
                   textTransform: 'uppercase', color: C.t2, marginBottom: 6,
                 }}>
-                  Ask Flyxa AI
+                  Ask
                 </div>
-                <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: C.t0, margin: 0 }}>
-                  Query your trade data
+                <h1 style={{ fontSize: 32, fontWeight: 650, letterSpacing: '-0.04em', color: C.t0, margin: 0 }}>
+                  Ask one clean question.
                 </h1>
-                <p style={{ fontSize: 12.5, color: C.t1, marginTop: 4 }}>
+                <p style={{ fontSize: 13, color: C.t1, marginTop: 8, maxWidth: 560, lineHeight: 1.7 }}>
                   Ask anything in plain English — Flyxa AI analyses your actual trade history and thinks through the numbers.
                 </p>
               </div>
@@ -655,7 +626,7 @@ export default function FlyxaAIAsk() {
             </div>
 
             {/* Input */}
-            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+            <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <input
                   ref={inputRef}
@@ -666,10 +637,10 @@ export default function FlyxaAIAsk() {
                   autoFocus
                   disabled={loading}
                   style={{
-                    width: '100%', height: 42, borderRadius: 8,
+                    width: '100%', height: 48, borderRadius: 11,
                     border: `1px solid ${input ? C.acc + '50' : C.b0}`,
                     background: C.d2, color: C.t0,
-                    padding: '0 14px', fontSize: 13, fontFamily: C.sans,
+                    padding: '0 16px', fontSize: 14, fontFamily: C.sans,
                     outline: 'none', boxSizing: 'border-box',
                     transition: 'border-color 0.15s',
                     opacity: loading ? 0.6 : 1,
@@ -681,7 +652,7 @@ export default function FlyxaAIAsk() {
                 onClick={() => void submitQuestion(input)}
                 disabled={!input.trim() || loading}
                 style={{
-                  width: 42, height: 42, borderRadius: 8, border: 'none', flexShrink: 0,
+                  width: 48, height: 48, borderRadius: 11, border: 'none', flexShrink: 0,
                   background: input.trim() && !loading ? C.acc : `${C.acc}35`,
                   color: '#0a0806', cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -693,8 +664,8 @@ export default function FlyxaAIAsk() {
             </div>
 
             {/* Quick questions */}
-            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {QUICK_QUESTIONS.slice(0, 8).map(q => (
+            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {QUICK_QUESTIONS.slice(0, 5).map(q => (
                 <button
                   key={q}
                   type="button"
@@ -957,62 +928,6 @@ export default function FlyxaAIAsk() {
         </main>
 
         {/* ── Right panel ── */}
-        <aside className="min-h-0 overflow-y-auto border-l px-4 py-[18px]" style={{ backgroundColor: C.d1, borderColor: C.b0 }}>
-
-          <div style={{ marginBottom: 16 }}>
-            <div style={{
-              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
-              textTransform: 'uppercase', color: C.t2, marginBottom: 10,
-            }}>
-              Frequently asked questions
-            </div>
-            {[
-              'When do I trade best?',
-              'Do I follow my plan?',
-              'Am I overtrading?',
-              'How do I trade after a loss?',
-              'Which confluences work?',
-              'Am I improving?',
-            ].map(question => (
-              <button
-                key={question}
-                type="button"
-                onClick={() => { void submitQuestion(question); inputRef.current?.focus(); }}
-                disabled={loading}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '9px 10px',
-                  marginBottom: 7,
-                  borderRadius: 7,
-                  border: `1px solid ${C.b0}`,
-                  background: C.d2,
-                  fontSize: 11.5,
-                  color: C.t1,
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontFamily: C.sans,
-                  lineHeight: 1.45,
-                  transition: 'border-color 0.12s ease, color 0.12s ease, background 0.12s ease',
-                }}
-                onMouseEnter={e => {
-                  if (!loading) {
-                    e.currentTarget.style.borderColor = `${C.acc}45`;
-                    e.currentTarget.style.color = C.t0;
-                    e.currentTarget.style.background = C.d0;
-                  }
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = C.b0;
-                  e.currentTarget.style.color = C.t1;
-                  e.currentTarget.style.background = C.d2;
-                }}
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-        </aside>
       </div>
 
       <style>{`
