@@ -276,7 +276,8 @@ function mergeScreenshots(localValue: unknown, remoteValue: unknown): unknown {
 function mergeRemoteEntryIntoLocal(
   localEntry: Record<string, unknown>,
   remoteEntry: Record<string, unknown>,
-  deletedTradeIds: Set<string>
+  deletedTradeIds: Set<string>,
+  blockedTradeKeys: Set<string> = new Set()
 ): Record<string, unknown> {
   const localTrades = tradeRecordsFromEntry(localEntry)
     .filter((trade) => typeof trade.id !== 'string' || !deletedTradeIds.has(trade.id));
@@ -289,7 +290,10 @@ function mergeRemoteEntryIntoLocal(
     .filter((trade) => typeof trade.id !== 'string' || !deletedTradeIds.has(trade.id))
     .filter((trade) => {
       const key = tradeMergeKey(trade);
-      return !key || !localTradeKeys.has(key);
+      if (!key) return true;
+      if (localTradeKeys.has(key)) return false;
+      if (blockedTradeKeys.has(key)) return false;
+      return true;
     });
 
   return {
@@ -438,6 +442,19 @@ function mergeRemoteEntriesIntoStoreBlob(
     };
   }
 
+  // Collect every trade key that already exists anywhere in the local blob.
+  // Remote must not re-add a trade to a stale day if local has already placed
+  // it somewhere (e.g. after moving a trade from Day A to Day B, old Supabase
+  // still has it on Day A — without this guard the merge re-adds it there).
+  const locallyPlacedTradeKeys = new Set<string>();
+  for (const entry of localEntries) {
+    for (const trade of tradeRecordsFromEntry(entry)) {
+      const key = tradeMergeKey(trade);
+      if (key) locallyPlacedTradeKeys.add(key);
+    }
+  }
+  const effectiveDeletedTradeKeys = locallyPlacedTradeKeys;
+
   const mergedByKey = new Map<string, Record<string, unknown>>();
   const looseEntries: Record<string, unknown>[] = [];
 
@@ -458,12 +475,24 @@ function mergeRemoteEntriesIntoStoreBlob(
     }
 
     const existing = mergedByKey.get(key);
-    mergedByKey.set(
-      key,
-      existing
-        ? mergeRemoteEntryIntoLocal(existing, remoteEntry, deletedTradeIds)
-        : remoteEntry
-    );
+    if (existing) {
+      // For this local entry, remove trades already placed here from the
+      // "blocked" set so the merge can still see them within the same day.
+      const localEntryTradeKeys = new Set<string>();
+      for (const trade of tradeRecordsFromEntry(existing)) {
+        const tk = tradeMergeKey(trade);
+        if (tk) localEntryTradeKeys.add(tk);
+      }
+      const blockedForThisEntry = new Set(
+        [...effectiveDeletedTradeKeys].filter(k => !localEntryTradeKeys.has(k))
+      );
+      mergedByKey.set(
+        key,
+        mergeRemoteEntryIntoLocal(existing, remoteEntry, deletedTradeIds, blockedForThisEntry)
+      );
+    } else {
+      mergedByKey.set(key, remoteEntry);
+    }
   }
 
   const entries = [...mergedByKey.values(), ...looseEntries]
@@ -1132,10 +1161,27 @@ export const supabaseZustandStorage: StateStorage = {
                 .filter(e => typeof (e as Record<string, unknown>).date === 'string')
                 .map(e => (e as Record<string, unknown>).date as string)
             );
-            const backupEntries = await readBackupEntries(userId);
-            const missingEntries = backupEntries.filter(
-              e => typeof e.date === 'string' && !existingDates.has(e.date)
+            const deletedDates = deletedEntryDatesFromBlob(flyxaData);
+
+            // Check both Supabase backup table and localStorage backup for missing dates.
+            const [backupEntries, localSafeEntries] = await Promise.all([
+              readBackupEntries(userId),
+              Promise.resolve(readLocalEntriesSafe(userId)),
+            ]);
+
+            // Deduplicate by date, preferring the Supabase backup over localStorage.
+            const candidateMap = new Map<string, Record<string, unknown>>();
+            for (const e of localSafeEntries) {
+              if (typeof e.date === 'string') candidateMap.set(e.date, e as Record<string, unknown>);
+            }
+            for (const e of backupEntries) {
+              if (typeof e.date === 'string') candidateMap.set(e.date, e);
+            }
+
+            const missingEntries = Array.from(candidateMap.values()).filter(
+              e => typeof e.date === 'string' && !existingDates.has(e.date) && !deletedDates.has(e.date)
             );
+
             if (missingEntries.length > 0) {
               const mergedBlob = applyDedicatedRules(
                 mergeRemoteEntriesIntoStoreBlob(flyxaData, { state: { entries: missingEntries } } as unknown),
