@@ -27,7 +27,7 @@ import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
-import { evaluateEntryRules, evaluateTradeRules, manualRules } from '../utils/tradingRules.js';
+import { evaluateEntryRules, evaluateTradeRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
 import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
@@ -405,15 +405,26 @@ function gradeCssKey(letter: string): string {
   return letter.replace('+', 'plus').replace('—', 'dash');
 }
 
-function computeEntryStats(entry: JournalEntry) {
+function computeEntryStats(entry: JournalEntry, riskRules: RiskRule[] = []) {
   const pnl = entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
   const wins = entry.trades.filter(trade => trade.result === 'win').length;
   const losses = entry.trades.filter(trade => trade.result === 'loss').length;
   const tradeCount = entry.trades.length;
   const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
   const avgRR = tradeCount ? entry.trades.reduce((sum, trade) => sum + trade.rr, 0) / tradeCount : 0;
-  const okCount = entry.rules.filter(rule => rule.state === 'ok').length;
-  const failCount = entry.rules.filter(rule => rule.state === 'fail').length;
+  // Use full evaluation (auto + manual) when riskRules are provided so that
+  // automatic rule violations affect the grade, not just manual confirmations.
+  let okCount: number;
+  let failCount: number;
+  if (riskRules.length > 0) {
+    const evs = evaluateEntryRules(entry as unknown as StoreJournalEntry, riskRules);
+    const s = summarizeRuleEvaluations(evs);
+    okCount = s.passed;
+    failCount = s.failed;
+  } else {
+    okCount = entry.rules.filter(rule => rule.state === 'ok').length;
+    failCount = entry.rules.filter(rule => rule.state === 'fail').length;
+  }
   const evaluatedRules = okCount + failCount;
   const rulePassPct = evaluatedRules ? (okCount / evaluatedRules) * 100 : 0;
   const discipline = entry.psychology.discipline;
@@ -1358,6 +1369,17 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
     onMutateEntry({ rules: next });
   };
 
+  const unconfirmedManual = evaluations.filter(e => e.source === 'manual' && e.state === 'unchecked');
+  const markAllManualPassed = () => {
+    let next = [...entry.rules];
+    for (const ev of unconfirmedManual) {
+      next = next.some(r => r.text === ev.label)
+        ? next.map(r => r.text === ev.label ? { ...r, state: 'ok' as RuleState } : r)
+        : [...next, { text: ev.label, state: 'ok' as RuleState }];
+    }
+    onMutateEntry({ rules: next });
+  };
+
   return (
     <div className="tj-card" style={{ marginBottom: 8, padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
@@ -1367,9 +1389,20 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
             {verified.length > 0 ? `${pct}% adherence · ${passed}/${verified.length} verified checks passed` : 'No rules verified yet'}
           </span>
         </div>
-        <span style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9 }}>
-          {broken.length > 0 ? `${broken.length} broken` : 'Automatic + reported'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {unconfirmedManual.length > 0 && (
+            <button
+              type="button"
+              onClick={markAllManualPassed}
+              style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid var(--green)', background: 'var(--green-dim)', color: 'var(--green)', fontSize: 9, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              All passed
+            </button>
+          )}
+          <span style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9 }}>
+            {broken.length > 0 ? `${broken.length} broken` : 'Automatic + reported'}
+          </span>
+        </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {evaluations.map(item => (
@@ -2555,6 +2588,19 @@ export default function TradeJournal() {
     return { monthPnl, daysTraded, winRate, bestDay };
   }, [tradedEntriesInMonth]);
 
+  // Pre-compute per-entry adherence for the visible list so the render stays O(1) per card.
+  const entryAdherenceMap = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const entry of visibleEntries) {
+      if (entry.trades.length === 0) continue;
+      const s = summarizeRuleEvaluations(
+        evaluateEntryRules(entry as unknown as StoreJournalEntry, riskRules)
+      );
+      map.set(entry.id, s.pct);
+    }
+    return map;
+  }, [visibleEntries, riskRules]);
+
   const addBlankDay = useCallback(() => {
     // Always create for today — never inherit the currently-viewed entry's date
     const date = getTodayIso(preferences.timezone);
@@ -3249,6 +3295,12 @@ export default function TradeJournal() {
                       <>
                         <div className={`tj-day-pnl ${stats.pnl > 0 ? 'pos' : stats.pnl < 0 ? 'neg' : ''}`}>{formatSignedCurrency(stats.pnl)}</div>
                         <div className="tj-day-meta">{`${stats.wins}W | ${stats.losses}L | ${stats.tradeCount} trades`}</div>
+                        {(() => {
+                          const pct = entryAdherenceMap.get(entry.id) ?? null;
+                          if (pct === null) return null;
+                          const clr = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+                          return <div style={{ fontSize: 9, color: clr, marginTop: 1, fontWeight: 600 }}>{pct}% rules</div>;
+                        })()}
                       </>
                     ) : (
                       <>
@@ -3301,7 +3353,16 @@ export default function TradeJournal() {
                         : activeTrade?.accountId;
                     const acct = accounts.find(a => a.id === resolvedId);
                     return acct ? `${acct.name} | ${acct.type}` : null;
-                  })()} | <strong>{formatSignedCurrency(computeEntryStats(selectedEntry).pnl)}</strong>
+                  })()} | <strong>{formatSignedCurrency(computeEntryStats(selectedEntry, riskRules).pnl)}</strong>
+                  {(() => {
+                    if (!selectedEntry.trades.length) return null;
+                    const s = summarizeRuleEvaluations(
+                      evaluateEntryRules(selectedEntry as unknown as StoreJournalEntry, riskRules)
+                    );
+                    if (s.pct === null) return null;
+                    const clr = s.pct >= 80 ? 'var(--green)' : s.pct >= 60 ? 'var(--amber)' : 'var(--red)';
+                    return <> · <span style={{ color: clr, fontWeight: 600 }}>{s.pct}% rules</span></>;
+                  })()}
                 </p>
                 {activeTrade && !deleteEntryConfirm && (
                   <div className="tj-date-edit-row">

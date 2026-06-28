@@ -20,6 +20,7 @@ import type { RiskRule } from '../store/types.js';
 import { saveStoreStatePatchNow, flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import { pushToast } from '../store/toastStore.js';
 import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
+import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import './TradingPlan.css';
 
@@ -239,6 +240,34 @@ export default function TradingPlan() {
     [riskRules]
   );
 
+  // Last-30-day adherence report for displaying per-rule breach stats.
+  const planReport = useMemo(() => {
+    const today = new Date();
+    const ago = new Date(today);
+    ago.setDate(ago.getDate() - 30);
+    const bounds: [string, string] = [
+      ago.toISOString().slice(0, 10),
+      today.toISOString().slice(0, 10),
+    ];
+    return buildPlanAdherenceReport(journalEntries, riskRules, { bounds });
+  }, [journalEntries, riskRules]);
+
+  const ruleStatsMap = useMemo(() => {
+    const map = new Map<string, { checked: number; passed: number; failed: number; pct: number | null }>();
+    for (const day of planReport.daily) {
+      for (const ev of day.evaluations) {
+        if (ev.state === 'unchecked') continue;
+        const s = map.get(ev.ruleId) ?? { checked: 0, passed: 0, failed: 0, pct: null };
+        s.checked++;
+        if (ev.state === 'ok') s.passed++;
+        else s.failed++;
+        s.pct = Math.round((s.passed / s.checked) * 100);
+        map.set(ev.ruleId, s);
+      }
+    }
+    return map;
+  }, [planReport]);
+
   const togglePlanBlock = (id: string) => {
     setPlanBlocks(current => current.map(block => (block.id === id ? { ...block, isOpen: !block.isOpen } : block)));
   };
@@ -388,6 +417,17 @@ export default function TradingPlan() {
             <p className="tp-kpi-label">Auto Checks</p>
             <p className="tp-kpi-value num">{automaticRuleCount}</p>
             <p className="tp-kpi-sub">Measurable guardrails verified from trades</p>
+          </article>
+          <article className="tp-kpi" style={{ borderColor: planReport.pct === null ? 'var(--app-border)' : planReport.pct >= 80 ? 'var(--green)' : planReport.pct >= 60 ? 'var(--amber)' : 'var(--red)' }}>
+            <p className="tp-kpi-label">Adherence (30d)</p>
+            <p className="tp-kpi-value num" style={{ color: planReport.pct === null ? 'var(--app-text-subtle)' : planReport.pct >= 80 ? 'var(--green)' : planReport.pct >= 60 ? 'var(--amber)' : 'var(--red)' }}>
+              {planReport.pct === null ? '—' : `${planReport.pct}%`}
+            </p>
+            <p className="tp-kpi-sub">
+              {planReport.entriesChecked > 0
+                ? `${planReport.perfectDays} perfect · ${planReport.brokenDays} broken days`
+                : 'No checked entries yet'}
+            </p>
           </article>
         </div>
 
@@ -622,6 +662,19 @@ export default function TradingPlan() {
                       </p>
                     </div>
                   )}
+                  {(() => {
+                    const s = ruleStatsMap.get(rule.id);
+                    if (!s || s.checked === 0) return null;
+                    const clr = s.pct === null ? 'var(--app-text-subtle)' : s.pct >= 80 ? 'var(--green)' : s.pct >= 60 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 8px', background: 'var(--app-surface-2)', borderRadius: 5, border: '1px solid var(--app-border)' }}>
+                        <span style={{ color: clr, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700 }}>{s.pct}%</span>
+                        <span style={{ color: 'var(--app-text-subtle)', fontSize: 10 }}>
+                          {s.failed > 0 ? `${s.failed} break${s.failed !== 1 ? 's' : ''}` : 'no breaks'} · last 30 days
+                        </span>
+                      </div>
+                    );
+                  })()}
                   <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)}>
                     <Trash2 size={12} /> Remove
                   </button>
