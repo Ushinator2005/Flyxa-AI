@@ -336,25 +336,33 @@ function recoverMissingStateFromRemote(
     }
   }
 
-  // Trading plan rules are first-class user data. Only recover them when the
-  // merged snapshot is missing them, or when a blank/default refresh snapshot
-  // would otherwise replace a meaningful remote ruleset.
+  // Trading plan rules are first-class user data. Recover remote rules when:
+  //   1. merged has no rules array at all, OR
+  //   2. remote rules are strictly newer (by riskRulesUpdatedAt timestamp), OR
+  //   3. remote has meaningful custom rules but merged only has defaults — UNLESS
+  //      merged carries a strictly newer timestamp (i.e. the user intentionally
+  //      reset to defaults after the remote version was saved).
   const mRiskRules = mergedState.riskRules;
   const rRiskRules = remoteState.riskRules;
   const mergedRulesAt = timestampMs(mergedState.riskRulesUpdatedAt);
   const remoteRulesAt = timestampMs(remoteState.riskRulesUpdatedAt);
   const remoteRulesAreNewer = remoteRulesAt !== null && (mergedRulesAt === null || remoteRulesAt > mergedRulesAt);
-  const untimestampedRemoteHasOnlyMeaningfulCopy = remoteRulesAt === null &&
-    mergedRulesAt === null &&
+  // merged is "strictly newer" only when it has a timestamp AND that timestamp
+  // beats the remote timestamp (or remote has none).
+  const mergedIsStrictlyNewer = mergedRulesAt !== null && (remoteRulesAt === null || mergedRulesAt > remoteRulesAt);
+  // Remote has intentional custom rules; merged has only defaults (or no rules)
+  // and is NOT from a more-recent intentional change → recover remote.
+  const remoteHasCustomMergedHasDefault =
     hasMeaningfulRiskRules(remoteState) &&
-    !hasMeaningfulRiskRules(mergedState);
+    !hasMeaningfulRiskRules(mergedState) &&
+    !mergedIsStrictlyNewer;
   if (
     Array.isArray(rRiskRules) &&
     rRiskRules.length > 0 &&
     (
       !Array.isArray(mRiskRules) ||
       remoteRulesAreNewer ||
-      untimestampedRemoteHasOnlyMeaningfulCopy
+      remoteHasCustomMergedHasDefault
     )
   ) {
     patch.riskRules = rRiskRules;

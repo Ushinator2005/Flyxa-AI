@@ -176,6 +176,7 @@ const T1 = 'var(--app-text)';
 const T2 = 'var(--app-text-muted)';
 const T3 = 'var(--app-text-subtle)';
 const SANS = 'var(--font-sans)';
+const MONO = 'var(--font-mono)';
 
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = hex.replace('#', '');
@@ -306,45 +307,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SafetyBox({
-  label,
-  children,
-  description,
-}: {
-  label: React.ReactNode;
-  children: React.ReactNode;
-  description?: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        minWidth: 0,
-        border: `1px solid ${BORDER}`,
-        borderRadius: '8px',
-        background: 'rgba(255,255,255,0.018)',
-        padding: '12px',
-      }}
-    >
-      <div
-        style={{
-          marginBottom: '9px',
-          color: T3,
-          fontSize: '10px',
-          fontWeight: 650,
-          letterSpacing: '0.02em',
-        }}
-      >
-        {label}
-      </div>
-      {children}
-      {description && (
-        <p style={{ marginTop: '8px', color: T3, fontSize: '10px', lineHeight: 1.45, fontFamily: SANS }}>
-          {description}
-        </p>
-      )}
-    </div>
-  );
-}
 
 function SafetyActionButton({
   children,
@@ -1528,35 +1490,35 @@ export default function Settings() {
             title="Data safety"
             subtitle="Confirm which login owns the data currently loaded on this device."
           >
-            <div style={{ display: ‘flex’, flexDirection: ‘column’ }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
 
               {/* Account + snapshot */}
-              <div style={{ display: ‘flex’, alignItems: ‘center’, justifyContent: ‘space-between’, gap: 16, paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
-                <div style={{ display: ‘flex’, alignItems: ‘center’, gap: 8, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <User size={13} style={{ color: T3, flexShrink: 0 }} />
-                  <span style={{ color: T1, font: `600 12px ${SANS}`, overflow: ‘hidden’, textOverflow: ‘ellipsis’, whiteSpace: ‘nowrap’ }}>
-                    {user?.email ?? ‘Not signed in’}
+                  <span style={{ color: T1, font: `600 12px ${SANS}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.email ?? 'Not signed in'}
                   </span>
                 </div>
-                <div style={{ display: ‘flex’, alignItems: ‘center’, gap: 12, flexShrink: 0 }}>
-                  <div style={{ display: ‘flex’, alignItems: ‘baseline’, gap: 5 }}>
-                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: ‘-0.03em’, lineHeight: 1 }}>{journalEntries.length}</strong>
-                    <span style={{ color: T3, fontSize: 10 }}>{journalEntries.length === 1 ? ‘day’ : ‘days’}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: '-0.03em', lineHeight: 1 }}>{journalEntries.length}</strong>
+                    <span style={{ color: T3, fontSize: 10 }}>{journalEntries.length === 1 ? 'day' : 'days'}</span>
                   </div>
-                  <span style={{ width: 1, height: 12, background: BSUB, display: ‘block’ }} />
-                  <div style={{ display: ‘flex’, alignItems: ‘baseline’, gap: 5 }}>
-                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: ‘-0.03em’, lineHeight: 1 }}>{loadedTradeCount}</strong>
-                    <span style={{ color: T3, fontSize: 10 }}>{loadedTradeCount === 1 ? ‘trade’ : ‘trades’}</span>
+                  <span style={{ width: 1, height: 12, background: BSUB, display: 'block' }} />
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: '-0.03em', lineHeight: 1 }}>{loadedTradeCount}</strong>
+                    <span style={{ color: T3, fontSize: 10 }}>{loadedTradeCount === 1 ? 'trade' : 'trades'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Backup controls */}
               <div style={{ paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
-                <div style={{ display: ‘flex’, alignItems: ‘center’, justifyContent: ‘space-between’, gap: 16, marginBottom: 10 }}>
-                  <span style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: ‘0.07em’, textTransform: ‘uppercase’ }}>Backup</span>
-                  <div style={{ display: ‘flex’, gap: 6 }}>
-                    <input ref={importFileRef} type="file" accept=".json" style={{ display: ‘none’ }} onChange={handleImportJson} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 10 }}>
+                  <span style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Backup</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input ref={importFileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportJson} />
                     <SafetyActionButton icon={<FileJson size={13} />} onClick={handleExportJson} disabled={journalEntries.length === 0}>
                       Export JSON
                     </SafetyActionButton>
@@ -1572,18 +1534,18 @@ export default function Settings() {
                   Export before major imports or account changes. JSON restores Flyxa data; CSV is for spreadsheet review.
                 </p>
                 {importFeedback && (
-                  <p style={{ marginTop: 7, fontSize: 11, color: importFeedback.ok ? ‘#4ade80’ : ‘#f87171’, fontFamily: SANS }}>
-                    {importFeedback.ok ? ‘✓ ‘ : ‘✗ ‘}{importFeedback.msg}
+                  <p style={{ marginTop: 7, fontSize: 11, color: importFeedback.ok ? '#4ade80' : '#f87171', fontFamily: SANS }}>
+                    {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
                   </p>
                 )}
               </div>
 
               {/* Browser recovery */}
-              <div style={{ display: ‘flex’, alignItems: ‘center’, justifyContent: ‘space-between’, gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: ‘0.07em’, textTransform: ‘uppercase’, marginBottom: 5 }}>Browser recovery</div>
+                  <div style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>Browser recovery</div>
                   <p style={{ color: T3, fontSize: 10, lineHeight: 1.5, fontFamily: SANS, maxWidth: 520 }}>
-                    Merge trades from this browser’s local backup when recent cloud journal trades are missing.
+                    Merge trades from this browser's local backup when recent cloud journal trades are missing.
                   </p>
                 </div>
                 <SafetyActionButton icon={<RotateCcw size={13} />} tone="primary" onClick={() => { void handleRecoverFromLocalCache(); }}>
