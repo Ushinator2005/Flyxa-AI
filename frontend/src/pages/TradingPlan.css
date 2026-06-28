@@ -140,12 +140,53 @@
 .tp-kpi-cobalt .tp-kpi-value { color: var(--cobalt); }
 .tp-kpi-red .tp-kpi-value { color: var(--red); }
 
+.tp-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .tp-tabs {
   display: flex;
   align-items: center;
   gap: 6px;
   overflow-x: auto;
   padding-bottom: 2px;
+}
+
+.tp-header-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tp-hstat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tp-hstat-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tp-hstat-label {
+  font-size: 10px;
+  color: var(--txt-3);
+  line-height: 1;
+}
+
+.tp-hstat-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--app-border);
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .tp-tab {
