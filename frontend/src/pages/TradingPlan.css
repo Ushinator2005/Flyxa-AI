@@ -13,72 +13,90 @@
   top: 0;
   z-index: 10;
   border-bottom: 1px solid var(--app-border);
-  background:
-    radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.08), transparent 44%),
-    var(--app-bg);
-  padding: 18px 24px 14px;
+  background: var(--app-bg);
+  padding: 16px 24px 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
 }
 
 .tp-header-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding-bottom: 14px;
 }
 
 .tp-eyebrow {
-  margin: 0 0 6px;
-  font-size: 11px;
+  margin: 0 0 4px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--txt-3);
+  font-weight: 500;
 }
 
 .tp-title {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.1;
-  font-weight: 600;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--txt);
 }
 
 .tp-subtitle {
-  margin: 6px 0 0;
-  max-width: 760px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--txt-2);
+  display: none;
+}
+
+.tp-meta {
+  margin: 5px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--txt-3);
+}
+
+.tp-meta-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--app-border);
+  flex-shrink: 0;
 }
 
 .tp-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .tp-saved {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--txt-3);
+  margin-right: 4px;
 }
 
 .tp-btn {
-  height: 30px;
-  border-radius: 6px;
+  height: 28px;
+  border-radius: 5px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--txt-2);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 11px;
+  gap: 5px;
+  padding: 0 10px;
   cursor: pointer;
-  transition: all 0.16s ease;
+  transition: color 0.14s, border-color 0.14s, background 0.14s;
 }
 
 .tp-btn-muted {
@@ -88,17 +106,18 @@
 
 .tp-btn-muted:hover {
   color: var(--txt);
-  border-color: var(--amber-border);
+  border-color: var(--app-text-subtle);
 }
 
 .tp-btn-primary {
-  border-color: var(--amber-border);
-  background: var(--amber-dim);
-  color: var(--amber);
+  background: var(--amber);
+  color: #0c0c0a;
+  border-color: transparent;
+  font-weight: 600;
 }
 
 .tp-btn-primary:hover {
-  filter: brightness(1.04);
+  filter: brightness(1.06);
 }
 
 .tp-kpi-grid {
@@ -140,80 +159,37 @@
 .tp-kpi-cobalt .tp-kpi-value { color: var(--cobalt); }
 .tp-kpi-red .tp-kpi-value { color: var(--red); }
 
-.tp-tabs-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .tp-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.tp-header-stats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.tp-hstat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.tp-hstat-val {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.tp-hstat-label {
-  font-size: 10px;
-  color: var(--txt-3);
-  line-height: 1;
-}
-
-.tp-hstat-sep {
-  width: 1px;
-  height: 12px;
-  background: var(--app-border);
-  flex-shrink: 0;
-  align-self: center;
 }
 
 .tp-tab {
-  border: 1px solid var(--app-border);
-  border-radius: 6px;
-  background: var(--surface-1);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
   color: var(--txt-3);
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 8px 14px 10px;
+  font-size: 11px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.14s ease;
+  transition: color 0.14s, border-color 0.14s;
 }
 
 .tp-tab:hover {
   color: var(--txt-2);
-  border-color: var(--amber-border);
 }
 
 .tp-tab.active {
-  background: var(--amber-dim);
-  color: var(--amber);
-  border-color: var(--amber-border);
+  color: var(--txt);
+  border-bottom-color: var(--amber);
 }
 
 .tp-content {

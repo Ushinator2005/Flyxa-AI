@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { supabaseZustandStorage, saveRiskRulesNow } from './supabaseStorage.js';
+import { supabaseZustandStorage, saveRiskRulesNow, flushSupabaseStoreNow } from './supabaseStorage.js';
 import { publishPreSessionSync } from '../utils/preSessionSync.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { DEFAULT_ACHIEVEMENTS, mergeAchievementCatalog, refreshAchievements } from './achievements.js';
@@ -810,6 +810,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         const updatedAt = new Date().toISOString();
         set(() => ({ riskRules: rules, riskRulesUpdatedAt: updatedAt }));
         void saveRiskRulesNow(rules, updatedAt);
+        void flushSupabaseStoreNow();
       },
 
       updateChecklist: (items) => set(() => ({ checklist: items })),

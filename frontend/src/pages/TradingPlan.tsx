@@ -384,74 +384,59 @@ export default function TradingPlan() {
       <header className="tp-header" data-tour-id="trading-plan-header">
         <div className="tp-header-main">
           <div>
-            <p className="tp-eyebrow">Rule Operating System</p>
+            <p className="tp-eyebrow">Trading Plan</p>
             <h1 className="tp-title">Risk Rules</h1>
-            <p className="tp-subtitle">
-              Lock the rules Flyxa uses to score plan adherence, enforce guardrails, and flag process drift automatically.
+            <p className="tp-meta">
+              <span style={{ color: 'var(--amber)' }}>{activeRuleCount} active</span>
+              <span className="tp-meta-dot" />
+              <span style={{ color: 'var(--green)' }}>{automaticRuleCount} auto-checked</span>
+              {planReport.pct !== null && (
+                <>
+                  <span className="tp-meta-dot" />
+                  <span style={{ color: planReport.pct >= 80 ? 'var(--green)' : planReport.pct >= 60 ? 'var(--amber)' : 'var(--red)' }}>
+                    {planReport.pct}% 30d
+                  </span>
+                  {planReport.brokenDays > 0 && (
+                    <><span className="tp-meta-dot" /><span style={{ color: 'var(--red)' }}>{planReport.brokenDays} broken</span></>
+                  )}
+                </>
+              )}
             </p>
           </div>
           <div className="tp-actions">
             <span className="tp-saved">{lastSavedLabel}</span>
             <button type="button" className="tp-btn tp-btn-muted" onClick={exportPlan}>
-              <Download size={13} />
+              <Download size={12} />
               Export
             </button>
             <button type="button" className="tp-btn tp-btn-muted" onClick={resetPlan}>
-              <RefreshCw size={13} />
+              <RefreshCw size={12} />
               Reset
             </button>
             <button type="button" className="tp-btn tp-btn-primary" onClick={() => { void persistState(); }}>
-              <Save size={13} />
+              <Save size={12} />
               Save Rules
             </button>
           </div>
         </div>
 
-        <div className="tp-tabs-row">
-          <nav className="tp-tabs" data-tour-id="trading-plan-tabs">
-            {TAB_ITEMS.map(tab => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`tp-tab ${active ? 'active' : ''}`}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  <Icon size={13} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-          <div className="tp-header-stats" data-tour-id="trading-plan-kpis">
-            <span className="tp-hstat">
-              <span className="tp-hstat-val" style={{ color: 'var(--amber)' }}>{activeRuleCount}</span>
-              <span className="tp-hstat-label">active</span>
-            </span>
-            <span className="tp-hstat-sep" />
-            <span className="tp-hstat">
-              <span className="tp-hstat-val" style={{ color: 'var(--green)' }}>{automaticRuleCount}</span>
-              <span className="tp-hstat-label">auto-checked</span>
-            </span>
-            {planReport.pct !== null && (
-              <>
-                <span className="tp-hstat-sep" />
-                <span className="tp-hstat">
-                  <span className="tp-hstat-val" style={{ color: planReport.pct >= 80 ? 'var(--green)' : planReport.pct >= 60 ? 'var(--amber)' : 'var(--red)' }}>
-                    {planReport.pct}%
-                  </span>
-                  <span className="tp-hstat-label">
-                    30d
-                    {planReport.brokenDays > 0 && <> · <span style={{ color: 'var(--red)' }}>{planReport.brokenDays} broken</span></>}
-                    {planReport.brokenDays === 0 && planReport.perfectDays > 0 && <> · <span style={{ color: 'var(--green)' }}>{planReport.perfectDays} perfect</span></>}
-                  </span>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
+        <nav className="tp-tabs" data-tour-id="trading-plan-tabs">
+          {TAB_ITEMS.map(tab => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tp-tab ${active ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon size={13} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
       </header>
 
       <main className="tp-content trading-plan-scroll">
