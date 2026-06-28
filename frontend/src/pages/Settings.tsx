@@ -378,21 +378,24 @@ function SafetyActionButton({
         gap: '7px',
         paddingInline: '12px',
         borderRadius: '6px',
-        border: `1px solid ${disabled ? BORDER : primary ? 'rgba(245,158,11,0.38)' : 'rgba(255,255,255,0.11)'}`,
+        border: `1px solid ${disabled ? BORDER : primary ? 'transparent' : 'rgba(255,255,255,0.11)'}`,
         background: disabled
           ? 'transparent'
-          : hovered
-            ? primary ? 'rgba(245,158,11,0.11)' : 'rgba(255,255,255,0.04)'
-            : primary ? 'rgba(245,158,11,0.055)' : 'rgba(255,255,255,0.018)',
-        color: disabled ? T3 : primary ? AMBER : T1,
-        font: `650 11px ${SANS}`,
+          : primary
+            ? hovered ? '#fbbf24' : AMBER
+            : hovered ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.018)',
+        color: disabled ? T3 : primary ? '#11100f' : T1,
+        font: primary ? `800 11px ${SANS}` : `650 11px ${SANS}`,
+        letterSpacing: primary ? '0.035em' : undefined,
+        textTransform: primary ? 'uppercase' : undefined,
+        boxShadow: disabled || !primary ? 'none' : hovered ? '0 10px 22px rgba(245,158,11,0.2)' : '0 8px 18px rgba(245,158,11,0.14)',
         whiteSpace: 'nowrap',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
-        transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+        transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
       }}
     >
-      <span style={{ color: disabled ? T3 : primary ? AMBER : T2, display: 'inline-flex' }}>{icon}</span>
+      <span style={{ color: disabled ? T3 : primary ? '#11100f' : T2, display: 'inline-flex' }}>{icon}</span>
       {children}
     </button>
   );
@@ -1520,101 +1523,77 @@ export default function Settings() {
       {/* Profile section */}
       <section ref={profileRef} data-tour-id="settings-profile" style={{ scrollMarginTop: '140px' }}>
         <SectionDivider label="Profile" />
-        <SectionPanel
-          title="Data safety"
-          subtitle="Confirm which login owns the data currently loaded on this device."
-        >
-          <div style={{ display: 'grid', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-              <SafetyBox label="Signed-in account">
-                <div style={{ height: '36px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+        <div data-tour-id="settings-data-safety">
+          <SectionPanel
+            title="Data safety"
+            subtitle="Confirm which login owns the data currently loaded on this device."
+          >
+            <div style={{ display: ‘flex’, flexDirection: ‘column’ }}>
+
+              {/* Account + snapshot */}
+              <div style={{ display: ‘flex’, alignItems: ‘center’, justifyContent: ‘space-between’, gap: 16, paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
+                <div style={{ display: ‘flex’, alignItems: ‘center’, gap: 8, minWidth: 0 }}>
                   <User size={13} style={{ color: T3, flexShrink: 0 }} />
-                  <span
-                    style={{
-                      minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: T1,
-                      font: `650 12px ${SANS}`,
-                    }}
-                  >
-                    {user?.email ?? 'Not signed in'}
+                  <span style={{ color: T1, font: `600 12px ${SANS}`, overflow: ‘hidden’, textOverflow: ‘ellipsis’, whiteSpace: ‘nowrap’ }}>
+                    {user?.email ?? ‘Not signed in’}
                   </span>
                 </div>
-              </SafetyBox>
-
-              <SafetyBox label="Journal snapshot">
-                <div style={{ height: '36px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <strong style={{ color: T1, font: '650 20px var(--font-sans)', letterSpacing: '-0.02em', lineHeight: 1 }}>{journalEntries.length}</strong>
-                  <span style={{ color: T3, fontSize: '11px' }}>{journalEntries.length === 1 ? 'day' : 'days'}</span>
-                  <span style={{ width: '1px', height: '14px', background: BSUB }} />
-                  <strong style={{ color: T1, font: '650 20px var(--font-sans)', letterSpacing: '-0.02em', lineHeight: 1 }}>{loadedTradeCount}</strong>
-                  <span style={{ color: T3, fontSize: '11px' }}>{loadedTradeCount === 1 ? 'trade' : 'trades'}</span>
+                <div style={{ display: ‘flex’, alignItems: ‘center’, gap: 12, flexShrink: 0 }}>
+                  <div style={{ display: ‘flex’, alignItems: ‘baseline’, gap: 5 }}>
+                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: ‘-0.03em’, lineHeight: 1 }}>{journalEntries.length}</strong>
+                    <span style={{ color: T3, fontSize: 10 }}>{journalEntries.length === 1 ? ‘day’ : ‘days’}</span>
+                  </div>
+                  <span style={{ width: 1, height: 12, background: BSUB, display: ‘block’ }} />
+                  <div style={{ display: ‘flex’, alignItems: ‘baseline’, gap: 5 }}>
+                    <strong style={{ color: T1, font: `700 18px ${MONO}`, letterSpacing: ‘-0.03em’, lineHeight: 1 }}>{loadedTradeCount}</strong>
+                    <span style={{ color: T3, fontSize: 10 }}>{loadedTradeCount === 1 ? ‘trade’ : ‘trades’}</span>
+                  </div>
                 </div>
-              </SafetyBox>
+              </div>
 
-              <SafetyBox
-                label="Backup controls"
-                description="Export before major imports or account changes. JSON restores Flyxa data; CSV is for spreadsheet review."
-              >
-                <input
-                  ref={importFileRef}
-                  type="file"
-                  accept=".json"
-                  style={{ display: 'none' }}
-                  onChange={handleImportJson}
-                />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
-                  <SafetyActionButton icon={<FileJson size={13} />} onClick={handleExportJson} disabled={journalEntries.length === 0}>
-                    Export JSON
-                  </SafetyActionButton>
-                  <SafetyActionButton icon={<FileSpreadsheet size={13} />} onClick={handleExportCsv} disabled={loadedTradeCount === 0}>
-                    Export CSV
-                  </SafetyActionButton>
-                  <SafetyActionButton icon={<Upload size={13} />} onClick={() => importFileRef.current?.click()}>
-                    Import JSON
-                  </SafetyActionButton>
+              {/* Backup controls */}
+              <div style={{ paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 14 }}>
+                <div style={{ display: ‘flex’, alignItems: ‘center’, justifyContent: ‘space-between’, gap: 16, marginBottom: 10 }}>
+                  <span style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: ‘0.07em’, textTransform: ‘uppercase’ }}>Backup</span>
+                  <div style={{ display: ‘flex’, gap: 6 }}>
+                    <input ref={importFileRef} type="file" accept=".json" style={{ display: ‘none’ }} onChange={handleImportJson} />
+                    <SafetyActionButton icon={<FileJson size={13} />} onClick={handleExportJson} disabled={journalEntries.length === 0}>
+                      Export JSON
+                    </SafetyActionButton>
+                    <SafetyActionButton icon={<FileSpreadsheet size={13} />} onClick={handleExportCsv} disabled={loadedTradeCount === 0}>
+                      Export CSV
+                    </SafetyActionButton>
+                    <SafetyActionButton icon={<Upload size={13} />} onClick={() => importFileRef.current?.click()}>
+                      Import JSON
+                    </SafetyActionButton>
+                  </div>
                 </div>
+                <p style={{ color: T3, fontSize: 10, lineHeight: 1.5, fontFamily: SANS }}>
+                  Export before major imports or account changes. JSON restores Flyxa data; CSV is for spreadsheet review.
+                </p>
                 {importFeedback && (
-                  <p
-                    style={{
-                      marginTop: '9px',
-                      fontSize: '11px',
-                      color: importFeedback.ok ? '#4ade80' : '#f87171',
-                      fontFamily: SANS,
-                    }}
-                  >
-                    {importFeedback.ok ? '✓ ' : '✗ '}{importFeedback.msg}
+                  <p style={{ marginTop: 7, fontSize: 11, color: importFeedback.ok ? ‘#4ade80’ : ‘#f87171’, fontFamily: SANS }}>
+                    {importFeedback.ok ? ‘✓ ‘ : ‘✗ ‘}{importFeedback.msg}
                   </p>
                 )}
-              </SafetyBox>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '16px',
-                border: `1px solid ${BORDER}`,
-                borderRadius: '8px',
-                background: 'rgba(255,255,255,0.012)',
-                padding: '12px',
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ color: T1, font: `650 12px ${SANS}` }}>Browser recovery</div>
-                <p style={{ marginTop: '4px', maxWidth: '620px', color: T3, fontSize: '11px', fontFamily: SANS, lineHeight: 1.45 }}>
-                  Merge trades from this browser’s local backup when recent cloud journal trades are missing.
-                </p>
               </div>
-              <SafetyActionButton icon={<RotateCcw size={13} />} tone="primary" onClick={() => { void handleRecoverFromLocalCache(); }}>
-                Recover missing trades
-              </SafetyActionButton>
+
+              {/* Browser recovery */}
+              <div style={{ display: ‘flex’, alignItems: ‘center’, justifyContent: ‘space-between’, gap: 16 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: T3, fontSize: 10, fontWeight: 650, letterSpacing: ‘0.07em’, textTransform: ‘uppercase’, marginBottom: 5 }}>Browser recovery</div>
+                  <p style={{ color: T3, fontSize: 10, lineHeight: 1.5, fontFamily: SANS, maxWidth: 520 }}>
+                    Merge trades from this browser’s local backup when recent cloud journal trades are missing.
+                  </p>
+                </div>
+                <SafetyActionButton icon={<RotateCcw size={13} />} tone="primary" onClick={() => { void handleRecoverFromLocalCache(); }}>
+                  Recover missing trades
+                </SafetyActionButton>
+              </div>
+
             </div>
-          </div>
-        </SectionPanel>
+          </SectionPanel>
+        </div>
         <SectionPanel
           title="Your profile"
           subtitle="Set the username other traders use to find you and send rival requests."
@@ -1735,16 +1714,10 @@ export default function Settings() {
                   type="button"
                   disabled={profileSaving}
                   onClick={() => { void handleSaveProfile(); }}
+                  className="settings-primary-action"
                   style={{
                     height: '38px',
-                    borderRadius: '6px',
-                    border: `1px solid ${AMBER}`,
-                    background: profileSaving ? 'rgba(245,158,11,0.08)' : AMBER_DIM,
-                    color: AMBER,
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: profileSaving ? 'not-allowed' : 'pointer',
-                    opacity: profileSaving ? 0.65 : 1,
+                    width: '100%',
                   }}
                 >
                   {profileSaving ? 'Saving' : 'Save'}
@@ -1996,16 +1969,10 @@ export default function Settings() {
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event('flyxa:restart-tour'))}
+              className="settings-primary-action"
               style={{
                 height: '36px',
-                borderRadius: '6px',
-                border: `1px solid ${AMBER}`,
-                background: AMBER_DIM,
-                color: AMBER,
                 padding: '0 14px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
               }}
             >
               Restart Website Tour
@@ -3018,13 +2985,11 @@ export default function Settings() {
               type="button"
               disabled={!newConfluenceDraft.trim() || confluenceOptions.length >= 64}
               onClick={handleAddConfluence}
+              className="settings-primary-action"
               style={{
-                height: '36px', padding: '0 14px', borderRadius: '6px',
-                border: `1px solid ${AMBER}`, background: AMBER_DIM, color: AMBER,
-                fontSize: '12px', fontWeight: 700, fontFamily: SANS,
-                cursor: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 'not-allowed' : 'pointer',
-                opacity: !newConfluenceDraft.trim() || confluenceOptions.length >= 64 ? 0.45 : 1,
-                display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0,
+                height: '36px',
+                padding: '0 14px',
+                flexShrink: 0,
               }}
             >
               <Plus size={13} />
@@ -3384,7 +3349,7 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={handleAddAccount}
-                className="btn-primary"
+                className="settings-primary-action"
                 style={{ fontSize: '12px', padding: '7px 14px' }}
               >
                 Save Account

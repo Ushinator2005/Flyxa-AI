@@ -28,7 +28,7 @@ function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
 }) {
   const pct = Math.round((progress.drawdownUsed / (account.maxDrawdown || 1)) * 100);
   return (
-    <div className="eval-pass">
+    <div className="eval-pass" data-tour-id="evaluation-overview">
       <div className="eval-pass-inner">
         <div className="eval-pass-icon"><Trophy size={28} /></div>
         <p className="eval-pass-kicker">Evaluation complete</p>
@@ -51,7 +51,7 @@ function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
 
 function EmptyEvaluation() {
   return (
-    <div className="eval-empty">
+    <div className="eval-empty" data-tour-id="evaluation-overview">
       <ShieldCheck size={30} />
       <h2>No evaluation account found</h2>
       <p>Add an account with its type or phase set to evaluation. Flyxa will monitor its rules and progress.</p>
@@ -305,7 +305,7 @@ export default function EvaluationCoach() {
   ].filter(Boolean).join(' · ');
 
   return (
-    <div className="eval-page">
+    <div className="eval-page" data-tour-id="evaluation-overview">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div className="eval-header">

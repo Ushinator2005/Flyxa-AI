@@ -8,10 +8,10 @@ import {
   Clock3,
   Download,
   FileText,
+  LockKeyhole,
   Plus,
   RefreshCw,
   Save,
-  ShieldAlert,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -36,8 +36,8 @@ interface PlanBlock {
 }
 
 const TAB_ITEMS: Array<{ id: TradingPlanTab; label: string; icon: typeof FileText }> = [
-  { id: 'trading-plan', label: 'Trading Plan', icon: FileText },
-  { id: 'risk-rules', label: 'Risk Rules', icon: ShieldAlert },
+  { id: 'risk-rules', label: 'Risk Rules', icon: LockKeyhole },
+  { id: 'trading-plan', label: 'Strategy Notes', icon: FileText },
 ];
 
 const PLAN_BLOCK_ICONS = {
@@ -122,7 +122,7 @@ function toneClass(tone: ColorTone): string {
 export default function TradingPlan() {
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
 
-  const [activeTab, setActiveTab] = useState<TradingPlanTab>('trading-plan');
+  const [activeTab, setActiveTab] = useState<TradingPlanTab>('risk-rules');
   const [planBlocks, setPlanBlocks] = useState<PlanBlock[]>(() => {
     const stored = useFlyxaStore.getState().planBlocks;
     const storedMap = new Map(stored.map(block => [block.id, block]));
@@ -179,11 +179,12 @@ export default function TradingPlan() {
   }, []);
 
   const persistState = useCallback(async () => {
-    const currentRiskRules = useFlyxaStore.getState().riskRules;
+    const currentState = useFlyxaStore.getState();
     try {
       await saveStoreStatePatchNow({
         planBlocks,
-        riskRules: currentRiskRules,
+        riskRules: currentState.riskRules,
+        riskRulesUpdatedAt: currentState.riskRulesUpdatedAt,
       });
       hydrateSharedData({
         planBlocks: planBlocks as any,
@@ -218,7 +219,10 @@ export default function TradingPlan() {
   useEffect(() => {
     if (firstRulesMountRef.current) { firstRulesMountRef.current = false; return; }
     const timer = setTimeout(() => {
-      void saveStoreStatePatchNow({ riskRules: storeRiskRules }).catch(() => {
+      void saveStoreStatePatchNow({
+        riskRules: storeRiskRules,
+        riskRulesUpdatedAt: useFlyxaStore.getState().riskRulesUpdatedAt,
+      }).catch(() => {
         pushToast({ tone: 'red', durationMs: 4000, message: 'Risk rules could not sync. Your changes are saved locally.' });
       });
     }, 650);
@@ -226,13 +230,12 @@ export default function TradingPlan() {
   }, [storeRiskRules]);
 
   const lastSavedLabel = useMemo(() => formatLastSaved(lastSaved, now), [lastSaved, now]);
-  const completedBlocks = useMemo(() => planBlocks.filter(block => block.content.trim().length > 0).length, [planBlocks]);
-  const strategyCoverage = useMemo(
-    () => Math.round((completedBlocks / Math.max(1, planBlocks.length)) * 100),
-    [completedBlocks, planBlocks.length]
+  const activeRuleCount = useMemo(
+    () => riskRules.filter(rule => rule.enabled !== false).length,
+    [riskRules]
   );
-  const strictRiskRules = useMemo(
-    () => riskRules.filter(rule => rule.color === 'amber' || rule.color === 'red').length,
+  const automaticRuleCount = useMemo(
+    () => riskRules.filter(rule => rule.enabled !== false && (rule.kind ?? 'manual') !== 'manual').length,
     [riskRules]
   );
 
@@ -340,7 +343,7 @@ export default function TradingPlan() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `trading-plan-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.download = `risk-rules-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -352,10 +355,10 @@ export default function TradingPlan() {
       <header className="tp-header" data-tour-id="trading-plan-header">
         <div className="tp-header-main">
           <div>
-            <p className="tp-eyebrow">Strategy Operating System</p>
-            <h1 className="tp-title">Trading Plan</h1>
+            <p className="tp-eyebrow">Rule Operating System</p>
+            <h1 className="tp-title">Risk Rules</h1>
             <p className="tp-subtitle">
-              Clear structure, hard limits, and repeatable execution rules. This is the document you execute, not improvise.
+              Lock the rules Flyxa uses to score plan adherence, enforce guardrails, and flag process drift automatically.
             </p>
           </div>
           <div className="tp-actions">
@@ -370,21 +373,21 @@ export default function TradingPlan() {
             </button>
             <button type="button" className="tp-btn tp-btn-primary" onClick={() => { void persistState(); }}>
               <Save size={13} />
-              Save Plan
+              Save Rules
             </button>
           </div>
         </div>
 
         <div className="tp-kpi-grid" data-tour-id="trading-plan-kpis">
           <article className="tp-kpi tp-kpi-amber">
-            <p className="tp-kpi-label">Strategy Coverage</p>
-            <p className="tp-kpi-value num">{strategyCoverage}%</p>
-            <p className="tp-kpi-sub">{completedBlocks}/{planBlocks.length} core blocks documented</p>
+            <p className="tp-kpi-label">Active Rules</p>
+            <p className="tp-kpi-value num">{activeRuleCount}</p>
+            <p className="tp-kpi-sub">Rules currently scoring adherence</p>
           </article>
           <article className="tp-kpi tp-kpi-red">
-            <p className="tp-kpi-label">Guardrails</p>
-            <p className="tp-kpi-value num">{strictRiskRules}</p>
-            <p className="tp-kpi-sub">Hard stop rules with strict enforcement</p>
+            <p className="tp-kpi-label">Auto Checks</p>
+            <p className="tp-kpi-value num">{automaticRuleCount}</p>
+            <p className="tp-kpi-sub">Measurable guardrails verified from trades</p>
           </article>
         </div>
 
@@ -472,7 +475,7 @@ export default function TradingPlan() {
         )}
 
         {activeTab === 'risk-rules' && (
-          <section className="tp-panel">
+          <section className="tp-panel" data-tour-id="risk-rules-framework">
             <div className="tp-section-head tp-section-head-actions">
               <div>
                 <h2>Rule Framework</h2>

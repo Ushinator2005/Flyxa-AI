@@ -1,6 +1,8 @@
 import type { StateStorage } from 'zustand/middleware';
 import { supabase } from '../services/api.js';
 import { shouldPreferLocalStore } from '../utils/storeFreshness.js';
+import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
+import type { RiskRule } from './types.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -18,6 +20,63 @@ const LEGACY_STORE_UID_KEY        = 'flyxa-store-uid';
 const LEGACY_ENTRIES_SAFE_KEY     = 'flyxa-entries-safe';
 const LEGACY_ENTRIES_SAFE_UID_KEY = 'flyxa-entries-safe-uid';
 const LEGACY_SAVED_AT_KEY         = 'flyxa-store-saved-at';
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeRiskRuleForSignature(rule: unknown): Record<string, unknown> | null {
+  if (!rule || typeof rule !== 'object') return null;
+  const normalized = normalizeRiskRule(rule as RiskRule);
+  return {
+    id: normalized.id,
+    label: normalized.label,
+    value: normalized.value,
+    unit: normalized.unit,
+    color: normalized.color ?? 'neutral',
+    kind: normalized.kind ?? 'manual',
+    enabled: normalized.enabled !== false,
+    startTime: normalized.startTime ?? '',
+    endTime: normalized.endTime ?? '',
+    contractLimits: normalized.contractLimits ?? {},
+  };
+}
+
+const DEFAULT_RISK_RULE_SIGNATURE = stableStringify(
+  DEFAULT_STRUCTURED_RULES.map(normalizeRiskRuleForSignature)
+);
+
+function hasMeaningfulRiskRules(state: Record<string, unknown>): boolean {
+  if (!Array.isArray(state.riskRules)) return false;
+  const normalized = state.riskRules
+    .map(normalizeRiskRuleForSignature)
+    .filter((rule): rule is Record<string, unknown> => Boolean(rule));
+  if (normalized.length === 0) return false;
+  return stableStringify(normalized) !== DEFAULT_RISK_RULE_SIGNATURE;
+}
+
+function hasMeaningfulPlanBlocks(state: Record<string, unknown>): boolean {
+  if (!Array.isArray(state.planBlocks)) return false;
+  return state.planBlocks.some(block => (
+    block != null &&
+    typeof block === 'object' &&
+    typeof (block as Record<string, unknown>).content === 'string' &&
+    ((block as Record<string, unknown>).content as string).trim().length > 0
+  ));
+}
+
+function timestampMs(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingValue: string | null = null;
@@ -275,6 +334,46 @@ function recoverMissingStateFromRemote(
     if (Array.isArray(rArr) && rArr.length > 0 && !(Array.isArray(mArr) && mArr.length > 0)) {
       patch[key] = rArr;
     }
+  }
+
+  // Trading plan rules are first-class user data. Only recover them when the
+  // merged snapshot is missing them, or when a blank/default refresh snapshot
+  // would otherwise replace a meaningful remote ruleset.
+  const mRiskRules = mergedState.riskRules;
+  const rRiskRules = remoteState.riskRules;
+  const mergedRulesAt = timestampMs(mergedState.riskRulesUpdatedAt);
+  const remoteRulesAt = timestampMs(remoteState.riskRulesUpdatedAt);
+  const remoteRulesAreNewer = remoteRulesAt !== null && (mergedRulesAt === null || remoteRulesAt > mergedRulesAt);
+  const untimestampedRemoteHasOnlyMeaningfulCopy = remoteRulesAt === null &&
+    mergedRulesAt === null &&
+    hasMeaningfulRiskRules(remoteState) &&
+    !hasMeaningfulRiskRules(mergedState);
+  if (
+    Array.isArray(rRiskRules) &&
+    rRiskRules.length > 0 &&
+    (
+      !Array.isArray(mRiskRules) ||
+      remoteRulesAreNewer ||
+      untimestampedRemoteHasOnlyMeaningfulCopy
+    )
+  ) {
+    patch.riskRules = rRiskRules;
+    if (typeof remoteState.riskRulesUpdatedAt === 'string') {
+      patch.riskRulesUpdatedAt = remoteState.riskRulesUpdatedAt;
+    }
+  }
+
+  const mPlanBlocks = mergedState.planBlocks;
+  const rPlanBlocks = remoteState.planBlocks;
+  if (
+    Array.isArray(rPlanBlocks) &&
+    rPlanBlocks.length > 0 &&
+    (
+      !Array.isArray(mPlanBlocks) ||
+      (hasMeaningfulPlanBlocks(remoteState) && !hasMeaningfulPlanBlocks(mergedState))
+    )
+  ) {
+    patch.planBlocks = rPlanBlocks;
   }
 
   // Objects (moods, titles): recover when local has no keys but remote does
@@ -902,9 +1001,9 @@ export const supabaseZustandStorage: StateStorage = {
 
       if (!error && data?.flyxa_data) {
         const local = localStorage.getItem(storeKey);
+        const sanitizedLocal = local ? sanitizeStoreValue(local) : null;
         const localSavedAt = localStorage.getItem(localSavedAtKey(userId));
         if (local && shouldPreferLocalStore(localSavedAt, data.updated_at)) {
-          const sanitizedLocal = sanitizeStoreValue(local);
           const localEntries = extractEntries(sanitizedLocal);
           const remoteEntries = (data.flyxa_data as { state?: { entries?: unknown[] } })?.state?.entries;
           const remoteHasEntries = Array.isArray(remoteEntries) && remoteEntries.length > 0;
@@ -927,6 +1026,12 @@ export const supabaseZustandStorage: StateStorage = {
         // Supabase is the source of truth across all devices.
         // Also recover preSessionHistory from the pre_sessions table if the main blob is missing it.
         let flyxaData = data.flyxa_data as Record<string, unknown>;
+        if (sanitizedLocal) {
+          try {
+            const localBlob = JSON.parse(sanitizedLocal) as Record<string, unknown>;
+            flyxaData = recoverMissingStateFromRemote(flyxaData, localBlob);
+          } catch { /* local cache is non-critical */ }
+        }
         const blobState = flyxaData.state as Record<string, unknown> | undefined;
         const blobPreSessionHistory = blobState?.preSessionHistory as Record<string, unknown> | undefined;
         if (!blobPreSessionHistory || Object.keys(blobPreSessionHistory).length === 0) {
@@ -1068,6 +1173,9 @@ export const supabaseZustandStorage: StateStorage = {
         return (
           (moods != null && typeof moods === 'object' && Object.keys(moods).length > 0) ||
           (titles != null && typeof titles === 'object' && Object.keys(titles).length > 0) ||
+          hasMeaningfulRiskRules(st) ||
+          typeof st.riskRulesUpdatedAt === 'string' ||
+          hasMeaningfulPlanBlocks(st) ||
           // User has created accounts beyond the built-in default
           (Array.isArray(accounts) && accounts.some(a => a.id !== 'default-account')) ||
           // User has rivals or goals
@@ -1092,6 +1200,7 @@ export const supabaseZustandStorage: StateStorage = {
             const parsed = JSON.parse(existing) as { state?: Record<string, unknown> };
             const st = parsed?.state ?? {};
             const accounts = st.accounts as Array<Record<string, unknown>> | undefined;
+            if (hasMeaningfulRiskRules(st) || typeof st.riskRulesUpdatedAt === 'string' || hasMeaningfulPlanBlocks(st)) return;
             if (Array.isArray(accounts) && accounts.some(a => a.id !== 'default-account')) return;
           } catch { /* ignore */ }
         }
