@@ -90,6 +90,7 @@ export default function FlyxaAIPostSession() {
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const activePreSession = useFlyxaStore(state => state.preSession);
+  const riskRules = useFlyxaStore(state => state.riskRules);
   const requestedDate = searchParams.get('date');
   // Use timezone-aware date so it matches how pre-session saves its history key
   const [selectedDate, setSelectedDate] = useState(() =>
@@ -806,21 +807,18 @@ export default function FlyxaAIPostSession() {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between mb-3">
               <p style={SECTION_LABEL}>Your reflection</p>
-              {ps?.postSessionNote && !noteSaved && (
-                <span className="text-[10px]" style={{ color: C.t2 }}>saved</span>
-              )}
             </div>
             <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-              {ps?.sessionPlan && ps.sessionPlan.length > 0 && (
+              {riskRules.filter(r => r.enabled !== false).length > 0 && (
                 <div className="mb-3 space-y-1">
-                  <p className="text-[10px] uppercase tracking-[0.1em]" style={{ color: C.t2 }}>Pre-session rules to compare against</p>
-                  {ps.sessionPlan.slice(0, 3).map(row => (
-                    <p key={row.id} className="text-[11px] leading-relaxed" style={{ color: C.t2 }}>
+                  <p className="text-[10px] uppercase tracking-[0.1em]" style={{ color: C.t2 }}>Your rules</p>
+                  {riskRules.filter(r => r.enabled !== false).slice(0, 4).map(rule => (
+                    <p key={rule.id} className="text-[11px] leading-relaxed" style={{ color: C.t2 }}>
                       <span style={{
-                        color: row.source === 'Primary focus' ? C.grn : row.source === 'Avoid today' ? C.amb : C.red,
+                        color: rule.color === 'red' ? C.red : rule.color === 'green' ? C.grn : C.amb,
                         fontWeight: 600,
-                      }}>{row.source}: </span>
-                      {row.rule}
+                      }}>– </span>
+                      {rule.label}{rule.value ? `: ${rule.value}${rule.unit ? ' ' + rule.unit : ''}` : ''}
                     </p>
                   ))}
                 </div>
@@ -842,7 +840,7 @@ export default function FlyxaAIPostSession() {
                 <p className="text-[11px]" style={{ color: C.t2 }}>
                   {noteSaved ? (
                     <span style={{ color: C.grn }}>Saved</span>
-                  ) : postNote.trim() ? 'Unsaved changes' : 'Write your post-session reflection above'}
+                  ) : postNote.trim() ? '' : 'Write your post-session reflection above'}
                 </p>
                 <button
                   type="button"
