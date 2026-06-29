@@ -16,7 +16,7 @@ function readBoundedEnvInt(name: string, fallback: number, min: number, max: num
 }
 
 const GEMINI_MODEL_FALLBACK_CHAIN = parseModelFallbackChain(process.env.GEMINI_MODEL_FALLBACK_CHAIN);
-const GEMINI_MAX_RETRIES_PER_MODEL = readBoundedEnvInt('GEMINI_MAX_RETRIES_PER_MODEL', 1, 0, 3);
+const GEMINI_MAX_RETRIES_PER_MODEL = readBoundedEnvInt('GEMINI_MAX_RETRIES_PER_MODEL', 2, 0, 4);
 const GEMINI_BASE_RETRY_DELAY_MS = readBoundedEnvInt('GEMINI_BASE_RETRY_DELAY_MS', 1200, 250, 10_000);
 const GEMINI_REQUEST_TIMEOUT_MS = readBoundedEnvInt('GEMINI_REQUEST_TIMEOUT_MS', 30_000, 10_000, 60_000);
 
@@ -24,11 +24,24 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function retryDelayMs(attempt: number): number {
+  const jitter = Math.round(Math.random() * 450);
+  return GEMINI_BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + jitter;
+}
+
 function isRetryableGeminiError(message: string): boolean {
   const text = message.toLowerCase();
   return (
+    text.includes('429') ||
+    text.includes('529') ||
     text.includes('503') ||
+    text.includes('busy') ||
+    text.includes('rate limit') ||
+    text.includes('rate_limit') ||
+    text.includes('too many requests') ||
+    text.includes('resource exhausted') ||
     text.includes('service unavailable') ||
+    text.includes('unavailable') ||
     text.includes('high demand') ||
     text.includes('overloaded') ||
     text.includes('deadline exceeded') ||
@@ -109,9 +122,7 @@ async function generateWithFallback(
           break;
         }
 
-        // Exponential backoff: 2s, 4s, 8s, 16s
-        const delayMs = GEMINI_BASE_RETRY_DELAY_MS * Math.pow(2, attempt);
-        await sleep(delayMs);
+        await sleep(retryDelayMs(attempt));
       }
     }
   }
@@ -245,6 +256,11 @@ export async function readTradeChart(
     rightRatio: number;
   },
   directionHint?: 'Long' | 'Short',
+  lineHints?: {
+    entryLineRatio?: number;
+    stopLineRatio?: number;
+    targetLineRatio?: number;
+  },
 ): Promise<{
   symbol: string | null;
   direction: 'Long' | 'Short' | null;
@@ -270,7 +286,7 @@ export async function readTradeChart(
 PRICE LEVEL IDENTIFICATION — FOLLOW THESE STEPS EXACTLY:
 
 Step 1. Look at the right-hand price axis of the chart. You will see colored price labels — these may be rounded pills, sharp rectangles, or any other colored tag shape depending on the trading platform (TradingView standalone, TopstepX, Apex, FTMO, Tradovate, etc.). Shape does not matter — only the background color and the number inside matter.
-IMPORTANT: The ENTRY label should match the user's configured Entry zone color when they have changed it. Use grey only as a fallback for default position-tool labels. Never use a black/white horizontal-line label as entry when a colored or grey entry label is visible.
+IMPORTANT: The ENTRY label should match the user's configured Entry zone color when they have changed it. If no configured-color entry label is visible, the entry can be the neutral/grey/black right-axis pill exactly aligned with the shared boundary between the compact take-profit and stop-loss zones. Never use a black/white horizontal-line label as entry when a colored or grey entry label is visible.
 If an attached crop is labelled price-label-focus, use it to read all visible right-axis labels. If an attached crop is labelled entry-color-label-focus, use it to resolve the entry label only.
 FALLBACK — if no colored labels are visible on the right axis at all: trace each zone boundary (entry line, outer edge of pink zone, outer edge of teal zone) horizontally to the price axis gridlines and read the nearest grid price.
 
@@ -285,21 +301,21 @@ Charts often contain extra colored boxes such as demand zones, supply zones, ord
 The active trade is the compact paired position tool: its red/stop zone and teal/take-profit zone share roughly the same horizontal start/end span and touch the same entry boundary. Ignore any large colored zone that spans most of the chart, sits far away from the paired red/teal tool, or continues far beyond the P&L box.
 Only read right-axis labels that align with the compact position-tool boundaries. If a green/red price label belongs to a large demand/supply/orderblock zone, ignore it even if its color matches the configured Take Profit or Stop Loss color.
 
-⚠ MANDATORY — KEY-LEVEL LINE LABELS vs POSITION TOOL LABELS (THE #1 MISREAD):
-Traders draw horizontal support/resistance lines across their entire chart. These lines produce their own right-axis labels with TRUE BLACK or VERY DARK backgrounds (close to #000000). They are completely separate from the position tool and must be ignored.
+⚠ MANDATORY — KEY-LEVEL LINE LABELS vs POSITION TOOL ENTRY LABELS:
+Traders draw horizontal support/resistance lines across their entire chart. These lines can produce their own right-axis labels with TRUE BLACK or VERY DARK backgrounds (close to #000000). Some platforms also use a black/dark right-axis pill for the actual ENTRY label.
 How to tell them apart:
-  • KEY-LEVEL label: true black or near-black background (#000000–#222222 range). The line it belongs to runs horizontally across the ENTIRE chart, extending into blank future space beyond the P&L box.
-  • POSITION TOOL label: background matches the user's configured hex above. Even if the configured entry color is grey or grey-blue (e.g. #78788E), it is visually LIGHTER and has a distinct hue compared to a true-black key-level label.
+  • KEY-LEVEL label: the line it belongs to runs horizontally across the ENTIRE chart, extending far beyond the compact P&L box. Ignore it unless it is exactly the shared entry boundary and no better entry label exists.
+  • POSITION TOOL ENTRY label: sits on the right axis at the exact shared boundary where the compact teal/green and red/pink zones meet. It may be grey, black, or dark depending on the platform.
 WHEN BOTH APPEAR AT THE SAME PRICE (common case): a key-level line happens to be drawn exactly at the entry/SL/TP price, so two labels stack at the same Y position on the right axis — one black (key-level), one colored/grey (position tool). You MUST use the non-black one.
-MANDATORY: Discard any black or near-black label entirely. Read ONLY the label whose background matches the configured hex.
-MANDATORY: If entry-label-focus shows only a black/dark label with no lighter label beside it, the crop caught a key-level line. Find the correct entry label in price-label-focus at the same vertical position — it will be lighter than black.
-NEVER read entry_price from a true-black or near-black background label. This applies even when it appears at the correct Y position for entry.
+MANDATORY: Do NOT discard a black/dark right-axis label when it is exactly aligned with the shared boundary between the compact TP and SL zones. In that case it is the entry pill and is the correct entry_price.
+MANDATORY: If entry-label-focus shows a black/dark right-axis pill at the shared boundary and no configured-color entry label is visible, read that pill as entry_price.
+NEVER read entry_price from numeric annotations printed inside the chart/position tool body (examples: 0, 0.5, 1, -1, -2, fib labels, dashed-line labels). Entry must come from the right-axis pill/label at the shared red/green boundary.
 
 Step 3. Match each right-axis label to the configured hex colors above:
   • Label whose background ≈ ${userColors.entry} (${entryName})  → entry_price
   • Label whose background ≈ ${userColors.stopLoss} (${slName})   → sl_price
   • Label whose background ≈ ${userColors.takeProfit} (${tpName}) → tp_price
-  If no ${entryName} entry label is visible, fall back to any grey label at the entry boundary as entry_price.
+  If no ${entryName} entry label is visible, fall back to the grey/black/dark right-axis label at the shared entry boundary as entry_price.
   A Take Profit-colored label can NEVER be used as sl_price. A Stop Loss-colored label can NEVER be used as tp_price. If a dedicated crop contains the wrong color for its role, ignore that label and re-read price-label-focus at the correct compact position-tool boundary.
 
 CRITICAL — STACKED LABELS DISAMBIGUATION:
@@ -317,7 +333,7 @@ RULE: When two similarly-colored labels are stacked, ALWAYS choose the inner one
 
 Step 4. IGNORE everything else on the chart completely:
   • Horizontal lines (black, white, or any color) drawn across the chart = key levels, NOT trade prices
-  • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price
+  • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price UNLESS the label is exactly aligned with the shared boundary between the compact TP and SL zones and no configured-color entry label is visible
   • The live floating price label on the far right (the highlight showing current price) = ignore
   • Any price label whose background color does NOT match the configured position-tool colors = ignore, except grey is allowed as an entry fallback
   • Do not use a nearby black horizontal-line label when a configured-color or grey entry label exists. The entry label is the source of truth.
@@ -326,19 +342,36 @@ Step 4. IGNORE everything else on the chart completely:
     : `
 PRICE LEVEL IDENTIFICATION:
 Look at the right-hand price axis. Find the three colored price labels (any shape — pill, rectangle, tag):
-  • Grey background label = entry_price
+  • Grey/black/dark label exactly at the shared boundary between the compact teal/green and red/pink position-tool zones = entry_price
   • Red or pink background label = sl_price
   • Teal or green background label = tp_price
 
-⚠ KEY-LEVEL LINES: Traders draw horizontal lines across their entire chart. These produce BLACK or DARK GREY right-axis labels — they are NOT position-tool labels. If a black/dark label appears near the same price as a grey/colored position-tool label, DISCARD the black/dark one and use only the grey/colored one. This is the most common misread.
+⚠ KEY-LEVEL LINES: Traders draw horizontal lines across their entire chart. These can produce BLACK or DARK GREY right-axis labels. Ignore them unless the label is exactly on the compact position tool's shared entry boundary and no colored/grey entry label is visible.
+NEVER use numeric labels printed inside the chart body (0, 0.5, 1, -1, -2, fib labels, dashed-line labels) as entry/sl/tp.
 
 FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
 STACKED LABELS: If two labels of similar color appear stacked near the TP or SL price, use the one that aligns with the OUTER BOUNDARY of the colored zone (the far edge of the zone from entry). The label floating outside the zone boundary is the live price marker — ignore it.
 `;
 
+  const geometrySection = directionHint || lineHints
+    ? `PIXEL GEOMETRY AUTHORITY — USE THIS BEFORE GUESSING:
+The browser-side scanner has already matched the user's configured colors and selected the compact paired position-tool zones. Treat this geometry as the source of truth for direction and crop roles.
+${directionHint ? `- Detected compact position-tool direction: ${directionHint}` : '- Direction hint: unavailable'}
+${typeof lineHints?.entryLineRatio === 'number' ? `- entry-label-focus is centered near ${Math.round(lineHints.entryLineRatio * 100)}% image height: read entry_price from the RIGHT-AXIS pill/label at this shared boundary.` : ''}
+${typeof lineHints?.stopLineRatio === 'number' ? `- stop-label-focus is centered near ${Math.round(lineHints.stopLineRatio * 100)}% image height: read sl_price at this stop boundary.` : ''}
+${typeof lineHints?.targetLineRatio === 'number' ? `- target-label-focus is centered near ${Math.round(lineHints.targetLineRatio * 100)}% image height: read tp_price at this target boundary.` : ''}
+If a right-axis label away from these geometry lines is easier to read, IGNORE IT. Do not use the live/current price label, the last traded price label, or a large orderblock/demand/supply-zone label as entry/sl/tp.
+For a Long position tool, TP/green is above entry and SL/red is below entry. For a Short position tool, SL/red is above entry and TP/green is below entry.
+If the numbers you read imply the opposite direction from the detected compact tool, your price read is wrong — re-read the labels at the geometry lines instead of flipping direction.
+The entry boundary may have a neutral/black/grey right-axis label if no configured entry-color label is visible. That neutral/dark pill is valid ONLY when it aligns with the shared boundary between the compact TP and SL zones. Do not read entry from a dashed line, fib label, or any number printed inside the chart body.
+`
+    : '';
+
   const systemPrompt = `You are a professional futures chart reader. Your ONLY job is to extract exact trade data from a P&L card screenshot — the chart may come from TradingView, TopstepX, Apex Trader, FTMO, Tradovate, or any other platform.
 You may receive the full chart plus labelled scanner crops. The crop labels are included as text immediately before each image.
-Use price-label-focus as the primary OCR view for right-axis price labels. Use entry-color-label-focus as the primary OCR view for the entry price label. If entry-label-focus, stop-label-focus, or target-label-focus show black/white horizontal-line labels, treat them as crop hints only and ignore those black/white values as trade prices.
+Use price-label-focus as the primary OCR view for right-axis price labels. Use entry-label-focus as the primary OCR view for the entry price pill at the shared red/green boundary. Use entry-color-label-focus only as a secondary entry check. If entry-label-focus shows a black/dark right-axis pill at the shared TP/SL boundary, that can be the valid entry label. If stop-label-focus or target-label-focus show black/white horizontal-line labels, treat them as crop hints only and ignore those black/white values as SL/TP prices.
+
+${geometrySection}
 
 CROP AUTHORITY RULE — HIGHEST PRIORITY FOR SL/TP PRICES:
 The crops labelled stop-label-focus and target-label-focus are scanner-generated strips precisely centered on the SL and TP zone boundary lines — each only ~9% of the chart height tall, placed right at that level.
@@ -374,9 +407,13 @@ STEP 3 — DETERMINE DIRECTION:
 ${directionHint
   ? `Pixel-level color analysis of the chart has pre-determined the direction as ${directionHint}. Return direction = "${directionHint}".
 Consistency check (${directionHint === 'Long' ? 'Long: TP > entry > SL' : 'Short: TP < entry < SL'}): if your prices conflict with this, re-examine the price labels first. Keep direction = "${directionHint}" regardless, but add a warning if prices still look inconsistent.`
-  : `- If take profit price > entry price → LONG
-- If take profit price < entry price → SHORT
-Use the prices you found in Step 2 to determine this. Never guess direction from box position alone.`}
+  : `First determine direction from the compact colored position tool layout:
+- Teal/take-profit zone above the red/stop zone = LONG.
+- Red/stop zone above the teal/take-profit zone = SHORT.
+Only use price order as a fallback AFTER you are sure the labels belong to the compact position tool:
+- TP > entry > SL = LONG.
+- SL > entry > TP = SHORT.
+Never use the live/current price label, last traded price label, or a large market-structure zone label to infer direction.`}
 
 STEP 4 — FIND THE EXIT (FIRST TOUCH ONLY, INSIDE THE P&L CARD ONLY):
 The P&L card is the colored overlay on the chart — the region covered by the red/pink zone and the teal zone together. You must ONLY read candles whose bodies and wicks fall physically inside this colored overlay. Nothing outside it exists for this analysis.
@@ -478,10 +515,14 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
       const firstTouchIndexRaw = parseNullableNumber(parsed.first_touch_candle_index);
       const firstTouchCandleIndex = firstTouchIndexRaw !== null ? Math.max(0, Math.round(firstTouchIndexRaw)) : null;
 
-      const direction = parseDirection(parsed.direction);
+      const modelDirection = parseDirection(parsed.direction);
+      const direction = directionHint ?? modelDirection;
       const entryPrice = parseNullableNumber(parsed.entry_price);
       const parsedConfidence = parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low' as const;
       const baseWarnings: string[] = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w: unknown) => typeof w === 'string') : [];
+      if (directionHint && modelDirection && modelDirection !== directionHint) {
+        baseWarnings.push(`Direction corrected from ${modelDirection} to ${directionHint} using compact position-tool geometry.`);
+      }
 
       // Price sanity: auto-swap TP/SL if they look reversed for the detected direction
       const { sl_price, tp_price, warnings: sanityWarnings } = sanitizePriceLevels(
@@ -624,8 +665,11 @@ async function detectBoundaryTouch(
       ? `the candle HIGH wick reaches or rises above ${price}`
       : `the candle LOW wick reaches or falls below ${price}`;
   const bounds = boxBounds
-    ? `The position tool spans approximately ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% of the full image width.`
-    : 'Use the visible left and right edges of the colored position tool.';
+    ? `The position tool spans image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
+HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist for this analysis. Do not look at it. Do not count it. Do not let its wick influence your answer in any way.
+This is especially important for large market-open spike candles (e.g. the 09:30 ET candle on US futures) that frequently appear immediately to the left of the position tool with wicks that reach far beyond SL or TP prices. Those candles are pre-trade and must be completely ignored.
+HARD RULE: Any candle whose center x-position is to the RIGHT of ${Math.round(boxBounds.rightRatio * 100)}% does not exist.`
+    : `Only inspect candles physically inside the colored position-tool overlay. Any candle to the left of where the colored zones begin is a pre-trade candle — ignore it entirely even if its wick reaches the ${boundary} price. Large market-open spike candles immediately left of the box are especially common and must be excluded.`;
 
   const prompt = `You are checking ONE boundary on a futures chart. Do not decide whether the trade won or lost.
 
@@ -637,9 +681,13 @@ ${bounds}
 Start at the FIRST candle whose center is inside the LEFT edge of the colored position tool. That is candle 0.
 Count every candle to the right as candle 1, 2, 3, and so on.
 Ignore all candles left of the colored tool and all chart annotations.
+CRITICAL: If there is a large spike or crash candle just outside the left edge of the box, that is a pre-trade candle. It does not count as candle 0 and its wick does not trigger any boundary.
 
 This ${boundary} boundary is touched only when ${touchRule}.
-Entering the colored zone without reaching its far outer edge is not a touch.
+Entering the colored zone without reaching its far outer edge is NOT a touch. The wick must VISIBLY and CLEARLY reach or cross the exact price line at ${price}. A wick that enters the colored zone but appears to stop before the outer edge does not count.
+
+CONSERVATIVE STANDARD: Only return touched=true when you are highly confident the wick unambiguously reaches or exceeds ${price}. If the wick looks close but you are uncertain whether it reaches exactly ${price}, return touched=false. False negatives (missing a touch) are far less damaging than false positives (calling a touch that did not happen).
+
 Scan strictly left-to-right and stop at the earliest candle touching this boundary.
 
 Return only JSON:
@@ -730,7 +778,27 @@ export async function analyzeChartImage(
   const directionHint: 'Long' | 'Short' | undefined =
     rawDirectionHint === 'Long' || rawDirectionHint === 'Short' ? rawDirectionHint : undefined;
 
-  const result = await readTradeChart(base64Image, mimeType, focusImages, userColors, boxBounds, directionHint);
+  const readRatioHint = (key: string): number | undefined => {
+    const value = scannerContext?.[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  };
+
+  const lineHints = {
+    entryLineRatio: readRatioHint('entry_line_ratio'),
+    stopLineRatio: readRatioHint('stop_line_ratio'),
+    targetLineRatio: readRatioHint('target_line_ratio'),
+  };
+  const hasLineHints = Object.values(lineHints).some(value => typeof value === 'number');
+
+  const result = await readTradeChart(
+    base64Image,
+    mimeType,
+    focusImages,
+    userColors,
+    boxBounds,
+    directionHint,
+    hasLineHints ? lineHints : undefined,
+  );
   let verifiedExitReason: 'TP' | 'SL' | null = null;
   let verifiedConfidence: 'high' | 'medium' | 'low' = 'low';
   let verifiedFirstTouchIndex: number | null = null;
