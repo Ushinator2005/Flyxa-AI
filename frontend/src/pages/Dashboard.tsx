@@ -23,6 +23,7 @@ import MonthlyHeatmap from '../components/dashboard/MonthlyHeatmap.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
 import { useBreakingNewsAlert } from '../hooks/useBreakingNewsAlert.js';
+import { isLivePreSession } from '../utils/sessionLifecycle.js';
 
 // ── Design tokens ────────────────────────────────────────────────
 const COBALT      = '#60a5fa';
@@ -133,7 +134,7 @@ export default function Dashboard() {
   // Pre-session brief prompt — shows daily until dismissed or started.
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const preSession = useFlyxaStore(state => state.preSession);
-  const sessionStartedToday = Boolean(preSession?.startedAt?.startsWith(todayKey));
+  const sessionStartedToday = isLivePreSession(preSession) && preSession.startedAt.startsWith(todayKey);
   const [preSessionDismissed, setPreSessionDismissed] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('flyxa_presession_done_date') === todayKey
   );

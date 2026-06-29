@@ -272,6 +272,9 @@ export interface PreSessionData {
   bias: unknown;
   checklistState: unknown;
   startedAt: string | null;
+  sessionStartedAt?: string | null;
+  endedAt?: string | null;
+  postSessionStartedAt?: string | null;
   readiness?: {
     status: 'Ready' | 'Caution' | 'Stand Down';
     score: number;

@@ -7,7 +7,9 @@ import {
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { useRisk } from '../contexts/RiskContext.js';
+import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
+import { getPreSessionDate, isLivePreSession, markPreSessionEnded } from '../utils/sessionLifecycle.js';
 import {
   clearStaleGuardSessionTrades,
   readGuardSessionTrades,
@@ -157,34 +159,37 @@ export default function SessionActive() {
   const navigate = useNavigate();
   const preSession  = useFlyxaStore(s => s.preSession);
   const setPreSession = useFlyxaStore(s => s.setPreSession);
+  const setPreSessionForDate = useFlyxaStore(s => s.setPreSessionForDate);
   const { dailyStatus, riskLevel } = useRisk();
+  const { preferences } = useAppSettings();
 
   const [elapsed, setElapsed] = useState('00:00');
-  const [guardTrades, setGuardTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(preSession?.startedAt));
+  const activeStartedAt = isLivePreSession(preSession) ? preSession.startedAt : undefined;
+  const [guardTrades, setGuardTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(activeStartedAt));
   const guardSummary = summarizeGuardSessionTrades(guardTrades);
 
   // Redirect to pre-session if no active session
   useEffect(() => {
-    if (!preSession?.startedAt) {
+    if (!isLivePreSession(preSession)) {
       navigate('/pre-session', { replace: true });
     }
-  }, [preSession?.startedAt, navigate]);
+  }, [preSession, navigate]);
 
   // Tick elapsed timer every second
   useEffect(() => {
-    if (!preSession?.startedAt) return;
-    const tick = () => setElapsed(formatElapsed(preSession.startedAt!));
+    if (!activeStartedAt) return;
+    const tick = () => setElapsed(formatElapsed(activeStartedAt));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [preSession?.startedAt]);
+  }, [activeStartedAt]);
 
   useEffect(() => {
-    clearStaleGuardSessionTrades(preSession?.startedAt);
-  }, [preSession?.startedAt]);
+    clearStaleGuardSessionTrades(activeStartedAt);
+  }, [activeStartedAt]);
 
   useEffect(() => {
-    const refresh = () => setGuardTrades(readGuardSessionTrades(preSession?.startedAt));
+    const refresh = () => setGuardTrades(readGuardSessionTrades(activeStartedAt));
     const storageHandler = (event: StorageEvent) => {
       if (event.key === SESSION_TRADES_STORAGE) refresh();
     };
@@ -202,9 +207,9 @@ export default function SessionActive() {
       window.removeEventListener('flyxa:session-trades-updated', refresh);
       window.clearInterval(poll);
     };
-  }, [preSession?.startedAt]);
+  }, [activeStartedAt]);
 
-  if (!preSession?.startedAt) return null;
+  if (!isLivePreSession(preSession)) return null;
 
   // ── Derived values ──────────────────────────────────────
   const bias       = preSession.bias as BiasState | null;
@@ -236,9 +241,13 @@ export default function SessionActive() {
     : GREEN;
 
   const handleEnd = () => {
+    const sessionDate = getPreSessionDate(preSession, preferences.timezone);
+    const existingSession = useFlyxaStore.getState().preSessionHistory[sessionDate];
+    const endedSession = markPreSessionEnded(preSession, existingSession);
     setPreSession(null);
+    setPreSessionForDate(sessionDate, endedSession);
     void flushSupabaseStoreNow();
-    navigate('/post-session');
+    navigate(`/post-session?date=${sessionDate}`);
   };
 
   // ── Render ──────────────────────────────────────────────

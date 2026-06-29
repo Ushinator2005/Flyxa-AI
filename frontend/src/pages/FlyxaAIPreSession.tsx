@@ -15,6 +15,7 @@ import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { saveGuardSessionTrades } from '../hooks/useGuardSessionTrades.js';
 import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
+import { isLivePreSession } from '../utils/sessionLifecycle.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -742,9 +743,9 @@ export default function FlyxaAIPreSession() {
   };
 
   const sessionAlreadyStarted = useMemo(() => {
-    if (!storedPreSession?.startedAt) return false;
+    if (!isLivePreSession(storedPreSession)) return false;
     return getTimeZoneParts(new Date(storedPreSession.startedAt), preferences.timezone).date === todayIso;
-  }, [storedPreSession?.startedAt, todayIso, preferences.timezone]);
+  }, [storedPreSession, todayIso, preferences.timezone]);
 
   const startSession = () => {
     if (sessionAlreadyStarted) { navigate('/session'); return; }
@@ -757,6 +758,9 @@ export default function FlyxaAIPreSession() {
       bias,
       checklistState,
       startedAt: committedAt,
+      sessionStartedAt: committedAt,
+      endedAt: null,
+      postSessionStartedAt: null,
       readiness,
       sessionPlan,
       prescriptions,

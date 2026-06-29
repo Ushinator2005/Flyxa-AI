@@ -3,7 +3,10 @@ import { useEffect } from 'react';
 import { clearStaleGuardSessionTrades, summarizeGuardSessionTrades, useGuardSessionTrades } from '../../hooks/useGuardSessionTrades.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
 import { useRisk } from '../../contexts/RiskContext.js';
+import { useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { flushSupabaseStoreNow } from '../../store/supabaseStorage.js';
+import { getPreSessionDate, isLivePreSession, markPreSessionEnded } from '../../utils/sessionLifecycle.js';
+import { getTimeZoneParts } from '../../utils/calendarTime.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<string, BiasValue>;
@@ -27,29 +30,49 @@ function readinessColor(status: string) {
 export default function SessionStatusBar() {
   const preSession = useFlyxaStore(state => state.preSession);
   const setPreSession = useFlyxaStore(state => state.setPreSession);
+  const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const { dailyStatus } = useRisk();
+  const { preferences } = useAppSettings();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const guardSummary = summarizeGuardSessionTrades(useGuardSessionTrades(preSession?.startedAt));
+  const activeStartedAt = isLivePreSession(preSession) ? preSession.startedAt : undefined;
+  const guardSummary = summarizeGuardSessionTrades(useGuardSessionTrades(activeStartedAt));
 
   useEffect(() => {
-    clearStaleGuardSessionTrades(preSession?.startedAt);
-  }, [preSession?.startedAt]);
+    clearStaleGuardSessionTrades(activeStartedAt);
+  }, [activeStartedAt]);
 
   // Auto-expire sessions from a previous calendar day — a trading session
   // cannot span midnight, so any leftover preSession from yesterday is stale.
   useEffect(() => {
     if (!preSession?.startedAt) return;
-    const sessionDate = new Date(preSession.startedAt).toDateString();
-    const today = new Date().toDateString();
+    if (preSession.endedAt) {
+      setPreSession(null);
+      void flushSupabaseStoreNow();
+      return;
+    }
+
+    const sessionDate = getPreSessionDate(preSession, preferences.timezone);
+    const today = getTimeZoneParts(new Date(), preferences.timezone).date;
     if (sessionDate !== today) {
+      const existingSession = useFlyxaStore.getState().preSessionHistory[sessionDate];
+      setPreSessionForDate(sessionDate, markPreSessionEnded(preSession, existingSession));
       setPreSession(null);
       void flushSupabaseStoreNow();
     }
-  }, [preSession?.startedAt, setPreSession]);
+  }, [preSession, preferences.timezone, setPreSession, setPreSessionForDate]);
 
-  if (!preSession?.startedAt) return null;
+  if (!isLivePreSession(preSession)) return null;
+
+  const endSession = () => {
+    const sessionDate = getPreSessionDate(preSession, preferences.timezone);
+    const existingSession = useFlyxaStore.getState().preSessionHistory[sessionDate];
+    setPreSession(null);
+    setPreSessionForDate(sessionDate, markPreSessionEnded(preSession, existingSession));
+    void flushSupabaseStoreNow();
+    navigate(`/post-session?date=${sessionDate}`);
+  };
 
   const bias = preSession.bias as BiasState | null;
   const readiness = preSession.readiness;
@@ -211,11 +234,7 @@ export default function SessionStatusBar() {
       {/* End session */}
       <button
         type="button"
-        onClick={() => {
-          setPreSession(null);
-          void flushSupabaseStoreNow();
-          navigate('/post-session');
-        }}
+        onClick={endSession}
         style={{
           fontSize: 10,
           fontWeight: 500,

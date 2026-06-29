@@ -1,10 +1,24 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ExtractedTradeData } from '../types/index';
 
-const GEMINI_MODEL_FALLBACK_CHAIN = ['gemini-2.5-flash', 'gemini-2.5-pro'];
-const GEMINI_MAX_RETRIES_PER_MODEL = 0;
-const GEMINI_BASE_RETRY_DELAY_MS = 2000;
-const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? 30_000);
+function parseModelFallbackChain(value: string | undefined): string[] {
+  const models = (value ?? '')
+    .split(',')
+    .map(model => model.trim())
+    .filter(Boolean);
+  return models.length > 0 ? models : ['gemini-2.5-flash', 'gemini-2.5-pro'];
+}
+
+function readBoundedEnvInt(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+const GEMINI_MODEL_FALLBACK_CHAIN = parseModelFallbackChain(process.env.GEMINI_MODEL_FALLBACK_CHAIN);
+const GEMINI_MAX_RETRIES_PER_MODEL = readBoundedEnvInt('GEMINI_MAX_RETRIES_PER_MODEL', 1, 0, 3);
+const GEMINI_BASE_RETRY_DELAY_MS = readBoundedEnvInt('GEMINI_BASE_RETRY_DELAY_MS', 1200, 250, 10_000);
+const GEMINI_REQUEST_TIMEOUT_MS = readBoundedEnvInt('GEMINI_REQUEST_TIMEOUT_MS', 30_000, 10_000, 60_000);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -266,6 +280,11 @@ Step 2. The user has configured exactly these three zone colors in their Flyxa s
   • Take Profit   = ${tpName} — exact hex: ${userColors.takeProfit}
 These hex values describe the background color of the position-tool price labels on the right axis. The label whose background most closely matches each hex is the correct one for that level.
 
+MANDATORY - POSITION TOOL vs MARKET-STRUCTURE ZONES:
+Charts often contain extra colored boxes such as demand zones, supply zones, order blocks, FVGs, or session zones. These may use the same green/red colors as the scanner settings, but they are NOT the trade.
+The active trade is the compact paired position tool: its red/stop zone and teal/take-profit zone share roughly the same horizontal start/end span and touch the same entry boundary. Ignore any large colored zone that spans most of the chart, sits far away from the paired red/teal tool, or continues far beyond the P&L box.
+Only read right-axis labels that align with the compact position-tool boundaries. If a green/red price label belongs to a large demand/supply/orderblock zone, ignore it even if its color matches the configured Take Profit or Stop Loss color.
+
 ⚠ MANDATORY — KEY-LEVEL LINE LABELS vs POSITION TOOL LABELS (THE #1 MISREAD):
 Traders draw horizontal support/resistance lines across their entire chart. These lines produce their own right-axis labels with TRUE BLACK or VERY DARK backgrounds (close to #000000). They are completely separate from the position tool and must be ignored.
 How to tell them apart:
@@ -281,6 +300,7 @@ Step 3. Match each right-axis label to the configured hex colors above:
   • Label whose background ≈ ${userColors.stopLoss} (${slName})   → sl_price
   • Label whose background ≈ ${userColors.takeProfit} (${tpName}) → tp_price
   If no ${entryName} entry label is visible, fall back to any grey label at the entry boundary as entry_price.
+  A Take Profit-colored label can NEVER be used as sl_price. A Stop Loss-colored label can NEVER be used as tp_price. If a dedicated crop contains the wrong color for its role, ignore that label and re-read price-label-focus at the correct compact position-tool boundary.
 
 CRITICAL — STACKED LABELS DISAMBIGUATION:
 On many platforms (especially TradingView), you will see TWO labels of identical or very similar color stacked close together at the TP or SL price level. One is the position-tool price label (the correct value). The other is the LIVE floating price label that shows the current market price — it can coincidentally match your configured color and float near the zone boundary.
@@ -325,6 +345,12 @@ The crops labelled stop-label-focus and target-label-focus are scanner-generated
 • If stop-label-focus contains a COLORED label (any non-black, non-white background) → that label's number is the DEFINITIVE sl_price. It overrides every other reading, including the full chart and price-label-focus. Do not second-guess it.
 • If target-label-focus contains a COLORED label (any non-black, non-white background) → that label's number is the DEFINITIVE tp_price. It overrides every other reading, including the full chart and price-label-focus. Do not second-guess it.
 • Only fall back to price-label-focus or the full chart for a price if the dedicated crop shows ONLY a black or white label (meaning it captured a key-level line instead of the zone boundary label).
+IMPORTANT OVERRIDE TO THE CROP RULE ABOVE:
+Do NOT treat "any colored label" as valid. The color must match the crop role:
+- stop-label-focus is authoritative ONLY when the label background matches the configured Stop Loss color.
+- target-label-focus is authoritative ONLY when the label background matches the configured Take Profit color.
+- If a dedicated crop contains the wrong role color, a black/white key-level label, a live-price marker, or a market-structure zone label, ignore it and re-read price-label-focus at the correct compact position-tool boundary.
+
 Read each number in the colored label CHARACTER BY CHARACTER — digit by digit. Do not approximate or round. "823" and "830" are completely different numbers — read every digit individually.
 
 STEP 1 — READ THE TICKER:

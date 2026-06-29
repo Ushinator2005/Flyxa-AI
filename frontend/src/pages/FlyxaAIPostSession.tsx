@@ -10,6 +10,7 @@ import { buildDailyFlowInsight } from '../utils/dailyFlow.js';
 import DatePicker from '../components/common/DatePicker.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { limitsFromPreSession, summarizePerformanceOutcome } from '../utils/performanceLoop.js';
+import { isLivePreSession } from '../utils/sessionLifecycle.js';
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -130,7 +131,7 @@ export default function FlyxaAIPostSession() {
     const fromHistory = preSessionHistory[selectedDate];
     if (fromHistory) return fromHistory;
     // Fallback: use the active pre-session if its tz-aware date matches selectedDate
-    if (activePreSession?.startedAt) {
+    if (isLivePreSession(activePreSession)) {
       const psDate = getTimeZoneParts(new Date(activePreSession.startedAt), preferences.timezone).date;
       if (psDate === selectedDate) return activePreSession;
     }

@@ -2942,7 +2942,14 @@ export default function TradeJournal() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Scan failed.';
       const lowered = message.toLowerCase();
-      if (lowered.includes('503') || lowered.includes('high demand') || lowered.includes('service unavailable')) {
+      if (
+        lowered.includes('503') ||
+        lowered.includes('529') ||
+        lowered.includes('high demand') ||
+        lowered.includes('service unavailable') ||
+        lowered.includes('overloaded') ||
+        lowered.includes('temporarily busy')
+      ) {
         setScanError('Scanner AI is temporarily busy. Please retry in 10-20 seconds.');
       } else if (lowered.includes('failed to fetch')) {
         setScanError('Could not reach the scanner service. Please try again in a moment.');

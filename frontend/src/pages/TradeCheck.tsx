@@ -18,6 +18,7 @@ import {
   parsePreSessionSync,
   PRE_SESSION_SYNC_STORAGE_KEY,
 } from '../utils/preSessionSync.js';
+import { isLivePreSession } from '../utils/sessionLifecycle.js';
 import type { RiskRule } from '../store/types.js';
 
 type GateStatus = 'clear' | 'caution' | 'blocked';
@@ -126,18 +127,19 @@ export default function TradeCheck() {
   const activePreSession                                      = useFlyxaStore(state => state.preSession);
   const preSessionHistory                                    = useFlyxaStore(state => state.preSessionHistory);
   const riskRules                                            = useFlyxaStore(state => state.riskRules);
+  const activeStartedAt = isLivePreSession(activePreSession) ? activePreSession.startedAt : undefined;
 
   const [phase, setPhase]                 = useState<Phase>('idle');
   const [direction, setDirection]         = useState<TradeDir | null>(null);
   const [outcome, setOutcome]             = useState<Outcome | null>(null);
-  const [sessionTrades, setSessionTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(activePreSession?.startedAt));
+  const [sessionTrades, setSessionTrades] = useState<GuardSessionTrade[]>(() => readGuardSessionTrades(activeStartedAt));
   // pendingClose: Win or Loss was tapped — waiting for $ amount before confirming
   const [pendingClose, setPendingClose]   = useState<{ outcome: Exclude<Outcome, 'be'>; amount: string } | null>(null);
   // Inline risk-limit editor
   const [showLimits, setShowLimits]       = useState(false);
   const [limitDraft, setLimitDraft]       = useState({ loss: '', trades: '', riskPct: '', contracts: '' });
   const [limitSaving, setLimitSaving]     = useState(false);
-  const sessionStartedAtRef = useRef<string | null>(activePreSession?.startedAt ?? null);
+  const sessionStartedAtRef = useRef<string | null>(activeStartedAt ?? null);
   const currentDate = todayKey(preferences.timezone);
 
   // Trade Lens can live in a separate popup window. Zustand updates in the main
@@ -149,7 +151,7 @@ export default function TradeCheck() {
       if (!payload) return;
 
       useFlyxaStore.setState(state => ({
-        preSession: payload.data,
+        preSession: isLivePreSession(payload.data) ? payload.data : null,
         preSessionHistory: {
           ...state.preSessionHistory,
           [payload.date]: payload.data,
@@ -167,17 +169,17 @@ export default function TradeCheck() {
   }, []);
 
   useEffect(() => {
-    clearStaleGuardSessionTrades(activePreSession?.startedAt);
-    setSessionTrades(readGuardSessionTrades(activePreSession?.startedAt));
+    clearStaleGuardSessionTrades(activeStartedAt);
+    setSessionTrades(readGuardSessionTrades(activeStartedAt));
   }, []);
 
   // Persist session trades whenever they change (date-keyed, auto-expires next day)
   useEffect(() => {
-    if (sessionStartedAtRef.current === (activePreSession?.startedAt ?? null)) return;
-    sessionStartedAtRef.current = activePreSession?.startedAt ?? null;
-    clearStaleGuardSessionTrades(activePreSession?.startedAt);
-    setSessionTrades(readGuardSessionTrades(activePreSession?.startedAt));
-  }, [activePreSession?.startedAt]);
+    if (sessionStartedAtRef.current === (activeStartedAt ?? null)) return;
+    sessionStartedAtRef.current = activeStartedAt ?? null;
+    clearStaleGuardSessionTrades(activeStartedAt);
+    setSessionTrades(readGuardSessionTrades(activeStartedAt));
+  }, [activeStartedAt]);
 
   useEffect(() => {
     if (!sessionStartedAtRef.current) return;
@@ -201,8 +203,8 @@ export default function TradeCheck() {
   // ── Gate: all session-level checks use local sessionTrades, not the DB ──
   const gate = useMemo(() => {
     const historyPreSession = preSessionHistory[currentDate];
-    const activeSessionDate = activePreSession?.startedAt
-      ? getTimeZoneParts(new Date(activePreSession.startedAt), preferences.timezone).date
+    const activeSessionDate = activeStartedAt
+      ? getTimeZoneParts(new Date(activeStartedAt), preferences.timezone).date
       : null;
     const preSession = historyPreSession
       ?? (activeSessionDate === currentDate ? activePreSession : null);

@@ -233,8 +233,13 @@ function makeZoneMatcher(
 }
 
 function findLargestComponent(mask: Uint8Array, width: number, height: number): ComponentBounds | null {
+  return findComponents(mask, width, height)
+    .sort((a, b) => b.count - a.count)[0] ?? null
+}
+
+function findComponents(mask: Uint8Array, width: number, height: number): ComponentBounds[] {
   const visited = new Uint8Array(mask.length)
-  let best: ComponentBounds | null = null
+  const components: ComponentBounds[] = []
   const queue = new Int32Array(mask.length)
 
   for (let index = 0; index < mask.length; index += 1) {
@@ -272,12 +277,104 @@ function findLargestComponent(mask: Uint8Array, width: number, height: number): 
       })
     }
 
-    if (!best || count > best.count) {
-      best = { xMin, xMax, yMin, yMax, count }
+    components.push({ xMin, xMax, yMin, yMax, count })
+  }
+
+  return components
+}
+
+function componentWidth(component: ComponentBounds): number {
+  return component.xMax - component.xMin + 1
+}
+
+function componentHeight(component: ComponentBounds): number {
+  return component.yMax - component.yMin + 1
+}
+
+function componentDensity(component: ComponentBounds): number {
+  const area = componentWidth(component) * componentHeight(component)
+  return area > 0 ? component.count / area : 0
+}
+
+function horizontalOverlapRatio(a: ComponentBounds, b: ComponentBounds): number {
+  const overlap = Math.max(0, Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin) + 1)
+  return overlap / Math.max(1, Math.min(componentWidth(a), componentWidth(b)))
+}
+
+function verticalGap(a: ComponentBounds, b: ComponentBounds): number {
+  if (a.yMax < b.yMin) return b.yMin - a.yMax
+  if (b.yMax < a.yMin) return a.yMin - b.yMax
+  return 0
+}
+
+function scoreZonePair(redBox: ComponentBounds, greenBox: ComponentBounds, width: number, height: number): number | null {
+  const redWidth = componentWidth(redBox)
+  const greenWidth = componentWidth(greenBox)
+  const unionWidth = Math.max(redBox.xMax, greenBox.xMax) - Math.min(redBox.xMin, greenBox.xMin) + 1
+  const unionWidthRatio = unionWidth / width
+  const redWidthRatio = redWidth / width
+  const greenWidthRatio = greenWidth / width
+
+  // Position tools are compact paired boxes. Wide market-structure zones
+  // (order blocks / demand zones) often span most of the chart and must not
+  // be treated as TP/SL even when their fill color matches the scanner color.
+  if (unionWidthRatio > 0.46 || redWidthRatio > 0.42 || greenWidthRatio > 0.42) return null
+  if (redWidthRatio < 0.025 || greenWidthRatio < 0.025) return null
+
+  const redHeightRatio = componentHeight(redBox) / height
+  const greenHeightRatio = componentHeight(greenBox) / height
+  if (redHeightRatio < 0.025 || greenHeightRatio < 0.025) return null
+
+  const overlapRatio = horizontalOverlapRatio(redBox, greenBox)
+  if (overlapRatio < 0.32) return null
+
+  const gap = verticalGap(redBox, greenBox)
+  if (gap > height * 0.09) return null
+
+  const redDensity = componentDensity(redBox)
+  const greenDensity = componentDensity(greenBox)
+  const widthSimilarity = 1 - Math.min(1, Math.abs(redWidth - greenWidth) / Math.max(redWidth, greenWidth))
+  const edgeSimilarity = 1 - Math.min(1, (
+    Math.abs(redBox.xMin - greenBox.xMin) + Math.abs(redBox.xMax - greenBox.xMax)
+  ) / Math.max(1, unionWidth * 1.4))
+  const compactness = 1 - Math.min(1, Math.abs(unionWidthRatio - 0.13) / 0.33)
+  const adjacency = 1 - Math.min(1, gap / Math.max(1, height * 0.09))
+
+  return (
+    overlapRatio * 3.5 +
+    widthSimilarity * 1.8 +
+    edgeSimilarity * 2.4 +
+    adjacency * 1.4 +
+    compactness +
+    Math.min(redDensity, 0.65) +
+    Math.min(greenDensity, 0.65)
+  )
+}
+
+function findBestPositionToolPair(
+  redMask: Uint8Array,
+  greenMask: Uint8Array,
+  width: number,
+  height: number,
+): { redBox: ComponentBounds; greenBox: ComponentBounds } | null {
+  const redCandidates = findComponents(redMask, width, height)
+    .filter(component => component.count >= 90 && hasSufficientFillDensity(component, 0.1))
+  const greenCandidates = findComponents(greenMask, width, height)
+    .filter(component => component.count >= 90 && hasSufficientFillDensity(component, 0.1))
+
+  let best: { redBox: ComponentBounds; greenBox: ComponentBounds; score: number } | null = null
+
+  for (const redBox of redCandidates) {
+    for (const greenBox of greenCandidates) {
+      const score = scoreZonePair(redBox, greenBox, width, height)
+      if (score === null) continue
+      if (!best || score > best.score) {
+        best = { redBox, greenBox, score }
+      }
     }
   }
 
-  return best
+  return best ? { redBox: best.redBox, greenBox: best.greenBox } : null
 }
 
 // Rejects components whose matching pixels are too sparse relative to their
@@ -416,11 +513,9 @@ function detectTradeBoxContext(
     }
   }
 
-  const redBox = findLargestComponent(redMask, width, height)
-  const greenBox = findLargestComponent(greenMask, width, height)
-  if (!redBox || !greenBox || redBox.count < 200 || greenBox.count < 200) return null
-  // Reject components that look like scattered candle bodies rather than solid zone fills
-  if (!hasSufficientFillDensity(redBox) || !hasSufficientFillDensity(greenBox)) return null
+  const zonePair = findBestPositionToolPair(redMask, greenMask, width, height)
+  if (!zonePair) return null
+  const { redBox, greenBox } = zonePair
 
   const entryBox = entryMask ? findLargestComponent(entryMask, width, height) : null
   const hasEntryBox = entryBox !== null && entryBox.count >= 150

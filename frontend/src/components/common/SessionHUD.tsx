@@ -2,6 +2,7 @@ import { CSSProperties, useState } from 'react';
 import { X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useRisk } from '../../contexts/RiskContext.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
+import { isLivePreSession } from '../../utils/sessionLifecycle.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 function fmtPnl(v: number): string {
@@ -31,7 +32,7 @@ export default function SessionHUD() {
   const preSession = useFlyxaStore(state => state.preSession);
   const [expanded, setExpanded] = useState(false);
 
-  const sessionLive = Boolean(preSession?.startedAt);
+  const sessionLive = isLivePreSession(preSession);
 
   if (!dailyStatus || !sessionLive) return null;
 
