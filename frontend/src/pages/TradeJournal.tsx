@@ -28,6 +28,7 @@ import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { evaluateEntryRules, evaluateTradeRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
+import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
 import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
@@ -1490,6 +1491,36 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
 }) {
   const dr = entry.dailyReflection ?? { pre: entry.reflection.pre, post: entry.reflection.post, lessons: entry.reflection.lessons, bias: null, newsRisk: null, sessionTarget: null, sessionGrade: null, marketRespectedBias: null, lessonCategory: null };
   const [activeTab, setActiveTab] = useState<'pre' | 'post' | 'lessons'>('pre');
+
+  // ── Evaluation coaching context ────────────────────────────────
+  const storeAccounts = useFlyxaStore(state => state.accounts);
+  const storeEntries = useFlyxaStore(state => state.entries);
+  const { accounts: tradingAccounts, decorateTrades } = useAppSettings();
+  const statusById = useMemo(() => new Map(tradingAccounts.map(ta => [ta.id, (ta as { status?: string }).status ?? ''])), [tradingAccounts]);
+  const EVAL_STATUSES = new Set(['Eval', 'Passed', 'Blown']);
+  const entryAccountIds = useMemo(() => {
+    const e = entry as unknown as { accountIds?: string[]; account?: string };
+    return e.accountIds?.length ? e.accountIds : (e.account ? [e.account] : []);
+  }, [entry]);
+
+  const evalAccount = useMemo(() => {
+    return storeAccounts.find(a =>
+      entryAccountIds.includes(a.id) && (EVAL_STATUSES.has(statusById.get(a.id) ?? '') || a.type === 'eval' || a.phase === 'eval'),
+    ) ?? null;
+  }, [storeAccounts, entryAccountIds, statusById]);
+
+  const dayVerdict = useMemo(() => {
+    if (!evalAccount) return null;
+    const allTrades = decorateTrades(storeEntries.flatMap(e => e.trades));
+    const progress = computeEvaluationProgress(evalAccount, allTrades);
+    const activeTemplate = inferEvaluationTemplate(evalAccount);
+    const maxDrawdown = evalAccount.maxDrawdown || activeTemplate.maxDrawdown;
+    const dailyLimit = evalAccount.dailyLossLimit || activeTemplate.dailyLossLimit;
+    const drawdownRemainingPct = maxDrawdown > 0 ? Math.min(100, Math.round((progress.drawdownRemaining / maxDrawdown) * 100)) : 100;
+    const dailyLimitHit = dailyLimit > 0 && progress.dailyLossRemaining <= 0;
+    const accountTrades = tradesForAccount(allTrades, evalAccount.id);
+    return computeDayVerdict(accountTrades, drawdownRemainingPct, dailyLimitHit);
+  }, [evalAccount, storeEntries, decorateTrades]);
   const [localPre, setLocalPre] = useState(dr.pre);
   const [localPost, setLocalPost] = useState(dr.post);
   const [localLessons, setLocalLessons] = useState(dr.lessons);
@@ -1530,6 +1561,24 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
 
       {activeTab === 'pre' && (
         <div style={{ padding: '0' }}>
+          {dayVerdict && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 14px',
+              borderBottom: '1px solid var(--app-border)',
+              background: dayVerdict.verdict === 'yes' ? 'var(--green-dim)' : dayVerdict.verdict === 'caution' ? 'var(--amber-dim)' : 'var(--red-dim)',
+            }}>
+              <span style={{
+                font: '700 11px/1 var(--font-mono)', letterSpacing: '.06em',
+                color: dayVerdict.verdict === 'yes' ? 'var(--green)' : dayVerdict.verdict === 'caution' ? 'var(--amber)' : 'var(--red)',
+                flexShrink: 0, paddingTop: 1,
+              }}>
+                {dayVerdict.verdict === 'yes' ? 'TRADE' : dayVerdict.verdict === 'caution' ? 'CAUTION' : 'SIT OUT'}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--app-text-muted)', lineHeight: 1.5 }}>
+                {dayVerdict.reason}
+              </span>
+            </div>
+          )}
           <textarea className="tj-reflect" style={{ minHeight: 80, display:'block' }}
             value={localPre}
             onChange={e => setLocalPre(e.target.value)}

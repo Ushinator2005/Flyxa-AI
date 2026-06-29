@@ -680,3 +680,70 @@ export function buildEvaluationAgentAlerts(
 
   return alerts.slice(0, 5);
 }
+
+// ─── Day verdict ──────────────────────────────────────────────────────────────
+
+export interface DayVerdict {
+  verdict: 'yes' | 'caution' | 'no';
+  reason: string;
+}
+
+const VERDICT_DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export function computeDayVerdict(
+  accountTrades: Trade[],
+  drawdownRemainingPct: number,
+  dailyLimitHit: boolean,
+): DayVerdict {
+  const sorted = [...accountTrades].sort((a, b) =>
+    (b.date ?? '').localeCompare(a.date ?? '') || (b.time ?? '').localeCompare(a.time ?? ''),
+  );
+
+  const last3Losses = sorted.length >= 3 && sorted.slice(0, 3).every(t => (t.pnl ?? 0) < 0);
+
+  const byDate = new Map<string, number>();
+  for (const t of accountTrades) {
+    byDate.set(t.date, (byDate.get(t.date) ?? 0) + (t.pnl ?? 0));
+  }
+  const dayDates = [...byDate.keys()].sort().reverse();
+  const last2AllNeg = dayDates.length >= 2 && dayDates.slice(0, 2).every(d => (byDate.get(d) ?? 0) < 0);
+
+  const byDow = new Map<string, number[]>();
+  for (const t of accountTrades) {
+    if (!t.date) continue;
+    const d = new Date(`${t.date}T00:00:00`);
+    if (isNaN(d.getTime())) continue;
+    const dow = VERDICT_DOW[d.getDay()];
+    if (!byDow.has(dow)) byDow.set(dow, []);
+    byDow.get(dow)!.push(t.pnl ?? 0);
+  }
+  const todayDow = VERDICT_DOW[new Date().getDay()];
+  const todayDowData = byDow.get(todayDow);
+  const dowSum = (ps: number[]) => ps.reduce((s, p) => s + p, 0);
+  const allDowNets = [...byDow.entries()].filter(([, ps]) => ps.length >= 3).map(([, ps]) => dowSum(ps));
+  const worstDowNet = allDowNets.length ? Math.min(...allDowNets) : 0;
+  const todayIsWorstDow = !!todayDowData && todayDowData.length >= 3
+    && dowSum(todayDowData) === worstDowNet && worstDowNet < -100;
+
+  if (drawdownRemainingPct < 20 || dailyLimitHit || last3Losses) {
+    if (drawdownRemainingPct < 20) {
+      return { verdict: 'no', reason: `Only ${drawdownRemainingPct}% buffer remaining — account at critical risk. Sit out and review.` };
+    }
+    if (dailyLimitHit) {
+      return { verdict: 'no', reason: 'Daily loss limit reached. No more trading today.' };
+    }
+    return { verdict: 'no', reason: 'Last 3 trades were all losses. Step away — review setup criteria before re-entering.' };
+  }
+
+  if (drawdownRemainingPct < 40 || last2AllNeg || todayIsWorstDow) {
+    if (drawdownRemainingPct < 40) {
+      return { verdict: 'caution', reason: `Buffer at ${drawdownRemainingPct}% — use reduced size and only take A+ setups today.` };
+    }
+    if (last2AllNeg) {
+      return { verdict: 'caution', reason: 'Last 2 sessions were net negative. Tighten criteria — wait for high-confluence entries only.' };
+    }
+    return { verdict: 'caution', reason: `${todayDow}s are your weakest day in this eval. Be selective — only your highest-edge setups.` };
+  }
+
+  return { verdict: 'yes', reason: `Buffer healthy at ${drawdownRemainingPct}%. Trade your plan and protect the buffer.` };
+}

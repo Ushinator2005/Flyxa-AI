@@ -120,6 +120,7 @@ export interface Account {
   firmRuleVersionId?: string;
   evaluationPath?: 'standard' | 'no_activation_fee';
   dailyLossMode?: 'none' | 'purchase_fixed' | 'personal';
+  coachingNotes?: string;
 }
 
 export interface Achievement {

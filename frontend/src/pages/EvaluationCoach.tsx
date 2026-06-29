@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, ShieldCheck, Trophy } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Download, ShieldCheck, Sparkles, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
-import type { Account } from '../store/types.js';
+import type { Account, Trade } from '../store/types.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
-import { propFirmRulesApi } from '../services/api.js';
-import type { EvaluationProgress, EvaluationTemplate, PropFirmRuleRecord } from '../utils/evaluationCoach.js';
+import { propFirmRulesApi, aiApi } from '../services/api.js';
+import type { DayVerdict, EvaluationProgress, EvaluationTemplate, PropFirmRuleRecord, EvaluationAgentAlert } from '../utils/evaluationCoach.js';
 import {
   buildEvaluationAgentAlerts,
+  computeDayVerdict,
   computeEvaluationProgress,
   getEvaluationTemplates,
   inferEvaluationTemplate,
@@ -20,29 +21,125 @@ const money = (value: number) => value.toLocaleString('en-US', {
 });
 
 const STATUS_COLOR: Record<string, string> = {
-  Blown: '#ef4444', Passed: '#22c55e', Funded: '#22c55e', Live: '#f59e0b', Eval: '#3b82f6',
+  Blown: '#ef4444', Passed: '#22c55e', Funded: '#22c55e', Live: '#f59e0b', Eval: 'var(--cobalt)',
 };
+
+const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// ─── Behavioral warnings ──────────────────────────────────────────────────────
+
+function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
+  if (trades.length < 5) return [];
+  const warnings: EvaluationAgentAlert[] = [];
+
+  const byDate = new Map<string, Trade[]>();
+  for (const t of trades) {
+    const d = t.date ?? '';
+    if (!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d)!.push(t);
+  }
+
+  const overallWins = trades.filter(t => t.pnl > 0).length;
+  const overallWR = trades.length ? (overallWins / trades.length) * 100 : 0;
+
+  // Post-loss re-entry pattern
+  const postLossTrades: Trade[] = [];
+  for (const dayTrades of byDate.values()) {
+    const sorted = [...dayTrades].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i - 1].pnl < 0) postLossTrades.push(sorted[i]);
+    }
+  }
+  if (postLossTrades.length >= 4) {
+    const plWins = postLossTrades.filter(t => t.pnl > 0).length;
+    const plWR = (plWins / postLossTrades.length) * 100;
+    const drop = overallWR - plWR;
+    if (plWR < overallWR - 12) {
+      warnings.push({
+        id: 'behavioral-post-loss',
+        severity: 'warning',
+        title: `Post-loss WR drops ${Math.round(drop)}% on re-entry`,
+        message: `After a losing trade, your win rate falls from ${Math.round(overallWR)}% to ${Math.round(plWR)}% across ${postLossTrades.length} post-loss trades in this evaluation.`,
+        action: 'Mandatory 15-min break after any loss before re-entering.',
+      });
+    }
+  }
+
+  // Day-of-week pattern
+  const byDow = new Map<string, number[]>();
+  for (const t of trades) {
+    if (!t.date) continue;
+    const d = new Date(`${t.date}T00:00:00`);
+    if (isNaN(d.getTime())) continue;
+    const dow = DOW[d.getDay()];
+    if (!byDow.has(dow)) byDow.set(dow, []);
+    byDow.get(dow)!.push(t.pnl);
+  }
+  const dowEntries = [...byDow.entries()].filter(([, ps]) => ps.length >= 3);
+  if (dowEntries.length >= 2) {
+    const dowNet = (ps: number[]) => ps.reduce((s, p) => s + p, 0);
+    const worst = dowEntries.sort((a, b) => dowNet(a[1]) - dowNet(b[1]))[0];
+    const worstNet = dowNet(worst[1]);
+    if (worstNet < -200) {
+      warnings.push({
+        id: 'behavioral-worst-dow',
+        severity: 'info',
+        title: `${worst[0]}s: ${money(worstNet)} net drag`,
+        message: `Your ${worst[0]} sessions are the weakest in this evaluation (${worst[1].length} sessions, ${money(worstNet)} net).`,
+        action: `Reduce size or skip ${worst[0]} sessions until pattern reverses.`,
+      });
+    }
+  }
+
+  // Overtrading signal
+  const dayTradeCounts = [...byDate.entries()];
+  const highDays = dayTradeCounts.filter(([, ts]) => ts.length >= 4);
+  const lowDays = dayTradeCounts.filter(([, ts]) => ts.length <= 2);
+  if (highDays.length >= 3 && lowDays.length >= 3) {
+    const avgWR = (days: [string, Trade[]][]) => {
+      const all = days.flatMap(([, ts]) => ts);
+      return all.length ? (all.filter(t => t.pnl > 0).length / all.length) * 100 : 0;
+    };
+    const highWR = avgWR(highDays);
+    const lowWR = avgWR(lowDays);
+    if (lowWR > highWR + 10) {
+      warnings.push({
+        id: 'behavioral-overtrading',
+        severity: 'warning',
+        title: `4+ trade days underperform by ${Math.round(lowWR - highWR)}% WR`,
+        message: `Low-volume days (≤2 trades): ${Math.round(lowWR)}% WR. High-volume days (4+ trades): ${Math.round(highWR)}% WR. Selective trading is outperforming busy days.`,
+        action: 'Cap at 3 trades per session and stop early on the third loss.',
+      });
+    }
+  }
+
+  return warnings;
+}
+
+// (computeDayVerdict imported from evaluationCoach.ts)
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
   account: Account; progress: EvaluationProgress; onDismiss: () => void; onMarkFunded: () => void;
 }) {
   const pct = Math.round((progress.drawdownUsed / (account.maxDrawdown || 1)) * 100);
   return (
-    <div className="eval-pass" data-tour-id="evaluation-overview">
-      <div className="eval-pass-inner">
-        <div className="eval-pass-icon"><Trophy size={28} /></div>
-        <p className="eval-pass-kicker">Evaluation complete</p>
-        <h1 className="eval-pass-title">{account.name}</h1>
-        <p className="eval-pass-firm">{account.firm}</p>
-        <div className="eval-pass-stats">
-          <div className="eval-pass-stat"><strong>{money(progress.netPnl)}</strong><span>Net profit</span></div>
-          <div className="eval-pass-stat"><strong>{progress.tradingDays}</strong><span>Trading days</span></div>
-          <div className="eval-pass-stat"><strong>{pct}%</strong><span>Drawdown used</span></div>
+    <div className="ec-pass" data-tour-id="evaluation-overview">
+      <div className="ec-pass-inner">
+        <div className="ec-pass-icon"><Trophy size={28} /></div>
+        <p className="ec-pass-kicker">Evaluation complete</p>
+        <h1 className="ec-pass-title">{account.name}</h1>
+        <p className="ec-pass-firm">{account.firm}</p>
+        <div className="ec-pass-stats">
+          <div className="ec-pass-stat"><strong>{money(progress.netPnl)}</strong><span>Net profit</span></div>
+          <div className="ec-pass-stat"><strong>{progress.tradingDays}</strong><span>Trading days</span></div>
+          <div className="ec-pass-stat"><strong>{pct}%</strong><span>Drawdown used</span></div>
         </div>
-        <p className="eval-pass-note">Verify the result in your firm's dashboard before requesting a funded account.</p>
-        <div className="eval-pass-actions">
-          <button type="button" className="eval-pass-btn-primary" onClick={onMarkFunded}>Move to funded account</button>
-          <button type="button" className="eval-pass-btn-ghost" onClick={onDismiss}>Stay on this view</button>
+        <p className="ec-pass-note">Verify the result in your firm's dashboard before requesting a funded account.</p>
+        <div className="ec-pass-actions">
+          <button type="button" className="ec-pass-btn-primary" onClick={onMarkFunded}>Move to funded account</button>
+          <button type="button" className="ec-pass-btn-ghost" onClick={onDismiss}>Stay on this view</button>
         </div>
       </div>
     </div>
@@ -51,13 +148,15 @@ function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
 
 function EmptyEvaluation() {
   return (
-    <div className="eval-empty" data-tour-id="evaluation-overview">
+    <div className="ec-empty" data-tour-id="evaluation-overview">
       <ShieldCheck size={30} />
       <h2>No evaluation account found</h2>
       <p>Add an account with its type or phase set to evaluation. Flyxa will monitor its rules and progress.</p>
     </div>
   );
 }
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function EvaluationCoach() {
   const accounts = useFlyxaStore(state => state.accounts);
@@ -111,7 +210,18 @@ export default function EvaluationCoach() {
   const [useOptionalDailyLoss, setUseOptionalDailyLoss] = useState(false);
   const [dismissPass, setDismissPass] = useState(false);
   const [acctDropOpen, setAcctDropOpen] = useState(false);
+  const [alertBarDismissed, setAlertBarDismissed] = useState(false);
+
+  // Coaching state
+  const [missionText, setMissionText] = useState('');
+  const [missionLoading, setMissionLoading] = useState(false);
+  const [missionLoadedFor, setMissionLoadedFor] = useState('');
+  const [debriefWhat, setDebriefWhat] = useState('');
+  const [debriefDifferent, setDebriefDifferent] = useState('');
+  const [debriefSaved, setDebriefSaved] = useState(false);
+
   const acctDropRef = useRef<HTMLDivElement>(null);
+  const alertsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onOut = (e: MouseEvent) => {
@@ -160,20 +270,27 @@ export default function EvaluationCoach() {
     [allTrades, selected],
   );
 
+  // ── Day map (used in multiple places) ──────────────────────────
+  const byDayMap = useMemo(() => {
+    const m = new Map<string, number>();
+    accountTrades.forEach(t => m.set(t.date, (m.get(t.date) ?? 0) + Number(t.pnl ?? 0) - Number(t.commission ?? 0)));
+    return m;
+  }, [accountTrades]);
+
+  const dayDates = useMemo(() => [...byDayMap.keys()].sort().reverse(), [byDayMap]);
+
   const tradeStats = useMemo(() => {
     if (!accountTrades.length) return null;
     const nets = accountTrades.map(t => Number(t.pnl ?? 0) - Number(t.commission ?? 0));
     const wins = nets.filter(n => n > 0).length;
     const winRate = Math.round((wins / nets.length) * 100);
     const avgPnl = nets.reduce((s, n) => s + n, 0) / nets.length;
-    const byDay = new Map<string, number>();
-    accountTrades.forEach((t, i) => byDay.set(t.date, (byDay.get(t.date) ?? 0) + nets[i]));
-    const dayValues = [...byDay.values()];
+    const dayValues = [...byDayMap.values()];
     const bestDay = dayValues.length ? Math.max(...dayValues) : 0;
     const worstDay = dayValues.length ? Math.min(...dayValues) : 0;
     const greenDayPct = dayValues.length ? Math.round((dayValues.filter(v => v > 0).length / dayValues.length) * 100) : 0;
     return { tradeCount: nets.length, winRate, avgPnl, bestDay, worstDay, greenDayPct };
-  }, [accountTrades]);
+  }, [accountTrades, byDayMap]);
 
   const comparisons = useMemo(
     () => evaluationAccounts.map(a => ({
@@ -186,6 +303,26 @@ export default function EvaluationCoach() {
     }),
     [allTrades, evaluationAccounts, statusById],
   );
+
+  // ── Behavioral warnings ─────────────────────────────────────────
+  const behavioralWarnings = useMemo(() => computeBehavioralWarnings(accountTrades), [accountTrades]);
+
+  // ── Load debrief from saved account notes ───────────────────────
+  useEffect(() => {
+    if (!selected?.coachingNotes) {
+      setDebriefWhat('');
+      setDebriefDifferent('');
+      return;
+    }
+    try {
+      const saved = JSON.parse(selected.coachingNotes) as { what?: string; different?: string };
+      setDebriefWhat(saved.what ?? '');
+      setDebriefDifferent(saved.different ?? '');
+    } catch {
+      setDebriefWhat('');
+      setDebriefDifferent('');
+    }
+  }, [selected?.id]);
 
   if (!selected || !progress) return <EmptyEvaluation />;
 
@@ -204,18 +341,106 @@ export default function EvaluationCoach() {
   const target = selected.profitTarget ?? activeTemplate.profitTarget;
   const maxDrawdown = selected.maxDrawdown || activeTemplate.maxDrawdown;
   const dailyLimit = selected.dailyLossLimit || activeTemplate.dailyLossLimit;
-  const maxContracts = selected.maxContracts ?? activeTemplate.maxContracts;
 
-  const decision = progress.status === 'violated'
-    ? { label: 'Stop trading', tone: 'danger' as const, reason: progress.warnings[0] ?? 'An evaluation limit has been reached.' }
-    : progress.status === 'passed'
-      ? { label: 'Conditions reached', tone: 'good' as const, reason: 'Protect the result and verify the pass in your firm dashboard.' }
-      : progress.warnings.length
-        ? { label: 'Reduce risk', tone: 'warning' as const, reason: progress.warnings[0] }
-        : { label: 'Within limits', tone: 'good' as const, reason: '' };
+  const selStatus = statusById.get(selected.id) ?? 'Eval';
+  const triggerColor = STATUS_COLOR[selStatus] ?? 'var(--txt-3)';
+  const dropEval   = comparisons.filter(c => c.status === 'Eval');
+  const dropPassed = comparisons.filter(c => c.status === 'Passed');
+  const dropBlown  = comparisons.filter(c => c.status === 'Blown');
 
-  const probColor = progress.passProbability >= 65 ? '#34d399' : progress.passProbability >= 35 ? '#f59e0b' : '#f87171';
-  const toneColor = { good: '#34d399', warning: '#f59e0b', danger: '#f87171' } as const;
+  const firmMeta = [
+    selected.firm,
+    selected.size ? money(selected.size) : null,
+    (selected.drawdownType ?? activeTemplate.drawdownType)
+      ? `${(selected.drawdownType ?? activeTemplate.drawdownType)?.replace(/_/g, ' ')} drawdown`
+      : null,
+  ].filter(Boolean).join(' · ');
+
+  // ── Metric computations ─────────────────────────────────────────
+  const targetProgressPct = Math.min(100, Math.round(progress.targetProgressPct));
+  const drawdownRemainingPct = maxDrawdown > 0 ? Math.min(100, Math.round((progress.drawdownRemaining / maxDrawdown) * 100)) : 0;
+  const drawdownUsedPct = 100 - drawdownRemainingPct;
+  const drawdownBufferColor = drawdownRemainingPct > 50 ? 'var(--green)' : drawdownRemainingPct >= 20 ? 'var(--amber)' : 'var(--red)';
+  const dailyRemaining = dailyLimit > 0 ? Math.max(0, progress.dailyLossRemaining) : null;
+  const dailyRemainingPct = dailyLimit > 0 ? Math.min(100, Math.round((Math.max(0, progress.dailyLossRemaining) / dailyLimit) * 100)) : 0;
+  const dailyUsedPct = 100 - dailyRemainingPct;
+  const daysMet = progress.tradingDays >= progress.minimumTradingDays;
+  const dailyLimitHit = dailyLimit > 0 && progress.dailyLossRemaining <= 0;
+
+  // ── Pass probability ring ───────────────────────────────────────
+  const probColor = progress.passProbability >= 65 ? 'var(--green)' : progress.passProbability >= 40 ? 'var(--amber)' : 'var(--red)';
+  const RING_CIRC = 276.5;
+  const ringOffset = RING_CIRC * (1 - progress.passProbability / 100);
+
+  // ── Pace ────────────────────────────────────────────────────────
+  const avgDailyPnl = progress.tradingDays > 0 ? progress.netPnl / progress.tradingDays : 0;
+  const daysToTarget = avgDailyPnl > 0 && progress.targetRemaining > 0 ? Math.ceil(progress.targetRemaining / avgDailyPnl) : null;
+  const sessionsLeft = avgDailyPnl > 0 && progress.targetRemaining > 0 ? daysToTarget : null;
+  const targetPace = avgDailyPnl > 0 ? 'On track' : 'Behind';
+  const targetPaceColor = avgDailyPnl > 0 ? 'var(--green)' : 'var(--red)';
+  const paceNegative = progress.tradingDays > 0 && avgDailyPnl < 0;
+  const s = (n: number) => n !== 1 ? 's' : '';
+
+  // ── "Should I trade today?" verdict ────────────────────────────
+  const { verdict, reason: verdictReason } = computeDayVerdict(accountTrades, drawdownRemainingPct, dailyLimitHit);
+  const verdictColor = verdict === 'yes' ? 'var(--green)' : verdict === 'caution' ? 'var(--amber)' : 'var(--red)';
+  const verdictBg = verdict === 'yes' ? 'var(--green-dim)' : verdict === 'caution' ? 'var(--amber-dim)' : 'var(--red-dim)';
+  const verdictBdr = verdict === 'yes' ? 'var(--green-border)' : verdict === 'caution' ? 'var(--amber-border)' : 'var(--red-border)';
+  const verdictLabel = verdict === 'yes' ? 'YES' : verdict === 'caution' ? 'CAUTION' : 'NO';
+
+  // ── AI mission (loaded async) ───────────────────────────────────
+  const missionCacheKey = `${selected.id}-${new Date().toISOString().slice(0, 10)}-${progress.tradingDays}`;
+
+  // Fallback static insight text (shown while mission loads or on error)
+  const insightFallback = (() => {
+    if (progress.tradingDays === 0) return 'No trades recorded yet. Add your first session to see coaching insights.';
+    if (paceNegative && drawdownRemainingPct <= 30) {
+      return `Buffer critical at ${drawdownRemainingPct}%. At current pace, the evaluation expires before target. Reduce risk to preserve the remaining buffer.`;
+    }
+    if (daysToTarget !== null) {
+      return `Averaging ${money(avgDailyPnl)}/session. At this pace, approximately ${daysToTarget} more session${s(daysToTarget)} to reach the ${money(target)} target.`;
+    }
+    return `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. ${money(progress.targetRemaining)} still needed.`;
+  })();
+
+  // ── Eval timeline dots ──────────────────────────────────────────
+  const pastDots = dayDates.slice(0, 10).reverse().map(d => ({
+    type: 'past' as const,
+    pnl: byDayMap.get(d) ?? 0,
+    date: d,
+  }));
+  const futureCount = Math.min(7, Math.max(2, sessionsLeft ?? 5));
+  const futureColor = drawdownRemainingPct < 30 ? 'var(--red)' : drawdownRemainingPct < 50 ? 'var(--amber)' : 'var(--green)';
+  const futureDots = Array.from({ length: futureCount }, (_, i) => ({
+    type: 'future' as const,
+    index: i,
+  }));
+
+  // ── Alert bar ───────────────────────────────────────────────────
+  const topAlert = alerts[0] ?? null;
+  const showAlertBar = !alertBarDismissed && topAlert !== null;
+  const alertBarColor = topAlert?.severity === 'critical' ? 'var(--red)' : 'var(--amber)';
+  const alertBarBg = topAlert?.severity === 'critical' ? 'var(--red-dim)' : 'var(--amber-dim)';
+  const alertBarBdr = topAlert?.severity === 'critical' ? 'var(--red-border)' : 'var(--amber-border)';
+
+  // ── All alerts (risk + behavioral) ─────────────────────────────
+  const allAlerts = [...alerts, ...behavioralWarnings];
+
+  function exportReport() {
+    if (!progress) return;
+    const report = {
+      generatedAt: new Date().toISOString(),
+      account: { name: selected.name, firm: selected.firm, size: selected.size },
+      rules: { profitTarget: target, dailyLossLimit: dailyLimit, maxDrawdown, minimumTradingDays: progress.minimumTradingDays },
+      progress, agentAlerts: allAlerts,
+      disclaimer: 'Verify all rule values against the current terms supplied by the prop firm.',
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `flyxa-eval-${selected.name.replace(/\s+/g, '-').toLowerCase()}.json`; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   function applyTemplate(account: Account) {
     updateAccount(account.id, {
@@ -238,265 +463,502 @@ export default function EvaluationCoach() {
     });
   }
 
-  function exportReport() {
-    const report = {
-      generatedAt: new Date().toISOString(),
-      account: { name: selected.name, firm: selected.firm, size: selected.size },
-      rules: { profitTarget: target, dailyLossLimit: dailyLimit, maxDrawdown, minimumTradingDays: progress.minimumTradingDays, maxContracts, drawdownType: selected.drawdownType ?? activeTemplate.drawdownType },
-      progress, agentAlerts: alerts,
-      disclaimer: 'Verify all rule values against the current terms supplied by the prop firm.',
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `flyxa-eval-${selected.name.replace(/\s+/g, '-').toLowerCase()}.json`; a.click();
-    URL.revokeObjectURL(url);
+  function saveDebrief() {
+    updateAccount(selected.id, {
+      coachingNotes: JSON.stringify({
+        what: debriefWhat,
+        different: debriefDifferent,
+        savedAt: new Date().toISOString(),
+      }),
+    });
+    setDebriefSaved(true);
+    setTimeout(() => setDebriefSaved(false), 2000);
   }
-
-  const selStatus = statusById.get(selected.id) ?? 'Eval';
-  const triggerColor = STATUS_COLOR[selStatus] ?? 'var(--app-text-subtle)';
-  const dropEval   = comparisons.filter(c => c.status === 'Eval');
-  const dropPassed = comparisons.filter(c => c.status === 'Passed');
-  const dropBlown  = comparisons.filter(c => c.status === 'Blown');
 
   function DropRow({ account }: { account: Account }) {
     const isSelected = account.id === selected.id;
     const st = statusById.get(account.id) ?? 'Eval';
-    const col = STATUS_COLOR[st] ?? 'var(--app-text-subtle)';
+    const col = STATUS_COLOR[st] ?? 'var(--txt-3)';
     return (
       <button type="button"
-        className={`eval-acct-row${isSelected ? ' selected' : ''}${st === 'Blown' ? ' blown' : ''}`}
+        className={`ec-acct-row${isSelected ? ' selected' : ''}${st === 'Blown' ? ' blown' : ''}`}
         onClick={() => { setSelectedId(account.id); setAcctDropOpen(false); }}
       >
-        <div className="eval-acct-row-info">
+        <div className="ec-acct-row-info">
           <strong>{account.name}</strong>
           {account.firm && <small>{account.firm}</small>}
         </div>
-        <span className="eval-acct-pill" style={{ color: col, background: col + '18', borderColor: col + '40' }}>{st}</span>
+        <span className="ec-acct-pill" style={{ color: col, background: col + '18', borderColor: col + '40' }}>{st}</span>
       </button>
     );
   }
 
-  const drawdownPct = maxDrawdown > 0 ? Math.round((progress.drawdownUsed / maxDrawdown) * 100) : 0;
-  const drawdownTone = drawdownPct >= 75 ? 'danger' : drawdownPct >= 50 ? 'warning' : 'good';
-  const dailyPct = dailyLimit > 0 && Number.isFinite(progress.dailyLossRemaining)
-    ? Math.round(((dailyLimit - Math.max(0, progress.dailyLossRemaining)) / dailyLimit) * 100)
-    : null;
-  const dailyTone = dailyPct !== null && dailyPct >= 75 ? 'danger' : dailyPct !== null && dailyPct >= 50 ? 'warning' : 'good';
-  const daysMet = progress.tradingDays >= progress.minimumTradingDays;
+  // ── Recent journal post-sessions for this account ───────────────
+  const recentJournalReflections = useMemo(() => {
+    const accountId = selected.id;
+    return entries
+      .filter(e => {
+        const anyE = e as unknown as { accountIds?: string[]; account?: string; dailyReflection?: { post?: string } };
+        const accs = anyE.accountIds?.length ? anyE.accountIds : (anyE.account ? [anyE.account] : []);
+        return accs.includes(accountId) && !!(anyE.dailyReflection?.post?.trim());
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 3)
+      .map(e => {
+        const dr = (e as unknown as { dailyReflection: { post: string } }).dailyReflection;
+        return { date: e.date, post: dr.post.trim() };
+      });
+  }, [entries, selected.id]);
 
-  const avgDailyPnl = progress.tradingDays > 0 ? progress.netPnl / progress.tradingDays : 0;
-  const daysToTarget = avgDailyPnl > 0 && progress.targetRemaining > 0 ? Math.ceil(progress.targetRemaining / avgDailyPnl) : null;
-  const s = (n: number) => n !== 1 ? 's' : '';
-  const paceText = progress.tradingDays === 0 ? ''
-    : avgDailyPnl > 0 && daysToTarget !== null
-      ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. At this pace, ~${daysToTarget} more session${s(daysToTarget)} to reach the ${money(target)} target.`
-      : avgDailyPnl > 0
-        ? `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}.`
-        : `Averaging ${money(avgDailyPnl)}/session across ${progress.tradingDays} session${s(progress.tradingDays)}. ${money(progress.targetRemaining)} still needed to reach the ${money(target)} target.`;
-  const paceNegative = progress.tradingDays > 0 && avgDailyPnl < 0;
+  // ── AI mission load ─────────────────────────────────────────────
+  // Placed after early returns so it only fires when the page renders
+  function loadMission() {
+    if (missionLoadedFor === missionCacheKey || missionLoading) return;
+    if (progress.tradingDays === 0) {
+      setMissionText('');
+      setMissionLoadedFor(missionCacheKey);
+      return;
+    }
+    const last3 = dayDates.slice(0, 3).map(d => money(byDayMap.get(d) ?? 0)).join(', ');
 
-  const firmMeta = [
-    selected.firm,
-    selected.size ? money(selected.size) : null,
-    (selected.drawdownType ?? activeTemplate.drawdownType)
-      ? `${(selected.drawdownType ?? activeTemplate.drawdownType)?.replace(/_/g, ' ')} drawdown`
-      : null,
-  ].filter(Boolean).join(' · ');
+    // Build coaching context from saved debrief notes + journal post-sessions
+    const debriefNote = selected.coachingNotes ? (() => {
+      try {
+        const saved = JSON.parse(selected.coachingNotes!) as { what?: string; different?: string };
+        return saved.what || saved.different
+          ? `Coach note — What happened: "${saved.what}". Will improve: "${saved.different}".`
+          : '';
+      } catch { return ''; }
+    })() : '';
+
+    const journalContext = recentJournalReflections.length
+      ? `Recent journal post-sessions:\n${recentJournalReflections.map(r => `${r.date}: "${r.post}"`).join('\n')}`
+      : '';
+
+    const prompt = `You are Flyxa's evaluation coaching system. Give this trader ONE specific coaching directive for today's session.
+
+Account: ${selected.name} (${selected.firm})
+Eval status: ${progress.status} — ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
+Sessions traded: ${progress.tradingDays} | Avg P&L/session: ${money(avgDailyPnl)} | Pass probability: ${progress.passProbability}%
+Last 3 sessions: ${last3 || 'none yet'}
+${behavioralWarnings.length ? `Behavioral patterns: ${behavioralWarnings.map(w => w.title).join('; ')}` : ''}
+${journalContext}
+${debriefNote}
+
+Write exactly ONE coaching directive sentence. Start with an action verb (Focus on..., Limit entries to..., Avoid..., Cut size to..., Target..., etc.). Be specific to this account's current numbers. No greeting, no explanation — just the directive.`;
+
+    setMissionLoading(true);
+    aiApi.flyxaChat(prompt, [])
+      .then(({ reply }) => {
+        setMissionText(reply.trim());
+        setMissionLoadedFor(missionCacheKey);
+      })
+      .catch(() => {
+        setMissionText('');
+        setMissionLoadedFor(missionCacheKey);
+      })
+      .finally(() => setMissionLoading(false));
+  }
+
+  // Call mission load on render (idempotent due to key check)
+  if (missionLoadedFor !== missionCacheKey && !missionLoading && progress.tradingDays > 0) {
+    loadMission();
+  }
+
+  const missionDisplay = missionLoading
+    ? 'Loading today\'s directive…'
+    : (missionText || insightFallback);
 
   return (
-    <div className="eval-page" data-tour-id="evaluation-overview">
+    <div className="ec-page" data-tour-id="evaluation-overview">
 
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <div className="eval-header">
-        <div className="eval-header-left">
-          <div ref={acctDropRef} className="eval-acct-drop">
-            <button type="button" className="eval-acct-trigger" onClick={() => setAcctDropOpen(o => !o)}>
-              <span className="eval-acct-dot" style={{ background: triggerColor }} />
-              <span className="eval-acct-trigger-name">{selected.name}</span>
+      {/* ── Account header strip ────────────────────────────────────── */}
+      <div className="ec-strip">
+        <div className="ec-strip-left">
+          <div ref={acctDropRef} className="ec-acct-drop">
+            <button type="button" className="ec-acct-trigger" onClick={() => setAcctDropOpen(o => !o)}>
+              <span className="ec-acct-dot" style={{ background: triggerColor }} />
+              <span className="ec-acct-trigger-name">{selected.name}</span>
               <ChevronDown size={11} />
             </button>
             {acctDropOpen && (
-              <div className="eval-acct-menu">
+              <div className="ec-acct-menu">
                 {dropEval.map(({ account }) => <DropRow key={account.id} account={account} />)}
-                {dropPassed.length > 0 && (<><div className="eval-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
-                {dropBlown.length > 0 && (<><div className="eval-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
+                {dropPassed.length > 0 && (<><div className="ec-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
+                {dropBlown.length > 0 && (<><div className="ec-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
               </div>
             )}
           </div>
-          {firmMeta && <span className="eval-header-firm">{firmMeta}</span>}
+          {firmMeta && <p className="ec-acct-meta">{firmMeta}</p>}
         </div>
-        <div className="eval-header-right">
-          <div className="eval-header-bal-group">
-            <span className={`eval-header-bal${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>
-              {money(progress.currentBalance)}
-            </span>
-            {progress.netPnl !== 0 && (
-              <span className={`eval-header-delta${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>
-                {progress.netPnl > 0 ? '+' : ''}{money(progress.netPnl)}
-              </span>
-            )}
+
+        <div className="ec-strip-right">
+          <div className="ec-bal-block">
+            <span className="ec-bal-label">Current balance</span>
+            <div className="ec-bal-row">
+              <span className={`ec-bal-val${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>{money(progress.currentBalance)}</span>
+              {progress.netPnl !== 0 && (
+                <span className={`ec-bal-delta${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>
+                  {progress.netPnl > 0 ? '+' : ''}{money(progress.netPnl)}
+                </span>
+              )}
+            </div>
           </div>
-          <div className={`eval-status-pill eval-status-pill-${decision.tone}`}>{decision.label}</div>
-          <button type="button" className="eval-export-btn" onClick={exportReport}>
+          {allAlerts.length > 0 && (
+            <button type="button" className="ec-btn-reduce">Reduce Risk</button>
+          )}
+<button type="button" className="ec-btn-export" onClick={exportReport}>
             <Download size={12} /> Export
           </button>
         </div>
       </div>
 
-      {/* ── Warning / danger reason ─────────────────────────────────── */}
-      {decision.tone !== 'good' && decision.reason && (
-        <div className={`eval-reason-bar eval-reason-bar-${decision.tone}`}>{decision.reason}</div>
+      {/* ── Alert bar ───────────────────────────────────────────────── */}
+      {showAlertBar && topAlert && (
+        <div className="ec-alert-bar" style={{ background: alertBarBg, borderBottomColor: alertBarBdr }}>
+          <AlertTriangle size={13} className="ec-alert-bar-icon" style={{ color: alertBarColor, flexShrink: 0 }} />
+          <span className="ec-alert-bar-label" style={{ color: alertBarColor }}>{topAlert.title.toUpperCase()}</span>
+          {alerts.length === 1 ? (
+            <span className="ec-alert-bar-text">{topAlert.message}</span>
+          ) : (
+            <button type="button" className="ec-alert-bar-count" onClick={() => alertsRef.current?.scrollIntoView({ behavior: 'smooth' })}>
+              {allAlerts.length} alerts
+            </button>
+          )}
+          <button type="button" className="ec-alert-bar-dismiss" style={{ color: alertBarColor }} onClick={() => setAlertBarDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
       )}
 
-      {/* ── 3 Key metrics ───────────────────────────────────────────── */}
-      <div className="eval-metrics">
+      {/* ── Body ────────────────────────────────────────────────────── */}
+      <div className="ec-body">
 
-        {/* Profit progress */}
-        <div className="eval-metric" style={{ '--mc-acc': '#f59e0b' } as React.CSSProperties}>
-          <span className="eval-metric-lbl">Profit needed</span>
-          <strong className="eval-metric-val">{money(progress.targetRemaining)}</strong>
-          <div className="eval-metric-track">
-            <div className="eval-metric-fill" style={{ width: `${Math.min(100, progress.targetProgressPct)}%` }} />
-          </div>
-          <span className="eval-metric-note">
-            {Math.round(progress.targetProgressPct)}% of {money(target)} target
-            <span className="eval-metric-note-sep">·</span>
-            balance {money(progress.currentBalance)}
-          </span>
-        </div>
+        {/* Top row: metric grid left + prob card right */}
+        <div className="ec-top-row">
+          <div className="ec-left-col">
 
-        {/* Drawdown buffer */}
-        <div className="eval-metric" style={{ '--mc-acc': toneColor[drawdownTone] } as React.CSSProperties}>
-          <span className="eval-metric-lbl">Drawdown buffer</span>
-          <strong className="eval-metric-val" style={{ color: toneColor[drawdownTone] }}>
-            {money(progress.drawdownRemaining)}
-          </strong>
-          <div className="eval-metric-track">
-            <div className="eval-metric-fill" style={{ width: `${drawdownPct}%` }} />
-          </div>
-          <span className="eval-metric-note">
-            {drawdownPct}% of {money(maxDrawdown)} used
-            <span className="eval-metric-note-sep">·</span>
-            floor {money(progress.drawdownFloor)}
-          </span>
-        </div>
+            {/* 3 metric cards */}
+            <div className="ec-metric-grid">
 
-        {/* Daily budget or trading days */}
-        {dailyLimit > 0 ? (
-          <div className="eval-metric" style={{ '--mc-acc': toneColor[dailyTone] } as React.CSSProperties}>
-            <span className="eval-metric-lbl">Daily budget left</span>
-            <strong className="eval-metric-val" style={{ color: dailyTone !== 'good' ? toneColor[dailyTone] : undefined }}>
-              {money(Math.max(0, progress.dailyLossRemaining))}
-            </strong>
-            <div className="eval-metric-track">
-              <div className="eval-metric-fill" style={{ width: `${dailyPct ?? 0}%` }} />
-            </div>
-            <span className="eval-metric-note">
-              {dailyPct ?? 0}% of {money(dailyLimit)} used
-              <span className="eval-metric-note-sep">·</span>
-              {money(progress.dailyPnl)} today
-            </span>
-          </div>
-        ) : (
-          <div className="eval-metric" style={{ '--mc-acc': daysMet ? '#34d399' : '#f59e0b' } as React.CSSProperties}>
-            <span className="eval-metric-lbl">Trading days</span>
-            <strong className="eval-metric-val" style={{ color: progress.minimumTradingDays > 0 && daysMet ? '#34d399' : undefined }}>
-              {progress.tradingDays}
-              {progress.minimumTradingDays > 0 && <span className="eval-metric-denom">/{progress.minimumTradingDays}</span>}
-            </strong>
-            <div className="eval-metric-track">
-              {progress.minimumTradingDays > 0 && (
-                <div className="eval-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%` }} />
+              {/* Profit needed */}
+              <div className="ec-metric-card">
+                <span className="ec-metric-lbl">Profit needed</span>
+                <strong className="ec-metric-val" style={{ color: 'var(--amber)' }}>{money(progress.targetRemaining)}</strong>
+                <div className="ec-metric-track">
+                  <div className="ec-metric-fill" style={{ width: `${targetProgressPct}%`, background: 'var(--amber)' }} />
+                </div>
+                <span className="ec-metric-sub">
+                  {targetProgressPct}% of {money(target)} target · balance {money(progress.currentBalance)}
+                </span>
+              </div>
+
+              {/* Drawdown buffer */}
+              <div className="ec-metric-card">
+                <span className="ec-metric-lbl">Drawdown buffer</span>
+                <strong className="ec-metric-val" style={{ color: drawdownBufferColor }}>{money(progress.drawdownRemaining)}</strong>
+                <div className="ec-metric-track">
+                  <div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%`, background: drawdownBufferColor }} />
+                </div>
+                <span className="ec-metric-sub">
+                  {drawdownUsedPct}% of {money(maxDrawdown)} used · floor {money(progress.drawdownFloor)}
+                </span>
+              </div>
+
+              {/* Daily budget / trading days */}
+              {dailyLimit > 0 ? (
+                <div className="ec-metric-card">
+                  <span className="ec-metric-lbl">Daily budget left</span>
+                  <strong className="ec-metric-val">{money(dailyRemaining ?? 0)}</strong>
+                  <div className="ec-metric-track">
+                    <div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%`, background: 'var(--amber)' }} />
+                  </div>
+                  <span className="ec-metric-sub">
+                    {dailyUsedPct}% used · {money(progress.dailyPnl)} today
+                  </span>
+                </div>
+              ) : (
+                <div className="ec-metric-card">
+                  <span className="ec-metric-lbl">Trading days</span>
+                  <strong className="ec-metric-val" style={{ color: progress.minimumTradingDays > 0 && daysMet ? 'var(--green)' : undefined }}>
+                    {progress.tradingDays}
+                    {progress.minimumTradingDays > 0 && <span className="ec-metric-denom">/{progress.minimumTradingDays}</span>}
+                  </strong>
+                  <div className="ec-metric-track">
+                    {progress.minimumTradingDays > 0 && (
+                      <div className="ec-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%`, background: daysMet ? 'var(--green)' : 'var(--amber)' }} />
+                    )}
+                  </div>
+                  <span className="ec-metric-sub">
+                    {progress.minimumTradingDays > 0
+                      ? daysMet ? 'Minimum day requirement met' : `${progress.minimumTradingDays - progress.tradingDays} more day${progress.minimumTradingDays - progress.tradingDays === 1 ? '' : 's'} required`
+                      : 'No minimum day requirement'}
+                  </span>
+                </div>
               )}
             </div>
-            <span className="eval-metric-note">
-              {progress.minimumTradingDays > 0
-                ? daysMet
-                  ? 'Minimum day requirement met'
-                  : `${progress.minimumTradingDays - progress.tradingDays} more day${progress.minimumTradingDays - progress.tradingDays === 1 ? '' : 's'} required`
-                : 'No minimum day requirement'}
+
+            {/* Stat bar */}
+            {tradeStats ? (
+              <div className="ec-stat-bar">
+                {([
+                  { lbl: 'Trades',      val: String(tradeStats.tradeCount), color: 'var(--txt)' },
+                  { lbl: 'Win rate',    val: `${tradeStats.winRate}%`,       color: tradeStats.winRate > 60 ? 'var(--green)' : tradeStats.winRate >= 40 ? 'var(--amber)' : 'var(--red)' },
+                  { lbl: 'Avg / trade', val: `${tradeStats.avgPnl >= 0 ? '+' : ''}${money(tradeStats.avgPnl)}`, color: tradeStats.avgPnl >= 0 ? 'var(--green)' : 'var(--red)' },
+                  { lbl: 'Best day',    val: `${tradeStats.bestDay > 0 ? '+' : ''}${money(tradeStats.bestDay)}`, color: 'var(--green)' },
+                  { lbl: 'Worst day',   val: money(tradeStats.worstDay),     color: 'var(--red)' },
+                  { lbl: 'Green days',  val: `${tradeStats.greenDayPct}%`,   color: tradeStats.greenDayPct > 60 ? 'var(--green)' : tradeStats.greenDayPct >= 40 ? 'var(--amber)' : 'var(--red)' },
+                ] as { lbl: string; val: string; color: string }[]).map(({ lbl, val, color }) => (
+                  <div key={lbl} className="ec-stat-item">
+                    <span className="ec-stat-val" style={{ color }}>{val}</span>
+                    <span className="ec-stat-lbl">{lbl}</span>
+                  </div>
+                ))}
+                {progress.minimumTradingDays > 0 && (
+                  <div className="ec-stat-item">
+                    <span className="ec-stat-val" style={{ color: daysMet ? 'var(--green)' : 'var(--amber)' }}>
+                      {progress.tradingDays}/{progress.minimumTradingDays}
+                    </span>
+                    <span className="ec-stat-lbl">Min days</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="ec-no-data">No trades recorded for this account yet.</p>
+            )}
+          </div>
+
+          {/* Pass probability card */}
+          <div className="ec-prob-card">
+            <p className="ec-prob-title">Pass Probability</p>
+
+            <div className="ec-prob-ring-wrap">
+              <svg width={112} height={112} style={{ transform: 'rotate(-90deg)', display: 'block' }}>
+                <circle cx={56} cy={56} r={44} fill="none" stroke="var(--surface-3)" strokeWidth={8} />
+                <circle
+                  cx={56} cy={56} r={44} fill="none"
+                  stroke={probColor} strokeWidth={8}
+                  strokeLinecap="round"
+                  strokeDasharray={RING_CIRC}
+                  strokeDashoffset={ringOffset}
+                  style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+                />
+              </svg>
+              <div className="ec-prob-ring-center">
+                <span className="ec-prob-ring-val" style={{ color: probColor }}>{progress.passProbability}%</span>
+                <span className="ec-prob-ring-sub">current</span>
+              </div>
+            </div>
+
+            <div className="ec-prob-meta">
+              {progress.minimumTradingDays > 0 && (
+                <div className="ec-prob-meta-row">
+                  <span className="ec-prob-meta-lbl">Min trading days</span>
+                  <span className="ec-prob-meta-val" style={{ color: daysMet ? 'var(--green)' : 'var(--amber)' }}>
+                    {progress.tradingDays}/{progress.minimumTradingDays}
+                  </span>
+                </div>
+              )}
+              <div className="ec-prob-meta-row">
+                <span className="ec-prob-meta-lbl">Sessions left</span>
+                <span className="ec-prob-meta-val">{sessionsLeft !== null ? `~${sessionsLeft}` : '—'}</span>
+              </div>
+              <div className="ec-prob-meta-row">
+                <span className="ec-prob-meta-lbl">Target pace</span>
+                <span className="ec-prob-meta-val" style={{ color: targetPaceColor }}>{targetPace}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Coaching zone: mission + verdict ─────────────────────── */}
+        <div className="ec-coaching-zone">
+
+          {/* Today's Mission */}
+          <div className="ec-mission-card">
+            <div className="ec-mission-hdr">
+              <div className="ec-mission-icon">
+                <Sparkles size={11} />
+              </div>
+              <span className="ec-mission-label">Today's Mission</span>
+            </div>
+            <p className={`ec-mission-text${missionLoading ? ' ec-mission-loading' : ''}`}>
+              {missionDisplay}
+            </p>
+          </div>
+
+          {/* Should I trade today? */}
+          <div className="ec-verdict-card" style={{ background: verdictBg, borderColor: verdictBdr }}>
+            <span className="ec-verdict-label">Should I trade today?</span>
+            <span className="ec-verdict-badge" style={{ color: verdictColor }}>{verdictLabel}</span>
+            <p className="ec-verdict-reason">{verdictReason}</p>
+          </div>
+        </div>
+
+        {/* ── Eval timeline ─────────────────────────────────────────── */}
+        {(pastDots.length > 0 || futureDots.length > 0) && (
+          <div className="ec-timeline">
+            <span className="ec-timeline-label">Session history</span>
+            <div className="ec-timeline-dots">
+              {pastDots.map(dot => (
+                <div
+                  key={dot.date}
+                  className="ec-dot ec-dot-past"
+                  title={`${dot.date}: ${dot.pnl >= 0 ? '+' : ''}${money(dot.pnl)}`}
+                  style={{ background: dot.pnl >= 0 ? 'var(--green)' : 'var(--red)', borderColor: dot.pnl >= 0 ? 'var(--green-border)' : 'var(--red-border)' }}
+                />
+              ))}
+              {pastDots.length > 0 && futureDots.length > 0 && (
+                <div className="ec-timeline-divider" title="Today" />
+              )}
+              {futureDots.map(dot => (
+                <div
+                  key={dot.index}
+                  className="ec-dot ec-dot-future"
+                  title={`Projected session ${progress.tradingDays + dot.index + 1}`}
+                  style={{ borderColor: futureColor }}
+                />
+              ))}
+            </div>
+            <span className="ec-timeline-hint">
+              {pastDots.length} session{pastDots.length !== 1 ? 's' : ''} logged · {futureDots.length} projected
             </span>
           </div>
         )}
-      </div>
 
-      {/* ── Stats grid ──────────────────────────────────────────────── */}
-      {tradeStats ? (
-        <div className="eval-stats">
-          {([
-            { lbl: 'Trades',      val: String(tradeStats.tradeCount),                                              color: undefined },
-            { lbl: 'Win rate',    val: `${tradeStats.winRate}%`,                                                   color: tradeStats.winRate >= 50 ? '#34d399' : '#f87171' },
-            { lbl: 'Avg / trade', val: `${tradeStats.avgPnl >= 0 ? '+' : ''}${money(tradeStats.avgPnl)}`,          color: tradeStats.avgPnl >= 0 ? '#34d399' : '#f87171' },
-            { lbl: 'Best day',    val: `${tradeStats.bestDay > 0 ? '+' : ''}${money(tradeStats.bestDay)}`,         color: tradeStats.bestDay >= 0 ? '#34d399' : '#f87171' },
-            { lbl: 'Worst day',   val: money(tradeStats.worstDay),                                                  color: tradeStats.worstDay < 0 ? '#f87171' : '#34d399' },
-            { lbl: 'Green days',  val: `${tradeStats.greenDayPct}%`,                                               color: tradeStats.greenDayPct >= 50 ? '#34d399' : '#f87171' },
-          ] as { lbl: string; val: string; color: string | undefined }[]).map(({ lbl, val, color }) => (
-            <div key={lbl} className="eval-stat">
-              <span className="eval-stat-val" style={{ color }}>{val}</span>
-              <span className="eval-stat-lbl">{lbl}</span>
+        {/* ── Bottom grid: alerts + preset ──────────────────────────── */}
+        <div className="ec-bottom-grid" ref={alertsRef}>
+
+          {/* Risk + behavioral alerts */}
+          <div className="ec-alerts-card">
+            <div className="ec-card-hdr">
+              <span className="ec-card-hdr-title">Coaching Alerts</span>
+              {allAlerts.length > 0 && (
+                <span className="ec-card-badge">{allAlerts.length}</span>
+              )}
             </div>
-          ))}
-          <div className="eval-stat eval-stat-prob">
-            <span className="eval-stat-val" style={{ color: probColor }}>{progress.passProbability}%</span>
-            <span className="eval-stat-lbl">Pass probability</span>
-          </div>
-          {progress.minimumTradingDays > 0 && (
-            <div className="eval-stat">
-              <span className="eval-stat-val" style={{ color: daysMet ? '#34d399' : undefined }}>
-                {progress.tradingDays}/{progress.minimumTradingDays}
-              </span>
-              <span className="eval-stat-lbl">Min days</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="eval-no-trades">No trades recorded for this account yet.</div>
-      )}
-
-      {/* ── Pace note ───────────────────────────────────────────────── */}
-      {paceText && (
-        <p className={`eval-pace${paceNegative ? ' neg' : ''}`}>{paceText}</p>
-      )}
-
-      {/* ── Alerts ──────────────────────────────────────────────────── */}
-      {alerts.length > 0 && (
-        <div className="eval-alerts">
-          {alerts.map(alert => (
-            <div key={alert.id} className={`eval-alert eval-alert-${alert.severity}`}>
-              <div className="eval-alert-main">
-                <strong>{alert.title}</strong>
-                <p>{alert.message}</p>
+            {allAlerts.length > 0 ? allAlerts.map((alert, i) => (
+              <div
+                key={alert.id}
+                className={`ec-alert-item${i === allAlerts.length - 1 ? ' last' : ''}`}
+                style={{ borderLeftColor: alert.severity === 'critical' ? 'var(--red)' : alert.severity === 'warning' ? 'var(--amber)' : 'var(--border)' }}
+              >
+                <p className="ec-alert-item-title">{alert.title}</p>
+                <p className="ec-alert-item-body">{alert.message}</p>
+                <p className="ec-alert-item-fix">→ {alert.action}</p>
               </div>
-              <span className="eval-alert-action">{alert.action}</span>
+            )) : (
+              <p className="ec-no-alerts">No alerts — account looks healthy</p>
+            )}
+          </div>
+
+          {/* Rules preset */}
+          <div className="ec-preset-card">
+            <div className="ec-card-hdr ec-card-hdr-col">
+              <span className="ec-card-hdr-title">Rules Preset</span>
+              <span className="ec-preset-sub">
+                {selectedTemplate.program ?? 'Evaluation'} · verified {selectedTemplate.verifiedAt ? new Date(selectedTemplate.verifiedAt).toLocaleDateString() : 'locally'}
+              </span>
             </div>
-          ))}
+            <div className="ec-preset-body">
+              <select
+                className="ec-preset-select"
+                value={selectedTemplate.id}
+                onChange={e => setTemplateId(e.target.value)}
+              >
+                {templates.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+              {selectedTemplate.optionalDailyLossLimit && (
+                <label className="ec-check-row">
+                  <input
+                    type="checkbox"
+                    checked={useOptionalDailyLoss}
+                    onChange={e => setUseOptionalDailyLoss(e.target.checked)}
+                  />
+                  <span>{money(selectedTemplate.optionalDailyLossLimit)} daily limit active</span>
+                </label>
+              )}
+              <button type="button" className="ec-preset-apply" onClick={() => applyTemplate(selected)}>
+                Apply Preset
+              </button>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* ── Rules preset ────────────────────────────────────────────── */}
-      <div className="eval-preset">
-        <div className="eval-preset-info">
-          <span className="eval-preset-lbl">Rules preset</span>
-          <span className="eval-preset-sub">
-            {selectedTemplate.program ?? 'Evaluation'} · verified {selectedTemplate.verifiedAt ? new Date(selectedTemplate.verifiedAt).toLocaleDateString() : 'locally'}
-          </span>
+        {/* ── Post-session debrief ───────────────────────────────────── */}
+        <div className="ec-debrief-card">
+          <div className="ec-card-hdr">
+            <span className="ec-card-hdr-title">Session Debrief</span>
+            <span className="ec-debrief-sub">Informs your next coaching directive</span>
+          </div>
+          <div className="ec-debrief-body">
+
+            {/* Recent journal post-sessions (read from journal entries) */}
+            {recentJournalReflections.length > 0 && (
+              <div className="ec-debrief-journal">
+                <span className="ec-debrief-journal-label">From your journal</span>
+                {recentJournalReflections.map(r => (
+                  <div key={r.date} className="ec-debrief-journal-entry">
+                    <span className="ec-debrief-journal-date">{new Date(r.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <p className="ec-debrief-journal-text">{r.post}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Quick-capture debrief */}
+            <div className="ec-debrief-field">
+              <label className="ec-debrief-lbl">
+                {recentJournalReflections.length > 0 ? 'Add a quick coaching note (optional)' : 'What happened in today\'s session?'}
+              </label>
+              <textarea
+                className="ec-debrief-textarea"
+                placeholder={recentJournalReflections.length > 0 ? 'Anything to flag for tomorrow\'s coaching…' : 'Describe your entries, exits, decisions, and emotions…'}
+                value={debriefWhat}
+                onChange={e => { setDebriefWhat(e.target.value); setDebriefSaved(false); }}
+                rows={recentJournalReflections.length > 0 ? 2 : 3}
+              />
+            </div>
+            {recentJournalReflections.length === 0 && (
+              <div className="ec-debrief-field">
+                <label className="ec-debrief-lbl">What will you do differently next session?</label>
+                <textarea
+                  className="ec-debrief-textarea"
+                  placeholder="One specific adjustment to make tomorrow…"
+                  value={debriefDifferent}
+                  onChange={e => { setDebriefDifferent(e.target.value); setDebriefSaved(false); }}
+                  rows={2}
+                />
+              </div>
+            )}
+            <div className="ec-debrief-footer">
+              <button
+                type="button"
+                className={`ec-debrief-save${debriefSaved ? ' saved' : ''}`}
+                onClick={saveDebrief}
+                disabled={!debriefWhat.trim() && !debriefDifferent.trim()}
+              >
+                {debriefSaved ? 'Saved' : 'Save note'}
+              </button>
+              {selected.coachingNotes && (() => {
+                try {
+                  const saved = JSON.parse(selected.coachingNotes!) as { savedAt?: string };
+                  return saved.savedAt
+                    ? <span className="ec-debrief-last">Note saved {new Date(saved.savedAt).toLocaleDateString()}</span>
+                    : null;
+                } catch { return null; }
+              })()}
+              {recentJournalReflections.length === 0 && (
+                <span className="ec-debrief-hint">Or write post-session notes in your Trade Journal — they're read here automatically.</span>
+              )}
+            </div>
+          </div>
         </div>
-        {selectedTemplate.optionalDailyLossLimit && (
-          <label className="eval-dll-toggle">
-            <input type="checkbox" checked={useOptionalDailyLoss} onChange={e => setUseOptionalDailyLoss(e.target.checked)} />
-            {money(selectedTemplate.optionalDailyLossLimit)} daily limit
-          </label>
-        )}
-        <select value={selectedTemplate.id} onChange={e => setTemplateId(e.target.value)}>
-          {templates.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select>
-        <button type="button" onClick={() => applyTemplate(selected)}>Apply</button>
+
+        <p className="ec-disclaimer">
+          Firm rules can change. Flyxa's presets are monitoring aids, not the legal source of truth. Verify every limit against your firm dashboard and agreement.
+        </p>
       </div>
-
-      <p className="eval-disclaimer">
-        Firm rules can change. Flyxa's presets are monitoring aids, not the legal source of truth. Verify every limit against your firm dashboard and agreement.
-      </p>
     </div>
   );
 }
