@@ -876,58 +876,6 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
   );
 }
 
-function BlankDayAccountSelector({ entry, onMutate }: { entry: JournalEntry; onMutate: (fields: Partial<JournalEntry>) => void }) {
-  const { accounts } = useAppSettings();
-  const selectedAccountIds = Array.from(new Set([
-    ...(entry.accountIds ?? []),
-    ...(entry.account ? [entry.account] : []),
-  ].filter((id): id is string => typeof id === 'string' && id.length > 0)));
-
-  const toggleAccount = (accountId: string, checked: boolean) => {
-    const nextIds = checked
-      ? Array.from(new Set([...selectedAccountIds, accountId]))
-      : selectedAccountIds.filter(id => id !== accountId);
-    onMutate({ accountIds: nextIds, account: nextIds[0] });
-  };
-
-  return (
-    <div className="tj-account-card">
-      <span className="tj-size-title">ACCOUNTS</span>
-      <div className="tj-account-check-list">
-        {accounts.filter(account =>
-          account.id !== DEFAULT_ACCOUNT_ID &&
-          (!account.archived || selectedAccountIds.includes(account.id)) &&
-          (account.status !== 'Blown'  || selectedAccountIds.includes(account.id)) &&
-          (account.status !== 'Passed' || selectedAccountIds.includes(account.id))
-        ).map(account => {
-          const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
-          const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
-          const dotColor = ACCOUNT_STATUS_DOT[account.status] ?? 'rgba(255,255,255,0.25)';
-          return (
-            <label
-              key={account.id}
-              className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
-            >
-              <input
-                type="checkbox"
-                checked={selectedAccountIds.includes(account.id)}
-                onChange={e => toggleAccount(account.id, e.target.checked)}
-                disabled={isInactive}
-              />
-              <span
-                className="tj-account-status-dot"
-                style={{ background: dotColor }}
-                title={account.status}
-              />
-              <span>{account.name}{statusLabel}</span>
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
   const entry = getTradeEntry(trade);
   const exit = getTradeExit(trade);
@@ -2399,9 +2347,15 @@ export default function TradeJournal() {
     const nextTradeIds = new Set<string>(
       next.flatMap(e => e.trades.map(t => t.id).filter((id): id is string => typeof id === 'string'))
     );
-    const lostTrades = current.flatMap(e => e.trades).filter(
-      t => typeof t.id === 'string' && !deletedIds.has(t.id) && !nextTradeIds.has(t.id)
-    );
+    const lostTrades = current.flatMap(e => e.trades).filter(t => {
+      if (typeof t.id !== 'string') return false;
+      if (deletedIds.has(t.id)) return false;
+      if (nextTradeIds.has(t.id)) return false;
+      // Phantom trades (unfilled blanks: no price, no pnl, no screenshot) are
+      // legitimately cleaned up by the mount/leave cleanup without touching deletedTradeIds.
+      if (t.result === 'open' && t.pnl === 0 && (t.entryPrice ?? 0) === 0 && (t.exitPrice ?? 0) === 0 && !t.screenshotUrl) return false;
+      return true;
+    });
     if (lostTrades.length > 0) {
       pushToast({
         tone: 'red',
@@ -3060,6 +3014,10 @@ export default function TradeJournal() {
   ];
   const clampedIndex = Math.min(viewingImageIndex, Math.max(0, allTradeImages.length - 1));
   const currentImage = allTradeImages[clampedIndex] ?? '';
+  const hasExistingImages = !!(selectedEntry && (
+    selectedEntry.scannedImageUrl ||
+    selectedEntry.screenshots?.some(s => typeof s === 'string' && s.trim())
+  ));
 
   function navImage(dir: 'left' | 'right') {
     setSlideDir(dir);
@@ -3540,7 +3498,8 @@ export default function TradeJournal() {
                 </>
               )}
 
-              {/* ── SECTION 4: SCREENSHOT ── */}
+              {/* ── SECTION 4: SCREENSHOT — hidden on blank days with no existing image ── */}
+              {(selectedEntry.trades.length > 0 || hasExistingImages) && (<>
               <div className="tj-section-head first">
                 <span className="tj-section-title">Screenshot</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3642,9 +3601,10 @@ export default function TradeJournal() {
                   </div>
                 )}
               </div>
+              </>)}
 
-              {/* ── SECTION 5: TRADES ── */}
-              <div className="tj-section-head">
+              {/* ── SECTION 5: TRADES — hidden on blank days ── */}
+              {selectedEntry.trades.length > 0 && (<><div className="tj-section-head">
                 <span className="tj-section-title">
                   Trades
                   {selectedTradeIds.size > 0 && (
@@ -3757,14 +3717,7 @@ export default function TradeJournal() {
                     </div>
                   )
                 ))}
-              </div>
-
-              {selectedEntry.trades.length === 0 && (
-                <BlankDayAccountSelector
-                  entry={selectedEntry}
-                  onMutate={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                />
-              )}
+              </div></>)}
 
               {/* ── SECTION 6: PRICE LEVELS (only when active trade) ── */}
               {activeTrade && (
@@ -3781,15 +3734,17 @@ export default function TradeJournal() {
                 </>
               )}
 
-              {/* ── SECTION 6B: RULE VERIFICATION (collapsible) ── */}
-              <SectionHead title="Rule Verification" sectionKey="ruleVerification" collapsed={!!collapsed['ruleVerification']} onToggle={() => toggleSection('ruleVerification')} />
-              {!collapsed['ruleVerification'] && (
-                <RuleComplianceBlock
-                  entry={selectedEntry}
-                  rules={riskRules}
-                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                />
-              )}
+              {/* ── SECTION 6B: RULE VERIFICATION — hidden on blank days ── */}
+              {selectedEntry.trades.length > 0 && (<>
+                <SectionHead title="Rule Verification" sectionKey="ruleVerification" collapsed={!!collapsed['ruleVerification']} onToggle={() => toggleSection('ruleVerification')} />
+                {!collapsed['ruleVerification'] && (
+                  <RuleComplianceBlock
+                    entry={selectedEntry}
+                    rules={riskRules}
+                    onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                  />
+                )}
+              </>)}
 
               {/* ── SECTION 7: PLAN ADHERENCE ── */}
               {selectedEntry.trades.length > 0 && (() => {
