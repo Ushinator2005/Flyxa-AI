@@ -634,9 +634,9 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
     },
     {
       name: 'exit-path-focus',
-      x: clampRatio(left - boxWidth * 0.1, chartLeft, chartRight - 0.12),
+      x: clampRatio(left, chartLeft, chartRight - 0.12),
       y: clampRatio(top - boxHeight * 0.15),
-      width: clampRatio(boxWidth * 1.55, 0.18, chartRight - clampRatio(left - boxWidth * 0.1, chartLeft, chartRight - 0.12)),
+      width: clampRatio(boxWidth * 1.45, 0.18, chartRight - clampRatio(left, chartLeft, chartRight - 0.12)),
       height: clampRatio(boxHeight * 1.2, 0.32, 0.74),
     },
     {
