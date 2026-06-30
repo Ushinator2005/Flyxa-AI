@@ -476,10 +476,38 @@ When in doubt on a borderline wick (barely grazing the line), set exit_reason to
 If a wick clearly breaks THROUGH the zone boundary (extends past the outer edge entirely), that is an unambiguous hit.
 NEVER use the live floating current-price label on the right axis as a trade level.
 
-STEP 5 — ESTIMATE DURATION:
-entry_time: Read the x-axis time label at the LEFT EDGE of the colored P&L box (where the box starts). This is when the trade was entered.
-close_time: Read the x-axis time label at the candle where price first crossed SL or TP (from Step 4). If exit_reason is null, use the right edge of the P&L box.
-trade_length_seconds: Count candles from the left edge of the box to the exit candle, then multiply by timeframe_minutes × 60.
+STEP 5 — ESTIMATE ENTRY AND CLOSE TIME (CANDLE-COUNT METHOD — MANDATORY):
+Do NOT simply read the nearest x-axis label as the entry time. That method is wrong when the entry candle sits between two time labels. You MUST use the candle-count interpolation method described below.
+
+A. READ ALL VISIBLE X-AXIS TIME LABELS
+   Scan the entire bottom edge of the chart and note every time label printed there (e.g. 08:00, 08:15, 08:30, 09:00, 09:30, 10:00, etc.).
+   Each label is printed directly below the candle whose open time it represents — that candle is the reference candle for that label.
+
+B. PICK THE CLOSEST ANCHOR LABEL
+   Choose the x-axis time label whose candle sits closest to the left edge of the P&L box (the entry candle). Call this:
+     T_anchor = the time shown on that label (e.g. 09:30)
+     C_anchor = the horizontal position of that anchor candle on the chart
+
+C. COUNT CANDLES FROM ANCHOR TO ENTRY
+   The entry candle is the first candle whose center x-position is at or inside the left edge of the P&L box.
+   Count the number of candles between C_anchor and the entry candle, moving left or right:
+     N_entry = number of candles from C_anchor to the entry candle
+               (positive = entry is to the RIGHT of anchor, negative = to the LEFT)
+   Compute: entry_time = T_anchor + (N_entry × timeframe_minutes), expressed as HH:MM in 24-hour ET.
+   Example: T_anchor=09:30, N_entry=3, timeframe=1min → entry_time = 09:33
+
+D. COUNT CANDLES FROM ANCHOR TO EXIT
+   The exit candle is the one identified in Step 4 (first candle to touch SL or TP). If exit_reason is null, use the last candle inside the right edge of the P&L box.
+   Count: N_exit = number of candles from C_anchor to the exit candle
+   Compute: close_time = T_anchor + (N_exit × timeframe_minutes), expressed as HH:MM in 24-hour ET.
+
+E. CROSS-CHECK WITH A SECOND ANCHOR (when possible)
+   If there is a second visible x-axis time label on the other side of the trade, verify your candle count produces the correct time from that anchor too. If the two anchors disagree, prefer the one whose candle is physically closer to the entry.
+
+F. COMPUTE DURATION
+   trade_length_seconds = (N_exit − N_entry) × timeframe_minutes × 60
+
+IMPORTANT: If the entire P&L box sits exactly at one x-axis label and there are zero candles between the anchor and the entry, entry_time = T_anchor exactly. Only in that case is it valid to return the anchor time directly.
 
 Return ONLY this raw JSON with no markdown, no explanation, no code fences:
 {
