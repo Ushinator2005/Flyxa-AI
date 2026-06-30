@@ -8,8 +8,6 @@ import {
 import { useAuth } from '../../contexts/AuthContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { rivalsApi } from '../../services/api.js';
-import useFlyxaStore from '../../store/flyxaStore.js';
-import { isLivePreSession } from '../../utils/sessionLifecycle.js';
 
 const AMBER      = '#f59e0b';
 const AMBER_DIM  = 'rgba(245,158,11,0.10)';
@@ -100,8 +98,6 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { accounts, selectedAccountId, setSelectedAccountId } = useAppSettings();
-  const preSession = useFlyxaStore(state => state.preSession);
-  const sessionActive = isLivePreSession(preSession);
   const visibleAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived);
   const selectedAcct = accounts.find(a => a.id === selectedAccountId);
   const displayName = (user?.user_metadata?.name as string | undefined)
@@ -230,7 +226,7 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {primaryNavItems.map(item => {
               const isSessionItem = item.path === '/pre-session';
-              const path = isSessionItem && sessionActive ? '/session' : item.path;
+              const path = item.path;
               const extraActivePaths = isSessionItem
                 ? ['/post-session', '/session']
                 : item.extraActivePaths;

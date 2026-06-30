@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { clearStaleGuardSessionTrades, summarizeGuardSessionTrades, useGuardSessionTrades } from '../../hooks/useGuardSessionTrades.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
@@ -34,7 +34,6 @@ export default function SessionStatusBar() {
   const { dailyStatus } = useRisk();
   const { preferences } = useAppSettings();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const activeStartedAt = isLivePreSession(preSession) ? preSession.startedAt : undefined;
   const guardSummary = summarizeGuardSessionTrades(useGuardSessionTrades(activeStartedAt));
@@ -209,27 +208,6 @@ export default function SessionStatusBar() {
 
       {/* Spacer */}
       <div style={{ flex: 1, minWidth: 12 }} />
-
-      {location.pathname !== '/session' && (
-        <button
-          type="button"
-          onClick={() => navigate('/session')}
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: '#22d68a',
-            background: 'rgba(34,214,138,0.08)',
-            border: '1px solid rgba(34,214,138,0.24)',
-            borderRadius: 4,
-            padding: '2px 10px',
-            cursor: 'pointer',
-            flexShrink: 0,
-            letterSpacing: '0.02em',
-          }}
-        >
-          View session
-        </button>
-      )}
 
       {/* End session */}
       <button
