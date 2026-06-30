@@ -855,17 +855,31 @@ async function flushSave(userId: string, value: string): Promise<void> {
   const sanitized = stripBase64Images(parsed);
   const now = new Date().toISOString();
 
+  // Compute entries once from the merged state.
+  const entries = extractEntries(sanitizedValue);
+
+  // Write localStorage backup BEFORE the network call so local recovery data
+  // is always current, even when Supabase is temporarily unreachable.
+  mirrorLocalEntriesSafe(entries, userId, deletedTradeIds, deletedEntryDates);
+
+  // Fire the per-entry Supabase backup table concurrently with the main save.
+  // This means store_entries_backup is updated even if user_store fails, giving
+  // the recovery path something to work with on the next load.
+  const backupWritePromise = syncEntriesToTable(userId, entries, deletedTradeIds, deletedEntryDates)
+    .catch(() => { /* non-fatal — main store remains authoritative */ });
+
   const { error } = await supabase.from('user_store').upsert(
     { user_id: userId, flyxa_data: sanitized, updated_at: now },
     { onConflict: 'user_id' }
   );
-  if (error) throw error;
+  if (error) {
+    await backupWritePromise;
+    throw error;
+  }
 
   try { localStorage.setItem(localSavedAtKey(userId), Date.now().toString()); } catch { /* quota */ }
 
-  const entries = extractEntries(sanitizedValue);
-  await syncEntriesToTable(userId, entries, deletedTradeIds, deletedEntryDates);
-  mirrorLocalEntriesSafe(entries, userId, deletedTradeIds, deletedEntryDates);
+  await backupWritePromise;
 
   const preSessions = extractPreSessionHistory(sanitizedValue);
   await syncPreSessionsToTable(userId, preSessions);
@@ -927,6 +941,18 @@ export async function saveStoreStatePatchNow(
   } catch {
     // The queued cloud save remains authoritative if browser storage is full.
   }
+
+  // Write per-entry backup immediately — before the async Supabase call —
+  // so a save failure or tab close cannot leave the entry unrecoverable.
+  try {
+    const parsedBlob = JSON.parse(value) as unknown;
+    mirrorLocalEntriesSafe(
+      extractEntries(value),
+      userId,
+      deletedTradeIdsFromBlob(parsedBlob),
+      deletedEntryDatesFromBlob(parsedBlob),
+    );
+  } catch { /* non-fatal */ }
 
   const saved = await enqueueStoreSave(userId, value);
   if (!saved) throw new Error('Could not save Flyxa data to Supabase');
