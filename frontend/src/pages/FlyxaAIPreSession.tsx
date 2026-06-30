@@ -4,7 +4,6 @@ import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRisk } from '../contexts/RiskContext.js';
 import { useTrades } from '../hooks/useTrades.js';
-import { riskApi } from '../services/api.js';
 import { RiskSettings, Trade } from '../types/index.js';
 import { PatternItem } from './FlyxaAIPatterns.js';
 import useFlyxaStore from '../store/flyxaStore.js';
@@ -253,7 +252,7 @@ export default function FlyxaAIPreSession() {
   const navigate = useNavigate();
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount, preferences, selectedAccountId } = useAppSettings();
-  const { settings, refreshSettings } = useRisk();
+  const { settings } = useRisk();
 
   const storedPreSession = useFlyxaStore(state => state.preSession);
   const setPreSessionAction = useFlyxaStore(state => state.setPreSession);
@@ -280,18 +279,7 @@ export default function FlyxaAIPreSession() {
   const [oathDraft, setOathDraft] = useState<Array<{ id: string; label: string }>>([]);
   const [oathCooldownUntil, setOathCooldownUntil] = useState(0);
   const [oathCooldownNow, setOathCooldownNow] = useState(() => Date.now());
-  const [riskEditOpen, setRiskEditOpen] = useState(false);
-  const [riskSaving, setRiskSaving] = useState(false);
-  const [riskSaveError, setRiskSaveError] = useState('');
-  const [riskDraft, setRiskDraft] = useState({
-    daily_loss_limit: '',
-    daily_profit_limit: '',
-    max_trades_per_day: '',
-    max_contracts_per_trade: '',
-    account_size: '',
-    risk_percentage: '',
-  });
-  const [maxWinStored, setMaxWinStored] = useState<number | null>(() => parseMaxWinFromStorage());
+  const [maxWinStored] = useState<number | null>(() => parseMaxWinFromStorage());
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   useEffect(() => {
@@ -412,72 +400,6 @@ export default function FlyxaAIPreSession() {
       accountSize: accountSizeValue,
     };
   }, [settings, storedRiskSettings, maxWinStored, riskRules]);
-
-  const openRiskEditor = () => {
-    setRiskDraft({
-      daily_loss_limit: riskLimits.noLossLimit ? '0' : String(Math.round(riskLimits.maxDailyLoss)),
-      daily_profit_limit: String(Math.round(riskLimits.maxWin)),
-      max_trades_per_day: String(riskLimits.maxTrades),
-      max_contracts_per_trade: String(riskLimits.maxContracts),
-      account_size: String(Math.round(riskLimits.accountSize)),
-      risk_percentage: String(riskLimits.riskPct),
-    });
-    setRiskSaveError('');
-    setRiskEditOpen(true);
-  };
-
-  const updateRiskDraft = (field: keyof typeof riskDraft, value: string) => {
-    setRiskDraft(current => ({ ...current, [field]: value }));
-  };
-
-  const saveRiskLimits = async () => {
-    const lossRaw  = riskDraft.daily_loss_limit.trim();
-    const loss     = lossRaw === '' ? null : Number(lossRaw);
-    const trades   = Number(riskDraft.max_trades_per_day);
-
-    if (!Number.isFinite(trades) || trades <= 0) {
-      setRiskSaveError('Enter a positive number for max trades.');
-      return;
-    }
-    if (loss !== null && (!Number.isFinite(loss) || loss < 0)) {
-      setRiskSaveError('Max loss must be 0 (no limit) or a positive number.');
-      return;
-    }
-
-    // Save max win to localStorage (not sent to API)
-    const win = Number(riskDraft.daily_profit_limit);
-    if (Number.isFinite(win) && win > 0) {
-      window.localStorage.setItem('flyxa.risk.maxWin', String(win));
-      setMaxWinStored(win);
-    } else {
-      window.localStorage.removeItem('flyxa.risk.maxWin');
-      setMaxWinStored(null);
-    }
-
-    const next: Record<string, number> = { max_trades_per_day: trades };
-    if (loss !== null) next.daily_loss_limit = loss;
-
-    const contracts = Number(riskDraft.max_contracts_per_trade);
-    if (Number.isFinite(contracts) && contracts > 0) next.max_contracts_per_trade = contracts;
-
-    const size = Number(riskDraft.account_size);
-    if (Number.isFinite(size) && size > 0) next.account_size = size;
-
-    const pct = Number(riskDraft.risk_percentage);
-    if (Number.isFinite(pct) && pct > 0) next.risk_percentage = pct;
-
-    setRiskSaving(true);
-    setRiskSaveError('');
-    try {
-      await riskApi.updateSettings(next);
-      await refreshSettings();
-      setRiskEditOpen(false);
-    } catch {
-      setRiskSaveError('Could not save risk limits. Try again.');
-    } finally {
-      setRiskSaving(false);
-    }
-  };
 
   const activePatterns = useMemo(
     () => [] as PatternItem[],
@@ -972,94 +894,81 @@ export default function FlyxaAIPreSession() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <div>
                     <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Today&apos;s risk limits</h2>
-                    <p style={{ fontSize: 11, color: C.t2 }}>Confirm or adjust before you start.</p>
+                    <p style={{ fontSize: 11, color: C.t2 }}>From your active risk rules. Confirm before you start.</p>
                   </div>
-                  <button type="button" onClick={riskEditOpen ? () => setRiskEditOpen(false) : openRiskEditor}
-                    style={{ fontSize: 11, color: riskEditOpen ? C.t2 : C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                    {riskEditOpen ? 'cancel' : 'edit'}
+                  <button type="button" onClick={() => navigate('/trading-plan')}
+                    style={{ fontSize: 11, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    edit rules →
                   </button>
                 </div>
 
-                {/* Stat row — no inner boxes, just dividers */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
-                  {[
-                    { label: 'Max loss', value: riskLimits.noLossLimit ? 'No limit' : formatCurrency(-riskLimits.maxDailyLoss), color: riskLimits.noLossLimit ? C.t2 : C.red },
-                    { label: 'Max win', value: formatCurrency(riskLimits.maxWin), color: C.grn },
-                    { label: 'Max trades', value: String(riskLimits.maxTrades), color: C.t1 },
-                    { label: 'Contracts', value: String(riskLimits.maxContracts), color: C.t1 },
-                  ].map((stat, i) => (
-                    <div key={stat.label} style={{ padding: '16px 18px', borderRight: i < 3 ? `1px solid ${C.b0}` : 'none' }}>
-                      <p style={{ fontFamily: 'monospace', fontSize: 17, fontWeight: 500, color: stat.color, lineHeight: 1, marginBottom: 6, letterSpacing: '-0.02em' }}>{stat.value}</p>
-                      <p style={{ fontSize: 10, color: C.t2, letterSpacing: '0.03em' }}>{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
+                {/* Rules driven from Zustand riskRules store */}
+                {(() => {
+                  const KIND_LABEL: Record<string, string> = {
+                    max_daily_loss:     'Max daily loss',
+                    max_trades:         'Max trades / day',
+                    max_contracts:      'Max contracts',
+                    min_rr:             'Min R:R',
+                    time_window:        'Trade window',
+                    cooldown_after_loss:'Cooldown after loss',
+                  };
+                  const activeRules = riskRules.filter(r => r.enabled !== false && r.kind && r.kind !== 'manual');
 
-                {/* Edit form */}
-                {riskEditOpen && (
-                  <div style={{ borderTop: `1px solid ${C.b0}`, padding: '16px' }}>
-                    {/* Primary row: Max Loss + Max Win */}
-                    <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Loss &amp; Profit limits</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-                      {([
-                        ['daily_loss_limit',   'Max loss',  '$', 'Stop trading at this loss (0 = no limit)'],
-                        ['daily_profit_limit', 'Max win',   '$', 'Stop trading when profit hits this'],
-                      ] as const).map(([field, label, , hint]) => (
-                        <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: C.t1 }}>{label}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, padding: '0 10px' }}>
-                            <span style={{ color: C.t2, fontSize: 12, marginRight: 4 }}>$</span>
-                            <input type="number" min="0" step="1" placeholder="0" value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 14, color: C.t0, padding: '9px 0', minWidth: 0 }} />
-                          </div>
-                          <span style={{ fontSize: 10, color: C.t2 }}>{hint}</span>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Secondary row: Trades + Contracts */}
-                    <p style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Session limits</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-                      {([
-                        ['max_trades_per_day',      'Max trades',  'Max number of trades per session'],
-                        ['max_contracts_per_trade', 'Contracts',   'Max contracts per single trade'],
-                      ] as const).map(([field, label, hint]) => (
-                        <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: C.t1 }}>{label}</span>
-                          <input type="number" min="0" step="1" value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, outline: 'none', fontSize: 14, color: C.t0, padding: '9px 10px' }} />
-                          <span style={{ fontSize: 10, color: C.t2 }}>{hint}</span>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Optional: Account + Risk % */}
-                    <details style={{ marginBottom: 14 }}>
-                      <summary style={{ fontSize: 10, fontWeight: 600, color: C.t2, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>Advanced (optional)</span>
-                      </summary>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-                        {([
-                          ['account_size',   'Account size', '$', '%'],
-                          ['risk_percentage','Risk per trade','',  '%'],
-                        ] as const).map(([field, label, prefix, suffix]) => (
-                          <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: C.t1 }}>{label}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 5, border: `1px solid ${C.b0}`, backgroundColor: C.d2, padding: '0 10px' }}>
-                              {prefix === '$' && <span style={{ color: C.t2, fontSize: 12, marginRight: 4 }}>$</span>}
-                              <input type="number" min="0" step={field === 'risk_percentage' ? '0.1' : '1'} placeholder="skip" value={riskDraft[field]} onChange={e => updateRiskDraft(field, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 14, color: C.t0, padding: '9px 0', minWidth: 0 }} />
-                              {suffix === '%' && field === 'risk_percentage' && <span style={{ color: C.t2, fontSize: 12 }}>%</span>}
-                            </div>
-                          </label>
-                        ))}
+                  if (activeRules.length === 0) {
+                    return (
+                      <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                        <p style={{ fontSize: 12, color: C.t2, marginBottom: 10 }}>No active risk rules.</p>
+                        <button type="button" onClick={() => navigate('/trading-plan')}
+                          style={{ fontSize: 11, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                          Set up rules in Trading Plan →
+                        </button>
                       </div>
-                    </details>
+                    );
+                  }
 
-                    {riskSaveError && <p style={{ fontSize: 11, color: C.red, marginBottom: 10 }}>{riskSaveError}</p>}
-                    <button type="button" onClick={saveRiskLimits} disabled={riskSaving}
-                      style={{ width: '100%', padding: '10px 0', borderRadius: 5, border: `1px solid ${C.acc}44`, backgroundColor: `${C.acc}10`, color: C.acc, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      {riskSaving ? 'Saving...' : 'Save limits'}
-                    </button>
-                  </div>
-                )}
+                  return activeRules.map((rule, i) => {
+                    const kind = rule.kind!;
+                    let displayValue = '—';
+                    let valueColor = C.t1;
+
+                    if (kind === 'max_daily_loss') {
+                      const v = Number(rule.value);
+                      if (Number.isFinite(v) && v > 0) { displayValue = formatCurrency(-v); valueColor = C.red; }
+                      else { displayValue = 'No limit'; valueColor = C.t2; }
+                    } else if (kind === 'max_trades') {
+                      const v = Number(rule.value);
+                      if (Number.isFinite(v) && v > 0) displayValue = String(v);
+                    } else if (kind === 'max_contracts') {
+                      const limits = rule.contractLimits;
+                      const v = Number(rule.value);
+                      if (limits && Object.keys(limits).length > 0) {
+                        const entries = Object.entries(limits);
+                        displayValue = entries.map(([sym, max]) => `${max} ${sym}`).join('  ·  ');
+                      } else if (Number.isFinite(v) && v > 0) {
+                        displayValue = String(v);
+                      }
+                    } else if (kind === 'min_rr') {
+                      const v = Number(rule.value);
+                      if (Number.isFinite(v) && v > 0) displayValue = `1:${v}`;
+                    } else if (kind === 'time_window') {
+                      displayValue = `${rule.startTime ?? '09:30'} – ${rule.endTime ?? '16:00'}`;
+                    } else if (kind === 'cooldown_after_loss') {
+                      const v = Number(rule.value);
+                      if (Number.isFinite(v) && v > 0) displayValue = `${v} min`;
+                    }
+
+                    return (
+                      <div key={rule.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                      }}>
+                        <span style={{ fontSize: 11, color: C.t2 }}>{KIND_LABEL[kind] ?? kind}</span>
+                        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 500, color: valueColor, letterSpacing: '-0.01em' }}>{displayValue}</span>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
 
               {priorFlow?.biggestLeak && (

@@ -110,7 +110,7 @@ const defaultForm: Partial<Trade> = {
   contract_size: 1,
   point_value: 20,
   trade_date: new Date().toISOString().split('T')[0],
-  trade_time: '09:30',
+  trade_time: '',
   trade_length_seconds: 0,
   candle_count: 0,
   timeframe_minutes: 1,

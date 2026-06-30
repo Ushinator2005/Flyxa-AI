@@ -1323,12 +1323,21 @@ const FLAG_PENALTIES: Record<string, number> = {
 // ── Helper: computeProcessScore ──────────────────────────────────────────────
 function computeProcessScore(trade: JournalTrade): number {
   const r = trade.psychologyRatings;
-  if (!r) return 0;
-  const scores = [r.setupQuality, r.discipline, r.execution, r.patience, r.riskManagement, r.emotionalControl].filter(v => v > 0);
-  if (scores.length === 0) return 0;
-  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-  let score = avg * 20;
   const flags = trade.behavioralFlags ?? [];
+
+  let baseScore: number;
+  if (r) {
+    const scores = [r.setupQuality, r.discipline, r.execution, r.patience, r.riskManagement, r.emotionalControl].filter(v => v > 0);
+    baseScore = scores.length > 0
+      ? (scores.reduce((a, b) => a + b, 0) / scores.length) * 20
+      : 75; // ratings object exists but empty — use neutral base
+  } else if (flags.length > 0 || trade.executionReview || (trade.preEntry?.confidenceAtEntry ?? 0) > 0) {
+    baseScore = 75; // no ratings but other process data present — use neutral base
+  } else {
+    return 0; // genuinely no data
+  }
+
+  let score = baseScore;
   score -= flags.reduce((total, id) => total + (FLAG_PENALTIES[id] ?? 8), 0);
   const er = trade.executionReview;
   if (er && er.enteredAtLevel && er.waitedForConfirmation && er.correctSize && er.exitedAtPlan && er.movedStopCorrectly && er.resistedEarlyExit) score += 5;

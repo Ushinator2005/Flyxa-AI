@@ -1136,6 +1136,9 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
         mapped.trade_time = timeValue;
         setCurrentTime(timeValue);
         fields.add('trade_time');
+      } else {
+        // No time detected — clear any stale value from a prior scan draft
+        setCurrentTime('');
       }
       if (extracted.close_time) {
         mapped.close_time = (extracted.close_time as string).slice(0, 5);
