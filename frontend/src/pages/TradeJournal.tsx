@@ -2275,6 +2275,8 @@ export default function TradeJournal() {
   const [isScreenshotFullscreen, setIsScreenshotFullscreen] = useState(false);
   const [isTradeDateEditorOpen, setIsTradeDateEditorOpen] = useState(false);
   const [tradeDateDraft, setTradeDateDraft] = useState(getTodayIso(preferences.timezone));
+  const [isEntryDateEditorOpen, setIsEntryDateEditorOpen] = useState(false);
+  const [entryDateDraft, setEntryDateDraft] = useState(getTodayIso(preferences.timezone));
   const [showCSVImport, setShowCSVImport] = useState(false);
 
   // Collapsible section state — persisted to localStorage
@@ -2544,6 +2546,12 @@ export default function TradeJournal() {
     setIsTradeDateEditorOpen(false);
   }, [activeTrade?.id, selectedEntry?.id, selectedEntry?.date]);
 
+  useEffect(() => {
+    if (!selectedEntry) return;
+    setEntryDateDraft(selectedEntry.date);
+    setIsEntryDateEditorOpen(false);
+  }, [selectedEntry?.id]);
+
   const monthSummary = useMemo(() => {
     const dayPnL = tradedEntriesInMonth.map(entry => computeEntryStats(entry).pnl);
     const monthPnl = dayPnL.reduce((sum, pnl) => sum + pnl, 0);
@@ -2655,6 +2663,20 @@ export default function TradeJournal() {
     setIsTradeDateEditorOpen(false);
     pushToast({ tone: 'green', durationMs: 3000, message: 'Trade moved to selected date.' });
   }, [activeTrade, getDefaultTradeAccountId, mutateEntries, rulesTemplate, selectedEntry, tradeDateDraft]);
+
+  const saveEntryDate = useCallback(() => {
+    if (!selectedEntry || activeTrade) return;
+    const nextDate = entryDateDraft;
+    if (!nextDate || nextDate === selectedEntry.date) { setIsEntryDateEditorOpen(false); return; }
+    const collision = entries.find(e => e.date === nextDate && e.id !== selectedEntry.id);
+    if (collision) {
+      pushToast({ tone: 'red', durationMs: 4000, message: 'An entry already exists for that date.' });
+      return;
+    }
+    mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, date: nextDate } : e));
+    setIsEntryDateEditorOpen(false);
+    pushToast({ tone: 'green', durationMs: 3000, message: 'Date updated.' });
+  }, [activeTrade, entries, entryDateDraft, mutateEntries, selectedEntry]);
 
   const goToScanner = useCallback(() => {
     setShowScanner(true);
@@ -3373,6 +3395,30 @@ export default function TradeJournal() {
                       setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
                       setIsTradeDateEditorOpen(false);
                     }}>Cancel</button>
+                  </div>
+                )}
+                {!activeTrade && !deleteEntryConfirm && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>Date: {selectedEntry.date}</span>
+                    {!isEntryDateEditorOpen && (
+                      <button type="button" className="tj-mini-btn" onClick={() => { setEntryDateDraft(selectedEntry.date); setIsEntryDateEditorOpen(true); }}>
+                        Edit date
+                      </button>
+                    )}
+                  </div>
+                )}
+                {isEntryDateEditorOpen && !activeTrade && !deleteEntryConfirm && (
+                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <DatePicker
+                      className="tj-date-edit-input"
+                      value={entryDateDraft}
+                      onChange={setEntryDateDraft}
+                      compact
+                      align="left"
+                      max={getTodayIso(preferences.timezone)}
+                    />
+                    <button type="button" className="tj-mini-btn" onClick={saveEntryDate}>Save</button>
+                    <button type="button" className="tj-mini-btn" onClick={() => { setEntryDateDraft(selectedEntry.date); setIsEntryDateEditorOpen(false); }}>Cancel</button>
                   </div>
                 )}
               </div>
