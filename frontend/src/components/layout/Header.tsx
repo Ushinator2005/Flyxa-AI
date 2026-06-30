@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle.js';
 import { ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID, useAppSettings } from '../../contexts/AppSettingsContext.js';
 import MarketClock from './MarketClock.js';
+import { SAVE_STATUS_EVENT, type SaveStatusDetail } from '../../store/supabaseStorage.js';
 
 function accountStatusColor(status: string): string {
   const s = status.toLowerCase();
@@ -45,6 +46,23 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const visibleAccounts = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived);
+
+  type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const status = (e as CustomEvent<SaveStatusDetail>).detail.status;
+      if (savedTimerRef.current) { clearTimeout(savedTimerRef.current); savedTimerRef.current = null; }
+      setSaveStatus(status);
+      if (status === 'saved') {
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    };
+    window.addEventListener(SAVE_STATUS_EVENT, handler);
+    return () => window.removeEventListener(SAVE_STATUS_EVENT, handler);
+  }, []);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -119,6 +137,25 @@ export default function Header() {
       </h1>
 
       <MarketClock displayTimezone={preferences.timezone} />
+
+      {saveStatus !== 'idle' && (
+        <span style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          fontSize: 10,
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: '0.06em',
+          flexShrink: 0,
+          color: saveStatus === 'error' ? '#ef4444' : saveStatus === 'saved' ? '#22c55e' : 'var(--app-text-subtle)',
+          transition: 'color 200ms ease',
+        }}>
+          {saveStatus === 'saving' && (
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', opacity: 0.7 }} />
+          )}
+          {saveStatus === 'saving' ? 'Saving' : saveStatus === 'saved' ? '✓ Saved' : '⚠ Not saved'}
+        </span>
+      )}
 
       {/* Desktop-only controls */}
       <div className="hidden md:flex" style={{ alignItems: 'center', gap: 10 }}>

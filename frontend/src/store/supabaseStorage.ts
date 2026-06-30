@@ -10,6 +10,13 @@ const SAVE_DEBOUNCE_MS = 500;
 const REMOTE_RECONCILE_COOLDOWN_MS = 15_000;
 
 export const REMOTE_RECONCILE_EVENT = 'flyxa-store-remote-reconciled';
+export const SAVE_STATUS_EVENT = 'flyxa:save-status';
+export type SaveStatusDetail = { status: 'saving' | 'saved' | 'error' };
+
+function emitSaveStatus(status: 'saving' | 'saved' | 'error'): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<SaveStatusDetail>(SAVE_STATUS_EVENT, { detail: { status } }));
+}
 
 // Per-user localStorage keys — each auth account gets its own slot so accounts
 // on the same device never share or contaminate each other's cached data.
@@ -83,6 +90,8 @@ function timestampMs(value: unknown): number | null {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingValue: string | null = null;
+let pendingFailedUserId: string | null = null;
+let pendingFailedValue: string | null = null;
 // latestValue is set synchronously at the start of setItem (before any awaits)
 // so flushSupabaseStoreNow always has the freshest state even when setItem's
 // async getUserId() call hasn't completed yet — fixing the race condition where
@@ -888,19 +897,28 @@ async function flushSave(userId: string, value: string): Promise<void> {
 async function flushSaveWithRetry(userId: string, value: string, attempt = 0): Promise<boolean> {
   try {
     await flushSave(userId, value);
+    pendingFailedUserId = null;
+    pendingFailedValue = null;
     return true;
   } catch {
-    if (attempt < 2) {
-      await new Promise<void>(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    // Retry up to 6 times with exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s
+    if (attempt < 6) {
+      const delay = Math.min(1000 * Math.pow(2, attempt), 30_000);
+      await new Promise<void>(resolve => setTimeout(resolve, delay));
       return flushSaveWithRetry(userId, value, attempt + 1);
     }
+    // All retries exhausted — store for retry when the tab regains visibility.
+    pendingFailedUserId = userId;
+    pendingFailedValue = value;
     return false;
   }
 }
 
 function enqueueStoreSave(userId: string, value: string): Promise<boolean> {
+  emitSaveStatus('saving');
   const task = saveQueue.then(() => flushSaveWithRetry(userId, value));
   saveQueue = task.then(() => undefined, () => undefined);
+  void task.then(success => emitSaveStatus(success ? 'saved' : 'error'));
   return task;
 }
 
@@ -1198,6 +1216,18 @@ if (typeof window !== 'undefined') {
 
   window.addEventListener('beforeunload', flushLatestOnExit);
   window.addEventListener('pagehide', flushLatestOnExit);
+
+  // When the tab regains focus after being hidden, retry any save that exhausted
+  // all its attempts while the network was unavailable.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!pendingFailedUserId || !pendingFailedValue) return;
+    const uid = pendingFailedUserId;
+    const val = pendingFailedValue;
+    pendingFailedUserId = null;
+    pendingFailedValue = null;
+    void enqueueStoreSave(uid, val);
+  });
 }
 
 // ---------------------------------------------------------------------------
