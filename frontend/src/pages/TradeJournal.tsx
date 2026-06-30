@@ -2817,7 +2817,10 @@ export default function TradeJournal() {
   const applyScannedTrade = useCallback((fileDataUrl: string, trade: JournalTrade, date: string) => {
     let nextSelectedId: string | null = null;
     mutateEntries(prev => {
-      const existing = prev.find(entry => entry.id === selectedEntryId) ?? prev.find(entry => entry.date === date);
+      // Prefer the entry whose date matches the trade — if the user has a
+      // different day's entry selected, the scanned trade still lands on the
+      // correct date (and creates a new entry if that date doesn't exist yet).
+      const existing = prev.find(entry => entry.date === date) ?? prev.find(entry => entry.id === selectedEntryId);
       if (existing) {
         nextSelectedId = existing.id;
         return prev.map(entry => {
@@ -2859,7 +2862,10 @@ export default function TradeJournal() {
 
     setScanError('');
     setIsScanning(true);
-    const tradeDate = inferTradeDateFromFileName(file.name) ?? selectedEntry?.date ?? getTodayIso(preferences.timezone);
+    // Filename date takes priority; otherwise use today. Do NOT fall back to
+    // selectedEntry?.date — that causes trades scanned on day N to get stamped
+    // as day N-1 when the user still has the previous day's entry selected.
+    const tradeDate = inferTradeDateFromFileName(file.name) ?? getTodayIso(preferences.timezone);
     const tradeTime = getNowTime();
     let scanSucceeded = false;
 
