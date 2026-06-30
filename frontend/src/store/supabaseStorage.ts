@@ -587,7 +587,17 @@ function mergeRemoteEntriesIntoStoreBlob(
         mergeRemoteEntryIntoLocal(existing, remoteEntry, deletedTradeIds, blockedForThisEntry)
       );
     } else {
-      mergedByKey.set(key, remoteEntry);
+      // No local counterpart for this remote entry (e.g. the day was pruned after
+      // all its trades were moved away). Still apply the locally-placed guard so
+      // a trade that now lives on Day B isn't re-added here from a stale Day A backup.
+      const filteredTrades = tradeRecordsFromEntry(remoteEntry).filter(trade => {
+        const tk = tradeMergeKey(trade);
+        return !tk || !effectiveDeletedTradeKeys.has(tk);
+      });
+      if (filteredTrades.length > 0) {
+        mergedByKey.set(key, { ...remoteEntry, trades: filteredTrades });
+      }
+      // If every trade was already placed locally, skip the ghost empty entry.
     }
   }
 
