@@ -2445,7 +2445,11 @@ export default function TradeJournal() {
       deletedEntryDates: updatedState.deletedEntryDates,
       restoredEntryDates: updatedState.restoredEntryDates,
     }).catch(() => {
-      // Best effort: local persist already happened; cloud sync can retry on next write.
+      pushToast({
+        tone: 'red',
+        durationMs: 8000,
+        message: '⚠️ Could not save to cloud — your changes are local only. Stay on this device or try again.',
+      });
     });
   }, [rulesTemplate, setEntriesInStore]);
 
