@@ -48,7 +48,7 @@ export default function ScannerDropZone({
 
   if (isMobile) {
     return (
-      <div data-tour-id="scanner-upload" className="tj-empty-entry">
+      <div data-tour-id="scanner-upload" className="tj-empty-entry scanner-empty-entry">
         {/* hidden inputs */}
         <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFileChange} />
@@ -126,7 +126,7 @@ export default function ScannerDropZone({
   return (
     <div
       data-tour-id="scanner-upload"
-      className="tj-empty-entry"
+      className="tj-empty-entry scanner-empty-entry"
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

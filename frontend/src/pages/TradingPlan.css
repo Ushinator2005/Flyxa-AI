@@ -545,8 +545,8 @@
 
 .tp-rule-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .tp-rule-card {
@@ -655,6 +655,10 @@
   outline: none;
   font: 11px var(--font-sans);
 }
+.tp-rule-input.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+}
 
 .tp-rule-input:focus {
   border-color: var(--amber-border);
@@ -731,8 +735,8 @@
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 7px;
-  background: var(--surface-1);
+  border-radius: 5px;
+  background: var(--surface-2);
   transition: border-color .12s;
 }
 .tp-contract-row:hover {
@@ -1414,4 +1418,282 @@
   .tp-panel {
     padding: 12px;
   }
+
+  .tp-health-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 8px;
+  }
+
+  .tp-hs-divider {
+    display: none;
+  }
+
+  .tp-hs {
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .tp-hs:nth-child(odd) {
+    border-right: 1px solid var(--app-border);
+  }
+}
+
+/* ── Health Bar ──────────────────────────────────────────────── */
+.tp-health-bar {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.tp-hs {
+  flex: 1;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tp-hs-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+  white-space: nowrap;
+}
+
+.tp-hs-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--txt);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+}
+
+.tp-hs-bar-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-3, var(--surface-2));
+  overflow: hidden;
+  margin-top: 5px;
+  width: 100%;
+}
+
+.tp-hs-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .3s ease;
+}
+
+.tp-hs-green {
+  color: var(--green);
+}
+
+.tp-hs-divider {
+  width: 1px;
+  background: var(--app-border);
+  flex-shrink: 0;
+}
+
+/* ── Rule Cards (new architecture) ──────────────────────────── */
+.tp-rcard {
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity .15s;
+}
+
+.tp-rcard.tp-rcard-off {
+  opacity: .45;
+}
+
+.tp-rcard-hdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--surface-2);
+}
+
+.tp-rcard-topbar {
+  height: 3px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.tp-rcard-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--txt-3);
+  background: var(--surface-1);
+}
+.tp-rcard-icon-green {
+  color: var(--green);
+  border-color: var(--green-border);
+  background: var(--green-dim);
+}
+.tp-rcard-icon-amber {
+  color: var(--amber);
+  border-color: var(--amber-border);
+  background: var(--amber-dim);
+}
+.tp-rcard-icon-cobalt {
+  color: var(--cobalt);
+  border-color: var(--cobalt-border);
+  background: var(--cobalt-dim);
+}
+
+.tp-rcard-title-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tp-rcard-type-label {
+  font-size: 9px;
+  color: var(--txt-3);
+  letter-spacing: .04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-rcard-kind {
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--txt);
+  font: 600 11px/1 var(--font-sans);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Pill toggle */
+.tp-rcard-toggle {
+  flex-shrink: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tp-rcard-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.tp-toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 34px;
+  height: 19px;
+  border-radius: 10px;
+  background: var(--surface-3, var(--app-border));
+  border: 1px solid var(--app-border);
+  position: relative;
+  transition: background .15s, border-color .15s;
+  flex-shrink: 0;
+}
+
+.tp-rcard-toggle input:checked + .tp-toggle-track {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.tp-toggle-thumb {
+  position: absolute;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  transition: left .15s;
+}
+
+.tp-rcard-toggle input:checked + .tp-toggle-track .tp-toggle-thumb {
+  left: 17px;
+}
+
+/* Breach strip */
+.tp-rcard-breach {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-rcard-breach-pct {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tp-rcard-breach-sub {
+  font-size: 10px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-rcard-body {
+  padding: 12px;
+  flex: 1;
+}
+
+.tp-rcard-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tp-rcard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tp-rcard-field-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+}
+
+.tp-rcard-footer {
+  padding: 5px 12px 7px;
+  border-top: 1px solid var(--app-border);
+  background: var(--surface-2);
 }

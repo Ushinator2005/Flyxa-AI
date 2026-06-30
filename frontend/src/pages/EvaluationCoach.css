@@ -293,7 +293,7 @@
 /* ── Metric cards ─────────────────────────────────────────────── */
 .ec-metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1021,6 +1021,210 @@
 }
 .ec-pass-btn-ghost:hover { color: var(--txt-2); }
 
+/* ── Top zone (metrics + side card) ──────────────────────────── */
+.ec-top-zone {
+  display: block;
+}
+
+/* ── Side card (verdict + probability merged) ─────────────────── */
+.ec-side-card {
+  border: 1px solid;
+  border-radius: 7px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ec-side-eyebrow {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+}
+
+.ec-side-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+  opacity: .5;
+}
+
+.ec-prob-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.ec-prob-label {
+  font-size: 10px;
+  color: var(--txt-3);
+  white-space: nowrap;
+}
+
+.ec-prob-val {
+  font: 500 11px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--txt);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Mission hero ─────────────────────────────────────────────── */
+.ec-mission-hero {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: 7px;
+  padding: 16px 20px;
+}
+
+.ec-mission-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 10px;
+}
+
+.ec-mission-body {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--txt);
+  line-height: 1.6;
+}
+
+.ec-mission-body.loading {
+  color: var(--txt-3);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+/* â”€â”€ Path-to-pass strategy card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.ec-strategy-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ec-strategy-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ec-strategy-kicker {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 6px;
+}
+
+.ec-strategy-head h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  color: var(--txt);
+  font-weight: 600;
+}
+
+.ec-strategy-status {
+  font: 500 12px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.ec-strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ec-strategy-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 11px 12px;
+}
+
+.ec-strategy-item span {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--txt-3);
+  margin-bottom: 7px;
+}
+
+.ec-strategy-item strong {
+  display: block;
+  font: 500 16px/1.15 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  color: var(--txt);
+  margin-bottom: 7px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ec-strategy-item small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--txt-3);
+}
+
+.ec-directive {
+  border-left: 3px solid var(--amber);
+  background: rgba(245, 158, 11, .05);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.ec-directive-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 8px;
+}
+
+/* ── Debrief status indicator ─────────────────────────────────── */
+.ec-debrief-status {
+  font-size: 10px;
+  color: var(--txt-3);
+}
+.ec-debrief-status.saved {
+  color: var(--green);
+}
+
 /* ── Empty state ──────────────────────────────────────────────── */
 .ec-empty {
   display: flex;
@@ -1044,4 +1248,22 @@
   color: var(--txt-2);
   line-height: 1.6;
   max-width: 360px;
+}
+
+@media (max-width: 1180px) {
+  .ec-metric-grid,
+  .ec-strategy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .ec-metric-grid,
+  .ec-strategy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ec-strategy-head {
+    flex-direction: column;
+  }
 }

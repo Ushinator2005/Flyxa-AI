@@ -1199,6 +1199,15 @@
   padding: 24px;
 }
 
+.scanner-empty-entry {
+  min-height: calc(100vh - 56px);
+  height: calc(100vh - 56px);
+  align-items: flex-start;
+  padding-top: clamp(88px, 18vh, 180px);
+  padding-bottom: 40px;
+  overflow: hidden;
+}
+
 .tj-empty-wrap {
   display: flex;
   flex-direction: column;
@@ -1342,6 +1351,12 @@
 .tj-empty-meta {
   font-size: 11px;
   color: var(--txt-3);
+}
+
+@media (max-height: 760px) {
+  .scanner-empty-entry {
+    padding-top: 56px;
+  }
 }
 
 @keyframes tj-scan-sweep {

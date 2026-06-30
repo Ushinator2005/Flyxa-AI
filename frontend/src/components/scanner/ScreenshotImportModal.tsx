@@ -104,6 +104,7 @@ interface ScannerContext {
   target_line_ratio?: number;
   red_box?: Omit<ComponentBounds, 'count'>;
   green_box?: Omit<ComponentBounds, 'count'>;
+  entry_box?: Omit<ComponentBounds, 'count'>;
 }
 
 const DEFAULT_FOCUS_CROPS: CropPreset[] = [
@@ -204,6 +205,12 @@ function isRedOverlay(r: number, g: number, b: number): boolean {
   return r > g + 12 && r > b + 6 && r > 150;
 }
 
+function isNeutralOverlay(r: number, g: number, b: number): boolean {
+  const mx = Math.max(r, g, b);
+  const mn = Math.min(r, g, b);
+  return (mx - mn) < 30 && mx > 65 && mx < 215;
+}
+
 function hexToRgbParts(hex: string): { r: number; g: number; b: number } | null {
   const cleaned = hex.replace('#', '');
   if (cleaned.length !== 6) return null;
@@ -237,7 +244,77 @@ function makeZoneMatcher(
   if (cg > cr - 20 && cb > cr - 20 && cg > 60 && cb > 60 && cr < 80) {
     return (pr, pg, pb) => pg > pr + 15 && pb > pr + 10 && pg > 50;
   }
+  const sat = Math.max(cr, cg, cb) - Math.min(cr, cg, cb);
+  if (sat < 35) {
+    return (pr, pg, pb) => {
+      const mx = Math.max(pr, pg, pb);
+      const mn = Math.min(pr, pg, pb);
+      return (mx - mn) < 30 && mx > 65 && mx < 215;
+    };
+  }
   return fallback;
+}
+
+function componentWidth(component: ComponentBounds): number {
+  return component.xMax - component.xMin + 1;
+}
+
+function componentHeight(component: ComponentBounds): number {
+  return component.yMax - component.yMin + 1;
+}
+
+function componentDensity(component: ComponentBounds): number {
+  return component.count / Math.max(1, componentWidth(component) * componentHeight(component));
+}
+
+function hasSufficientFillDensity(component: ComponentBounds, minDensity = 0.15): boolean {
+  return componentDensity(component) >= minDensity;
+}
+
+function collectComponents(mask: Uint8Array, width: number, height: number): ComponentBounds[] {
+  const visited = new Uint8Array(mask.length);
+  const components: ComponentBounds[] = [];
+  const queue = new Int32Array(mask.length);
+
+  for (let index = 0; index < mask.length; index++) {
+    if (!mask[index] || visited[index]) continue;
+
+    let head = 0;
+    let tail = 0;
+    visited[index] = 1;
+    queue[tail++] = index;
+
+    let count = 0;
+    let xMin = width;
+    let xMax = 0;
+    let yMin = height;
+    let yMax = 0;
+
+    while (head < tail) {
+      const current = queue[head++];
+      const x = current % width;
+      const y = Math.floor(current / width);
+
+      count++;
+      xMin = Math.min(xMin, x);
+      xMax = Math.max(xMax, x);
+      yMin = Math.min(yMin, y);
+      yMax = Math.max(yMax, y);
+
+      const neighbors = [current - 1, current + 1, current - width, current + width];
+      neighbors.forEach(next => {
+        if (next < 0 || next >= mask.length || visited[next] || !mask[next]) return;
+        const nextX = next % width;
+        if (Math.abs(nextX - x) > 1) return;
+        visited[next] = 1;
+        queue[tail++] = next;
+      });
+    }
+
+    components.push({ xMin, xMax, yMin, yMax, count });
+  }
+
+  return components;
 }
 
 function findLargestComponent(mask: Uint8Array, width: number, height: number): ComponentBounds | null {
@@ -323,7 +400,143 @@ function inferChartPaneBounds(boxLeftRatio: number, boxRightRatio: number): { le
   return { left: 0, right: 1 };
 }
 
-function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?: string): ScannerContext | null {
+function horizontalOverlapRatio(a: ComponentBounds, b: ComponentBounds): number {
+  const overlap = Math.max(0, Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin) + 1);
+  return overlap / Math.max(1, Math.min(componentWidth(a), componentWidth(b)));
+}
+
+function verticalGap(a: ComponentBounds, b: ComponentBounds): number {
+  if (a.yMax < b.yMin) return b.yMin - a.yMax;
+  if (b.yMax < a.yMin) return a.yMin - b.yMax;
+  return 0;
+}
+
+function scoreZonePair(redBox: ComponentBounds, greenBox: ComponentBounds, width: number, height: number): number | null {
+  const redWidth = componentWidth(redBox);
+  const greenWidth = componentWidth(greenBox);
+  const unionWidth = Math.max(redBox.xMax, greenBox.xMax) - Math.min(redBox.xMin, greenBox.xMin) + 1;
+  const unionWidthRatio = unionWidth / width;
+  const redWidthRatio = redWidth / width;
+  const greenWidthRatio = greenWidth / width;
+
+  // A real position tool is a compact paired red/green bracket. Large supply,
+  // demand, order-block, FVG, or session zones often share colors with the
+  // scanner settings but span too much of the chart to be the active trade.
+  if (unionWidthRatio > 0.46 || redWidthRatio > 0.42 || greenWidthRatio > 0.42) return null;
+  if (redWidthRatio < 0.025 || greenWidthRatio < 0.025) return null;
+
+  const redHeightRatio = componentHeight(redBox) / height;
+  const greenHeightRatio = componentHeight(greenBox) / height;
+  if (redHeightRatio < 0.025 || greenHeightRatio < 0.025) return null;
+
+  const overlapRatio = horizontalOverlapRatio(redBox, greenBox);
+  if (overlapRatio < 0.32) return null;
+
+  const gap = verticalGap(redBox, greenBox);
+  if (gap > height * 0.09) return null;
+
+  const widthSimilarity = 1 - Math.min(1, Math.abs(redWidth - greenWidth) / Math.max(redWidth, greenWidth));
+  const edgeSimilarity = 1 - Math.min(1, (
+    Math.abs(redBox.xMin - greenBox.xMin) + Math.abs(redBox.xMax - greenBox.xMax)
+  ) / Math.max(1, unionWidth * 1.4));
+  const compactness = 1 - Math.min(1, Math.abs(unionWidthRatio - 0.13) / 0.33);
+  const adjacency = 1 - Math.min(1, gap / Math.max(1, height * 0.09));
+
+  return (
+    overlapRatio * 3.5
+    + widthSimilarity * 1.8
+    + edgeSimilarity * 2.4
+    + adjacency * 1.4
+    + compactness
+    + Math.min(componentDensity(redBox), 0.65)
+    + Math.min(componentDensity(greenBox), 0.65)
+  );
+}
+
+function findBestPositionToolPair(
+  redMask: Uint8Array,
+  greenMask: Uint8Array,
+  width: number,
+  height: number,
+): { redBox: ComponentBounds; greenBox: ComponentBounds } | null {
+  const redCandidates = collectComponents(redMask, width, height)
+    .filter(component => component.count >= 90 && hasSufficientFillDensity(component, 0.1));
+  const greenCandidates = collectComponents(greenMask, width, height)
+    .filter(component => component.count >= 90 && hasSufficientFillDensity(component, 0.1));
+
+  let best: { redBox: ComponentBounds; greenBox: ComponentBounds; score: number } | null = null;
+
+  for (const redBox of redCandidates) {
+    for (const greenBox of greenCandidates) {
+      const score = scoreZonePair(redBox, greenBox, width, height);
+      if (score === null) continue;
+      if (!best || score > best.score) {
+        best = { redBox, greenBox, score };
+      }
+    }
+  }
+
+  return best ? { redBox: best.redBox, greenBox: best.greenBox } : null;
+}
+
+function detectOverlayHorizontalSpan(
+  redMask: Uint8Array,
+  greenMask: Uint8Array,
+  width: number,
+  height: number,
+  yMin: number,
+  yMax: number,
+  fallbackLeft: number,
+  fallbackRight: number,
+): { left: number; right: number } {
+  const minPixels = Math.max(4, Math.round((yMax - yMin + 1) * 0.035));
+  const strong = new Uint8Array(width);
+
+  for (let x = 0; x < width; x++) {
+    let count = 0;
+    for (let y = yMin; y <= yMax; y++) {
+      const index = y * width + x;
+      if (redMask[index] || greenMask[index]) count++;
+    }
+    if (count >= minPixels) strong[x] = 1;
+  }
+
+  const runs: Array<{ left: number; right: number; strongColumns: number }> = [];
+  let runStart = -1;
+  let lastStrong = -1;
+  let strongColumns = 0;
+  const maxGap = Math.max(4, Math.round(width * 0.018));
+
+  for (let x = 0; x < width; x++) {
+    if (strong[x]) {
+      if (runStart < 0) runStart = x;
+      lastStrong = x;
+      strongColumns++;
+    } else if (runStart >= 0 && x - lastStrong > maxGap) {
+      runs.push({ left: runStart, right: lastStrong, strongColumns });
+      runStart = -1;
+      lastStrong = -1;
+      strongColumns = 0;
+    }
+  }
+  if (runStart >= 0) runs.push({ left: runStart, right: lastStrong, strongColumns });
+
+  const selected = runs
+    .filter(run => run.right >= fallbackLeft - maxGap && run.left <= fallbackRight + maxGap)
+    .sort((a, b) => {
+      const aOverlap = Math.max(0, Math.min(a.right, fallbackRight) - Math.max(a.left, fallbackLeft));
+      const bOverlap = Math.max(0, Math.min(b.right, fallbackRight) - Math.max(b.left, fallbackLeft));
+      return bOverlap - aOverlap || b.strongColumns - a.strongColumns;
+    })[0];
+
+  if (!selected) return { left: fallbackLeft, right: fallbackRight };
+  return {
+    left: Math.min(fallbackLeft, selected.left),
+    right: Math.max(fallbackRight, selected.right),
+  };
+}
+
+function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?: string, entryHex?: string): ScannerContext | null {
   const targetWidth = Math.min(640, image.naturalWidth || image.width);
   const scale = targetWidth / (image.naturalWidth || image.width);
   const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
@@ -342,11 +555,14 @@ function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?
   const { data } = context.getImageData(0, 0, width, height);
   const redMask = new Uint8Array(width * height);
   const greenMask = new Uint8Array(width * height);
+  const entryMask = entryHex ? new Uint8Array(width * height) : null;
 
   const matchStop = stopHex ? makeZoneMatcher(stopHex, isRedOverlay) : isRedOverlay;
   const matchTp = tpHex ? makeZoneMatcher(tpHex, isGreenOverlay) : isGreenOverlay;
+  const matchEntry = entryHex ? makeZoneMatcher(entryHex, isNeutralOverlay) : null;
 
-  for (let y = 0; y < height; y++) {
+  const yStart = Math.floor(height * 0.05);
+  for (let y = yStart; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (x > width * 0.88) {
         continue;
@@ -365,18 +581,36 @@ function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?
       if (matchTp(r, g, b)) {
         greenMask[pixelIndex] = 1;
       }
+
+      if (matchEntry && entryMask && matchEntry(r, g, b)) {
+        entryMask[pixelIndex] = 1;
+      }
     }
   }
 
-  const redBox = findLargestComponent(redMask, width, height);
-  const greenBox = findLargestComponent(greenMask, width, height);
-
-  if (!redBox || !greenBox || redBox.count < 200 || greenBox.count < 200) {
+  const zonePair = findBestPositionToolPair(redMask, greenMask, width, height);
+  if (!zonePair) {
     return null;
   }
+  const { redBox, greenBox } = zonePair;
 
-  const boxLeftRatio = Math.min(redBox.xMin, greenBox.xMin) / width;
-  const boxRightRatio = Math.max(redBox.xMax, greenBox.xMax) / width;
+  const entryBox = entryMask ? findLargestComponent(entryMask, width, height) : null;
+  const hasEntryBox = entryBox !== null && entryBox.count >= 150;
+
+  const fallbackLeft = Math.min(redBox.xMin, greenBox.xMin);
+  const fallbackRight = Math.max(redBox.xMax, greenBox.xMax);
+  const overlaySpan = detectOverlayHorizontalSpan(
+    redMask,
+    greenMask,
+    width,
+    height,
+    Math.min(redBox.yMin, greenBox.yMin),
+    Math.max(redBox.yMax, greenBox.yMax),
+    fallbackLeft,
+    fallbackRight,
+  );
+  const boxLeftRatio = overlaySpan.left / width;
+  const boxRightRatio = overlaySpan.right / width;
   const chartPane = inferChartPaneBounds(boxLeftRatio, boxRightRatio);
   const redCenterY = (redBox.yMin + redBox.yMax) / 2;
   const greenCenterY = (greenBox.yMin + greenBox.yMax) / 2;
@@ -391,11 +625,14 @@ function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?
   let stopLineRatio: number | undefined;
   let targetLineRatio: number | undefined;
   if (directionHint === 'Long') {
-    entryLineRatio = greenBox.yMax / height;
+    // Entry is the shared boundary between the compact TP and SL zones.
+    // Neutral/entry-colored chart drawings can be larger than the actual
+    // position-tool entry marker, so never let them move the entry crop.
+    entryLineRatio = ((greenBox.yMax + redBox.yMin) / 2) / height;
     stopLineRatio = redBox.yMax / height;
     targetLineRatio = greenBox.yMin / height;
   } else if (directionHint === 'Short') {
-    entryLineRatio = redBox.yMax / height;
+    entryLineRatio = ((redBox.yMax + greenBox.yMin) / 2) / height;
     stopLineRatio = redBox.yMin / height;
     targetLineRatio = greenBox.yMax / height;
   }
@@ -415,6 +652,7 @@ function detectTradeBoxContext(image: HTMLImageElement, stopHex?: string, tpHex?
     target_line_ratio: targetLineRatio,
     red_box: toRatioBounds(redBox, width, height),
     green_box: toRatioBounds(greenBox, width, height),
+    entry_box: hasEntryBox ? toRatioBounds(entryBox!, width, height) : undefined,
   };
 }
 
@@ -495,7 +733,7 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
 
 export async function buildScannerAssets(
   file: File,
-  colors?: { stopLoss?: string; takeProfit?: string },
+  colors?: { entry?: string; stopLoss?: string; takeProfit?: string },
 ): Promise<{
   focusImages: File[];
   scannerContext: Record<string, unknown> | null;
@@ -503,7 +741,7 @@ export async function buildScannerAssets(
 }> {
   const image = await loadImage(file);
   const sourceType = file.type || 'image/png';
-  const scannerContext = detectTradeBoxContext(image, colors?.stopLoss, colors?.takeProfit);
+  const scannerContext = detectTradeBoxContext(image, colors?.stopLoss, colors?.takeProfit, colors?.entry);
   const focusCrops = buildDynamicFocusCrops(scannerContext);
   const focusImages = await Promise.all(focusCrops.map(async crop => {
     const sx = Math.max(0, Math.floor(image.width * crop.x));
@@ -828,6 +1066,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       }
       const colors = preferences.scannerColors;
       const { focusImages, scannerContext: rawContext, uploadImage } = await buildScannerAssets(file, {
+        entry: colors?.entry,
         stopLoss: colors?.stopLoss,
         takeProfit: colors?.takeProfit,
       });

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../services/api.js';
 import useFlyxaStore, { getInitialState } from '../store/flyxaStore.js';
+import { REMOTE_RECONCILE_EVENT } from '../store/supabaseStorage.js';
 
 interface AuthContextType {
   user: User | null;
@@ -49,6 +50,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const wasLoggedInRef = useRef(false);
+
+  useEffect(() => {
+    const handleRemoteReconciled = () => {
+      void useFlyxaStore.persist.rehydrate();
+    };
+
+    window.addEventListener(REMOTE_RECONCILE_EVENT, handleRemoteReconciled);
+    return () => window.removeEventListener(REMOTE_RECONCILE_EVENT, handleRemoteReconciled);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

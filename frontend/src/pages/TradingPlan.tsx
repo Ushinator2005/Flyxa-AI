@@ -268,6 +268,11 @@ export default function TradingPlan() {
     return map;
   }, [planReport]);
 
+  const totalBreaks = useMemo(
+    () => planReport.daily.reduce((s, d) => s + d.failed, 0),
+    [planReport],
+  );
+
   const togglePlanBlock = (id: string) => {
     setPlanBlocks(current => current.map(block => (block.id === id ? { ...block, isOpen: !block.isOpen } : block)));
   };
@@ -386,22 +391,6 @@ export default function TradingPlan() {
           <div>
             <p className="tp-eyebrow">Trading Plan</p>
             <h1 className="tp-title">Risk Rules</h1>
-            <p className="tp-meta">
-              <span style={{ color: 'var(--amber)' }}>{activeRuleCount} active</span>
-              <span className="tp-meta-dot" />
-              <span style={{ color: 'var(--green)' }}>{automaticRuleCount} auto-checked</span>
-              {planReport.pct !== null && (
-                <>
-                  <span className="tp-meta-dot" />
-                  <span style={{ color: planReport.pct >= 80 ? 'var(--green)' : planReport.pct >= 60 ? 'var(--amber)' : 'var(--red)' }}>
-                    {planReport.pct}% 30d
-                  </span>
-                  {planReport.brokenDays > 0 && (
-                    <><span className="tp-meta-dot" /><span style={{ color: 'var(--red)' }}>{planReport.brokenDays} broken</span></>
-                  )}
-                </>
-              )}
-            </p>
           </div>
           <div className="tp-actions">
             <span className="tp-saved">{lastSavedLabel}</span>
@@ -504,173 +493,276 @@ export default function TradingPlan() {
         )}
 
         {activeTab === 'risk-rules' && (
-          <section className="tp-panel" data-tour-id="risk-rules-framework">
+          <section data-tour-id="risk-rules-framework" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Health Bar — uniform 4-cell strip */}
+            <div className="tp-health-bar">
+              <div className="tp-hs">
+                <span className="tp-hs-label">Active Rules</span>
+                <span className="tp-hs-value">{activeRuleCount}</span>
+              </div>
+              <div className="tp-hs-divider" />
+              <div className="tp-hs">
+                <span className="tp-hs-label">Auto-checked</span>
+                <span className="tp-hs-value tp-hs-green">{automaticRuleCount}</span>
+              </div>
+              <div className="tp-hs-divider" />
+              <div className="tp-hs">
+                <span className="tp-hs-label">Adherence 30d</span>
+                <span
+                  className="tp-hs-value"
+                  style={{
+                    color: planReport.pct === null ? 'var(--txt-3)'
+                      : planReport.pct >= 80 ? 'var(--green)'
+                      : planReport.pct >= 60 ? 'var(--amber)'
+                      : 'var(--red)',
+                  }}
+                >
+                  {planReport.pct !== null ? `${planReport.pct}%` : '—'}
+                </span>
+                <div className="tp-hs-bar-track">
+                  <div
+                    className="tp-hs-bar-fill"
+                    style={{
+                      width: `${planReport.pct ?? 0}%`,
+                      background: planReport.pct === null ? 'var(--app-border)'
+                        : planReport.pct >= 80 ? 'var(--green)'
+                        : planReport.pct >= 60 ? 'var(--amber)'
+                        : 'var(--red)',
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="tp-hs-divider" />
+              <div className="tp-hs">
+                <span className="tp-hs-label">Total Breaks 30d</span>
+                <span className="tp-hs-value" style={{ color: totalBreaks > 0 ? 'var(--red)' : 'var(--txt-3)' }}>
+                  {totalBreaks}
+                </span>
+              </div>
+            </div>
+
+            {/* Section Header */}
             <div className="tp-section-head tp-section-head-actions">
               <div>
                 <h2>Rule Framework</h2>
                 <p>Measurable rules are verified automatically. Subjective rules are confirmed in the journal.</p>
               </div>
               <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule}>
-                <Plus size={12} /> Add rule
+                <Plus size={12} /> Add Rule
               </button>
             </div>
 
+            {/* Rule Grid */}
             <div className="tp-rule-grid">
-              {riskRules.map(rule => (
-                <article key={rule.id} className={`tp-rule-card tp-rule-editor ${rule.enabled === false ? 'disabled' : ''}`}>
-                  <div className="tp-rule-editor-head">
-                    <span className={`tp-rule-source-wrap ${rule.kind === 'manual' ? 'manual' : 'automatic'}`}>
-                      <select
-                        className="tp-rule-kind-select"
-                        value={rule.kind ?? 'manual'}
-                        onChange={event => {
-                          const kind = event.target.value as NonNullable<RiskRule['kind']>;
-                          changeRiskRuleKind(rule, kind);
-                        }}
-                      >
-                        <option value="max_daily_loss">Max daily loss</option>
-                        <option value="max_trades">Max trades / day</option>
-                        <option value="max_contracts">Max contracts</option>
-                        <option value="min_rr">Min R:R</option>
-                        <option value="time_window">Time window</option>
-                        <option value="cooldown_after_loss">Cooldown after loss</option>
-                        <option value="manual">Manual check</option>
-                      </select>
-                    </span>
-                    <label className="tp-rule-toggle">
-                      <input type="checkbox" checked={rule.enabled !== false} onChange={event => updateRiskRule(rule.id, { enabled: event.target.checked })} />
-                      <span>{rule.enabled === false ? 'Off' : 'On'}</span>
-                    </label>
-                  </div>
-                  {rule.kind === 'time_window' ? (
-                    <div className="tp-rule-value-fields">
-                      <label><span>Start</span><input className="tp-rule-input" type="time" value={rule.startTime ?? '09:30'} onChange={event => updateRiskRule(rule.id, { startTime: event.target.value })} /></label>
-                      <label><span>End</span><input className="tp-rule-input" type="time" value={rule.endTime ?? '11:30'} onChange={event => updateRiskRule(rule.id, { endTime: event.target.value })} /></label>
-                    </div>
-                  ) : rule.kind === 'max_contracts' ? (
-                    <div className="tp-contract-limits">
-                      {Object.entries(rule.contractLimits ?? {}).length === 0 && (
-                        <p className="tp-contract-empty">No limits set — add an asset below.</p>
-                      )}
-                      {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => {
-                        const contract = lookupContract(sym);
-                        return (
-                          <div key={sym} className="tp-contract-row">
-                            <div className="tp-contract-sym-info">
-                              <span className="tp-contract-sym-name">{sym}</span>
-                              {contract && <span className="tp-contract-sym-full">{contract.name.replace(' Futures', '')}</span>}
-                            </div>
-                            <div className="tp-contract-stepper">
-                              <button type="button" className="tp-contract-step-btn"
-                                onClick={() => setContractLimit(rule.id, sym, Math.max(1, max - 1))}>−</button>
-                              <input
-                                type="number"
-                                className="tp-contract-value-input num"
-                                min={1}
-                                value={max}
-                                onChange={event => {
-                                  const v = parseInt(event.target.value);
-                                  if (!isNaN(v) && v >= 1) setContractLimit(rule.id, sym, v);
-                                }}
-                              />
-                              <button type="button" className="tp-contract-step-btn"
-                                onClick={() => setContractLimit(rule.id, sym, max + 1)}>+</button>
-                            </div>
-                            <button type="button" className="tp-contract-remove" title="Remove" onClick={() => removeContractLimit(rule.id, sym)}>
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                      <div className="tp-contract-add-section">
-                        <span className="tp-contract-add-label">Add asset</span>
-                        <div className="tp-contract-add-row">
-                          <input
-                            className="tp-rule-input tp-contract-sym-input"
-                            placeholder="Symbol (e.g. MNQ)"
-                            value={pendingContracts[rule.id]?.symbol ?? ''}
-                            onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], symbol: event.target.value.toUpperCase() } }))}
-                            onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
-                          />
-                          <input
-                            className="tp-rule-input num"
-                            type="number" min="1" step="1"
-                            placeholder="Max"
-                            value={pendingContracts[rule.id]?.max ?? ''}
-                            onChange={event => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], max: event.target.value } }))}
-                            onKeyDown={event => { if (event.key === 'Enter') commitPendingContract(rule.id); }}
-                          />
-                          <button type="button" className="tp-contract-add-btn" onClick={() => commitPendingContract(rule.id)}>
-                            Add
-                          </button>
-                        </div>
-                        {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).length > 0 && (
-                          <div className="tp-contract-quick">
-                            {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).map(sym => {
-                              const c = lookupContract(sym);
-                              return (
-                                <button key={sym} type="button" className="tp-contract-chip"
-                                  onClick={() => setContractLimit(rule.id, sym, 1)}>
-                                  <Plus size={9} />
-                                  <span className="tp-contract-chip-sym">{sym}</span>
-                                  {c && <span className="tp-contract-chip-name">{c.name.replace(' Futures', '')}</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
+              {riskRules.map(rule => {
+                const kind = rule.kind ?? 'manual';
+                const isAuto = kind !== 'manual';
+                const stats = ruleStatsMap.get(rule.id);
+                const breachCount = stats?.failed ?? 0;
+                // breach rate = 100 - compliance%; drives accent color
+                const breachRatePct = stats ? 100 - (stats.pct ?? 0) : 0;
+
+                const severity =
+                  kind === 'manual' ? 'cobalt' :
+                  !stats || stats.checked === 0 ? 'none' :
+                  breachRatePct >= 50 ? 'red' :
+                  breachRatePct >= 20 ? 'amber' :
+                  'green';
+
+                const SEV = {
+                  red:    { bar: 'linear-gradient(90deg, var(--red), var(--red-dim))',     bg: 'var(--red-dim)',    bdr: 'var(--red-border)',    txt: 'var(--red)' },
+                  amber:  { bar: 'linear-gradient(90deg, var(--amber), var(--amber-dim))', bg: 'var(--amber-dim)', bdr: 'var(--amber-border)',  txt: 'var(--amber)' },
+                  green:  { bar: 'linear-gradient(90deg, var(--green), var(--green-dim))', bg: 'var(--green-dim)', bdr: 'var(--green-border)',  txt: 'var(--green)' },
+                  cobalt: { bar: 'linear-gradient(90deg, var(--cobalt), var(--cobalt-dim))', bg: 'var(--cobalt-dim)', bdr: 'var(--cobalt-border)', txt: 'var(--cobalt)' },
+                  none:   { bar: 'var(--app-border)', bg: 'transparent', bdr: 'transparent', txt: 'var(--txt-3)' },
+                } as const;
+                const sev = SEV[severity];
+
+                const typeLabel =
+                  kind === 'manual' ? 'Journal-confirmed · Subjective' :
+                  kind === 'max_trades' ? 'Auto-verified · Count' :
+                  kind === 'max_contracts' ? 'Auto-verified · Asset' :
+                  kind === 'time_window' ? 'Auto-verified · Time' :
+                  kind === 'cooldown_after_loss' ? 'Auto-verified · Cooldown' :
+                  'Auto-verified · Amount';
+
+                return (
+                  <article key={rule.id} className={`tp-rcard${rule.enabled === false ? ' tp-rcard-off' : ''}`}>
+
+                    {/* Top accent bar — colored by breach severity */}
+                    <div className="tp-rcard-topbar" style={{ background: sev.bar }} />
+
+                    {/* Card Header */}
+                    <div className="tp-rcard-hdr">
+                      <div className="tp-rcard-title-col">
+                        <select
+                          className="tp-rcard-kind"
+                          value={kind}
+                          onChange={e => changeRiskRuleKind(rule, e.target.value as NonNullable<RiskRule['kind']>)}
+                        >
+                          <option value="max_daily_loss">Max daily loss</option>
+                          <option value="max_trades">Max trades / day</option>
+                          <option value="max_contracts">Max contracts</option>
+                          <option value="min_rr">Min R:R</option>
+                          <option value="time_window">Time window</option>
+                          <option value="cooldown_after_loss">Cooldown after loss</option>
+                          <option value="manual">Manual check</option>
+                        </select>
+                        <span className="tp-rcard-type-label">{typeLabel}</span>
                       </div>
-                    </div>
-                  ) : rule.kind !== 'manual' ? (
-                    <div className="tp-rule-value-fields">
-                      <label><span>Limit</span><input className="tp-rule-input num" type="number" min="0" step="0.1" value={rule.value} onChange={event => updateRiskRule(rule.id, { value: event.target.value })} /></label>
-                      <label><span>Unit</span><input className="tp-rule-input" value={rule.unit} onChange={event => updateRiskRule(rule.id, { unit: event.target.value })} /></label>
-                    </div>
-                  ) : (
-                    <div className="tp-manual-rule-fields">
-                      <label>
-                        <span>Rule</span>
+                      <label className="tp-rcard-toggle">
                         <input
-                          className="tp-rule-input tp-rule-name-input"
-                          value={rule.label}
-                          placeholder="e.g. No trades outside my planned setup"
-                          onChange={event => updateRiskRule(rule.id, { label: event.target.value })}
+                          type="checkbox"
+                          checked={rule.enabled !== false}
+                          onChange={e => updateRiskRule(rule.id, { enabled: e.target.checked })}
                         />
+                        <span className="tp-toggle-track">
+                          <span className="tp-toggle-thumb" />
+                        </span>
                       </label>
-                      <label>
-                        <span>Notes / confirmation prompt</span>
-                        <textarea
-                          className="tp-rule-input tp-rule-textarea"
-                          value={rule.value}
-                          placeholder="Optional: what counts as passing or breaking this rule?"
-                          onChange={event => updateRiskRule(rule.id, { value: event.target.value })}
-                        />
-                      </label>
-                      <p className="tp-rule-manual-note">
-                        This custom rule appears in each daily journal for pass/fail confirmation.
-                      </p>
                     </div>
-                  )}
-                  {(() => {
-                    const s = ruleStatsMap.get(rule.id);
-                    if (!s || s.checked === 0) return null;
-                    const clr = s.pct === null ? 'var(--app-text-subtle)' : s.pct >= 80 ? 'var(--green)' : s.pct >= 60 ? 'var(--amber)' : 'var(--red)';
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 8px', background: 'var(--app-surface-2)', borderRadius: 5, border: '1px solid var(--app-border)' }}>
-                        <span className="tp-rule-stat-pct" style={{ color: clr }}>{s.pct}%</span>
-                        <span style={{ color: 'var(--app-text-subtle)', fontSize: 10 }}>
-                          {s.failed > 0 ? `${s.failed} break${s.failed !== 1 ? 's' : ''}` : 'no breaks'} · last 30 days
+
+                    {/* Breach Strip — breach RATE, auto rules only, when 30d data exists */}
+                    {isAuto && stats && stats.checked > 0 && (
+                      <div className="tp-rcard-breach" style={{ background: sev.bg, borderColor: sev.bdr }}>
+                        <span className="tp-rcard-breach-pct" style={{ color: sev.txt }}>
+                          {breachRatePct}%
+                        </span>
+                        <span className="tp-rcard-breach-sub">
+                          breach rate · {breachCount} break{breachCount !== 1 ? 's' : ''} · last 30 days
                         </span>
                       </div>
-                    );
-                  })()}
-                  <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)}>
-                    <Trash2 size={12} /> Remove
-                  </button>
-                </article>
-              ))}
+                    )}
+
+                    {/* Card Body */}
+                    <div className="tp-rcard-body">
+                      {kind === 'time_window' ? (
+                        <div className="tp-rcard-fields">
+                          <label className="tp-rcard-field">
+                            <span className="tp-rcard-field-lbl">Start</span>
+                            <input className="tp-rule-input" type="time" value={rule.startTime ?? '09:30'} onChange={e => updateRiskRule(rule.id, { startTime: e.target.value })} />
+                          </label>
+                          <label className="tp-rcard-field">
+                            <span className="tp-rcard-field-lbl">End</span>
+                            <input className="tp-rule-input" type="time" value={rule.endTime ?? '11:30'} onChange={e => updateRiskRule(rule.id, { endTime: e.target.value })} />
+                          </label>
+                        </div>
+                      ) : kind === 'max_contracts' ? (
+                        <div className="tp-contract-limits">
+                          {Object.entries(rule.contractLimits ?? {}).length === 0 && (
+                            <p className="tp-contract-empty">No limits set — add an asset below.</p>
+                          )}
+                          {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => {
+                            const contract = lookupContract(sym);
+                            return (
+                              <div key={sym} className="tp-contract-row">
+                                <div className="tp-contract-sym-info">
+                                  <span className="tp-contract-sym-name">{sym}</span>
+                                  {contract && <span className="tp-contract-sym-full">{contract.name.replace(' Futures', '')}</span>}
+                                </div>
+                                <div className="tp-contract-stepper">
+                                  <button type="button" className="tp-contract-step-btn" onClick={() => setContractLimit(rule.id, sym, Math.max(1, max - 1))}>−</button>
+                                  <input
+                                    type="number"
+                                    className="tp-contract-value-input num"
+                                    min={1}
+                                    value={max}
+                                    onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setContractLimit(rule.id, sym, v); }}
+                                  />
+                                  <button type="button" className="tp-contract-step-btn" onClick={() => setContractLimit(rule.id, sym, max + 1)}>+</button>
+                                </div>
+                                <button type="button" className="tp-contract-remove" title="Remove" onClick={() => removeContractLimit(rule.id, sym)}>
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                          <div className="tp-contract-add-section">
+                            <span className="tp-contract-add-label">Add asset</span>
+                            <div className="tp-contract-add-row">
+                              <input
+                                className="tp-rule-input tp-contract-sym-input"
+                                placeholder="Symbol (e.g. MNQ)"
+                                value={pendingContracts[rule.id]?.symbol ?? ''}
+                                onChange={e => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], symbol: e.target.value.toUpperCase() } }))}
+                                onKeyDown={e => { if (e.key === 'Enter') commitPendingContract(rule.id); }}
+                              />
+                              <input
+                                className="tp-rule-input num"
+                                type="number" min="1" step="1"
+                                placeholder="Max"
+                                value={pendingContracts[rule.id]?.max ?? ''}
+                                onChange={e => setPendingContracts(prev => ({ ...prev, [rule.id]: { ...prev[rule.id], max: e.target.value } }))}
+                                onKeyDown={e => { if (e.key === 'Enter') commitPendingContract(rule.id); }}
+                              />
+                              <button type="button" className="tp-contract-add-btn" onClick={() => commitPendingContract(rule.id)}>Add</button>
+                            </div>
+                            {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).length > 0 && (
+                              <div className="tp-contract-quick">
+                                {topSymbols.filter(sym => !(rule.contractLimits ?? {})[sym]).map(sym => {
+                                  const c = lookupContract(sym);
+                                  return (
+                                    <button key={sym} type="button" className="tp-contract-chip" onClick={() => setContractLimit(rule.id, sym, 1)}>
+                                      <Plus size={9} />
+                                      <span className="tp-contract-chip-sym">{sym}</span>
+                                      {c && <span className="tp-contract-chip-name">{c.name.replace(' Futures', '')}</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : kind === 'manual' ? (
+                        <div className="tp-manual-rule-fields">
+                          <label>
+                            <span>Rule</span>
+                            <input
+                              className="tp-rule-input tp-rule-name-input"
+                              value={rule.label}
+                              placeholder="e.g. No trades outside my planned setup"
+                              onChange={e => updateRiskRule(rule.id, { label: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            <span>Notes / confirmation prompt</span>
+                            <textarea
+                              className="tp-rule-input tp-rule-textarea"
+                              value={rule.value}
+                              placeholder="Optional: what counts as passing or breaking this rule?"
+                              onChange={e => updateRiskRule(rule.id, { value: e.target.value })}
+                            />
+                          </label>
+                          <p className="tp-rule-manual-note">This custom rule appears in each daily journal for pass/fail confirmation.</p>
+                        </div>
+                      ) : (
+                        <div className="tp-rcard-fields">
+                          <label className="tp-rcard-field">
+                            <span className="tp-rcard-field-lbl">Limit</span>
+                            <input className="tp-rule-input num" type="number" min="0" step="0.1" value={rule.value} onChange={e => updateRiskRule(rule.id, { value: e.target.value })} />
+                          </label>
+                          <label className="tp-rcard-field">
+                            <span className="tp-rcard-field-lbl">Unit</span>
+                            <input className="tp-rule-input" value={rule.unit} onChange={e => updateRiskRule(rule.id, { unit: e.target.value })} />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card Footer */}
+                    <div className="tp-rcard-footer">
+                      <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)}>
+                        <Trash2 size={12} /> Remove
+                      </button>
+                    </div>
+
+                  </article>
+                );
+              })}
             </div>
 
+            {/* Warning Banner */}
             <div className="tp-warning">
               <AlertCircle size={14} />
               <div>
@@ -678,6 +770,7 @@ export default function TradingPlan() {
                 <span>Flyxa verifies only rules supported by logged trade data. Missing timestamps or values remain unverified.</span>
               </div>
             </div>
+
           </section>
         )}
       </main>

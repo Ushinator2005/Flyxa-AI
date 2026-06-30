@@ -545,16 +545,15 @@ function detectTradeBoxContext(
   let targetLineRatio: number | undefined
 
   if (directionHint === 'Long') {
-    // Use center of detected entry box if available, otherwise infer from TP zone edge
-    entryLineRatio = hasEntryBox
-      ? ((entryBox!.yMin + entryBox!.yMax) / 2) / height
-      : greenBox.yMax / height
+    // Entry is the shared boundary between the compact TP and SL zones.
+    // Do not use the largest neutral/entry-colored component: charts often
+    // contain grey fib/range drawings that can sit inside the position tool and
+    // create fake entry prices.
+    entryLineRatio = ((greenBox.yMax + redBox.yMin) / 2) / height
     stopLineRatio = redBox.yMax / height
     targetLineRatio = greenBox.yMin / height
   } else if (directionHint === 'Short') {
-    entryLineRatio = hasEntryBox
-      ? ((entryBox!.yMin + entryBox!.yMax) / 2) / height
-      : redBox.yMax / height
+    entryLineRatio = ((redBox.yMax + greenBox.yMin) / 2) / height
     stopLineRatio = redBox.yMin / height
     targetLineRatio = greenBox.yMax / height
   }

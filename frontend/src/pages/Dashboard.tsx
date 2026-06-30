@@ -1,8 +1,8 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Minus,
-  ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X,
+  ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X, ChevronDown,
 } from 'lucide-react';
 import { Btn, Badge, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
 import {
@@ -43,6 +43,15 @@ const MONO        = 'var(--font-mono)';
 const SANS        = 'var(--font-sans)';
 
 // ── Helpers ──────────────────────────────────────────────────────
+function acctStatusColor(status: string): string {
+  const s = status.toLowerCase();
+  if (s === 'blown')  return '#ef4444';
+  if (s === 'eval')   return '#3b82f6';
+  if (s === 'funded') return '#22c55e';
+  if (s === 'live')   return '#f59e0b';
+  return 'var(--app-text-subtle)';
+}
+
 const fmtUSD = (v: number) =>
   v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const fmtPct = (v: number) => v.toFixed(1) + '%';
@@ -125,6 +134,17 @@ export default function Dashboard() {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
+  }, []);
+  const [acctDropOpen, setAcctDropOpen] = useState(false);
+  const acctDropRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (acctDropRef.current && !acctDropRef.current.contains(e.target as Node)) {
+        setAcctDropOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
   const storeAccounts = useFlyxaStore(state => state.accounts);
 
@@ -332,25 +352,120 @@ export default function Dashboard() {
           sub={<>{format(new Date(), 'EEEE, MMMM d')} · <span style={{ color: 'var(--color-text-muted)' }}>{acctName}</span></>}
           actions={
             <>
-              <div data-tour-id="dashboard-account-filter" style={{ position: 'relative' }}>
-                <select
-                  value={selectedAccountId}
-                  onChange={e => setSelectedAccountId(e.target.value)}
+              <div data-tour-id="dashboard-account-filter" ref={acctDropRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setAcctDropOpen(o => !o)}
                   style={{
-                    height: 34, paddingLeft: 12, paddingRight: 28,
-                    appearance: 'none',
-                    background: 'var(--color-panel)', border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)',
-                    color: 'var(--color-text)', outline: 'none', cursor: 'pointer',
+                    height: 34,
                     minWidth: isMobile ? 120 : 170,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingLeft: 10,
+                    paddingRight: 10,
+                    fontSize: 12,
+                    fontFamily: SANS,
+                    fontWeight: 500,
+                    color: T2,
+                    background: 'var(--app-bg)',
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    outline: 'none',
                   }}
                 >
-                  <option value={ALL_ACCOUNTS_ID}>All Accounts</option>
-                  {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived).map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-                <span style={{ pointerEvents: 'none', position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: 'var(--color-text-subtle)' }}>▼</span>
+                  {selectedAccountId !== ALL_ACCOUNTS_ID && acctName !== 'All Accounts' ? (
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: acctStatusColor(accounts.find(a => a.id === selectedAccountId)?.status ?? ''), flexShrink: 0 }} />
+                  ) : (
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: T3, flexShrink: 0 }} />
+                  )}
+                  <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {acctName}
+                  </span>
+                  <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.5 }} />
+                </button>
+                {acctDropOpen && (() => {
+                  const visAccounts = accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived);
+                  const activeAccounts = visAccounts.filter(a => a.status !== 'Blown' && a.status !== 'Passed');
+                  const closedAccounts = visAccounts.filter(a => a.status === 'Blown' || a.status === 'Passed');
+                  const rowBtn = (id: string, name: string, status: string, isSelected: boolean, blown: boolean) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => { setSelectedAccountId(id); setAcctDropOpen(false); }}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 12px',
+                        fontFamily: SANS,
+                        background: isSelected ? 'var(--app-bg)' : 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        opacity: blown ? 0.5 : 1,
+                      }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--app-bg)'; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: acctStatusColor(status), flexShrink: 0, display: 'inline-block' }} title={status} />
+                      <span style={{ fontSize: 12, fontWeight: 500, color: isSelected ? T1 : T2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                    </button>
+                  );
+                  return (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      right: 0,
+                      width: 220,
+                      background: 'var(--app-panel)',
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 8,
+                      padding: '4px 0',
+                      zIndex: 9999,
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                      maxHeight: 320,
+                      overflowY: 'auto',
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedAccountId(ALL_ACCOUNTS_ID); setAcctDropOpen(false); }}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '8px 12px',
+                          fontFamily: SANS,
+                          color: selectedAccountId === ALL_ACCOUNTS_ID ? T1 : T2,
+                          background: selectedAccountId === ALL_ACCOUNTS_ID ? 'var(--app-bg)' : 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                        onMouseEnter={e => { if (selectedAccountId !== ALL_ACCOUNTS_ID) e.currentTarget.style.background = 'var(--app-bg)'; }}
+                        onMouseLeave={e => { if (selectedAccountId !== ALL_ACCOUNTS_ID) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        All Accounts
+                      </button>
+                      {activeAccounts.length > 0 && (
+                        <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 2, paddingTop: 2 }}>
+                          {activeAccounts.map(a => rowBtn(a.id, a.name, a.status, selectedAccountId === a.id, false))}
+                        </div>
+                      )}
+                      {closedAccounts.length > 0 && (
+                        <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 4 }}>
+                          <div style={{ padding: '2px 12px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3 }}>Closed</div>
+                          {closedAccounts.map(a => rowBtn(a.id, a.name, a.status, selectedAccountId === a.id, true))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <Btn
                 data-tour-id="dashboard-log-trade"

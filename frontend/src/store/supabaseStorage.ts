@@ -7,6 +7,9 @@ import type { RiskRule } from './types.js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const SAVE_DEBOUNCE_MS = 500;
+const REMOTE_RECONCILE_COOLDOWN_MS = 15_000;
+
+export const REMOTE_RECONCILE_EVENT = 'flyxa-store-remote-reconciled';
 
 // Per-user localStorage keys — each auth account gets its own slot so accounts
 // on the same device never share or contaminate each other's cached data.
@@ -89,6 +92,9 @@ let cachedUserId: string | null = null;
 let cachedToken: string | null = null;
 let setItemRevision = 0;
 let saveQueue: Promise<void> = Promise.resolve();
+let bypassLocalFastPath = false;
+let backgroundReconcileInFlight = false;
+let nextBackgroundReconcileAllowedAt = 0;
 
 function stripBase64Images(value: unknown): unknown {
   if (typeof value === 'string') {
@@ -124,6 +130,96 @@ function extractEntries(value: string): Record<string, unknown>[] {
   } catch {
     return [];
   }
+}
+
+function shouldHydrateFastFromLocal(value: string): boolean {
+  try {
+    const parsed = JSON.parse(value) as { state?: Record<string, unknown> };
+    const state = parsed?.state;
+    if (!state || typeof state !== 'object') return false;
+
+    // Journal entries are the expensive/visible part of first load. If this
+    // browser already has them for the signed-in user, render them immediately
+    // and let Supabase reconcile in the background.
+    if (extractEntries(value).length > 0) return true;
+
+    const accounts = state.accounts as Array<Record<string, unknown>> | undefined;
+    const moods = state.journalMoods;
+    const titles = state.journalTitles;
+    const rivals = state.rivals as unknown[] | undefined;
+    const goals = state.goals as unknown[] | undefined;
+    const billingAccounts = state.billingAccounts as unknown[] | undefined;
+    const fundingAccounts = state.fundingAccounts as unknown[] | undefined;
+    const preSessionHistory = state.preSessionHistory;
+
+    return (
+      hasMeaningfulRiskRules(state) ||
+      hasMeaningfulPlanBlocks(state) ||
+      typeof state.riskRulesUpdatedAt === 'string' ||
+      (moods != null && typeof moods === 'object' && Object.keys(moods).length > 0) ||
+      (titles != null && typeof titles === 'object' && Object.keys(titles).length > 0) ||
+      (preSessionHistory != null && typeof preSessionHistory === 'object' && Object.keys(preSessionHistory).length > 0) ||
+      (Array.isArray(accounts) && accounts.some(account => account.id !== 'default-account')) ||
+      (Array.isArray(rivals) && rivals.length > 0) ||
+      (Array.isArray(goals) && goals.length > 0) ||
+      (Array.isArray(billingAccounts) && billingAccounts.length > 0) ||
+      (Array.isArray(fundingAccounts) && fundingAccounts.length > 0)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function scheduleBackgroundRemoteReconcile(
+  userId: string,
+  storeKey: string,
+  currentLocalValue: string
+): void {
+  if (typeof window === 'undefined') return;
+
+  const now = Date.now();
+  if (backgroundReconcileInFlight || now < nextBackgroundReconcileAllowedAt) return;
+
+  backgroundReconcileInFlight = true;
+
+  void (async () => {
+    let shouldNotify = false;
+    bypassLocalFastPath = true;
+
+    try {
+      const remoteValue = await supabaseZustandStorage.getItem('flyxa-store');
+      if (remoteValue && remoteValue !== currentLocalValue) {
+        localStorage.setItem(storeKey, remoteValue);
+        localStorage.setItem(localSavedAtKey(userId), Date.now().toString());
+        shouldNotify = true;
+      }
+    } catch {
+      // Non-fatal: the already-rendered local cache remains usable.
+    } finally {
+      bypassLocalFastPath = false;
+      backgroundReconcileInFlight = false;
+      nextBackgroundReconcileAllowedAt = Date.now() + REMOTE_RECONCILE_COOLDOWN_MS;
+
+      if (shouldNotify) {
+        window.dispatchEvent(new CustomEvent(REMOTE_RECONCILE_EVENT));
+      }
+    }
+  })();
+}
+
+function cacheStoreValueForUser(
+  userId: string,
+  value: string,
+  savedAtMs = Date.now()
+): string {
+  if (typeof window === 'undefined') return value;
+  try {
+    localStorage.setItem(localStoreKey(userId), value);
+    localStorage.setItem(localSavedAtKey(userId), String(savedAtMs));
+  } catch {
+    // Browser storage is only the fast-start cache; Supabase remains authority.
+  }
+  return value;
 }
 
 function extractPreSessionHistory(value: string): Array<{ id: string; data: Record<string, unknown> }> {
@@ -1078,6 +1174,14 @@ export const supabaseZustandStorage: StateStorage = {
     if (!userId) return null;
 
     const storeKey = localStoreKey(userId);
+    const local = typeof window !== 'undefined' ? localStorage.getItem(storeKey) : null;
+    if (!bypassLocalFastPath && local) {
+      const sanitizedLocal = sanitizeStoreValue(local);
+      if (shouldHydrateFastFromLocal(sanitizedLocal)) {
+        scheduleBackgroundRemoteReconcile(userId, storeKey, sanitizedLocal);
+        return sanitizedLocal;
+      }
+    }
 
     try {
       // Fetch main blob and dedicated risk_rules table concurrently.
@@ -1087,6 +1191,7 @@ export const supabaseZustandStorage: StateStorage = {
       ]);
 
       if (!error && data?.flyxa_data) {
+        const remoteSavedAt = timestampMs(data.updated_at) ?? Date.now();
         const local = localStorage.getItem(storeKey);
         const sanitizedLocal = local ? sanitizeStoreValue(local) : null;
         const localSavedAt = localStorage.getItem(localSavedAtKey(userId));
@@ -1109,7 +1214,7 @@ export const supabaseZustandStorage: StateStorage = {
             // that snapshot immediately, but first merge in any remote trades
             // that this browser had not loaded yet.
             void enqueueStoreSave(userId, mergedLocal);
-            return mergedLocal;
+            return cacheStoreValueForUser(userId, mergedLocal);
           }
         }
 
@@ -1189,10 +1294,10 @@ export const supabaseZustandStorage: StateStorage = {
               );
               const mergedValue = sanitizeStoreValue(JSON.stringify(mergedBlob));
               void enqueueStoreSave(userId, mergedValue);
-              return mergedValue;
+              return cacheStoreValueForUser(userId, mergedValue);
             }
           } catch { /* non-fatal — return main store as-is */ }
-          return sanitizeStoreValue(JSON.stringify(flyxaData));
+          return cacheStoreValueForUser(userId, sanitizeStoreValue(JSON.stringify(flyxaData)), remoteSavedAt);
         }
 
         // user_store exists but 0 entries — try store_entries_backup table.
@@ -1200,7 +1305,7 @@ export const supabaseZustandStorage: StateStorage = {
         const recovered = await recoverFromJournalEntries(userId, flyxaData);
         if (recovered) {
           void enqueueStoreSave(userId, recovered);
-          return recovered;
+          return cacheStoreValueForUser(userId, recovered);
         }
 
         // Last resort: per-user safe backup (then legacy).
@@ -1216,17 +1321,17 @@ export const supabaseZustandStorage: StateStorage = {
           });
           const sanitizedRebuilt = sanitizeStoreValue(rebuilt);
           void enqueueStoreSave(userId, sanitizedRebuilt);
-          return sanitizedRebuilt;
+          return cacheStoreValueForUser(userId, sanitizedRebuilt);
         }
 
-        return sanitizeStoreValue(JSON.stringify(flyxaData));
+        return cacheStoreValueForUser(userId, sanitizeStoreValue(JSON.stringify(flyxaData)), remoteSavedAt);
       }
 
       // No user_store row — try store_entries_backup table
       const recovered = await recoverFromJournalEntries(userId, null);
       if (recovered) {
         void enqueueStoreSave(userId, recovered);
-        return recovered;
+        return cacheStoreValueForUser(userId, recovered);
       }
 
       // Per-user localStorage cache
@@ -1242,7 +1347,7 @@ export const supabaseZustandStorage: StateStorage = {
       if (legacyLocal) {
         const sanitizedLegacy = sanitizeStoreValue(legacyLocal);
         void enqueueStoreSave(userId, sanitizedLegacy);
-        return sanitizedLegacy;
+        return cacheStoreValueForUser(userId, sanitizedLegacy);
       }
 
       // Per-user safe backup, then legacy
@@ -1253,7 +1358,7 @@ export const supabaseZustandStorage: StateStorage = {
         const rebuilt = JSON.stringify({ state: { entries: safeEntries }, version: 1 });
         const sanitizedRebuilt = sanitizeStoreValue(rebuilt);
         void enqueueStoreSave(userId, sanitizedRebuilt);
-        return sanitizedRebuilt;
+        return cacheStoreValueForUser(userId, sanitizedRebuilt);
       }
     } catch {
       const local = localStorage.getItem(storeKey);

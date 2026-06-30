@@ -160,24 +160,16 @@ export default function Header() {
           {open && (() => {
             const activeAccounts = visibleAccounts.filter(a => a.status !== 'Blown' && a.status !== 'Passed');
             const closedAccounts = visibleAccounts.filter(a => a.status === 'Blown' || a.status === 'Passed');
-            const statusPill = (status: string) => {
-              const color = accountStatusColor(status);
-              return (
-                <span style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase' as const,
-                  color,
-                  background: color + '18',
-                  border: `1px solid ${color}40`,
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  flexShrink: 0,
-                  fontFamily: 'var(--font-sans)',
-                }}>{status}</span>
-              );
-            };
+            const statusDot = (status: string) => (
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: accountStatusColor(status),
+                flexShrink: 0,
+                display: 'inline-block',
+              }} title={status} />
+            );
             const rowBtn = (id: string, name: string, firm: string, status: string, isSelected: boolean, blown: boolean) => (
               <button
                 key={id}
@@ -187,23 +179,23 @@ export default function Header() {
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
                   gap: 10,
                   padding: '8px 12px',
                   fontFamily: 'var(--font-sans)',
-                  background: isSelected ? 'rgba(255,255,255,0.045)' : 'transparent',
+                  background: isSelected ? 'var(--app-bg)' : 'transparent',
                   border: 'none',
-                  borderLeft: isSelected ? '2px solid #f59e0b' : '2px solid transparent',
                   cursor: 'pointer',
                   textAlign: 'left',
                   opacity: blown ? 0.5 : 1,
                 }}
+                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--app-bg)'; }}
+                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
               >
-                <div style={{ minWidth: 0 }}>
+                {statusDot(status)}
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, color: isSelected ? 'var(--app-text)' : 'var(--app-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
                   {firm && <div style={{ fontSize: 10, color: 'var(--app-text-subtle)', marginTop: 1 }}>{firm}</div>}
                 </div>
-                {statusPill(status)}
               </button>
             );
             return (
@@ -211,13 +203,13 @@ export default function Header() {
                 position: 'absolute',
                 top: 'calc(100% + 4px)',
                 right: 0,
-                width: 260,
+                width: 240,
                 background: 'var(--app-panel)',
                 border: '1px solid var(--app-border)',
                 borderRadius: 8,
                 padding: '4px 0',
                 zIndex: 9999,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
                 maxHeight: 380,
                 overflowY: 'auto',
               }}>
@@ -229,22 +221,21 @@ export default function Header() {
                     width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
                     gap: 10,
                     padding: '8px 12px',
                     fontFamily: 'var(--font-sans)',
                     color: selectedAccountId === ALL_ACCOUNTS_ID ? 'var(--app-text)' : 'var(--app-text-muted)',
-                    background: selectedAccountId === ALL_ACCOUNTS_ID ? 'rgba(255,255,255,0.045)' : 'transparent',
+                    background: selectedAccountId === ALL_ACCOUNTS_ID ? 'var(--app-bg)' : 'transparent',
                     border: 'none',
-                    borderLeft: selectedAccountId === ALL_ACCOUNTS_ID ? '2px solid #f59e0b' : '2px solid transparent',
                     cursor: 'pointer',
                     textAlign: 'left',
                     fontSize: 12,
                     fontWeight: 500,
                   }}
+                  onMouseEnter={e => { if (selectedAccountId !== ALL_ACCOUNTS_ID) e.currentTarget.style.background = 'var(--app-bg)'; }}
+                  onMouseLeave={e => { if (selectedAccountId !== ALL_ACCOUNTS_ID) e.currentTarget.style.background = 'transparent'; }}
                 >
                   All Accounts
-                  <span style={{ fontSize: 9, color: 'var(--app-text-subtle)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>{activeAccounts.length} active</span>
                 </button>
 
                 {/* Active accounts */}

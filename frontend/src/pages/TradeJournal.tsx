@@ -29,7 +29,7 @@ import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { evaluateEntryRules, evaluateTradeRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
 import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
-import { flushSupabaseStoreNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
+import { flushSupabaseStoreNow, saveStoreStatePatchNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -2428,7 +2428,13 @@ export default function TradeJournal() {
     // must also remove its empty day instead of leaving a "No trades" shell.
     const next = pruneEmptyJournalEntries(updater(current));
     setEntriesInStore(next as unknown as StoreJournalEntry[]);
-    void flushSupabaseStoreNow().catch(() => {
+    const updatedState = useFlyxaStore.getState();
+    void saveStoreStatePatchNow({
+      entries: updatedState.entries,
+      deletedTradeIds: updatedState.deletedTradeIds,
+      deletedEntryDates: updatedState.deletedEntryDates,
+      restoredEntryDates: updatedState.restoredEntryDates,
+    }).catch(() => {
       // Best effort: local persist already happened; cloud sync can retry on next write.
     });
   }, [rulesTemplate, setEntriesInStore]);
