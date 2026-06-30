@@ -1,6 +1,7 @@
 interface MaybeRichEntry {
   trades: unknown[];
   date?: string;
+  isBlankDay?: boolean;
   dailyReflection?: { pre?: string; post?: string; lessons?: string } | null;
   reflection?: { pre?: string; post?: string; lessons?: string } | null;
   emotions?: Array<{ state?: string }> | null;
@@ -36,6 +37,8 @@ export function pruneEmptyJournalEntries<T extends MaybeRichEntry>(
 ): T[] {
   return entries.filter(entry => {
     if (entry.trades.length > 0) return true;
+    // Explicitly marked blank days are intentional — always keep them.
+    if (entry.isBlankDay) return true;
     if (hasContent(entry)) return true;
     // Keep the entry if a pre-session (or post-session note) exists for its date.
     if (preSessionHistory && typeof entry.date === 'string' && entry.date) {

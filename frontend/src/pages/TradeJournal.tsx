@@ -155,6 +155,7 @@ interface JournalEntry {
     distractions: string[];
     environment: string;
   };
+  isBlankDay?: boolean;
 }
 
 const DEFAULT_RULES = [
@@ -368,7 +369,7 @@ function getRulesTemplate(rules: RiskRule[]) {
   return configured.length > 0 ? configured : DEFAULT_RULES;
 }
 
-function createEmptyEntry(date: string, rulesTemplate: string[], account?: string): JournalEntry {
+function createEmptyEntry(date: string, rulesTemplate: string[], account?: string, isBlankDay = false): JournalEntry {
   return {
     id: crypto.randomUUID(),
     date,
@@ -387,6 +388,7 @@ function createEmptyEntry(date: string, rulesTemplate: string[], account?: strin
       execution: 0,
     },
     emotions: TAGS.map(label => ({ label, state: 'neutral' })),
+    ...(isBlankDay ? { isBlankDay: true } : {}),
   };
 }
 
@@ -707,6 +709,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
         emotions,
         dailyReflection: record.dailyReflection && typeof record.dailyReflection === 'object' ? record.dailyReflection as JournalEntry['dailyReflection'] : undefined,
         physicalState: record.physicalState && typeof record.physicalState === 'object' ? record.physicalState as JournalEntry['physicalState'] : undefined,
+        isBlankDay: record.isBlankDay === true ? true : undefined,
       };
     })
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -733,6 +736,7 @@ function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEnt
           index => richer.screenshots[index] || fallback.screenshots[index] || ''
         ),
         scannedImageUrl: richer.scannedImageUrl || fallback.scannedImageUrl,
+        isBlankDay: richer.isBlankDay || fallback.isBlankDay || undefined,
         reflection: {
           pre: richer.reflection.pre || fallback.reflection.pre,
           post: richer.reflection.post || fallback.reflection.post,
@@ -2594,7 +2598,7 @@ export default function TradeJournal() {
       return;
     }
 
-    const blank = createEmptyEntry(date, rulesTemplate, getDefaultTradeAccountId());
+    const blank = createEmptyEntry(date, rulesTemplate, getDefaultTradeAccountId(), true);
     // No phantom trade — blank days start empty. User adds trades via "Add trade".
     optimisticEntryRef.current = blank;
     mutateEntries(prev => [blank, ...prev]);
