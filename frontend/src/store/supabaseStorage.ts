@@ -1175,6 +1175,160 @@ if (typeof window !== 'undefined') {
 }
 
 // ---------------------------------------------------------------------------
+// Dev / recovery tools exposed on window._flyxa
+// ---------------------------------------------------------------------------
+
+/**
+ * Attaches diagnostic and recovery helpers to `window._flyxa` so engineers
+ * can run them from the browser DevTools console:
+ *
+ *   await window._flyxa.diagnoseBackup(['2026-06-04', '2026-06-12'])
+ *   await window._flyxa.diagnoseMainStore()
+ *   await window._flyxa.forceRestoreFromBackup(['2026-06-04', '2026-06-12'])
+ */
+export async function exposeRecoveryTools(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const userId = await getUserId();
+  if (!userId) return;
+
+  const tools = {
+    /** Show what dates/trade-counts exist in the Supabase backup table. */
+    async diagnoseBackup(dates?: string[]) {
+      const all = await readBackupEntries(userId);
+      const rows = (dates && dates.length > 0)
+        ? all.filter(e => dates.includes(e.date as string))
+        : all;
+      const summary = rows.map(e => ({
+        date: e.date,
+        trades: Array.isArray(e.trades) ? (e.trades as unknown[]).length : 0,
+        tradeIds: Array.isArray(e.trades)
+          ? (e.trades as Record<string, unknown>[]).map(t => t.id).join(', ')
+          : '',
+      }));
+      console.table(summary);
+      if (summary.length === 0) console.warn('No backup rows found for those dates. Trades may never have been saved to Supabase.');
+      return rows;
+    },
+
+    /** Show what dates/trade-counts exist in the localStorage per-entry backup. */
+    diagnoseLocalBackup(dates?: string[]) {
+      const all = readLocalEntriesSafe(userId);
+      const rows = (dates && dates.length > 0)
+        ? all.filter(e => dates.includes(e.date as string))
+        : all;
+      const summary = rows.map(e => ({
+        date: e.date,
+        trades: Array.isArray(e.trades) ? (e.trades as unknown[]).length : 0,
+        tradeIds: Array.isArray(e.trades)
+          ? (e.trades as Record<string, unknown>[]).map(t => t.id).join(', ')
+          : '',
+      }));
+      console.table(summary);
+      if (summary.length === 0) console.warn('No localStorage backup rows found for those dates.');
+      return rows;
+    },
+
+    /** Show all dates currently in the Supabase main user_store. */
+    async diagnoseMainStore(dates?: string[]) {
+      const { data, error } = await supabase
+        .from('user_store')
+        .select('flyxa_data')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error || !data) { console.error('Could not read main store', error); return []; }
+      const entries = (data.flyxa_data as Record<string, unknown> | null)?.state as { entries?: unknown[] } | undefined;
+      const all = Array.isArray(entries?.entries) ? entries!.entries as Record<string, unknown>[] : [];
+      const rows = (dates && dates.length > 0)
+        ? all.filter(e => dates.includes(e.date as string))
+        : all;
+      const summary = rows.map(e => ({
+        date: e.date,
+        trades: Array.isArray(e.trades) ? (e.trades as unknown[]).length : 0,
+      }));
+      console.table(summary);
+      return rows;
+    },
+
+    /**
+     * Force-restores backup entries for the given dates into the main Supabase store,
+     * bypassing the locally-placed trade key filter. Use when trades are genuinely
+     * lost (not merely moved to a different date). Reload the page after calling this.
+     */
+    async forceRestoreFromBackup(dates: string[]) {
+      if (!dates || dates.length === 0) { console.error('Pass an array of date strings, e.g. ["2026-06-04"]'); return; }
+
+      // Read backup (Supabase table + localStorage), prefer Supabase.
+      const [backupRows, localRows] = await Promise.all([
+        readBackupEntries(userId),
+        Promise.resolve(readLocalEntriesSafe(userId)),
+      ]);
+      const candidateMap = new Map<string, Record<string, unknown>>();
+      for (const e of localRows) if (typeof e.date === 'string') candidateMap.set(e.date as string, e);
+      for (const e of backupRows) if (typeof e.date === 'string') candidateMap.set(e.date as string, e);
+
+      const toRestore = dates
+        .map(d => candidateMap.get(d))
+        .filter((e): e is Record<string, unknown> => !!e && Array.isArray(e.trades) && (e.trades as unknown[]).length > 0);
+
+      if (toRestore.length === 0) {
+        console.warn('No backup entries with trades found for:', dates);
+        console.info('Tip: run diagnoseBackup() and diagnoseLocalBackup() first to see what is available.');
+        return;
+      }
+
+      // Read current main store.
+      const { data, error } = await supabase
+        .from('user_store')
+        .select('flyxa_data')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) { console.error('Could not read main store:', error); return; }
+
+      const mainBlob = (data?.flyxa_data ?? { state: {}, version: 1 }) as Record<string, unknown>;
+      const mainState = (mainBlob.state ?? {}) as Record<string, unknown>;
+      const mainEntries = Array.isArray(mainState.entries)
+        ? mainState.entries as Record<string, unknown>[]
+        : [];
+      const existingDates = new Set(mainEntries.map(e => e.date as string));
+
+      const added: string[] = [];
+      const skipped: string[] = [];
+      const newEntries = [...mainEntries];
+
+      for (const entry of toRestore) {
+        const d = entry.date as string;
+        if (existingDates.has(d)) {
+          skipped.push(d);
+          console.warn(`Date ${d} already exists in main store — skipping (delete it first if you want to overwrite).`);
+        } else {
+          newEntries.push(entry);
+          added.push(d);
+        }
+      }
+
+      if (added.length === 0) { console.warn('Nothing to restore — all dates already present.', { skipped }); return; }
+
+      const newBlob = { ...mainBlob, state: { ...mainState, entries: newEntries } };
+      const newValue = sanitizeStoreValue(JSON.stringify(newBlob));
+
+      const { error: saveError } = await supabase
+        .from('user_store')
+        .upsert({ user_id: userId, flyxa_data: JSON.parse(newValue) as unknown, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+
+      if (saveError) { console.error('Save to Supabase failed:', saveError); return; }
+
+      // Bust the local cache so next load pulls fresh from Supabase.
+      try { localStorage.removeItem(localStoreKey(userId)); } catch { /* ignore */ }
+
+      console.log(`✅ Restored ${added.length} date(s): ${added.join(', ')}. Reload the page to see the recovered trades.`);
+      if (skipped.length > 0) console.log(`Skipped (already present): ${skipped.join(', ')}`);
+    },
+  };
+
+  (window as unknown as Record<string, unknown>)._flyxa = tools;
+}
+
+// ---------------------------------------------------------------------------
 // Zustand storage adapter
 // ---------------------------------------------------------------------------
 

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../services/api.js';
 import useFlyxaStore, { getInitialState } from '../store/flyxaStore.js';
-import { REMOTE_RECONCILE_EVENT } from '../store/supabaseStorage.js';
+import { REMOTE_RECONCILE_EVENT, exposeRecoveryTools } from '../store/supabaseStorage.js';
 
 interface AuthContextType {
   user: User | null;
@@ -74,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // journal instead of staying on defaults.
       if (session) {
         void useFlyxaStore.persist.rehydrate();
+        void exposeRecoveryTools();
       }
     });
 
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if ((event === 'SIGNED_IN' && !wasLoggedIn) || (event === 'INITIAL_SESSION' && isLoggedIn && !wasLoggedIn)) {
         setIsPasswordRecovery(false);
         void useFlyxaStore.persist.rehydrate();
+        void exposeRecoveryTools();
       }
       if (event === 'SIGNED_OUT') {
         setIsPasswordRecovery(false);

@@ -1956,60 +1956,6 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
   );
 }
 
-// ── D — ExecutionReviewBlock ──────────────────────────────────────────────────
-function ExecutionReviewBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
-  const er = trade.executionReview ?? { enteredAtLevel:null, waitedForConfirmation:null, correctSize:null, exitedAtPlan:null, movedStopCorrectly:null, resistedEarlyExit:null, note:'' };
-  const [note, setNote] = useState(er.note ?? '');
-  useEffect(() => { setNote(trade.executionReview?.note ?? ''); }, [trade.id]);
-  const update = (patch: Partial<typeof er>) => onMutate({ executionReview: { ...er, ...patch } });
-
-  // Save note on unmount (section collapse)
-  const unmountRef = useRef({ note, er, onMutate });
-  unmountRef.current = { note, er, onMutate };
-  useEffect(() => {
-    return () => {
-      const { note: n, er: e, onMutate: m } = unmountRef.current;
-      if (n !== (e.note ?? '')) m({ executionReview: { ...e, note: n } });
-    };
-  }, []);
-
-  const YNToggle = ({ label, field, value }: { label: string; field: keyof typeof er; value: boolean | null }) => (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-      <span style={{ fontSize:10, color:'var(--app-text-muted)' }}>{label}</span>
-      <div style={{ display:'flex', gap:3 }}>
-        {[true,false].map(v => (
-          <button key={String(v)} type="button" onClick={() => update({ [field]: value === v ? null : v } as Partial<typeof er>)}
-            style={{ padding:'2px 8px', fontSize:9, borderRadius:3, border:`1px solid ${value===v?(v?'var(--green-border)':'var(--red-border)'):'var(--app-border)'}`, background:value===v?(v?'var(--green-dim)':'var(--red-dim)'):'transparent', color:value===v?(v?'var(--green)':'var(--red)'):'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600 }}>
-            {v ? 'YES' : 'NO'}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, overflow:'hidden', marginBottom:8 }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', borderBottom:'1px solid var(--app-border)' }}>
-        <div style={{ padding:'12px 14px', borderRight:'1px solid var(--app-border)', display:'flex', flexDirection:'column', gap:8 }}>
-          <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:0 }}>Entry Execution</div>
-          <YNToggle label="Entered exactly at my level" field="enteredAtLevel" value={er.enteredAtLevel} />
-          <YNToggle label="Waited for confirmation" field="waitedForConfirmation" value={er.waitedForConfirmation} />
-          <YNToggle label="Correct position size" field="correctSize" value={er.correctSize} />
-        </div>
-        <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:8 }}>
-          <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:0 }}>Exit Execution</div>
-          <YNToggle label="Exited at planned level" field="exitedAtPlan" value={er.exitedAtPlan} />
-          <YNToggle label="Moved stop to BE at right time" field="movedStopCorrectly" value={er.movedStopCorrectly} />
-          <YNToggle label="Resisted urge to exit early" field="resistedEarlyExit" value={er.resistedEarlyExit} />
-        </div>
-      </div>
-      <textarea value={note} onChange={e => setNote(e.target.value)} onBlur={e => update({ note: e.target.value })}
-        placeholder="Anything specific about how you managed this trade that you want to remember — good or bad."
-        style={{ width:'100%', minHeight:60, padding:'10px 14px', fontSize:11, fontFamily:'var(--font-sans)', background:'transparent', border:'none', outline:'none', resize:'none', color:'var(--txt)', boxSizing:'border-box' }} />
-    </div>
-  );
-}
-
 // ── E — PsychologyRatingsBlock ────────────────────────────────────────────────
 function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
   const r = trade.psychologyRatings ?? { setupQuality:0, discipline:0, execution:0, patience:0, riskManagement:0, emotionalControl:0, notes:{} };
@@ -2311,7 +2257,7 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
 export default function TradeJournal() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { preferences, accounts, selectedAccountId, getDefaultTradeAccountId } = useAppSettings();
+  const { preferences, accounts, getDefaultTradeAccountId } = useAppSettings();
   const { user } = useAuth();
   const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
@@ -3137,6 +3083,18 @@ export default function TradeJournal() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
+  // ── Adherence: single source of truth for both header and plan adherence section ──
+  const adherenceSummary = useMemo(() => {
+    if (!selectedEntry || selectedEntry.trades.length === 0) return null;
+    return summarizeRuleEvaluations(
+      evaluateEntryRules(selectedEntry as unknown as StoreJournalEntry, riskRules)
+    );
+  }, [selectedEntry, riskRules]);
+  const adherencePct = adherenceSummary?.pct ?? null;
+  const adherencePassed = adherenceSummary?.passed ?? 0;
+  const adherenceFailed = adherenceSummary?.failed ?? 0;
+  const adherenceTotal = adherencePassed + adherenceFailed;
+
   return (
     <div className="tj-shell">
       <input
@@ -3422,35 +3380,42 @@ export default function TradeJournal() {
       <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
         {!showScanner && selectedEntry ? (
           <>
-            <div className="tj-sticky-head">
+            {/* ── SECTION 1: HEADER ── */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+              paddingBottom: 14, borderBottom: '1px solid var(--border)', padding: '16px 20px 14px',
+              flexShrink: 0,
+            }}>
               <div>
-                <div className="tj-entry-title-row">
-                  <p className="tj-entry-title">{formatDateTitle(selectedEntry.date)}</p>
+                <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--txt)', marginBottom: 6, fontFamily: 'var(--font-sans)' }}>
+                  {formatDateTitle(selectedEntry.date)}
                 </div>
-                <p className="tj-entry-sub">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {(() => {
-                    // Use the globally selected account; fall back to the trade's own account
-                    // when "All Accounts" is active or the selected account can't be found.
-                    const resolvedId =
-                      selectedAccountId && selectedAccountId !== DEFAULT_ACCOUNT_ID
-                        ? selectedAccountId
-                        : activeTrade?.accountId;
-                    const acct = accounts.find(a => a.id === resolvedId);
-                    return acct ? `${acct.name} | ${acct.type}` : null;
-                  })()} | <strong>{formatSignedCurrency(computeEntryStats(selectedEntry, riskRules).pnl)}</strong>
-                  {(() => {
-                    if (!selectedEntry.trades.length) return null;
-                    const s = summarizeRuleEvaluations(
-                      evaluateEntryRules(selectedEntry as unknown as StoreJournalEntry, riskRules)
+                    const stats = computeEntryStats(selectedEntry, riskRules);
+                    const pnl = stats.pnl;
+                    const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--txt-2)';
+                    const pctColor = adherencePct !== null
+                      ? (adherencePct >= 80 ? 'var(--green)' : adherencePct >= 60 ? 'var(--amber)' : 'var(--red)')
+                      : 'var(--txt-2)';
+                    return (
+                      <>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: pnlColor, fontWeight: 500 }}>
+                          {formatSignedCurrency(pnl)}
+                        </span>
+                        <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--txt-3)', display: 'inline-block', flexShrink: 0 }} />
+                        {adherencePct !== null && (
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: pctColor, fontWeight: 500 }}>
+                            {adherencePct}% rule adherence
+                          </span>
+                        )}
+                      </>
                     );
-                    if (s.pct === null) return null;
-                    const clr = s.pct >= 80 ? 'var(--green)' : s.pct >= 60 ? 'var(--amber)' : 'var(--red)';
-                    return <> · <span style={{ color: clr, fontWeight: 600 }}>{s.pct}% rules</span></>;
                   })()}
-                </p>
+                </div>
                 {activeTrade && !deleteEntryConfirm && (
-                  <div className="tj-date-edit-row">
-                    <span className="tj-entry-sub" style={{ margin: 0 }}>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
                       Trade date: {getTradeDateValue(activeTrade, selectedEntry.date)}
                     </span>
                     <button
@@ -3466,7 +3431,7 @@ export default function TradeJournal() {
                   </div>
                 )}
                 {isTradeDateEditorOpen && activeTrade && !deleteEntryConfirm && (
-                  <div className="tj-date-edit-row">
+                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <DatePicker
                       className="tj-date-edit-input"
                       value={tradeDateDraft}
@@ -3479,26 +3444,33 @@ export default function TradeJournal() {
                     <button type="button" className="tj-mini-btn" onClick={() => {
                       setTradeDateDraft(getTradeDateValue(activeTrade, selectedEntry.date));
                       setIsTradeDateEditorOpen(false);
-                    }}>
-                      Cancel
-                    </button>
+                    }}>Cancel</button>
                   </div>
                 )}
               </div>
-              <div className="tj-head-actions">
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
                 {deleteEntryConfirm ? (
                   <>
-                    <span className="tj-delete-text">Delete this day?</span>
+                    <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Delete this day?</span>
                     <button type="button" className="tj-mini-btn" onClick={() => setDeleteEntryConfirm(false)}>Cancel</button>
                     <button type="button" className="tj-mini-btn red" onClick={deleteEntry}>Delete</button>
                   </>
                 ) : (
                   <>
-                    <button type="button" className="tj-btn-ghost" onClick={() => setDeleteEntryConfirm(true)}>
+                    <button
+                      type="button"
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                      onClick={() => setDeleteEntryConfirm(true)}
+                    >
                       <Trash2 size={13} />
                       Delete
                     </button>
-                    <button type="button" className="tj-btn-primary tj-btn-save" onClick={goToScanner} data-tour-id="scanner-log-trade-button">
+                    <button
+                      type="button"
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 4, border: 'none', background: 'var(--amber)', color: '#000', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                      onClick={goToScanner}
+                      data-tour-id="scanner-log-trade-button"
+                    >
                       <Plus size={13} />
                       Log trade
                     </button>
@@ -3508,69 +3480,70 @@ export default function TradeJournal() {
             </div>
 
             <div className="tj-entry-body">
-              <div className="tj-stats" data-tour-id="scanner-trade-stats">
-                <div className="tj-stat">
-                  <div className="tj-stat-label">Net P&amp;L</div>
-                  <div className={`tj-stat-value ${computeEntryStats(selectedEntry).pnl > 0 ? 'pos' : computeEntryStats(selectedEntry).pnl < 0 ? 'neg' : ''}`}>
-                    {formatSignedCurrency(computeEntryStats(selectedEntry).pnl)}
-                  </div>
-                </div>
-                <div className="tj-stat">
-                  <div className="tj-stat-label">Win Rate</div>
-                  <div className="tj-stat-value">{toPercent(computeEntryStats(selectedEntry).winRate)}</div>
-                </div>
-                <div className="tj-stat">
-                  <div className="tj-stat-label">Avg R:R</div>
-                  <div className="tj-stat-value">{toR(computeEntryStats(selectedEntry).avgRR)}</div>
-                </div>
-                <div className="tj-stat">
-                  <div className="tj-stat-label">Trades</div>
-                  <div className="tj-stat-value">{computeEntryStats(selectedEntry).tradeCount}</div>
-                </div>
-                <div className="tj-stat">
-                  <div className="tj-stat-label">Trade Length</div>
-                  {activeTrade ? (
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-                    <input
-                      type="number"
-                      className="tj-stat-value tj-stat-editable"
-                      value={draftDuration}
-                      min={0}
-                      placeholder="—"
-                      title="Duration in minutes"
-                      onChange={e => setDraftDuration(e.target.value)}
-                      onBlur={() => {
-                        if (!activeTrade) return;
-                        const mins = parseInt(draftDuration, 10);
-                        mutateTradeFields(activeTrade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
-                      }}
-                    />
-                    <span style={{ fontSize: 10, color: 'var(--app-text-subtle)' }}>min</span>
-                    </div>
-                  ) : (
-                    <div className="tj-stat-value">{formatDurationLabel(resolveTradeDurationMinutes(activeTrade))}</div>
-                  )}
-                </div>
-                <div className="tj-stat">
-                  <div className="tj-stat-label">Entry Time</div>
-                  {activeTrade ? (
-                    <input
-                      type="time"
-                      className="tj-stat-value tj-stat-editable"
-                      value={draftEntryTime}
-                      onChange={e => setDraftEntryTime(e.target.value)}
-                      onBlur={() => {
-                        if (activeTrade && draftEntryTime !== activeTrade.entryTime) {
-                          mutateTradeFields(activeTrade.id, { entryTime: draftEntryTime });
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="tj-stat-value">--:--</div>
-                  )}
-                </div>
-              </div>
 
+              {/* ── SECTION 2: STAT BAR ── */}
+              {(() => {
+                const stats = computeEntryStats(selectedEntry, riskRules);
+                const pnlColor = stats.pnl > 0 ? 'var(--green)' : stats.pnl < 0 ? 'var(--red)' : 'var(--txt)';
+                return (
+                  <div style={{ display: 'flex', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 12, overflow: 'hidden' }} data-tour-id="scanner-trade-stats">
+                    {[
+                      { label: 'NET P&L', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: pnlColor }}>{formatSignedCurrency(stats.pnl)}</span> },
+                      { label: 'WIN RATE', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{toPercent(stats.winRate)}</span> },
+                      { label: 'AVG R:R', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{toR(stats.avgRR)}</span> },
+                      { label: 'TRADES', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{String(stats.tradeCount)}</span> },
+                      { label: 'TRADE LENGTH', node: activeTrade ? (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                          <input type="number" className="tj-stat-value tj-stat-editable" value={draftDuration} min={0} placeholder="—"
+                            title="Duration in minutes"
+                            onChange={e => setDraftDuration(e.target.value)}
+                            onBlur={() => {
+                              if (!activeTrade) return;
+                              const mins = parseInt(draftDuration, 10);
+                              mutateTradeFields(activeTrade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
+                            }} />
+                          <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>min</span>
+                        </div>
+                      ) : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{formatDurationLabel(resolveTradeDurationMinutes(null))}</span> },
+                      { label: 'ENTRY TIME', node: activeTrade ? (
+                        <input type="time" className="tj-stat-value tj-stat-editable" value={draftEntryTime}
+                          onChange={e => setDraftEntryTime(e.target.value)}
+                          onBlur={() => {
+                            if (activeTrade && draftEntryTime !== activeTrade.entryTime) {
+                              mutateTradeFields(activeTrade.id, { entryTime: draftEntryTime });
+                            }
+                          }} />
+                      ) : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>--:--</span> },
+                    ].map((cell, i, arr) => (
+                      <div key={cell.label} style={{ flex: 1, padding: '10px 14px', borderRight: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', marginBottom: 4 }}>{cell.label}</div>
+                        {cell.node}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* ── SECTION 3: CONTRACT SIZING ── */}
+              {activeTrade && (
+                <>
+                  <div className="tj-section-head">
+                    <span className="tj-section-title">Contract Sizing</span>
+                  </div>
+                  <div className="tj-sizing-group">
+                    <AccountSelectorBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                    <ContractSizingBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* ── SECTION 4: SCREENSHOT ── */}
               <div className="tj-section-head first">
                 <span className="tj-section-title">Screenshot</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3579,6 +3552,13 @@ export default function TradeJournal() {
                       {clampedIndex + 1} / {allTradeImages.length}
                     </span>
                   )}
+                  <button
+                    type="button"
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: 'var(--cobalt)', fontFamily: 'var(--font-sans)' }}
+                    onClick={() => { screenshotInputRef.current?.click(); onShotPick(0); }}
+                  >
+                    + Add image
+                  </button>
                   {activeTrade && (
                     <button
                       type="button"
@@ -3592,10 +3572,7 @@ export default function TradeJournal() {
                   )}
                 </span>
               </div>
-
-              {/* Image carousel wrapper */}
               <div className="tj-shot-viewer" data-tour-id="scanner-screenshot">
-                {/* Main image button */}
                 <button
                   type="button"
                   className="tj-shot tj-shot-single"
@@ -3646,40 +3623,22 @@ export default function TradeJournal() {
                     </>
                   )}
                 </button>
-
-                {/* Right-side nav strip — only shown when supporting images exist */}
                 {allTradeImages.length > 1 && (
                   <div className="tj-shot-side-nav">
                     {clampedIndex > 0 && (
-                      <button
-                        type="button"
-                        className="tj-shot-side-btn"
-                        onClick={() => navImage('left')}
-                        aria-label="Previous image"
-                        title="Back to main chart"
-                      >
+                      <button type="button" className="tj-shot-side-btn" onClick={() => navImage('left')} aria-label="Previous image" title="Back to main chart">
                         <ChevronLeft size={14} />
                       </button>
                     )}
                     <div className="tj-shot-side-dots">
                       {allTradeImages.map((_, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          className={`tj-side-dot${i === clampedIndex ? ' active' : ''}`}
+                        <button key={i} type="button" className={`tj-side-dot${i === clampedIndex ? ' active' : ''}`}
                           onClick={() => { setSlideDir(i > clampedIndex ? 'right' : 'left'); setViewingImageIndex(i); }}
-                          aria-label={`Image ${i + 1}`}
-                        />
+                          aria-label={`Image ${i + 1}`} />
                       ))}
                     </div>
                     {clampedIndex < allTradeImages.length - 1 && (
-                      <button
-                        type="button"
-                        className="tj-shot-side-btn"
-                        onClick={() => navImage('right')}
-                        aria-label="Next image"
-                        title="View supporting image"
-                      >
+                      <button type="button" className="tj-shot-side-btn" onClick={() => navImage('right')} aria-label="Next image" title="View supporting image">
                         <ChevronRight size={14} />
                       </button>
                     )}
@@ -3687,6 +3646,7 @@ export default function TradeJournal() {
                 )}
               </div>
 
+              {/* ── SECTION 5: TRADES ── */}
               <div className="tj-section-head">
                 <span className="tj-section-title">
                   Trades
@@ -3698,20 +3658,12 @@ export default function TradeJournal() {
                 </span>
                 <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {selectedTradeIds.size > 0 && !bulkDeleteConfirm && (
-                    <button
-                      type="button"
-                      className="tj-mini-btn red"
-                      onClick={() => setBulkDeleteConfirm(true)}
-                    >
+                    <button type="button" className="tj-mini-btn red" onClick={() => setBulkDeleteConfirm(true)}>
                       Delete {selectedTradeIds.size}
                     </button>
                   )}
                   {selectedTradeIds.size > 0 && (
-                    <button
-                      type="button"
-                      className="tj-mini-btn"
-                      onClick={() => { setSelectedTradeIds(new Set()); setBulkDeleteConfirm(false); }}
-                    >
+                    <button type="button" className="tj-mini-btn" onClick={() => { setSelectedTradeIds(new Set()); setBulkDeleteConfirm(false); }}>
                       Clear
                     </button>
                   )}
@@ -3723,73 +3675,51 @@ export default function TradeJournal() {
                   <span className="tj-delete-text">Delete {selectedTradeIds.size} trade{selectedTradeIds.size !== 1 ? 's' : ''}?</span>
                   <span className="tj-delete-actions">
                     <button type="button" className="tj-mini-btn" onClick={() => setBulkDeleteConfirm(false)}>Cancel</button>
-                    <button
-                      type="button"
-                      className="tj-mini-btn red"
+                    <button type="button" className="tj-mini-btn red"
                       onClick={async () => {
                         const ids = Array.from(selectedTradeIds);
                         const willBeEmpty = selectedEntry.trades.length === ids.length;
-                        const entryDate   = selectedEntry.date;
-                        const entryId     = selectedEntry.id;
-                        for (const id of ids) {
-                          await deleteTradeEverywhere(id);
-                        }
+                        const entryDate = selectedEntry.date;
+                        const entryId = selectedEntry.id;
+                        for (const id of ids) { await deleteTradeEverywhere(id); }
                         setSelectedTradeIds(new Set());
                         setBulkDeleteConfirm(false);
                         setDeleteTradeId(null);
                         if (willBeEmpty) {
-                          // All trades removed — remove the now-empty day entry too
-                          useFlyxaStore.getState().entries
-                            .filter(e => e.date === entryDate)
-                            .forEach(e => deleteEntryInStore(e.id));
+                          useFlyxaStore.getState().entries.filter(e => e.date === entryDate).forEach(e => deleteEntryInStore(e.id));
                           void flushSupabaseStoreNow().catch(() => {});
-                          const next = entries
-                            .filter(e => e.id !== entryId)
-                            .sort((a, b) => b.date.localeCompare(a.date))
-                            .find(e => e.trades.length > 0);
+                          const next = entries.filter(e => e.id !== entryId).sort((a, b) => b.date.localeCompare(a.date)).find(e => e.trades.length > 0);
                           if (next) { setSelectedEntryId(next.id); setActiveTradeId(next.trades[0].id); }
                           else { setSelectedEntryId(null); setActiveTradeId(null); }
                         }
                       }}
-                    >
-                      Confirm
-                    </button>
+                    >Confirm</button>
                   </span>
                 </div>
               )}
               <div className="tj-trade-list" data-tour-id="scanner-trade-list">
-                {selectedEntry.trades.map(trade => (
+                {selectedEntry.trades.map((trade, tradeIdx) => (
                   deleteTradeId === trade.id ? (
                     <div key={trade.id} className="tj-delete-row">
                       <span className="tj-delete-text">Delete this trade?</span>
                       <span className="tj-delete-actions">
                         <button type="button" className="tj-mini-btn" onClick={() => setDeleteTradeId(null)}>Cancel</button>
-                        <button
-                          type="button"
-                          className="tj-mini-btn red"
+                        <button type="button" className="tj-mini-btn red"
                           onClick={async () => {
                             const willBeEmpty = selectedEntry.trades.length === 1;
-                            const entryDate   = selectedEntry.date;
-                            const entryId     = selectedEntry.id;
+                            const entryDate = selectedEntry.date;
+                            const entryId = selectedEntry.id;
                             await deleteTradeEverywhere(trade.id);
                             setDeleteTradeId(null);
                             if (willBeEmpty) {
-                              // Last trade gone — remove the now-empty day entry too
-                              useFlyxaStore.getState().entries
-                                .filter(e => e.date === entryDate)
-                                .forEach(e => deleteEntryInStore(e.id));
+                              useFlyxaStore.getState().entries.filter(e => e.date === entryDate).forEach(e => deleteEntryInStore(e.id));
                               void flushSupabaseStoreNow().catch(() => {});
-                              const next = entries
-                                .filter(e => e.id !== entryId)
-                                .sort((a, b) => b.date.localeCompare(a.date))
-                                .find(e => e.trades.length > 0);
+                              const next = entries.filter(e => e.id !== entryId).sort((a, b) => b.date.localeCompare(a.date)).find(e => e.trades.length > 0);
                               if (next) { setSelectedEntryId(next.id); setActiveTradeId(next.trades[0].id); }
                               else { setSelectedEntryId(null); setActiveTradeId(null); }
                             }
                           }}
-                        >
-                          Delete
-                        </button>
+                        >Delete</button>
                       </span>
                     </div>
                   ) : (
@@ -3798,6 +3728,7 @@ export default function TradeJournal() {
                       className={`tj-trade-card ${trade.result}${activeTradeId === trade.id ? ' active' : ''}${selectedTradeIds.has(trade.id) ? ' tj-trade-selected' : ''}`}
                       onClick={() => { setActiveTradeId(trade.id); setSelectedTradeIds(new Set()); setBulkDeleteConfirm(false); }}
                       aria-current={activeTradeId === trade.id ? 'true' : undefined}
+                      style={{ position: 'relative' }}
                     >
                       <button
                         type="button"
@@ -3807,41 +3738,22 @@ export default function TradeJournal() {
                           e.stopPropagation();
                           setSelectedTradeIds(prev => {
                             const next = new Set(prev);
-                            if (next.has(trade.id)) next.delete(trade.id);
-                            else next.add(trade.id);
+                            if (next.has(trade.id)) next.delete(trade.id); else next.add(trade.id);
                             return next;
                           });
                         }}
                       >
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 14,
-                            height: 14,
-                            borderRadius: 3,
-                            border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--app-border)'}`,
-                            background: selectedTradeIds.has(trade.id) ? 'var(--amber-dim)' : 'transparent',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {selectedTradeIds.has(trade.id) && (
-                            <span style={{ fontSize: 9, color: 'var(--amber)', lineHeight: 1 }}>✓</span>
-                          )}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--border)'}`, background: selectedTradeIds.has(trade.id) ? 'var(--amber-dim)' : 'transparent', flexShrink: 0 }}>
+                          {selectedTradeIds.has(trade.id) && <span style={{ fontSize: 9, color: 'var(--amber)', lineHeight: 1 }}>✓</span>}
                         </span>
                       </button>
-                      {(() => {
-                        const s = computeProcessScore(trade);
-                        const letter = scoreToGradeLetter(s);
-                        return (
-                          <span className={`tj-trade-grade g-${gradeCssKey(letter)}`}>
-                            {letter}
-                          </span>
-                        );
-                      })()}
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>#{tradeIdx + 1}</span>
                       <span className="tj-symbol">{trade.symbol}</span>
                       <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
+                      <span style={{ flex: 1 }} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: trade.pnl > 0 ? 'var(--green)' : trade.pnl < 0 ? 'var(--red)' : 'var(--txt-2)' }}>
+                        {formatSignedCurrency(trade.pnl - (trade.commission ?? 0))}
+                      </span>
                       <button type="button" className="tj-trash-btn" onClick={e => { e.stopPropagation(); setDeleteTradeId(trade.id); }}>
                         <Trash2 size={13} />
                       </button>
@@ -3857,48 +3769,22 @@ export default function TradeJournal() {
                 />
               )}
 
+              {/* ── SECTION 6: PRICE LEVELS (only when active trade) ── */}
               {activeTrade && (
                 <>
-                  <div className="tj-section-head">
-                    <span className="tj-section-title">Contract Sizing</span>
-                  </div>
-                  <div className="tj-sizing-group">
-                    <AccountSelectorBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                    <ContractSizingBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  </div>
+                  <PriceLevelsBlock
+                    trade={activeTrade}
+                    onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                  />
+                  <ActiveTradeRuleBlock
+                    entry={selectedEntry}
+                    trade={activeTrade}
+                    rules={riskRules}
+                  />
                 </>
               )}
 
-              {activeTrade && (
-                <PriceLevelsBlock
-                  trade={activeTrade}
-                  onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                />
-              )}
-
-              {activeTrade && (
-                <ActiveTradeRuleBlock
-                  entry={selectedEntry}
-                  trade={activeTrade}
-                  rules={riskRules}
-                />
-              )}
-
-              {/* ── A. DAILY REFLECTION ── */}
-              <SectionHead title="Daily Reflection" sectionKey="dailyReflection" collapsed={!!collapsed['dailyReflection']} onToggle={() => toggleSection('dailyReflection')} />
-              {!collapsed['dailyReflection'] && (
-                <DailyReflectionBlock
-                  entry={selectedEntry}
-                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                />
-              )}
-
+              {/* ── SECTION 6B: RULE VERIFICATION (collapsible) ── */}
               <SectionHead title="Rule Verification" sectionKey="ruleVerification" collapsed={!!collapsed['ruleVerification']} onToggle={() => toggleSection('ruleVerification')} />
               {!collapsed['ruleVerification'] && (
                 <RuleComplianceBlock
@@ -3908,9 +3794,106 @@ export default function TradeJournal() {
                 />
               )}
 
+              {/* ── SECTION 7: PLAN ADHERENCE ── */}
+              {selectedEntry.trades.length > 0 && (() => {
+                const evs = evaluateEntryRules(selectedEntry as unknown as StoreJournalEntry, riskRules);
+                const pct = adherencePct;
+                const passed = adherencePassed;
+                const failed = adherenceFailed;
+                const total = adherenceTotal;
+                const borderColor = pct !== null && pct < 70 ? 'var(--red-bdr, rgba(239,68,68,0.25))' : 'var(--border)';
+                const tintBg = pct === null ? 'transparent' : pct >= 90 ? 'var(--green-dim)' : pct >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
+                const ringColor = pct === null ? 'var(--txt-3)' : pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+                const circumference = 2 * Math.PI * 20;
+                const dashoffset = pct !== null ? circumference * (1 - pct / 100) : circumference;
+                return (
+                  <div style={{ background: 'var(--surface-1)', border: `1px solid ${borderColor}`, borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
+                    <div style={{ background: tintBg, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <svg width="50" height="50" viewBox="0 0 50 50" style={{ flexShrink: 0 }}>
+                          <circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" strokeWidth="4" />
+                          <circle cx="25" cy="25" r="20" fill="none" stroke={ringColor} strokeWidth="4"
+                            strokeDasharray={circumference} strokeDashoffset={dashoffset}
+                            strokeLinecap="round" transform="rotate(-90 25 25)" />
+                          <text x="25" y="29" textAnchor="middle" fill={ringColor} fontSize="11" fontWeight="700" fontFamily="var(--font-mono)">
+                            {pct !== null ? `${pct}%` : '--'}
+                          </text>
+                        </svg>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 3 }}>
+                            Plan Adherence{pct !== null ? `: ${pct}%` : ''}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--txt-2)' }}>
+                            {total > 0 ? `${passed} of ${total} verified checks passed` : 'No rules verified yet'}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {passed > 0 && (
+                          <span style={{ padding: '3px 8px', borderRadius: 3, background: 'var(--green-dim)', border: '1px solid var(--green-bdr, rgba(34,197,94,0.25))', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>
+                            {passed} passed
+                          </span>
+                        )}
+                        {failed > 0 && (
+                          <span style={{ padding: '3px 8px', borderRadius: 3, background: 'var(--red-dim)', border: '1px solid var(--red-bdr, rgba(239,68,68,0.25))', color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>
+                            {failed} broken
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {evs.map(item => (
+                      <div key={item.ruleId} style={{ padding: '11px 16px', borderBottom: '1px solid var(--border-sub, var(--border))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--txt)' }}>{item.label}</span>
+                            <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: item.source === 'automatic' ? 'var(--green-dim)' : 'var(--cobalt-dim)', color: item.source === 'automatic' ? 'var(--green)' : 'var(--cobalt)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+                              {item.source === 'automatic' ? 'AUTO' : 'MANUAL'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--txt-3)' }}>{item.detail}</div>
+                        </div>
+                        {item.source === 'manual' ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button type="button"
+                              onClick={() => {
+                                const next = selectedEntry.rules.some(r => r.text === item.label)
+                                  ? selectedEntry.rules.map(r => r.text === item.label ? { ...r, state: 'ok' as RuleState } : r)
+                                  : [...selectedEntry.rules, { text: item.label, state: 'ok' as RuleState }];
+                                mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, rules: next } : e));
+                              }}
+                              style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--border)'}`, background: item.state === 'ok' ? 'var(--green-dim)' : 'transparent', color: item.state === 'ok' ? 'var(--green)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Pass</button>
+                            <button type="button"
+                              onClick={() => {
+                                const next = selectedEntry.rules.some(r => r.text === item.label)
+                                  ? selectedEntry.rules.map(r => r.text === item.label ? { ...r, state: 'fail' as RuleState } : r)
+                                  : [...selectedEntry.rules, { text: item.label, state: 'fail' as RuleState }];
+                                mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, rules: next } : e));
+                              }}
+                              style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--border)'}`, background: item.state === 'fail' ? 'var(--red-dim)' : 'transparent', color: item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Break</button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: item.state === 'ok' ? 'var(--green)' : item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)' }}>
+                            {item.state === 'ok' ? 'PASS' : item.state === 'fail' ? 'BREAK' : 'UNVERIFIED'}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* ── SECTION 8: DAILY REFLECTION ── */}
+              <SectionHead title="Daily Reflection" sectionKey="dailyReflection" collapsed={!!collapsed['dailyReflection']} onToggle={() => toggleSection('dailyReflection')} />
+              {!collapsed['dailyReflection'] && (
+                <DailyReflectionBlock
+                  entry={selectedEntry}
+                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                />
+              )}
+
               {activeTrade && (
                 <>
-                  {/* ── B. PRE-ENTRY STATE ── */}
+                  {/* ── SECTION 9: PRE-ENTRY STATE ── */}
                   <SectionHead title="Pre-entry State" sectionKey="preEntry" collapsed={!!collapsed['preEntry']} onToggle={() => toggleSection('preEntry')} />
                   {!collapsed['preEntry'] && (
                     <PreEntryBlock
@@ -3921,7 +3904,7 @@ export default function TradeJournal() {
                     />
                   )}
 
-                  {/* ── C. TRADE THESIS ── */}
+                  {/* ── SECTION 10: TRADE THESIS ── */}
                   <SectionHead title="Trade Thesis" sectionKey="tradeTh" collapsed={!!collapsed['tradeTh']} onToggle={() => toggleSection('tradeTh')} />
                   {!collapsed['tradeTh'] && (
                     <TradeThesisBlock
@@ -3930,25 +3913,7 @@ export default function TradeJournal() {
                     />
                   )}
 
-                  {/* ── D. EXECUTION REVIEW ── */}
-                  <SectionHead title="Execution Review" sectionKey="execReview" collapsed={!!collapsed['execReview']} onToggle={() => toggleSection('execReview')} />
-                  {!collapsed['execReview'] && (
-                    <ExecutionReviewBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  )}
-
-                  {/* ── E. PSYCHOLOGY RATINGS ── */}
-                  <SectionHead title="Psychology Ratings" sectionKey="psychRatings" collapsed={!!collapsed['psychRatings']} onToggle={() => toggleSection('psychRatings')} />
-                  {!collapsed['psychRatings'] && (
-                    <PsychologyRatingsBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  )}
-
-                  {/* ── F. BEHAVIORAL FLAGS ── */}
+                  {/* ── SECTION 11: BEHAVIORAL FLAGS ── */}
                   <SectionHead title="Behavioral Flags" sectionKey="behavFlags" collapsed={!!collapsed['behavFlags']} onToggle={() => toggleSection('behavFlags')} />
                   {!collapsed['behavFlags'] && (
                     <BehavioralFlagsBlock
@@ -3956,10 +3921,19 @@ export default function TradeJournal() {
                       onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
                     />
                   )}
+
+                  {/* ── SECTION 12: PSYCHOLOGY RATINGS ── */}
+                  <SectionHead title="Psychology Ratings" sectionKey="psychRatings" collapsed={!!collapsed['psychRatings']} onToggle={() => toggleSection('psychRatings')} />
+                  {!collapsed['psychRatings'] && (
+                    <PsychologyRatingsBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                  )}
                 </>
               )}
 
-              {/* ── G. STATE OF MIND ── */}
+              {/* ── SECTION 13: STATE OF MIND ── */}
               <SectionHead title="State of Mind" sectionKey="stateOfMind" collapsed={!!collapsed['stateOfMind']} onToggle={() => toggleSection('stateOfMind')} />
               {!collapsed['stateOfMind'] && (
                 <StateOfMindBlock
@@ -3970,7 +3944,7 @@ export default function TradeJournal() {
                 />
               )}
 
-              {/* ── H. PHYSICAL STATE ── */}
+              {/* ── SECTION 14: PHYSICAL STATE ── */}
               <SectionHead title="Physical State" sectionKey="physState" collapsed={!!collapsed['physState']} onToggle={() => toggleSection('physState')} />
               {!collapsed['physState'] && (
                 <PhysicalStateBlock
@@ -3981,7 +3955,7 @@ export default function TradeJournal() {
 
               {activeTrade && (
                 <>
-                  {/* ── I. PROCESS SCORE ── */}
+                  {/* ── SECTION 15: FLYXA PROCESS SCORE ── */}
                   <SectionHead title="Flyxa Process Score" sectionKey="processScore" collapsed={!!collapsed['processScore']} onToggle={() => toggleSection('processScore')} />
                   {!collapsed['processScore'] && (
                     <ProcessScoreBlock
