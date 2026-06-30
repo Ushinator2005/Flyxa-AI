@@ -46,4 +46,30 @@ describe('pruneEmptyJournalEntries', () => {
 
     expect(pruneEmptyJournalEntries(entries)).toHaveLength(1);
   });
+
+  it('keeps a no-trade day that has a scannedImageUrl attached', () => {
+    const entries = [
+      { id: 'june-9', date: '2026-06-09', trades: [], emotions: [], rules: [], scannedImageUrl: 'https://example.com/image.png' },
+    ];
+
+    expect(pruneEmptyJournalEntries(entries)).toHaveLength(1);
+  });
+
+  it('keeps a no-trade day that has a pre-session in preSessionHistory', () => {
+    const entries = [
+      { id: 'june-9', date: '2026-06-09', trades: [], emotions: [], rules: [] },
+    ];
+    const preSessionHistory = { '2026-06-09': { postSessionNote: 'Stayed disciplined today', commitment: {} } };
+
+    expect(pruneEmptyJournalEntries(entries, preSessionHistory)).toHaveLength(1);
+  });
+
+  it('removes a no-trade day with no content and no pre-session', () => {
+    const entries = [
+      { id: 'june-9', date: '2026-06-09', trades: [], emotions: [], rules: [] },
+    ];
+    const preSessionHistory = { '2026-06-10': { postSessionNote: 'different day' } };
+
+    expect(pruneEmptyJournalEntries(entries, preSessionHistory)).toHaveLength(0);
+  });
 });

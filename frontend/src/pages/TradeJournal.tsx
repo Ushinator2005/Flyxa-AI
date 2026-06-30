@@ -2379,10 +2379,15 @@ export default function TradeJournal() {
   const [draftDuration, setDraftDuration] = useState('');
 
   const mutateEntries = useCallback((updater: (prev: JournalEntry[]) => JournalEntry[]) => {
-    const current = normalizeEntries(useFlyxaStore.getState().entries as unknown[], rulesTemplate);
+    const storeState = useFlyxaStore.getState();
+    const current = normalizeEntries(storeState.entries as unknown[], rulesTemplate);
     // Scanner entries represent traded days. Moving or deleting the final trade
     // must also remove its empty day instead of leaving a "No trades" shell.
-    const next = pruneEmptyJournalEntries(updater(current));
+    // Pass preSessionHistory so no-trade days with a pre/post session are kept.
+    const next = pruneEmptyJournalEntries(
+      updater(current),
+      storeState.preSessionHistory as Record<string, unknown>,
+    );
     setEntriesInStore(next as unknown as StoreJournalEntry[]);
     const updatedState = useFlyxaStore.getState();
     void saveStoreStatePatchNow({
