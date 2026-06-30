@@ -15,7 +15,7 @@ import {
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import type { JournalEntry as StoreJournalEntry, RiskRule, Trade as StoreTrade } from '../store/types.js';
+import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { pushToast } from '../store/toastStore.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { lookupContract } from '../constants/futuresContracts.js';
@@ -27,7 +27,7 @@ import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
-import { evaluateEntryRules, evaluateTradeRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
+import { evaluateEntryRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
 import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
 import { flushSupabaseStoreNow, saveStoreStatePatchNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
@@ -1339,14 +1339,33 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
     onMutateEntry({ rules: next });
   };
 
+  const tintBg = pct === null ? 'transparent' : pct >= 80 ? 'var(--green-dim)' : pct >= 60 ? 'var(--amber-dim)' : 'var(--red-dim)';
+  const ringColor = pct === null ? 'var(--app-text-subtle)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+  const circumference = 2 * Math.PI * 20;
+  const dashoffset = pct !== null ? circumference * (1 - pct / 100) : circumference;
+
   return (
-    <div className="tj-card" style={{ marginBottom: 8, padding: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-        <div>
-          <strong style={{ display: 'block', color: 'var(--app-text)', fontSize: 12 }}>Rule verification</strong>
-          <span style={{ display: 'block', marginTop: 3, color: 'var(--app-text-subtle)', fontSize: 10 }}>
-            {verified.length > 0 ? `${pct}% adherence · ${passed}/${verified.length} verified checks passed` : 'No rules verified yet'}
-          </span>
+    <div style={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
+      {/* ── Summary strip ── */}
+      <div style={{ background: tintBg, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <svg width="50" height="50" viewBox="0 0 50 50" style={{ flexShrink: 0 }}>
+            <circle cx="25" cy="25" r="20" fill="none" stroke="var(--app-border)" strokeWidth="4" />
+            <circle cx="25" cy="25" r="20" fill="none" stroke={ringColor} strokeWidth="4"
+              strokeDasharray={circumference} strokeDashoffset={dashoffset}
+              strokeLinecap="round" transform="rotate(-90 25 25)" />
+            <text x="25" y="29" textAnchor="middle" fill={ringColor} fontSize="11" fontWeight="700" fontFamily="var(--font-mono)">
+              {pct !== null ? `${pct}%` : '--'}
+            </text>
+          </svg>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--app-text)', marginBottom: 3 }}>
+              Plan Adherence{pct !== null ? `: ${pct}%` : ''}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--app-text-subtle)' }}>
+              {verified.length > 0 ? `${passed} of ${verified.length} verified checks passed` : 'No rules verified yet'}
+            </div>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {unconfirmedManual.length > 0 && (
@@ -1358,12 +1377,20 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
               All passed
             </button>
           )}
-          <span style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9 }}>
-            {broken.length > 0 ? `${broken.length} broken` : 'Automatic + reported'}
-          </span>
+          {passed > 0 && (
+            <span style={{ padding: '3px 9px', borderRadius: 3, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>
+              {passed} passed
+            </span>
+          )}
+          {broken.length > 0 && (
+            <span style={{ padding: '3px 9px', borderRadius: 3, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>
+              {broken.length} broken
+            </span>
+          )}
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* ── Rule rows (unchanged) ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12 }}>
         {evaluations.map(item => (
           <div key={item.ruleId} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center', padding: '9px 10px', border: '1px solid var(--app-border)', borderRadius: 5, background: 'var(--app-surface-2)' }}>
             <div style={{ minWidth: 0 }}>
@@ -1386,58 +1413,6 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function ActiveTradeRuleBlock({ entry, trade, rules }: {
-  entry: JournalEntry;
-  trade: JournalTrade;
-  rules: RiskRule[];
-}) {
-  const evaluations = evaluateTradeRules(
-    trade as unknown as StoreTrade,
-    entry.trades as unknown as StoreTrade[],
-    rules,
-  );
-  const verified = evaluations.filter(item => item.state !== 'unchecked');
-  const passed = verified.filter(item => item.state === 'ok').length;
-  const broken = verified.filter(item => item.state === 'fail');
-  const pct = verified.length > 0 ? Math.round((passed / verified.length) * 100) : null;
-  const primary = broken[0];
-
-  return (
-    <div className="tj-card" style={{ marginBottom: 10, padding: 14, borderLeft: `3px solid ${broken.length > 0 ? 'var(--red)' : pct === null ? 'var(--app-border)' : 'var(--green)'}` }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'center' }}>
-        <div>
-          <div style={{ color: 'var(--app-text-subtle)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
-            Active trade plan check
-          </div>
-          <strong style={{ display: 'block', color: broken.length > 0 ? 'var(--red)' : 'var(--app-text)', fontSize: 13 }}>
-            {pct === null ? 'No automatic rules verified' : broken.length > 0 ? primary?.label ?? 'Rule break' : 'Trade is on-plan'}
-          </strong>
-          <span style={{ display: 'block', marginTop: 4, color: 'var(--app-text-subtle)', fontSize: 10 }}>
-            {primary?.detail ?? (pct === null ? 'Add rules with measurable values in Trading Plan.' : `${passed}/${verified.length} checks passed for this trade.`)}
-          </span>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div className="tj-adherence-percent" style={{ color: broken.length > 0 ? 'var(--red)' : 'var(--green)' }}>
-            {pct === null ? '--' : `${pct}%`}
-          </div>
-          <div style={{ color: 'var(--app-text-subtle)', fontSize: 9, marginTop: 4 }}>
-            adherence
-          </div>
-        </div>
-      </div>
-      {broken.length > 1 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-          {broken.slice(1, 4).map(item => (
-            <span key={item.ruleId} style={{ border: '1px solid var(--red-border, rgba(248,113,113,0.35))', background: 'var(--red-dim)', color: 'var(--red)', borderRadius: 999, padding: '3px 7px', fontSize: 9 }}>
-              {item.label}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -3046,9 +3021,7 @@ export default function TradeJournal() {
     );
   }, [selectedEntry, riskRules]);
   const adherencePct = adherenceSummary?.pct ?? null;
-  const adherencePassed = adherenceSummary?.passed ?? 0;
-  const adherenceFailed = adherenceSummary?.failed ?? 0;
-  const adherenceTotal = adherencePassed + adherenceFailed;
+
 
   return (
     <div className="tj-shell">
@@ -3296,7 +3269,7 @@ export default function TradeJournal() {
                           const pct = entryAdherenceMap.get(entry.id) ?? null;
                           if (pct === null) return null;
                           const clr = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
-                          return <div style={{ fontSize: 9, color: clr, marginTop: 1, fontWeight: 600 }}>{pct}% rules</div>;
+                          return <div style={{ fontSize: 9, color: clr, marginTop: 1, fontWeight: 600 }}>{pct}% adherence</div>;
                         })()}
                       </>
                     ) : (
@@ -3721,17 +3694,10 @@ export default function TradeJournal() {
 
               {/* ── SECTION 6: PRICE LEVELS (only when active trade) ── */}
               {activeTrade && (
-                <>
-                  <PriceLevelsBlock
-                    trade={activeTrade}
-                    onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                  />
-                  <ActiveTradeRuleBlock
-                    entry={selectedEntry}
-                    trade={activeTrade}
-                    rules={riskRules}
-                  />
-                </>
+                <PriceLevelsBlock
+                  trade={activeTrade}
+                  onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                />
               )}
 
               {/* ── SECTION 6B: RULE VERIFICATION — hidden on blank days ── */}
@@ -3745,94 +3711,6 @@ export default function TradeJournal() {
                   />
                 )}
               </>)}
-
-              {/* ── SECTION 7: PLAN ADHERENCE ── */}
-              {selectedEntry.trades.length > 0 && (() => {
-                const evs = evaluateEntryRules(selectedEntry as unknown as StoreJournalEntry, riskRules);
-                const pct = adherencePct;
-                const passed = adherencePassed;
-                const failed = adherenceFailed;
-                const total = adherenceTotal;
-                const borderColor = pct !== null && pct < 70 ? 'var(--red-bdr, rgba(239,68,68,0.25))' : 'var(--border)';
-                const tintBg = pct === null ? 'transparent' : pct >= 90 ? 'var(--green-dim)' : pct >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
-                const ringColor = pct === null ? 'var(--txt-3)' : pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
-                const circumference = 2 * Math.PI * 20;
-                const dashoffset = pct !== null ? circumference * (1 - pct / 100) : circumference;
-                return (
-                  <div style={{ background: 'var(--surface-1)', border: `1px solid ${borderColor}`, borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
-                    <div style={{ background: tintBg, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                        <svg width="50" height="50" viewBox="0 0 50 50" style={{ flexShrink: 0 }}>
-                          <circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" strokeWidth="4" />
-                          <circle cx="25" cy="25" r="20" fill="none" stroke={ringColor} strokeWidth="4"
-                            strokeDasharray={circumference} strokeDashoffset={dashoffset}
-                            strokeLinecap="round" transform="rotate(-90 25 25)" />
-                          <text x="25" y="29" textAnchor="middle" fill={ringColor} fontSize="11" fontWeight="700" fontFamily="var(--font-mono)">
-                            {pct !== null ? `${pct}%` : '--'}
-                          </text>
-                        </svg>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 3 }}>
-                            Plan Adherence{pct !== null ? `: ${pct}%` : ''}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--txt-2)' }}>
-                            {total > 0 ? `${passed} of ${total} verified checks passed` : 'No rules verified yet'}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        {passed > 0 && (
-                          <span style={{ padding: '3px 8px', borderRadius: 3, background: 'var(--green-dim)', border: '1px solid var(--green-bdr, rgba(34,197,94,0.25))', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>
-                            {passed} passed
-                          </span>
-                        )}
-                        {failed > 0 && (
-                          <span style={{ padding: '3px 8px', borderRadius: 3, background: 'var(--red-dim)', border: '1px solid var(--red-bdr, rgba(239,68,68,0.25))', color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>
-                            {failed} broken
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {evs.map(item => (
-                      <div key={item.ruleId} style={{ padding: '11px 16px', borderBottom: '1px solid var(--border-sub, var(--border))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--txt)' }}>{item.label}</span>
-                            <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: item.source === 'automatic' ? 'var(--green-dim)' : 'var(--cobalt-dim)', color: item.source === 'automatic' ? 'var(--green)' : 'var(--cobalt)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-                              {item.source === 'automatic' ? 'AUTO' : 'MANUAL'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--txt-3)' }}>{item.detail}</div>
-                        </div>
-                        {item.source === 'manual' ? (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button type="button"
-                              onClick={() => {
-                                const next = selectedEntry.rules.some(r => r.text === item.label)
-                                  ? selectedEntry.rules.map(r => r.text === item.label ? { ...r, state: 'ok' as RuleState } : r)
-                                  : [...selectedEntry.rules, { text: item.label, state: 'ok' as RuleState }];
-                                mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, rules: next } : e));
-                              }}
-                              style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--border)'}`, background: item.state === 'ok' ? 'var(--green-dim)' : 'transparent', color: item.state === 'ok' ? 'var(--green)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Pass</button>
-                            <button type="button"
-                              onClick={() => {
-                                const next = selectedEntry.rules.some(r => r.text === item.label)
-                                  ? selectedEntry.rules.map(r => r.text === item.label ? { ...r, state: 'fail' as RuleState } : r)
-                                  : [...selectedEntry.rules, { text: item.label, state: 'fail' as RuleState }];
-                                mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, rules: next } : e));
-                              }}
-                              style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--border)'}`, background: item.state === 'fail' ? 'var(--red-dim)' : 'transparent', color: item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Break</button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: item.state === 'ok' ? 'var(--green)' : item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)' }}>
-                            {item.state === 'ok' ? 'PASS' : item.state === 'fail' ? 'BREAK' : 'UNVERIFIED'}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
 
               {/* ── SECTION 8: DAILY REFLECTION ── */}
               <SectionHead title="Daily Reflection" sectionKey="dailyReflection" collapsed={!!collapsed['dailyReflection']} onToggle={() => toggleSection('dailyReflection')} />
