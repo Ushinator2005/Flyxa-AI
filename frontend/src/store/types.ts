@@ -87,6 +87,7 @@ export interface JournalEntry {
     distractions: string[];
     environment: string;
   };
+  isBlankDay?: boolean;
 }
 
 export interface Payout {

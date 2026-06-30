@@ -603,10 +603,17 @@ function mergeRemoteEntriesIntoStoreBlob(
         const tk = tradeMergeKey(trade);
         return !tk || !effectiveDeletedTradeKeys.has(tk);
       });
-      if (filteredTrades.length > 0) {
+      // Keep the entry if it has remaining trades OR if it carries meaningful
+      // non-trade content (e.g. a blank day with notes, emotions, or isBlankDay).
+      // Without this check, a blank day created on device A gets silently erased
+      // when device B (which has no local copy) does a flushSave merge.
+      const remoteHasContent = Object.keys(remoteEntry).some(
+        (k) => !['id', 'date', 'trades'].includes(k)
+      );
+      if (filteredTrades.length > 0 || remoteHasContent) {
         mergedByKey.set(key, { ...remoteEntry, trades: filteredTrades });
       }
-      // If every trade was already placed locally, skip the ghost empty entry.
+      // If the entry has no trades and no content, skip it (ghost empty entry).
     }
   }
 

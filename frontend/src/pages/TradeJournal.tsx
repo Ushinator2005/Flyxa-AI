@@ -2588,12 +2588,15 @@ export default function TradeJournal() {
   const addBlankDay = useCallback(() => {
     // Always create for today — never inherit the currently-viewed entry's date
     const date = getTodayIso(preferences.timezone);
+    const parsedDate = parseDate(date);
+    const targetMonth = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1);
 
     const existing = entries.find(entry => entry.date === date);
     if (existing) {
       // Day already exists — just select it; don't inject a phantom trade
       optimisticEntryRef.current = existing;
       setSelectedEntryId(existing.id);
+      setMonthCursor(targetMonth);
       setShowScanner(false);
       return;
     }
@@ -2603,8 +2606,9 @@ export default function TradeJournal() {
     optimisticEntryRef.current = blank;
     mutateEntries(prev => [blank, ...prev]);
     setSelectedEntryId(blank.id);
+    setMonthCursor(targetMonth);
     setShowScanner(false);
-  }, [entries, getDefaultTradeAccountId, mutateEntries, preferences.timezone, rulesTemplate]);
+  }, [entries, getDefaultTradeAccountId, mutateEntries, preferences.timezone, rulesTemplate, setMonthCursor]);
 
   const saveTradeDate = useCallback(() => {
     if (!selectedEntry || !activeTrade) return;
