@@ -368,10 +368,11 @@ function getRulesTemplate(rules: RiskRule[]) {
   return configured.length > 0 ? configured : DEFAULT_RULES;
 }
 
-function createEmptyEntry(date: string, rulesTemplate: string[]): JournalEntry {
+function createEmptyEntry(date: string, rulesTemplate: string[], account?: string): JournalEntry {
   return {
     id: crypto.randomUUID(),
     date,
+    account,
     trades: [],
     screenshots: ['', '', ''],
     reflection: {
@@ -2310,7 +2311,7 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
 export default function TradeJournal() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { preferences, accounts, selectedAccountId } = useAppSettings();
+  const { preferences, accounts, selectedAccountId, getDefaultTradeAccountId } = useAppSettings();
   const { user } = useAuth();
   const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
@@ -2707,7 +2708,7 @@ export default function TradeJournal() {
       return;
     }
 
-    const blank = createEmptyEntry(date, rulesTemplate);
+    const blank = createEmptyEntry(date, rulesTemplate, getDefaultTradeAccountId());
     blank.trades = [blankTrade];
     // Set optimistic ref BEFORE the Zustand write so that selectedEntry is
     // non-null on the very first render after state updates apply.
@@ -2715,7 +2716,7 @@ export default function TradeJournal() {
     mutateEntries(prev => [blank, ...prev]);
     setSelectedEntryId(blank.id);
     setShowScanner(false);
-  }, [accounts, entries, mutateEntries, preferences.timezone, rulesTemplate]);
+  }, [accounts, entries, getDefaultTradeAccountId, mutateEntries, preferences.timezone, rulesTemplate]);
 
   const saveTradeDate = useCallback(() => {
     if (!selectedEntry || !activeTrade) return;
@@ -2763,7 +2764,7 @@ export default function TradeJournal() {
         ));
       }
 
-      const created = createEmptyEntry(nextDate, rulesTemplate);
+      const created = createEmptyEntry(nextDate, rulesTemplate, tradeToMove.accountId ?? getDefaultTradeAccountId());
       created.trades = [movedWithDate];
       nextSelectedId = created.id;
       return [created, ...withoutTrade];
@@ -2777,7 +2778,7 @@ export default function TradeJournal() {
     setMonthCursor(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
     setIsTradeDateEditorOpen(false);
     pushToast({ tone: 'green', durationMs: 3000, message: 'Trade moved to selected date.' });
-  }, [activeTrade, mutateEntries, rulesTemplate, selectedEntry, tradeDateDraft]);
+  }, [activeTrade, getDefaultTradeAccountId, mutateEntries, rulesTemplate, selectedEntry, tradeDateDraft]);
 
   const goToScanner = useCallback(() => {
     setShowScanner(true);
@@ -2831,7 +2832,7 @@ export default function TradeJournal() {
           };
         });
       }
-      const created = createEmptyEntry(date, rulesTemplate);
+      const created = createEmptyEntry(date, rulesTemplate, trade.accountId ?? getDefaultTradeAccountId());
       created.scannedImageUrl = fileDataUrl;
       created.screenshots[0] = fileDataUrl;
       created.trades = [trade];
@@ -2844,7 +2845,7 @@ export default function TradeJournal() {
     const scannedMonth = parseDate(date);
     setMonthCursor(new Date(scannedMonth.getFullYear(), scannedMonth.getMonth(), 1));
     setActiveTradeId(trade.id);
-  }, [mutateEntries, rulesTemplate, selectedEntryId, setMonthCursor]);
+  }, [getDefaultTradeAccountId, mutateEntries, rulesTemplate, selectedEntryId, setMonthCursor]);
 
   const handleScanFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -2930,6 +2931,8 @@ export default function TradeJournal() {
       const trade: JournalTrade = {
         id: crypto.randomUUID(),
         date: tradeDate,
+        accountId: getDefaultTradeAccountId(),
+        accountIds: [getDefaultTradeAccountId()],
         symbol: normalizedSymbol,
         direction,
         entryTime,
@@ -2977,7 +2980,7 @@ export default function TradeJournal() {
         setScanPreviewUrl('');
       }
     }
-  }, [applyScannedTrade, preferences.scannerColors, selectedEntry?.date]);
+  }, [applyScannedTrade, getDefaultTradeAccountId, preferences.scannerColors, selectedEntry?.date]);
 
   // ── Browser extension bridge ─────────────────────────────────────────────────
   // Ref always tracks the latest handleScanFile so the mount effect below never

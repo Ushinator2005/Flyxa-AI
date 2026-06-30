@@ -219,15 +219,19 @@ export function toApiTrade(trade: StoreTrade): ApiTrade {
   const confidenceLevel = typeof confidenceLevelRaw === 'number' && Number.isFinite(confidenceLevelRaw) ? confidenceLevelRaw : null;
   const followedPlan = deriveFollowedPlan(trade);
   const planScore = computePlanAdherenceScore(trade);
+  // Journal trades (JournalTrade shape) store account as `accountId`, while
+  // store trades (StoreTrade shape) use `account`. Read both so dashboard
+  // account filtering works regardless of which path created the trade.
+  const tradeAccount = trade.account ?? (trade as unknown as { accountId?: string }).accountId;
   return {
     id: trade.id,
     user_id: 'local',
     symbol: trade.symbol,
     screenshot_url: trade.scannedImageUrl ?? (trade as unknown as { screenshotUrl?: string }).screenshotUrl ?? (Array.isArray(trade.screenshots) ? trade.screenshots[0] : undefined),
-    accountId: trade.account,
-    account_id: trade.account,
-    accountIds: normalizeAccountIds(trade.accountIds, trade.account),
-    account_ids: normalizeAccountIds(trade.accountIds, trade.account),
+    accountId: tradeAccount,
+    account_id: tradeAccount,
+    accountIds: normalizeAccountIds(trade.accountIds, tradeAccount),
+    account_ids: normalizeAccountIds(trade.accountIds, tradeAccount),
     direction: trade.direction === 'SHORT' ? 'Short' : 'Long',
     entry_price: trade.entry,
     exit_price: trade.exit ?? trade.entry,
