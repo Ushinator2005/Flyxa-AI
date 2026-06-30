@@ -348,6 +348,7 @@ export default function EvaluationCoach() {
   const dailyRemaining = dailyLimit > 0 ? Math.max(0, progress.dailyLossRemaining) : null;
   const dailyRemainingPct = dailyLimit > 0 ? Math.min(100, Math.round((Math.max(0, progress.dailyLossRemaining) / dailyLimit) * 100)) : 0;
   const dailyUsedPct = 100 - dailyRemainingPct;
+  const dailyBudgetColor = dailyRemainingPct >= 70 ? 'var(--green)' : dailyRemainingPct >= 35 ? 'var(--amber)' : 'var(--red)';
   const daysMet = progress.tradingDays >= progress.minimumTradingDays;
 
   // ── Pass probability ring ───────────────────────────────────────
@@ -364,12 +365,18 @@ export default function EvaluationCoach() {
   // ── Path-to-pass context ───────────────────────────────────────
   const allAlerts = [...alerts, ...behavioralWarnings];
   const remainingMinDays = Math.max(0, progress.minimumTradingDays - progress.tradingDays);
-  const plannedSessionsToPass = progress.targetRemaining <= 0
-    ? Math.max(1, remainingMinDays)
-    : sessionsLeft ?? Math.max(remainingMinDays, 4);
-  const requiredPace = progress.targetRemaining > 0
-    ? roundTo(progress.targetRemaining / Math.max(1, plannedSessionsToPass))
-    : 0;
+  const paceHeadline = progress.targetRemaining <= 0
+    ? 'Target reached'
+    : sessionsLeft !== null
+      ? `~${sessionsLeft} session${s(sessionsLeft)}`
+      : money(progress.targetRemaining);
+  const paceDetail = progress.targetRemaining <= 0
+    ? remainingMinDays > 0
+      ? `${remainingMinDays} minimum trading day${s(remainingMinDays)} still required.`
+      : 'Profit target and minimum days are complete.'
+    : sessionsLeft !== null
+      ? `Based on your current ${money(avgDailyPnl)}/session average.`
+      : `Current average is ${money(avgDailyPnl)}/session, so there is no reliable pass pace yet.`;
   const avgWin = (() => {
     const wins = accountTrades.filter(trade => tradeNet(trade) > 0);
     return wins.length ? wins.reduce((sum, trade) => sum + tradeNet(trade), 0) / wins.length : 0;
@@ -514,7 +521,7 @@ export default function EvaluationCoach() {
 Account: ${selected.name} (${selected.firm})
 Eval status: ${progress.status} — ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
 Sessions traded: ${progress.tradingDays} | Avg P&L/session: ${money(avgDailyPnl)} | Pass probability: ${progress.passProbability}%
-Required pace: ${progress.targetRemaining > 0 ? `${money(requiredPace)} per session across ${plannedSessionsToPass} planned sessions` : 'profit target reached'}
+Pace to target: ${paceHeadline} | ${paceDetail}
 Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'} | Plan adherence: ${planAdherencePct !== null ? `${planAdherencePct}%` : 'not enough tagged data'}
 Main leak: ${primaryLeak ?? 'none detected'}
 Last 3 sessions: ${last3 || 'none yet'}
@@ -626,9 +633,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             {dailyLimit > 0 ? (
               <div className="ec-metric-card">
                 <span className="ec-metric-lbl">Daily budget left</span>
-                <strong className="ec-metric-val">{money(dailyRemaining ?? 0)}</strong>
+                <strong className="ec-metric-val" style={{ color: dailyBudgetColor }}>{money(dailyRemaining ?? 0)}</strong>
                 <div className="ec-metric-track">
-                  <div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%`, background: 'var(--amber)' }} />
+                  <div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%`, background: dailyBudgetColor }} />
                 </div>
                 <span className="ec-metric-sub">
                   {dailyUsedPct}% used · {money(progress.dailyPnl)} today
@@ -708,13 +715,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
 
           <div className="ec-strategy-grid">
             <div className="ec-strategy-item">
-              <span>Required pace</span>
-              <strong>{progress.targetRemaining > 0 ? `${money(requiredPace)} / session` : 'Target reached'}</strong>
-              <small>
-                {progress.targetRemaining > 0
-                  ? `${money(progress.targetRemaining)} left across ${plannedSessionsToPass} planned session${s(plannedSessionsToPass)}.`
-                  : `${remainingMinDays} minimum day${s(remainingMinDays)} left.`}
-              </small>
+              <span>Pace to target</span>
+              <strong>{paceHeadline}</strong>
+              <small>{paceDetail}</small>
             </div>
             <div className="ec-strategy-item">
               <span>Session risk cap</span>
@@ -735,9 +738,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               </small>
             </div>
             <div className="ec-strategy-item">
-              <span>Win / loss profile</span>
-              <strong>{avgWin > 0 ? money(avgWin) : '—'} / {avgLossAbs > 0 ? money(avgLossAbs) : '—'}</strong>
-              <small>Main leak: {primaryLeak ?? 'none detected'}.</small>
+              <span>Average trade</span>
+              <strong>{avgWin > 0 ? `${money(avgWin)} avg win` : 'Not enough wins'}</strong>
+              <small>{avgLossAbs > 0 ? `${money(avgLossAbs)} avg loss` : 'No average loss yet'} · Main leak: {primaryLeak ?? 'none detected'}.</small>
             </div>
           </div>
 
