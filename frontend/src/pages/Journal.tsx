@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Download,
+  Flame,
   Leaf,
   Moon,
   PenLine,
@@ -872,22 +873,9 @@ export default function Journal() {
                       />
                     )}
                   </svg>
-                  {/* Candlestick flame — 3 ascending candle bars forming a flame silhouette */}
+                  {/* Flame icon */}
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg viewBox="0 0 20 22" width={18} height={20}>
-                      {/* Left candle */}
-                      <line x1="2.75" y1="8.5" x2="2.75" y2="12" stroke={flameStroke} strokeWidth={1} strokeOpacity={0.65} strokeLinecap="round" />
-                      <rect x="0.5" y="12" width="4.5" height="9" rx="0.75" fill={flameFill} />
-                      <rect x="0.5" y="12" width="4.5" height="9" rx="0.75" fill="none" stroke={flameStroke} strokeWidth={0.6} strokeOpacity={0.5} />
-                      {/* Middle candle (tallest — flame tip) */}
-                      <line x1="10" y1="1" x2="10" y2="4" stroke={flameStroke} strokeWidth={1} strokeOpacity={0.65} strokeLinecap="round" />
-                      <rect x="7.75" y="4" width="4.5" height="17" rx="0.75" fill={flameFill} />
-                      <rect x="7.75" y="4" width="4.5" height="17" rx="0.75" fill="none" stroke={flameStroke} strokeWidth={0.6} strokeOpacity={0.5} />
-                      {/* Right candle */}
-                      <line x1="17.25" y1="10.5" x2="17.25" y2="14" stroke={flameStroke} strokeWidth={1} strokeOpacity={0.65} strokeLinecap="round" />
-                      <rect x="15" y="14" width="4.5" height="7" rx="0.75" fill={flameFill} />
-                      <rect x="15" y="14" width="4.5" height="7" rx="0.75" fill="none" stroke={flameStroke} strokeWidth={0.6} strokeOpacity={0.5} />
-                    </svg>
+                    <Flame size={22} color={flameStroke} fill={flameFill} fillOpacity={0.9} strokeWidth={1.6} />
                   </div>
                 </div>
 
