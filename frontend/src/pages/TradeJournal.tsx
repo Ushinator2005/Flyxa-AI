@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -8,6 +9,7 @@ import {
   Maximize2,
   Plus,
   Search,
+  Sparkles,
   Trash2,
   Upload,
   X,
@@ -1084,7 +1086,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
                 }}
                 title={isBreakevenActive && trade.breakevenRestore ? 'Restore previous exit' : 'Set exit to entry price (Breakeven)'}
               >
-                {isBreakevenActive && trade.breakevenRestore ? '↺ BE' : 'BE'}
+                {isBreakevenActive && trade.breakevenRestore ? '↺ BREAKEVEN' : 'BREAKEVEN'}
               </button>
             )}
           </div>
@@ -1170,7 +1172,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
       </div>
       <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', borderLeft: '3px solid var(--amber)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '10px 12px 10px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className="tj-pl-summary-label" style={{ marginBottom: 0, whiteSpace: 'nowrap', color: 'var(--amber)' }}>FEES</div>
+          <div className="tj-pl-summary-label" style={{ marginBottom: 0, whiteSpace: 'nowrap', color: 'var(--amber)' }}>Commissions &amp; Fees</div>
           <input
             type="number"
             min="0"
@@ -1272,6 +1274,57 @@ const FLAG_PENALTIES: Record<string, number> = {
   // Minimal — conservative mistakes
   'be-too-early':    4,
 };
+
+// ── Helper: trade pattern detection ──────────────────────────────────────────
+function parseTimeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function computeTradePatternFlags(
+  trades: JournalTrade[],
+  contractLimitsBySymbol: Record<string, number> = {}
+): Map<string, string> {
+  const flags = new Map<string, string>();
+  for (let i = 0; i < trades.length; i++) {
+    const curr = trades[i];
+    if (i < trades.length - 1) {
+      const next = trades[i + 1];
+      if (curr.symbol === next.symbol) {
+        const gap = parseTimeToMinutes(next.entryTime) - parseTimeToMinutes(curr.exitTime);
+        if (gap >= 0 && gap < 5) {
+          const n = Math.max(1, Math.round(gap));
+          if (curr.direction !== next.direction) {
+            flags.set(curr.id, `Reversed within ${n}min`);
+          } else if (curr.result === 'loss') {
+            flags.set(next.id, `Re-entry after loss (${n}min)`);
+          }
+        }
+      }
+    }
+    const hasPriorLoss = trades.slice(0, i).some(t => t.result === 'loss');
+    if (hasPriorLoss) {
+      const symMax = contractLimitsBySymbol[curr.symbol];
+      if (symMax && curr.contracts > symMax && !flags.has(curr.id)) {
+        flags.set(curr.id, 'Sized up after loss');
+      }
+    }
+  }
+  return flags;
+}
+
+function detectRapidFire(trades: JournalTrade[]): number | null {
+  for (let i = 0; i < trades.length; i++) {
+    const windowStart = parseTimeToMinutes(trades[i].entryTime);
+    let count = 1;
+    for (let j = i + 1; j < trades.length; j++) {
+      if (parseTimeToMinutes(trades[j].entryTime) - windowStart < 10) count++;
+      else break;
+    }
+    if (count >= 3) return count;
+  }
+  return null;
+}
 
 // ── Helper: computeProcessScore ──────────────────────────────────────────────
 function computeProcessScore(trade: JournalTrade): number {
@@ -1917,7 +1970,10 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
               ))}
             </div>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <span style={{ fontSize:15, fontWeight:500, fontFamily:'var(--font-mono)', color: score===0?'var(--app-text-subtle)':score<=2?'var(--red)':score===3?'var(--amber)':'var(--green)' }}>{score > 0 ? score : '—'}</span>
+              {score > 0
+                ? <span style={{ fontSize:15, fontWeight:500, fontFamily:'var(--font-mono)', color: score<=2?'var(--red)':score===3?'var(--amber)':'var(--green)' }}>{score}</span>
+                : <span style={{ fontSize:11, color:'var(--app-text-subtle)', fontStyle:'italic' }}>Not rated</span>
+              }
               <button type="button" onClick={() => setNoteOpen(p => ({ ...p, [card.key]: !p[card.key] }))}
                 style={{ fontSize:10, color:'var(--app-text-subtle)', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font-sans)' }}>
                 {noteValues[card.key] ? '✎ note' : '+ note'}
@@ -2148,34 +2204,61 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
   const disc = trade.psychologyRatings?.discipline ?? 0;
   if (conf >= 4 && disc <= 2) insights.push({ text: 'Confidence was high but discipline was low — review your sizing decision', color: 'var(--amber)' });
 
+  const RING = 80;
+  const R = 34;
+  const circ = 2 * Math.PI * R;
+  const offset = circ * (1 - (score > 0 ? score : 0) / 100);
+
   return (
-    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, padding:'14px 16px', marginBottom:8 }}>
-      <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:12 }}>
-        <div>
-          <div style={{ fontSize:32, fontWeight:600, fontFamily:'var(--font-mono)', color:scoreColor, lineHeight:1 }}>{score > 0 ? score : '—'}</div>
-          <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginTop:2 }}>Process Score</div>
-        </div>
-        <div style={{ flex:1 }}>
-          <div style={{ height:4, borderRadius:2, background:'var(--app-panel-strong)', overflow:'hidden', marginBottom:8 }}>
-            <div style={{ height:'100%', borderRadius:2, background:scoreColor, width:`${score}%`, transition:'width 0.3s ease' }} />
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-            {insights.map((ins, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:6 }}>
-                <span style={{ width:6, height:6, borderRadius:'50%', background:ins.color, flexShrink:0, marginTop:3 }} />
-                <span style={{ fontSize:11, color:'var(--app-text-muted)' }}>{ins.text}</span>
-              </div>
-            ))}
-            {insights.length === 0 && score > 0 && (
-              <span style={{ fontSize:11, color:'var(--app-text-subtle)' }}>Complete more fields to see insights</span>
+    <div style={{ background:'var(--app-panel)', border:`1px solid ${score > 0 && score < 50 ? 'var(--red-border, rgba(239,68,68,0.25))' : 'var(--app-border)'}`, borderRadius:8, overflow:'hidden', marginBottom:8 }}>
+      {/* Top block */}
+      <div style={{ background: score >= 70 ? 'rgba(34,197,94,0.05)' : score >= 50 ? 'rgba(245,166,35,0.05)' : score > 0 ? 'rgba(239,68,68,0.05)' : 'transparent', padding:'18px 20px', display:'flex', alignItems:'center', gap:20, borderBottom:'1px solid var(--app-border)' }}>
+        {/* Ring */}
+        <div style={{ position:'relative', width:RING, height:RING, flexShrink:0 }}>
+          <svg width={RING} height={RING} style={{ transform:'rotate(-90deg)' }}>
+            <circle cx={RING/2} cy={RING/2} r={R} fill="none" stroke="var(--app-panel-strong)" strokeWidth={6} />
+            {score > 0 && (
+              <circle cx={RING/2} cy={RING/2} r={R} fill="none" stroke={scoreColor} strokeWidth={6}
+                strokeDasharray={`${circ} ${circ}`} strokeDashoffset={offset} strokeLinecap="round" style={{ transition:'stroke-dashoffset 0.4s ease' }} />
             )}
+          </svg>
+          <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>
+            <span style={{ fontSize:26, fontWeight:700, fontFamily:'var(--font-mono)', color:score > 0 ? scoreColor : 'var(--app-text-subtle)', lineHeight:1 }}>{score > 0 ? score : '—'}</span>
+            {score > 0 && <span style={{ fontSize:9, color:'var(--app-text-subtle)', lineHeight:1 }}>/100</span>}
           </div>
         </div>
-        <div style={{ fontSize:24, fontWeight:700, fontFamily:'var(--font-mono)', color:scoreColor }}>{score > 0 ? grade : '—'}</div>
+        {/* Info */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)', marginBottom:3 }}>Flyxa Process Score</div>
+          <div style={{ fontSize:12, color:'var(--app-text-muted)' }}>
+            {score > 0 ? 'Based on psychology ratings, discipline, and behavioral flags.' : 'Rate your psychology and flag behaviors to generate a score.'}
+          </div>
+        </div>
+        {/* Grade */}
+        <div style={{ fontSize:22, fontWeight:600, fontFamily:'var(--font-mono)', color:score > 0 ? scoreColor : 'var(--app-text-subtle)', flexShrink:0 }}>{score > 0 ? grade : '—'}</div>
       </div>
+      {/* Insight bullets */}
+      {(insights.length > 0 || score === 0) && (
+        <div style={{ padding:'14px 20px', display:'flex', flexDirection:'column', gap:8, borderBottom:'1px solid var(--app-border)' }}>
+          {insights.map((ins, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+              <span style={{ width:6, height:6, borderRadius:'50%', background:ins.color, flexShrink:0, marginTop:4 }} />
+              <span style={{ fontSize:12, color:'var(--app-text-muted)' }}>{ins.text}</span>
+            </div>
+          ))}
+          {insights.length === 0 && score === 0 && (
+            <div style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+              <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--app-border)', flexShrink:0, marginTop:4 }} />
+              <span style={{ fontSize:12, color:'var(--app-text-subtle)' }}>Complete psychology ratings and behavioral flags to see personalised insights.</span>
+            </div>
+          )}
+        </div>
+      )}
+      {/* AI button */}
       <button type="button" onClick={() => { onSaveEntries(); navigate(`/flyxa-ai/ask?tradeId=${trade.id}`); }}
-        style={{ width:'100%', padding:'10px 16px', fontSize:12, fontWeight:600, fontFamily:'var(--font-sans)', background:'var(--cobalt)', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-        ✦ Analyse this trade with Flyxa AI →
+        style={{ width:'100%', padding:13, fontSize:13, fontWeight:600, fontFamily:'var(--font-sans)', background:'var(--amber)', color:'#000', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, boxSizing:'border-box' }}>
+        <Sparkles size={14} />
+        Analyse this trade with Flyxa AI
       </button>
     </div>
   );
@@ -3681,8 +3764,22 @@ export default function TradeJournal() {
                   </span>
                 </div>
               )}
+              {(() => {
+                const _rapidFire = detectRapidFire(selectedEntry.trades);
+                if (!_rapidFire) return null;
+                return (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', marginBottom:6, background:'var(--amber-dim)', border:'1px solid var(--amber-bdr)', borderRadius:5, fontSize:12, color:'var(--amber)' }}>
+                    <AlertTriangle size={13} style={{ flexShrink:0 }} />
+                    {_rapidFire} trades within 10 minutes — review for overtrading.
+                  </div>
+                );
+              })()}
               <div className="tj-trade-list" data-tour-id="scanner-trade-list">
-                {selectedEntry.trades.map((trade, tradeIdx) => (
+                {(() => {
+                  const _contractRule = riskRules.find(r => r.kind === 'max_contracts');
+                  const _contractLimits = (_contractRule?.contractLimits as Record<string, number> | undefined) ?? {};
+                  const _patternFlags = computeTradePatternFlags(selectedEntry.trades, _contractLimits);
+                  return selectedEntry.trades.map((trade, tradeIdx) => (
                   deleteTradeId === trade.id ? (
                     <div key={trade.id} className="tj-delete-row">
                       <span className="tj-delete-text">Delete this trade?</span>
@@ -3735,6 +3832,12 @@ export default function TradeJournal() {
                       <span className="tj-symbol">{trade.symbol}</span>
                       <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
                       <span style={{ flex: 1 }} />
+                      {_patternFlags.has(trade.id) && (
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-bdr)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
+                          <AlertTriangle size={10} style={{ flexShrink:0 }} />
+                          {_patternFlags.get(trade.id)}
+                        </span>
+                      )}
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: trade.pnl > 0 ? 'var(--green)' : trade.pnl < 0 ? 'var(--red)' : 'var(--txt-2)' }}>
                         {formatSignedCurrency(trade.pnl - (trade.commission ?? 0))}
                       </span>
@@ -3743,7 +3846,8 @@ export default function TradeJournal() {
                       </button>
                     </div>
                   )
-                ))}
+                  ))
+                ;})()}
               </div></>)}
 
               {/* ── SECTION 6: PRICE LEVELS (only when active trade) ── */}
