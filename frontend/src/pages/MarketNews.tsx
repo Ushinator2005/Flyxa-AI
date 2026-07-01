@@ -1083,7 +1083,7 @@ function CalendarPanel({
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.04)' : 'transparent'; }}
                     >
-                      <span style={{ fontFamily: MONO, fontSize: 11, color: T3, fontWeight: 600 }}>{fmtFFTime(event.time)}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 12, color: T2, fontWeight: 700 }}>{fmtFFTime(event.time)}</span>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: impDot, flexShrink: 0, boxShadow: isHigh ? `0 0 5px ${RED}` : 'none' }} />
                       <div style={{ minWidth: 0 }}>
                         <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>{event.event}</span>
