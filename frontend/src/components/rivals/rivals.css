@@ -108,18 +108,18 @@
 .rv-leaderboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(310px, .8fr);
-  gap: 14px;
+  gap: 0;
   align-items: stretch;
   min-height: 640px;
 }
 
 .rv-leaderboard-main,
 .rv-profile-panel {
-  border: 1px solid var(--rv-border);
-  border-radius: 14px;
-  background: var(--rv-layer);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
-  box-shadow: 0 12px 32px rgba(0,0,0,.18);
+  box-shadow: none;
 }
 
 .rv-podium {
@@ -592,14 +592,14 @@
   grid-template-columns: minmax(0, 1.58fr) minmax(300px, .72fr);
   min-height: 0;
   align-items: start;
-  gap: 12px;
+  gap: 0;
 }
 
 .rv-leaderboard-main,
 .rv-profile-panel {
-  border-color: rgba(255,255,255,.065);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.16);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .rv-podium {
