@@ -520,18 +520,6 @@ export default function TradingPlan() {
                 >
                   {planReport.pct !== null ? `${planReport.pct}%` : '—'}
                 </span>
-                <div className="tp-hs-bar-track">
-                  <div
-                    className="tp-hs-bar-fill"
-                    style={{
-                      width: `${planReport.pct ?? 0}%`,
-                      background: planReport.pct === null ? 'var(--app-border)'
-                        : planReport.pct >= 80 ? 'var(--green)'
-                        : planReport.pct >= 60 ? 'var(--amber)'
-                        : 'var(--red)',
-                    }}
-                  />
-                </div>
               </div>
               <div className="tp-hs-divider" />
               <div className="tp-hs">
@@ -571,10 +559,10 @@ export default function TradingPlan() {
                   'green';
 
                 const SEV = {
-                  red:    { bar: 'linear-gradient(90deg, var(--red), var(--red-dim))',     bg: 'var(--red-dim)',    bdr: 'var(--red-border)',    txt: 'var(--red)' },
-                  amber:  { bar: 'linear-gradient(90deg, var(--amber), var(--amber-dim))', bg: 'var(--amber-dim)', bdr: 'var(--amber-border)',  txt: 'var(--amber)' },
-                  green:  { bar: 'linear-gradient(90deg, var(--green), var(--green-dim))', bg: 'var(--green-dim)', bdr: 'var(--green-border)',  txt: 'var(--green)' },
-                  cobalt: { bar: 'linear-gradient(90deg, var(--cobalt), var(--cobalt-dim))', bg: 'var(--cobalt-dim)', bdr: 'var(--cobalt-border)', txt: 'var(--cobalt)' },
+                  red:    { bar: 'linear-gradient(90deg, var(--red), var(--red-dim))',     bg: 'rgba(239,68,68,0.06)',    bdr: 'var(--red-border)',    txt: 'var(--red)' },
+                  amber:  { bar: 'linear-gradient(90deg, var(--amber), var(--amber-dim))', bg: 'rgba(245,166,35,0.06)',   bdr: 'var(--amber-border)',  txt: 'var(--amber)' },
+                  green:  { bar: 'linear-gradient(90deg, var(--green), var(--green-dim))', bg: 'rgba(34,197,94,0.06)',    bdr: 'var(--green-border)',  txt: 'var(--green)' },
+                  cobalt: { bar: 'linear-gradient(90deg, var(--cobalt), var(--cobalt-dim))', bg: 'rgba(30,111,255,0.06)', bdr: 'var(--cobalt-border)', txt: 'var(--cobalt)' },
                   none:   { bar: 'var(--app-border)', bg: 'transparent', bdr: 'transparent', txt: 'var(--txt-3)' },
                 } as const;
                 const sev = SEV[severity];
@@ -588,7 +576,12 @@ export default function TradingPlan() {
                   'Auto-verified · Amount';
 
                 return (
-                  <article key={rule.id} className={`tp-rcard${rule.enabled === false ? ' tp-rcard-off' : ''}`}>
+                  <article key={rule.id} className={[
+                    'tp-rcard',
+                    rule.enabled === false ? 'tp-rcard-off' : '',
+                    severity === 'red'   ? 'tp-rcard-high-breach' : '',
+                    severity === 'amber' ? 'tp-rcard-mid-breach'  : '',
+                  ].filter(Boolean).join(' ')}>
 
                     {/* Top accent bar — colored by breach severity */}
                     <div className="tp-rcard-topbar" style={{ background: sev.bar }} />

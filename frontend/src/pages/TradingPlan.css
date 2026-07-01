@@ -1468,26 +1468,11 @@
 
 .tp-hs-value {
   font-family: var(--font-mono);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--txt);
   font-variant-numeric: tabular-nums lining-nums;
   line-height: 1;
-}
-
-.tp-hs-bar-track {
-  height: 3px;
-  border-radius: 2px;
-  background: var(--surface-3, var(--surface-2));
-  overflow: hidden;
-  margin-top: 5px;
-  width: 100%;
-}
-
-.tp-hs-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width .3s ease;
 }
 
 .tp-hs-green {
@@ -1513,6 +1498,14 @@
 
 .tp-rcard.tp-rcard-off {
   opacity: .45;
+}
+
+.tp-rcard.tp-rcard-high-breach {
+  border-color: var(--red-border);
+}
+
+.tp-rcard.tp-rcard-mid-breach {
+  border-color: var(--amber-border);
 }
 
 .tp-rcard-hdr {
@@ -1585,11 +1578,21 @@
   color: var(--txt);
   font: 600 11px/1 var(--font-sans);
   cursor: pointer;
-  padding: 0;
+  padding: 0 14px 0 0;
   outline: none;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+  transition: color .14s;
+}
+
+.tp-rcard-kind:hover {
+  color: var(--amber);
+}
+
+.tp-rcard-kind option {
+  background: var(--surface-2);
+  color: var(--txt);
 }
 
 /* Pill toggle */
@@ -1647,14 +1650,14 @@
   align-items: baseline;
   gap: 8px;
   padding: 7px 12px;
-  border-bottom: 1px solid transparent;
+  border-bottom: none;
   font-variant-numeric: tabular-nums;
 }
 
 .tp-rcard-breach-pct {
   font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -1668,6 +1671,7 @@
 }
 
 .tp-rcard-body {
+  border-top: 1px solid var(--app-border);
   padding: 12px;
   flex: 1;
 }
@@ -1693,7 +1697,11 @@
 }
 
 .tp-rcard-footer {
-  padding: 5px 12px 7px;
+  padding: 8px 12px;
   border-top: 1px solid var(--app-border);
   background: var(--surface-2);
+}
+
+.tp-rcard-footer .tp-rule-delete:hover {
+  color: var(--red);
 }
