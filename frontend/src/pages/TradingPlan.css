@@ -1461,10 +1461,11 @@
 .tp-hs-value {
   font-family: var(--font-mono);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--txt);
   font-variant-numeric: tabular-nums lining-nums;
   line-height: 1;
+  -webkit-font-smoothing: antialiased;
 }
 
 .tp-hs-green {
@@ -1654,10 +1655,11 @@
 
 .tp-rcard-breach-inline {
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 400;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums lining-nums;
   line-height: 1;
+  -webkit-font-smoothing: antialiased;
 }
 
 .tp-rcard-body {
