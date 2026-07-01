@@ -1,6 +1,6 @@
 ﻿.rivals-page {
-  --rv-bg: var(--app-bg);
-  --rv-layer: var(--app-panel);
+  --rv-bg: var(--app-panel);
+  --rv-layer: var(--app-panel-strong);
   --rv-layer-2: var(--app-panel-strong);
   --rv-layer-3: var(--surface-3);
   --rv-border: var(--app-border);
