@@ -545,8 +545,8 @@
 
 .tp-rule-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .tp-rule-card {
@@ -1379,10 +1379,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .tp-rule-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .tp-edge-grid,
   .tp-edge-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1644,30 +1640,26 @@
   left: 17px;
 }
 
-/* Breach strip */
-.tp-rcard-breach {
+/* Inline breach info (inside header type row) */
+.tp-rcard-type-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 7px 12px;
-  border-bottom: none;
-  font-variant-numeric: tabular-nums;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
-.tp-rcard-breach-pct {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.tp-rcard-breach-sub {
-  font-size: 10px;
+.tp-rcard-type-dot {
+  font-size: 9px;
   color: var(--txt-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1;
+}
+
+.tp-rcard-breach-inline {
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
 }
 
 .tp-rcard-body {

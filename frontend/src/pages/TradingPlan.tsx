@@ -602,7 +602,17 @@ export default function TradingPlan() {
                           <option value="cooldown_after_loss">Cooldown after loss</option>
                           <option value="manual">Manual check</option>
                         </select>
-                        <span className="tp-rcard-type-label">{typeLabel}</span>
+                        <div className="tp-rcard-type-row">
+                          <span className="tp-rcard-type-label">{typeLabel}</span>
+                          {isAuto && stats && stats.checked > 0 && (
+                            <>
+                              <span className="tp-rcard-type-dot">·</span>
+                              <span className="tp-rcard-breach-inline" style={{ color: sev.txt }}>
+                                {breachRatePct}% breach · {breachCount} break{breachCount !== 1 ? 's' : ''}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <label className="tp-rcard-toggle">
                         <input
@@ -615,18 +625,6 @@ export default function TradingPlan() {
                         </span>
                       </label>
                     </div>
-
-                    {/* Breach Strip — breach RATE, auto rules only, when 30d data exists */}
-                    {isAuto && stats && stats.checked > 0 && (
-                      <div className="tp-rcard-breach" style={{ background: sev.bg, borderColor: sev.bdr }}>
-                        <span className="tp-rcard-breach-pct" style={{ color: sev.txt }}>
-                          {breachRatePct}%
-                        </span>
-                        <span className="tp-rcard-breach-sub">
-                          breach rate · {breachCount} break{breachCount !== 1 ? 's' : ''} · last 30 days
-                        </span>
-                      </div>
-                    )}
 
                     {/* Card Body */}
                     <div className="tp-rcard-body">
