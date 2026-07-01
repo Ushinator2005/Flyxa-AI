@@ -839,65 +839,58 @@ export default function Journal() {
           {!isMobile && (() => {
             const flameColor = journalStreak >= 30 ? '#a855f7'
               : journalStreak >= 14 ? '#dc2626'
-              : journalStreak >= 7  ? '#ef4444'
-              : journalStreak >= 3  ? '#f97316'
+              : journalStreak >= 7  ? '#f97316'
+              : journalStreak >= 3  ? '#fb923c'
               : journalStreak >= 1  ? '#f59e0b'
-              : 'var(--app-text-subtle)';
-            const cardBorder = journalStreak >= 30 ? 'rgba(168,85,247,0.35)'
-              : journalStreak >= 14 ? 'rgba(220,38,38,0.35)'
-              : journalStreak >= 7  ? 'rgba(239,68,68,0.32)'
-              : journalStreak >= 3  ? 'rgba(249,115,22,0.32)'
-              : journalStreak >= 1  ? 'rgba(245,158,11,0.30)'
-              : BORDER;
-            const cardGlow = journalStreak >= 30 ? 'rgba(168,85,247,0.08)'
-              : journalStreak >= 14 ? 'rgba(220,38,38,0.07)'
-              : journalStreak >= 7  ? 'rgba(239,68,68,0.07)'
-              : journalStreak >= 3  ? 'rgba(249,115,22,0.07)'
-              : journalStreak >= 1  ? 'rgba(245,158,11,0.06)'
-              : 'transparent';
+              : '#6b7280';
+            const flameFill = journalStreak >= 30 ? '#c084fc'
+              : journalStreak >= 14 ? '#f87171'
+              : journalStreak >= 7  ? '#fb923c'
+              : journalStreak >= 3  ? '#fdba74'
+              : journalStreak >= 1  ? '#fcd34d'
+              : '#4b5563';
             return (
               <div
                 title={`${journalStreak} day streak`}
                 style={{
-                  height: '36px',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  padding: '0 12px 0 10px',
-                  border: `1px solid ${cardBorder}`,
-                  borderRadius: '8px',
-                  background: `linear-gradient(135deg, var(--app-panel-strong), ${cardGlow})`,
-                  boxShadow: journalStreak > 0 ? `0 0 12px ${cardGlow}, inset 0 1px 0 rgba(255,255,255,0.06)` : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                  gap: '10px',
+                  padding: '7px 14px 7px 12px',
+                  borderRadius: '10px',
+                  background: 'var(--app-panel-strong)',
+                  border: `1px solid var(--app-border)`,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05)',
                   flexShrink: 0,
                 }}
               >
                 <Flame
-                  size={20}
+                  size={26}
                   color={flameColor}
-                  fill={journalStreak > 0 ? flameColor : 'transparent'}
-                  fillOpacity={journalStreak > 0 ? 0.55 : 0}
-                  strokeWidth={1.8}
+                  fill={flameFill}
+                  fillOpacity={0.9}
+                  strokeWidth={1.5}
+                  style={{ flexShrink: 0 }}
                 />
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span style={{
-                    fontSize: '8.5px',
+                    fontSize: '9px',
                     fontWeight: 700,
-                    letterSpacing: '0.09em',
+                    letterSpacing: '0.12em',
                     textTransform: 'uppercase',
-                    color: flameColor,
+                    color: T3,
                     lineHeight: 1,
-                    opacity: journalStreak > 0 ? 1 : 0.4,
                   }}>Streak</span>
                   <span style={{
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    color: journalStreak > 0 ? T1 : T2,
-                    fontFamily: 'var(--font-sans)',
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    color: T1,
                     lineHeight: 1,
-                    letterSpacing: '-0.01em',
+                    letterSpacing: '-0.02em',
+                    whiteSpace: 'nowrap',
                   }}>
                     {journalStreak}{' '}
-                    <span style={{ fontWeight: 500, fontSize: '11px', color: T2 }}>
+                    <span style={{ fontWeight: 500, fontSize: '13px', color: T2, letterSpacing: 0 }}>
                       {journalStreak === 1 ? 'Day' : 'Days'}
                     </span>
                   </span>
