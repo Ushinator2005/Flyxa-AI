@@ -373,7 +373,7 @@ export default function Rivals() {
           </div>
           <div className="rv-summary-context">
             {myRank === 1 ? (
-              <><Trophy size={14} /> Leading this board</>
+              <span className="rv-leading-badge"><Trophy size={12} /><span>Leading this board</span></span>
             ) : (
               <>
                 <span className="rv-summary-gap">{formatMetricGap(gapToNext, metric)}</span>
