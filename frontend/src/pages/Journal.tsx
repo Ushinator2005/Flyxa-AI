@@ -805,70 +805,95 @@ export default function Journal() {
           <p style={{ fontSize: '11px', color: T3, marginTop: '3px' }}>Your private trading log — pick up where you left off.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {!isMobile && (
-            <div
-              title={`${totalJournalEntries} journal ${totalJournalEntries === 1 ? 'entry' : 'entries'} · ${journalStreak} day streak`}
-              style={{
-                height: '32px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                overflow: 'hidden',
-                border: `1px solid ${BORDER}`,
-                borderRadius: '999px',
-                background: `linear-gradient(135deg, ${S2}, rgba(245,158,11,0.035))`,
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
-                flexShrink: 0,
-              }}
-            >
-              <span style={{
-                height: '100%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '0 10px',
-                color: T2,
-                fontSize: '11.5px',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-              }}>
-                <PenLine size={13} color={T3} />
-                <strong style={{ color: T1, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{totalJournalEntries}</strong>
-                {totalJournalEntries === 1 ? 'entry' : 'entries'}
-              </span>
-              <span style={{ width: 1, height: '58%', background: BORDER }} />
-              <span style={{
-                height: '100%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '0 10px',
-                color: journalStreak > 0 ? T1 : T3,
-                fontSize: '11.5px',
-                fontWeight: 650,
-                whiteSpace: 'nowrap',
-              }}>
-                <span style={{
-                  width: 18,
-                  height: 18,
+          {!isMobile && (() => {
+            const flameColor = journalStreak >= 30 ? '#a855f7'
+              : journalStreak >= 14 ? '#dc2626'
+              : journalStreak >= 7  ? '#ef4444'
+              : journalStreak >= 3  ? '#f97316'
+              : journalStreak >= 1  ? '#f59e0b'
+              : 'var(--app-text-subtle)';
+            const glowColor = journalStreak >= 30 ? 'rgba(168,85,247,0.18)'
+              : journalStreak >= 14 ? 'rgba(220,38,38,0.16)'
+              : journalStreak >= 7  ? 'rgba(239,68,68,0.15)'
+              : journalStreak >= 3  ? 'rgba(249,115,22,0.15)'
+              : journalStreak >= 1  ? 'rgba(245,158,11,0.13)'
+              : 'transparent';
+            const borderColor = journalStreak >= 30 ? 'rgba(168,85,247,0.28)'
+              : journalStreak >= 14 ? 'rgba(220,38,38,0.28)'
+              : journalStreak >= 7  ? 'rgba(239,68,68,0.26)'
+              : journalStreak >= 3  ? 'rgba(249,115,22,0.26)'
+              : journalStreak >= 1  ? 'rgba(245,158,11,0.24)'
+              : BORDER;
+            return (
+              <div
+                title={`${totalJournalEntries} journal ${totalJournalEntries === 1 ? 'entry' : 'entries'} · ${journalStreak} day streak`}
+                style={{
+                  height: '32px',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  border: `1px solid ${BORDER}`,
                   borderRadius: '999px',
-                  background: journalStreak > 0 ? 'rgba(245,158,11,0.14)' : BSUB,
-                  border: `1px solid ${journalStreak > 0 ? 'rgba(245,158,11,0.24)' : BORDER}`,
+                  background: `linear-gradient(135deg, ${S2}, rgba(245,158,11,0.035))`,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  height: '100%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '0 10px',
+                  color: T2,
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
                 }}>
-                  <Flame
-                    size={12}
-                    color={journalStreak > 0 ? AMBER : T3}
-                    fill={journalStreak > 0 ? 'rgba(245,158,11,0.28)' : 'transparent'}
-                    strokeWidth={2.4}
-                  />
+                  <PenLine size={13} color={T3} />
+                  <strong style={{ color: T1, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{totalJournalEntries}</strong>
+                  {totalJournalEntries === 1 ? 'entry' : 'entries'}
                 </span>
-                <strong style={{ color: journalStreak > 0 ? AMBER : T2, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{journalStreak}</strong>
-                day {journalStreak === 1 ? 'streak' : 'streak'}
-              </span>
-            </div>
-          )}
+                <span style={{ width: 1, height: '58%', background: BORDER }} />
+                {/* Chess.com-style streak badge */}
+                <span style={{
+                  height: '100%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  padding: '0 11px 0 9px',
+                  whiteSpace: 'nowrap',
+                }}>
+                  <span style={{
+                    position: 'relative',
+                    width: 22,
+                    height: 22,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '999px',
+                    background: glowColor,
+                    border: `1px solid ${borderColor}`,
+                    flexShrink: 0,
+                  }}>
+                    <Flame
+                      size={13}
+                      color={flameColor}
+                      fill={journalStreak > 0 ? flameColor : 'transparent'}
+                      fillOpacity={journalStreak > 0 ? 0.35 : 0}
+                      strokeWidth={2.2}
+                    />
+                  </span>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 0, lineHeight: 1 }}>
+                    <span style={{ fontSize: '9px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: flameColor, opacity: journalStreak > 0 ? 0.9 : 0.45 }}>Streak</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: journalStreak > 0 ? T1 : T2, fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
+                      {journalStreak} <span style={{ fontWeight: 500, fontSize: '10px', color: T2 }}>{journalStreak === 1 ? 'Day' : 'Days'}</span>
+                    </span>
+                  </span>
+                </span>
+              </div>
+            );
+          })()}
           {!isMobile && (
             <>
               <button
