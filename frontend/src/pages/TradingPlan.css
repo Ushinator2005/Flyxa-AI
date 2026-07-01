@@ -1418,7 +1418,7 @@
   .tp-health-bar {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    border-radius: 8px;
+    padding-bottom: 12px;
   }
 
   .tp-hs-divider {
@@ -1426,30 +1426,24 @@
   }
 
   .tp-hs {
-    border-bottom: 1px solid var(--app-border);
-  }
-
-  .tp-hs:nth-child(odd) {
-    border-right: 1px solid var(--app-border);
+    padding: 0 0 10px;
   }
 }
 
 /* ── Health Bar ──────────────────────────────────────────────── */
 .tp-health-bar {
   display: flex;
-  align-items: stretch;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--surface-1);
-  overflow: hidden;
+  align-items: center;
+  gap: 0;
+  padding: 4px 0 16px;
 }
 
 .tp-hs {
   flex: 1;
-  padding: 10px 16px;
+  padding: 0 20px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -1477,13 +1471,15 @@
 
 .tp-hs-divider {
   width: 1px;
+  height: 24px;
   background: var(--app-border);
   flex-shrink: 0;
+  margin-right: 20px;
 }
 
 /* ── Rule Cards (new architecture) ──────────────────────────── */
 .tp-rcard {
-  border: 1px solid var(--app-border);
+  border: none;
   border-radius: 8px;
   background: var(--surface-1);
   display: flex;
@@ -1497,24 +1493,24 @@
 }
 
 .tp-rcard.tp-rcard-high-breach {
-  border-color: var(--red-border);
+  background: rgba(239,68,68,0.04);
 }
 
 .tp-rcard.tp-rcard-mid-breach {
-  border-color: var(--amber-border);
+  background: rgba(245,166,35,0.04);
 }
 
 .tp-rcard-hdr {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--app-border);
-  background: var(--surface-2);
+  padding: 10px 14px 8px;
+  border-bottom: none;
+  background: transparent;
 }
 
 .tp-rcard-topbar {
-  height: 3px;
+  height: 4px;
   width: 100%;
   flex-shrink: 0;
 }
@@ -1663,8 +1659,8 @@
 }
 
 .tp-rcard-body {
-  border-top: 1px solid var(--app-border);
-  padding: 12px;
+  border-top: none;
+  padding: 4px 14px 12px;
   flex: 1;
 }
 
@@ -1689,9 +1685,9 @@
 }
 
 .tp-rcard-footer {
-  padding: 8px 12px;
-  border-top: 1px solid var(--app-border);
-  background: var(--surface-2);
+  padding: 4px 14px 10px;
+  border-top: none;
+  background: transparent;
 }
 
 .tp-rcard-footer .tp-rule-delete:hover {

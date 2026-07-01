@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ClipboardList,
   Clock3,
-  Download,
   FileText,
   LockKeyhole,
   Plus,
@@ -367,22 +366,6 @@ export default function TradingPlan() {
     setPendingContracts(prev => ({ ...prev, [ruleId]: { symbol: '', max: '' } }));
   };
 
-  const exportPlan = () => {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      planBlocks: planBlocks.map(block => ({ title: block.name, content: block.content })),
-      riskRules,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `risk-rules-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div className="tp-page">
@@ -394,10 +377,6 @@ export default function TradingPlan() {
           </div>
           <div className="tp-actions">
             <span className="tp-saved">{lastSavedLabel}</span>
-            <button type="button" className="tp-btn tp-btn-muted" onClick={exportPlan}>
-              <Download size={12} />
-              Export
-            </button>
             <button type="button" className="tp-btn tp-btn-muted" onClick={resetPlan}>
               <RefreshCw size={12} />
               Reset
