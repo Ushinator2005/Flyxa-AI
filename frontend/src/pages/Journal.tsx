@@ -805,37 +805,6 @@ export default function Journal() {
           <p style={{ fontSize: '11px', color: T3, marginTop: '3px' }}>Your private trading log — pick up where you left off.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {!isMobile && (
-            <div
-              title={`${totalJournalEntries} journal ${totalJournalEntries === 1 ? 'entry' : 'entries'}`}
-              style={{
-                height: '32px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                overflow: 'hidden',
-                border: `1px solid ${BORDER}`,
-                borderRadius: '999px',
-                background: S2,
-                flexShrink: 0,
-              }}
-            >
-              <span style={{
-                height: '100%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '0 10px',
-                color: T2,
-                fontSize: '11.5px',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-              }}>
-                <PenLine size={13} color={T3} />
-                <strong style={{ color: T1, fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{totalJournalEntries}</strong>
-                {totalJournalEntries === 1 ? 'entry' : 'entries'}
-              </span>
-            </div>
-          )}
           {!isMobile && (() => {
             const flameColor = journalStreak >= 30 ? '#a855f7'
               : journalStreak >= 14 ? '#dc2626'
