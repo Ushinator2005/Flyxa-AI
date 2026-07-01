@@ -511,10 +511,7 @@ export default function TradingPlan() {
 
             {/* Section Header */}
             <div className="tp-section-head tp-section-head-actions">
-              <div>
-                <h2>Rule Framework</h2>
-                <p>Measurable rules are verified automatically. Subjective rules are confirmed in the journal.</p>
-              </div>
+              <h2 style={{ margin: 0 }}>Rule Framework</h2>
               <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule}>
                 <Plus size={12} /> Add Rule
               </button>
@@ -593,16 +590,21 @@ export default function TradingPlan() {
                           )}
                         </div>
                       </div>
-                      <label className="tp-rcard-toggle">
-                        <input
-                          type="checkbox"
-                          checked={rule.enabled !== false}
-                          onChange={e => updateRiskRule(rule.id, { enabled: e.target.checked })}
-                        />
-                        <span className="tp-toggle-track">
-                          <span className="tp-toggle-thumb" />
-                        </span>
-                      </label>
+                      <div className="tp-rcard-hdr-actions">
+                        <label className="tp-rcard-toggle">
+                          <input
+                            type="checkbox"
+                            checked={rule.enabled !== false}
+                            onChange={e => updateRiskRule(rule.id, { enabled: e.target.checked })}
+                          />
+                          <span className="tp-toggle-track">
+                            <span className="tp-toggle-thumb" />
+                          </span>
+                        </label>
+                        <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)} title="Remove rule">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Card Body */}
@@ -720,26 +722,15 @@ export default function TradingPlan() {
                       )}
                     </div>
 
-                    {/* Card Footer */}
-                    <div className="tp-rcard-footer">
-                      <button type="button" className="tp-rule-delete" onClick={() => deleteRiskRule(rule.id)}>
-                        <Trash2 size={12} /> Remove
-                      </button>
-                    </div>
-
                   </article>
                 );
               })}
             </div>
 
-            {/* Warning Banner */}
-            <div className="tp-warning">
-              <AlertCircle size={14} />
-              <div>
-                <p>Automatic does not mean guessed.</p>
-                <span>Flyxa verifies only rules supported by logged trade data. Missing timestamps or values remain unverified.</span>
-              </div>
-            </div>
+            {/* Footnote */}
+            <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)', lineHeight: 1.5 }}>
+              Flyxa verifies only rules supported by logged trade data. Missing timestamps or values remain unverified.
+            </p>
 
           </section>
         )}

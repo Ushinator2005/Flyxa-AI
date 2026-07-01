@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, Download, ShieldCheck, Sparkles, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account, Trade } from '../store/types.js';
@@ -163,6 +164,7 @@ function EmptyEvaluation() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function EvaluationCoach() {
+  const [searchParams] = useSearchParams();
   const accounts = useFlyxaStore(state => state.accounts);
   const entries = useFlyxaStore(state => state.entries);
   const activeAccountId = useFlyxaStore(state => state.activeAccountId);
@@ -202,7 +204,11 @@ export default function EvaluationCoach() {
     return sorted[0] ?? null;
   }, [evaluationAccounts, appSelectedId, activeAccountId, statusById, latestEntryDateForAccount]);
 
-  const [selectedId, setSelectedId] = useState(() => pickDefaultEvalAccount()?.id ?? '');
+  const [selectedId, setSelectedId] = useState(() => {
+    const fromParam = searchParams.get('account');
+    if (fromParam) return fromParam;
+    return pickDefaultEvalAccount()?.id ?? '';
+  });
   useEffect(() => {
     if (selectedId && evaluationAccounts.find(a => a.id === selectedId)) return;
     const preferred = pickDefaultEvalAccount();

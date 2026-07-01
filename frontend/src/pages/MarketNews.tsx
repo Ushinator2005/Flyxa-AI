@@ -680,125 +680,76 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
   const hasDetail = Boolean(item.summary || item.marketImpact?.note);
   const esTone = sentimentTone(item.marketImpact?.es);
   const nqTone = sentimentTone(item.marketImpact?.nq);
+  const dotColor = item.isBreaking ? RED : item.impact === 'high' ? RED : item.impact === 'medium' ? AMBER : T3;
 
   return (
     <article
-      style={feedCardRestStyle(item)}
-      onMouseEnter={event => {
-        Object.assign(event.currentTarget.style, feedCardHoverStyle(item));
-      }}
-      onMouseLeave={event => {
-        Object.assign(event.currentTarget.style, feedCardRestStyle(item));
-      }}
+      style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, cursor: item.url ? 'pointer' : 'default', transition: 'background .1s', background: item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.09)' : 'rgba(255,255,255,0.03)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent'; }}
+      onClick={() => { if (item.url) window.open(item.url, '_blank', 'noopener,noreferrer'); }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-            {item.isBreaking && <BreakingBadge />}
-            <ImpactBadge impact={item.impact} />
-            <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{item.category}</span>
-          </div>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.48, color: T1, fontWeight: 500 }}>
-            {item.headline}
-          </p>
+        {/* Impact indicator */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4, flexShrink: 0 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, boxShadow: item.impact === 'high' || item.isBreaking ? `0 0 6px ${dotColor}` : 'none' }} />
         </div>
 
-        {item.url && (
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: T3, lineHeight: 0, marginTop: 2 }}
-            onMouseEnter={event => {
-              event.currentTarget.style.color = COBALT;
-            }}
-            onMouseLeave={event => {
-              event.currentTarget.style.color = T3;
-            }}
-          >
-            <ExternalLink size={13} />
-          </a>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: T2, fontFamily: MONO }}>{item.source}</span>
-        <span style={{ fontSize: 10, color: T3 }}>•</span>
-        <span style={{ fontSize: 10, color: T2, fontFamily: MONO }}>{fmtRelative(item.timestamp)}</span>
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontSize: 10,
-              fontFamily: MONO,
-              color: esTone.color,
-              background: esTone.bg,
-              borderRadius: 3,
-              border: `1px solid ${esTone.border}`,
-              padding: '2px 6px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.03em',
-            }}
-          >
-            {impactTagLabel('ES', item.marketImpact?.es)}
-          </span>
-          <span
-            style={{
-              fontSize: 10,
-              fontFamily: MONO,
-              color: nqTone.color,
-              background: nqTone.bg,
-              borderRadius: 3,
-              border: `1px solid ${nqTone.border}`,
-              padding: '2px 6px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.03em',
-            }}
-          >
-            {impactTagLabel('NQ', item.marketImpact?.nq)}
-          </span>
-        </span>
-      </div>
-
-      {hasDetail && (
-        <button
-          onClick={() => setExpanded(value => !value)}
-          style={{
-            marginTop: 8,
-            background: 'transparent',
-            border: 'none',
-            color: COBALT,
-            fontSize: 11,
-            fontWeight: 600,
-            padding: 0,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            cursor: 'pointer',
-          }}
-        >
-          {expanded ? 'Hide details' : 'Show details'}
-          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-      )}
-
-      {expanded && hasDetail && (
-        <div
-          style={{
-            marginTop: 9,
-            borderRadius: 6,
-            border: `1px solid ${BORDER}`,
-            background: S2,
-            padding: '10px 12px',
-          }}
-        >
-          {item.summary && <p style={{ margin: 0, color: T2, fontSize: 12, lineHeight: 1.55 }}>{item.summary}</p>}
-          {item.marketImpact?.note && (
-            <p style={{ margin: item.summary ? '8px 0 0' : 0, color: AMBER, fontSize: 11, lineHeight: 1.5 }}>
-              {item.marketImpact.note}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: item.isBreaking ? '#fff' : T1, fontWeight: item.isBreaking ? 600 : 450, flex: 1, minWidth: 0 }}>
+              {item.isBreaking && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 7, fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: RED, fontFamily: MONO }}>⚡ BREAKING</span>}
+              {item.headline}
             </p>
+            {item.url && (
+              <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                style={{ color: T3, lineHeight: 0, flexShrink: 0, marginTop: 2 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = COBALT; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = T3; }}>
+                <ExternalLink size={12} />
+              </a>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{fmtRelative(item.timestamp)}</span>
+            <span style={{ fontSize: 10, color: T3, opacity: 0.4 }}>·</span>
+            <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{item.source}</span>
+            {item.category && item.category !== 'Other' && (
+              <>
+                <span style={{ fontSize: 10, color: T3, opacity: 0.4 }}>·</span>
+                <span style={{ fontSize: 9, color: T3, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '.05em' }}>{item.category}</span>
+              </>
+            )}
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 5, flexWrap: 'nowrap' }}>
+              <span style={{ fontSize: 9, fontFamily: MONO, color: esTone.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+                ES {impactTagLabel('ES', item.marketImpact?.es).replace('ES ', '')}
+              </span>
+              <span style={{ fontSize: 9, color: T3, opacity: 0.4 }}>·</span>
+              <span style={{ fontSize: 9, fontFamily: MONO, color: nqTone.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+                NQ {impactTagLabel('NQ', item.marketImpact?.nq).replace('NQ ', '')}
+              </span>
+            </span>
+          </div>
+
+          {hasDetail && (
+            <button onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+              style={{ marginTop: 5, background: 'transparent', border: 'none', color: COBALT, fontSize: 10, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', fontFamily: SANS }}>
+              {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              {expanded ? 'Hide' : 'Details'}
+            </button>
+          )}
+
+          {expanded && hasDetail && (
+            <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid rgba(255,255,255,0.06)` }}>
+              {item.summary && <p style={{ margin: 0, color: T2, fontSize: 12, lineHeight: 1.55 }}>{item.summary}</p>}
+              {item.marketImpact?.note && (
+                <p style={{ margin: item.summary ? '6px 0 0' : 0, color: AMBER, fontSize: 11, lineHeight: 1.5 }}>{item.marketImpact.note}</p>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
     </article>
   );
 }
@@ -1058,169 +1009,98 @@ function CalendarPanel({
   }, [dates, todaySlice, weekOffset]);
 
   return (
-    <section style={{ ...sidebarCardStyle(), padding: '16px', borderColor: AMBER_BORDER, background: S1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 13, color: T1, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, minWidth: 0 }}>
-          Economic Calendar
-        </p>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, minWidth: 0 }}>
-          <span style={{ fontSize: 10, color: T3 }}>{subtitle}</span>
+    <section style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+      {/* Calendar header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, padding: '0 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: T3 }}>Econ Calendar</span>
+          <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{subtitle}</span>
+          {weekOffset === 0 && <span style={{ fontSize: 9, color: isToday ? GREEN : T3, fontFamily: MONO }}>{isToday ? '● live' : '○ missing'}</span>}
+        </div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <CalendarImpactFilterButton value={impactSelection} onChange={onImpactSelectionChange} />
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: T2, fontFamily: MONO, letterSpacing: '0.03em' }}>
-          {formatWeekRange(weekStart)}
-          {weekOffset === 0 && (
-            <span style={{ marginLeft: 6, color: isToday ? GREEN : T3 }}>{isToday ? 'today loaded' : 'today missing'}</span>
-          )}
-        </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <button
-            type="button"
-            onClick={() => setWeekOffset((current) => current - 1)}
-            style={{
-              height: 25,
-              borderRadius: 6,
-              border: `1px solid ${BORDER}`,
-              background: S2,
-              color: T2,
-              padding: '0 8px',
-              fontSize: 10,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            onClick={() => setWeekOffset(0)}
-            style={{
-              height: 25,
-              borderRadius: 6,
-              border: `1px solid ${weekOffset === 0 ? COBALT_BORDER : BORDER}`,
-              background: weekOffset === 0 ? COBALT_DIM : S2,
-              color: weekOffset === 0 ? COBALT : T2,
-              padding: '0 8px',
-              fontSize: 10,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            This week
-          </button>
-          <button
-            type="button"
-            onClick={() => setWeekOffset((current) => current + 1)}
-            style={{
-              height: 25,
-              borderRadius: 6,
-              border: `1px solid ${AMBER_BORDER}`,
-              background: AMBER_DIM,
-              color: AMBER,
-              padding: '0 8px',
-              fontSize: 10,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Next
-          </button>
+
+      {/* Week nav */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, padding: '0 14px' }}>
+        <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{formatWeekRange(weekStart)}</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          {[
+            { label: '‹', action: () => setWeekOffset(c => c - 1), active: false },
+            { label: 'Now', action: () => setWeekOffset(0), active: weekOffset === 0 },
+            { label: '›', action: () => setWeekOffset(c => c + 1), active: false },
+          ].map(btn => (
+            <button key={btn.label} type="button" onClick={btn.action} style={{ height: 22, borderRadius: 4, border: `1px solid ${btn.active ? COBALT_BORDER : BORDER}`, background: btn.active ? COBALT_DIM : 'transparent', color: btn.active ? COBALT : T3, padding: '0 7px', fontSize: 11, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>
+              {btn.label}
+            </button>
+          ))}
         </div>
       </div>
+
       {events.length === 0 ? (
-        <p style={{ margin: 0, color: T3, fontSize: 11 }}>No USD events available.</p>
+        <p style={{ margin: 0, color: T3, fontSize: 11, padding: '0 14px' }}>No USD events available.</p>
       ) : filteredEvents.length === 0 ? (
-        <p style={{ margin: 0, color: T3, fontSize: 11 }}>No selected USD events in the current range.</p>
+        <p style={{ margin: 0, color: T3, fontSize: 11, padding: '0 14px' }}>No events for selected impacts.</p>
       ) : weekEvents.length === 0 ? (
-        <p style={{ margin: 0, color: T3, fontSize: 11 }}>No selected USD events for this week.</p>
+        <p style={{ margin: 0, color: T3, fontSize: 11, padding: '0 14px' }}>No events this week.</p>
       ) : (
         <div
           ref={calendarScrollRef}
-          style={{
-            display: 'grid',
-            gap: 14,
-            width: '100%',
-            maxWidth: '100%',
-            maxHeight: 'min(68vh, 720px)',
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            padding: '0 3px 0 2px',
-            minWidth: 0,
-            boxSizing: 'border-box',
-          }}
+          style={{ maxHeight: 'min(60vh, 640px)', overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}
         >
           {dates.map(date => (
-            <div key={date} ref={date === todaySlice ? todayRef : undefined} style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
-              <p style={{ margin: '0 0 7px', paddingLeft: 2, fontSize: 11, fontWeight: 800, color: date === todaySlice ? COBALT : AMBER, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2 }}>
-                {fmtCalendarDate(date, safeDisplayTimezone)}
-              </p>
-              <div style={{ display: 'grid', gap: 5, minWidth: 0, width: '100%' }}>
-                {byDate[date].map((event, index) => {
+            <div key={date} ref={date === todaySlice ? todayRef : undefined} style={{ minWidth: 0 }}>
+              {/* Date header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 4px', position: 'sticky', top: 0, background: PAGE_BG, zIndex: 2, borderBottom: `1px solid ${BORDER}` }}>
+                <span style={{ width: 3, height: 12, borderRadius: 2, background: date === todaySlice ? COBALT : AMBER, flexShrink: 0 }} />
+                <span style={{ fontSize: 10, fontWeight: 800, color: date === todaySlice ? COBALT : AMBER, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {fmtCalendarDate(date, safeDisplayTimezone)}
+                </span>
+                {date === todaySlice && <span style={{ fontSize: 9, color: COBALT, fontFamily: MONO, opacity: .7 }}>today</span>}
+              </div>
+
+              {/* Events table */}
+              {byDate[date].map((event, index) => {
                   const hasActual = Boolean(event.actual);
                   const aColor = actualColor(event.actual, event.forecast);
                   const isHigh = event.impact === 'high';
+                  const isMed = event.impact === 'medium';
+                  const impDot = isHigh ? RED : isMed ? AMBER : T3;
                   return (
                     <div
                       key={`${event.event}-${index}`}
                       style={{
-                        padding: '9px 10px',
-                        borderRadius: 7,
-                        background: S2,
-                        border: isHigh ? `1px solid ${RED_BORDER}` : `1px solid ${BORDER}`,
-                        borderLeft: `4px solid ${impactColor(event.impact)}`,
-                        minWidth: 0,
-                        maxWidth: '100%',
-                        overflow: 'hidden',
-                        boxSizing: 'border-box',
-                        boxShadow: isHigh ? '0 8px 16px rgba(240,82,82,0.16)' : 'none',
+                        display: 'grid',
+                        gridTemplateColumns: '44px 8px 1fr auto',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '7px 14px',
+                        borderBottom: `1px solid ${BORDER}`,
+                        background: isHigh ? 'rgba(239,68,68,0.04)' : 'transparent',
+                        transition: 'background .1s',
                       }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.04)' : 'transparent'; }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: (event.forecast || event.previous) ? 5 : 0 }}>
-                        <span style={{ fontFamily: MONO, fontSize: 12, color: T1, minWidth: 44, flexShrink: 0, fontWeight: 600 }}>{fmtFFTime(event.time)}</span>
-                        <span style={{ fontSize: 12, color: isHigh ? RED : T1, flex: 1, minWidth: 0, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', fontWeight: 700 }}>{event.event}</span>
-                        {isHigh && (
-                          <span
-                            style={{
-                              fontSize: 9,
-                              fontWeight: 800,
-                              letterSpacing: '0.08em',
-                              textTransform: 'uppercase',
-                              padding: '2px 5px',
-                              borderRadius: 4,
-                              color: RED,
-                              background: RED_DIM,
-                              border: `1px solid ${RED_BORDER}`,
-                              flexShrink: 0,
-                            }}
-                          >
-                            High
-                          </span>
-                        )}
-                        {hasActual && (
-                          <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: aColor, flexShrink: 0 }}>{event.actual}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 11, color: T3, fontWeight: 600 }}>{fmtFFTime(event.time)}</span>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: impDot, flexShrink: 0, boxShadow: isHigh ? `0 0 5px ${RED}` : 'none' }} />
+                      <div style={{ minWidth: 0 }}>
+                        <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>{event.event}</span>
+                        {(event.forecast || event.previous) && (
+                          <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                            {event.forecast && <span style={{ fontSize: 9, color: T3, fontFamily: MONO }}>F: <span style={{ color: T2 }}>{event.forecast}</span></span>}
+                            {event.previous && <span style={{ fontSize: 9, color: T3, fontFamily: MONO }}>P: <span style={{ color: T2 }}>{event.previous}</span></span>}
+                            {!hasActual && <span style={{ fontSize: 9, color: T3, fontFamily: MONO }}>pending</span>}
+                          </div>
                         )}
                       </div>
-                      {(event.forecast || event.previous) && (
-                        <div style={{ display: 'flex', gap: 10, paddingLeft: 50, minWidth: 0, maxWidth: '100%', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
-                          {event.forecast && (
-                            <span style={{ fontSize: 10, color: T3, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
-                              F: <span style={{ color: T2, fontFamily: MONO }}>{event.forecast}</span>
-                            </span>
-                          )}
-                          {event.previous && (
-                            <span style={{ fontSize: 10, color: T3, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
-                              P: <span style={{ color: T2, fontFamily: MONO }}>{event.previous}</span>
-                            </span>
-                          )}
-                          {!hasActual && <span style={{ fontSize: 10, color: T3, overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>pending</span>}
-                        </div>
-                      )}
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        {hasActual && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: aColor }}>{event.actual}</span>}
+                      </div>
                     </div>
                   );
                 })}
-              </div>
             </div>
           ))}
         </div>
@@ -1228,6 +1108,7 @@ function CalendarPanel({
     </section>
   );
 }
+
 function SourcesPanel({
   prefs,
   onChange,
@@ -1241,10 +1122,10 @@ function SourcesPanel({
   const enabledCount = xAccounts.filter(account => account.enabled).length;
 
   return (
-    <section style={sidebarCardStyle()}>
+    <section style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
       <p
         style={{
-          margin: '0 0 8px',
+          margin: '0 0 10px',
           fontSize: 10,
           color: T3,
           textTransform: 'uppercase',
@@ -1253,12 +1134,13 @@ function SourcesPanel({
           display: 'inline-flex',
           gap: 5,
           alignItems: 'center',
+          padding: '0 14px',
         }}
       >
         <Settings2 size={10} />
         Sources
       </p>
-      <div style={{ display: 'grid', gap: 7 }}>
+      <div style={{ padding: '0 14px', display: 'grid', gap: 7 }}>
         {([
           { key: 'finnhub', label: 'Finnhub', note: 'Requires VITE_FINNHUB_KEY' },
           { key: 'polygon', label: 'Polygon.io', note: 'Requires VITE_POLYGON_KEY' },
@@ -1297,7 +1179,7 @@ function SourcesPanel({
           );
         })}
       </div>
-      <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 10 }}>
+      <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 10, padding: '10px 14px 0' }}>
         <button
           type="button"
           onClick={onOpenXAccounts}
@@ -1394,9 +1276,9 @@ function XAccountsModal({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 7,
-                border: '1px solid rgba(255, 255, 255, 0.14)',
-                background: '#000000',
-                color: '#ffffff',
+                border: `1px solid ${BORDER}`,
+                background: S2,
+                color: T1,
                 flexShrink: 0,
               }}
             >
@@ -1500,9 +1382,9 @@ function XAccountsModal({
                     alignItems: 'center',
                     justifyContent: 'center',
                     borderRadius: 7,
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    background: '#000000',
-                    color: '#ffffff',
+                    border: `1px solid ${BORDER}`,
+                    background: S2,
+                    color: T1,
                   }}
                 >
                   <TwitterXLogo size={15} />
@@ -1813,67 +1695,51 @@ export default function MarketNews() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, overflow: 'hidden', fontFamily: SANS, background: PAGE_BG }}>
-      <div style={{ padding: '12px 18px 10px', borderBottom: `1px solid ${BORDER}`, background: S1, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 18, letterSpacing: '-0.01em', fontWeight: 650 }}>Market News</h1>
-            </div>
+      <div style={{ padding: '10px 16px 8px', borderBottom: `1px solid ${BORDER}`, background: PAGE_BG, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: AMBER, fontFamily: MONO }}>FLYXA</span>
+            <span style={{ width: 1, height: 14, background: BORDER, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: T1 }}>Market Intelligence</span>
             {!isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 8 }}>
                 {[
-                  { label: 'Breaking', value: breakingCount, color: RED },
-                  { label: 'High', value: highCount, color: AMBER },
-                  { label: 'Calendar', value: highCalendarCount, color: COBALT },
+                  { label: 'BREAK', value: breakingCount, color: RED },
+                  { label: 'HIGH', value: highCount, color: AMBER },
+                  { label: 'CAL', value: highCalendarCount, color: COBALT },
                 ].map((stat) => (
-                  <span
-                    key={stat.label}
-                    style={{
-                      height: 24,
-                      border: `1px solid ${BORDER}`,
-                      borderRadius: 6,
-                      background: S2,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '0 8px',
-                      fontSize: 10,
-                      color: T3,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      fontWeight: 700,
-                    }}
-                  >
+                  <span key={stat.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: T3, fontFamily: MONO }}>
                     {stat.label}
-                    <span style={{ color: stat.color, fontFamily: MONO, fontSize: 12, fontWeight: 800 }}>{stat.value}</span>
+                    <span style={{ color: stat.value > 0 ? stat.color : T3, fontWeight: 700, fontSize: 11 }}>{stat.value}</span>
                   </span>
                 ))}
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {!isMobile && lastRefresh && <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>Updated {fmtRelative(lastRefresh.toISOString())}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {!isMobile && lastRefresh && <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>↻ {fmtRelative(lastRefresh.toISOString())}</span>}
             <button
               onClick={() => { void fetchNews(true); void fetchSidebar(); }}
               disabled={loading}
               style={{
-                height: 30,
-                borderRadius: 6,
+                height: 26,
+                borderRadius: 4,
                 border: `1px solid ${loading ? COBALT_BORDER : BORDER}`,
-                background: loading ? COBALT_DIM : S2,
-                color: loading ? COBALT : T2,
-                padding: '0 10px',
+                background: 'transparent',
+                color: loading ? COBALT : T3,
+                padding: '0 8px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
-                fontSize: 12,
+                gap: 5,
+                fontSize: 10,
                 fontWeight: 600,
                 cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: MONO,
               }}
             >
-              <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : undefined }} />
-              {loading ? 'Refreshing' : 'Refresh'}
+              <RefreshCw size={11} style={{ animation: loading ? 'spin 1s linear infinite' : undefined }} />
+              {loading ? 'LOADING' : 'REFRESH'}
             </button>
           </div>
         </div>
@@ -1956,20 +1822,10 @@ export default function MarketNews() {
         <main className="mn-feed" style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
           <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 10px 14px' }}>
           {topBreaking && (
-            <div
-              style={{
-                margin: '12px 0 0',
-                borderRadius: 8,
-                border: `1px solid ${RED_BORDER}`,
-                background: RED_DIM,
-                padding: '10px 12px',
-              }}
-            >
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <BreakingBadge />
-                <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{fmtRelative(topBreaking.timestamp)}</span>
-              </div>
-              <div style={{ fontSize: 13, color: T1, fontWeight: 500 }}>{topBreaking.headline}</div>
+            <div style={{ margin: '8px 0 0', padding: '8px 14px', borderBottom: `1px solid ${RED_BORDER}`, background: 'rgba(239,68,68,0.07)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: RED, fontFamily: MONO, flexShrink: 0, paddingTop: 2 }}>⚡ BREAKING</span>
+              <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, flex: 1 }}>{topBreaking.headline}</span>
+              <span style={{ fontSize: 9, color: T3, fontFamily: MONO, flexShrink: 0, paddingTop: 2 }}>{fmtRelative(topBreaking.timestamp)}</span>
             </div>
           )}
 
@@ -2039,7 +1895,7 @@ export default function MarketNews() {
             </div>
           )}
 
-          <div style={{ marginTop: 10, display: 'grid', gap: 10, padding: '0 4px' }}>
+          <div style={{ marginTop: 10 }}>
             {displayed.map((item, index) => (
               <NewsCard key={`${item.headline}-${index}`} item={item} />
             ))}
@@ -2092,7 +1948,7 @@ export default function MarketNews() {
               </button>
             </div>
           )}
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gap: 0 }}>
             <CalendarPanel
                 events={calendar}
                 isToday={calendarIsToday}

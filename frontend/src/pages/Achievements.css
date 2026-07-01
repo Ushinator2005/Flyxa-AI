@@ -1,58 +1,60 @@
+/* ─── Page ──────────────────────────────────────────────────────────────────── */
 .achv-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   color: var(--app-text);
+  padding-bottom: 40px;
 }
 
-.achv-hero,
-.achv-focus-card,
-.achv-payout-gallery,
-.achv-targets,
-.achv-streak-card,
-.achv-badge,
-.achv-empty {
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--app-panel);
+/* ─── Animations ─────────────────────────────────────────────────────────────── */
+@keyframes achv-legendary-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); border-color: rgba(245,158,11,0.38); }
+  50% { box-shadow: 0 0 20px 3px rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.75); }
 }
 
+@keyframes achv-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ─── Hero ───────────────────────────────────────────────────────────────────── */
 .achv-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 14px;
-  align-items: stretch;
-  padding: 18px;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 24px;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--app-border);
+  background: transparent;
+  border-radius: 0;
 }
 
 .achv-hero-copy {
   min-width: 0;
 }
 
-.achv-rarity-pill {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
 .achv-kicker {
   display: inline-flex;
   align-items: center;
-  color: var(--app-text-subtle);
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .achv-hero h1 {
   margin: 8px 0 0;
-  font-size: 24px;
-  line-height: 1.15;
+  font-size: 26px;
+  line-height: 1.1;
   font-weight: 750;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
   color: var(--app-text);
 }
 
 .achv-hero-copy p {
-  max-width: 680px;
+  max-width: 580px;
   margin: 6px 0 0;
   color: var(--app-text-muted);
   font-size: 12px;
@@ -60,33 +62,28 @@
 }
 
 .achv-hero-score {
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--app-panel-strong);
-  padding: 13px;
+  border: none;
+  border-left: 1px solid var(--app-border);
+  background: transparent;
+  padding: 4px 0 4px 24px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
 }
 
-.achv-hero-score > span,
-.achv-focus-label,
-.achv-section-sub,
-.achv-streak-meta,
-.achv-unlocked-date {
+.achv-hero-score > span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--app-text-subtle);
 }
 
-.achv-hero-score > span {
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .achv-hero-score strong {
-  margin-top: 5px;
+  margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 28px;
+  font-size: 36px;
   line-height: 1;
   font-weight: 720;
   color: var(--app-text);
@@ -94,7 +91,7 @@
 }
 
 .achv-hero-score small {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--app-text-subtle);
   font-family: var(--font-sans);
   font-weight: 600;
@@ -106,20 +103,20 @@
   color: var(--app-text-muted);
 }
 
+/* ─── Progress tracks ────────────────────────────────────────────────────────── */
 .achv-hero-track,
 .achv-target-track,
 .achv-mini-track,
 .achv-badge-progress {
   width: 100%;
   overflow: hidden;
-  background: var(--app-bg);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255,255,255,0.05);
+  border-radius: 99px;
 }
 
 .achv-hero-track {
-  height: 5px;
-  border-radius: 3px;
-  margin-top: 12px;
+  height: 6px;
+  margin-top: 14px;
 }
 
 .achv-hero-track span,
@@ -130,214 +127,17 @@
   height: 100%;
   border-radius: inherit;
   background: var(--amber);
+  transition: width 600ms ease;
 }
 
-.achv-focus-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
-  gap: 12px;
-}
-
-.achv-focus-card {
-  padding: 14px;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-}
-
-.achv-focus-card h2 {
-  margin: 7px 0 0;
-  font-size: 22px;
-  line-height: 1.1;
-  font-weight: 740;
-  letter-spacing: 0;
-}
-
-.achv-focus-card p {
-  margin: 8px 0 0;
-  max-width: 520px;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.achv-focus-label {
-  font-size: 9.5px;
-  font-weight: 650;
-}
-
-.achv-focus-mark {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: var(--amber);
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.24);
-}
-
-.achv-payout-gallery {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-.achv-payout-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  min-width: 0;
-}
-
-.achv-payout-head h2 {
-  margin: 7px 0 0;
-  font-size: 28px;
-  line-height: 1;
-  font-weight: 780;
-  letter-spacing: 0;
-  color: var(--green);
-}
-
-.achv-payout-head p {
-  margin: 8px 0 0;
-  max-width: 420px;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.achv-payout-input {
-  display: none;
-}
-
-.achv-payout-upload {
-  height: 34px;
-  border-radius: 7px;
-  border: 1px solid rgba(34, 197, 94, 0.32);
-  background: rgba(34, 197, 94, 0.1);
-  color: var(--green);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 11px;
-  font-size: 11px;
-  font-weight: 750;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.achv-payout-upload:hover {
-  border-color: rgba(34, 197, 94, 0.52);
-  background: rgba(34, 197, 94, 0.15);
-}
-
-.achv-payout-photo-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.achv-payout-photo {
-  margin: 0;
-  min-width: 0;
-  aspect-ratio: 4 / 3;
-  border: 1px solid var(--app-border);
-  border-radius: 7px;
-  background: var(--app-panel-strong);
-  overflow: hidden;
-  position: relative;
-}
-
-.achv-payout-photo img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
-.achv-payout-photo figcaption {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 7px;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.82));
-}
-
-.achv-payout-photo figcaption span {
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.achv-payout-photo figcaption button {
-  width: 23px;
-  height: 23px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.52);
-  color: rgba(255, 255, 255, 0.72);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.achv-payout-photo figcaption button:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.32);
-}
-
-.achv-payout-empty {
-  min-height: 148px;
-  border: 1px dashed var(--app-border);
-  border-radius: 7px;
-  background: var(--app-panel-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px;
-  color: var(--app-text-subtle);
-}
-
-.achv-payout-empty svg {
-  color: var(--green);
-  flex-shrink: 0;
-}
-
-.achv-payout-empty div {
-  display: grid;
-  gap: 3px;
-}
-
-.achv-payout-empty strong {
-  color: var(--app-text-muted);
-  font-size: 13px;
-}
-
-.achv-payout-empty span {
-  color: var(--app-text-subtle);
-  font-size: 11.5px;
-}
-
+/* ─── Closest targets section ───────────────────────────────────────────────── */
 .achv-targets {
-  padding: 12px;
   display: grid;
   gap: 8px;
   min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .achv-section-row {
@@ -353,36 +153,60 @@
 
 .achv-section-title {
   margin: 0;
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.2;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--app-text-subtle);
 }
 
 .achv-section-sub {
   margin: 5px 0 0;
   font-size: 11.5px;
+  color: var(--app-text-subtle);
 }
 
 .achv-target-card {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 10px;
-  padding: 10px;
-  border-radius: 7px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
   border: 1px solid var(--app-border);
+  background: var(--app-panel);
+  transition: border-color 150ms, background 150ms;
+}
+
+.achv-target-card:hover {
+  border-color: rgba(255,255,255,0.12);
   background: var(--app-panel-strong);
 }
 
+.achv-target-card.achv-rarity-legendary {
+  border-color: rgba(245,158,11,0.3);
+  background: linear-gradient(135deg, rgba(245,158,11,0.06) 0%, var(--app-panel) 55%);
+}
+
+.achv-target-card.achv-rarity-epic {
+  border-color: rgba(159,140,255,0.28);
+  background: linear-gradient(135deg, rgba(159,140,255,0.05) 0%, var(--app-panel) 55%);
+}
+
+.achv-target-card.achv-rarity-rare {
+  border-color: rgba(59,130,246,0.25);
+  background: linear-gradient(135deg, rgba(59,130,246,0.04) 0%, var(--app-panel) 55%);
+}
+
 .achv-target-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 7px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   color: var(--app-text-muted);
   border: 1px solid var(--app-border);
-  background: var(--app-panel);
+  background: var(--app-panel-strong);
 }
 
 .achv-target-body {
@@ -393,13 +217,15 @@
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--app-text-subtle);
 }
 
 .achv-target-topline strong {
-  color: var(--app-text-muted);
+  color: var(--amber);
   font-family: var(--font-mono);
   letter-spacing: 0;
 }
@@ -409,19 +235,20 @@
   font-size: 12.5px;
   line-height: 1.25;
   font-weight: 700;
+  color: var(--app-text);
 }
 
 .achv-target-card p {
   margin: 3px 0 0;
   color: var(--app-text-muted);
   font-size: 11px;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .achv-target-track {
   height: 4px;
   border-radius: 2px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .achv-target-empty {
@@ -433,6 +260,7 @@
   text-align: center;
 }
 
+/* ─── Live streaks section ───────────────────────────────────────────────────── */
 .achv-section {
   display: flex;
   flex-direction: column;
@@ -446,12 +274,23 @@
 }
 
 .achv-streak-card {
-  padding: 13px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  border: 1px solid var(--app-border);
+  border-top: 2px solid;
+  border-radius: 8px;
+  background: var(--app-panel);
+  position: relative;
+  overflow: hidden;
 }
+
+.achv-tone-green { border-top-color: var(--green); }
+.achv-tone-blue { border-top-color: var(--cobalt, #3b82f6); }
+.achv-tone-purple { border-top-color: #9f8cff; }
+.achv-tone-amber { border-top-color: var(--amber); }
 
 .achv-streak-head {
   display: flex;
@@ -461,17 +300,20 @@
 }
 
 .achv-streak-icon {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border: 1px solid var(--app-border);
-  background: var(--app-panel-strong);
   color: var(--app-text-muted);
 }
+
+.achv-tone-green .achv-streak-icon { color: var(--green); background: rgba(34,197,94,0.08); }
+.achv-tone-blue .achv-streak-icon { color: var(--cobalt, #3b82f6); background: rgba(59,130,246,0.08); }
+.achv-tone-purple .achv-streak-icon { color: #9f8cff; background: rgba(159,140,255,0.08); }
+.achv-tone-amber .achv-streak-icon { color: var(--amber); background: rgba(245,158,11,0.08); }
 
 .achv-streak-label {
   min-width: 0;
@@ -479,7 +321,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 9.5px;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: var(--app-text-subtle);
 }
 
@@ -492,11 +336,16 @@
 .achv-streak-value {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 30px;
+  font-size: 38px;
   line-height: 1;
   font-weight: 720;
   font-variant-numeric: tabular-nums;
 }
+
+.achv-tone-green .achv-streak-value { color: var(--green); }
+.achv-tone-blue .achv-streak-value { color: var(--cobalt, #3b82f6); }
+.achv-tone-purple .achv-streak-value { color: #9f8cff; }
+.achv-tone-amber .achv-streak-value { color: var(--amber); }
 
 .achv-streak-unit {
   font-size: 10.5px;
@@ -504,9 +353,14 @@
 }
 
 .achv-mini-track {
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
 }
+
+.achv-tone-green .achv-mini-track span { background: var(--green); }
+.achv-tone-blue .achv-mini-track span { background: var(--cobalt, #3b82f6); }
+.achv-tone-purple .achv-mini-track span { background: #9f8cff; }
+.achv-tone-amber .achv-mini-track span { background: var(--amber); }
 
 .achv-streak-meta {
   margin: 0;
@@ -514,6 +368,7 @@
   justify-content: space-between;
   gap: 8px;
   font-size: 10.5px;
+  color: var(--app-text-subtle);
 }
 
 .achv-streak-meta span {
@@ -521,38 +376,7 @@
   font-family: var(--font-mono);
 }
 
-.achv-tone-green .achv-streak-value {
-  color: var(--green);
-}
-
-.achv-tone-blue .achv-streak-value {
-  color: var(--cobalt);
-}
-
-.achv-tone-purple .achv-streak-value {
-  color: #9f8cff;
-}
-
-.achv-tone-amber .achv-streak-value {
-  color: var(--amber);
-}
-
-.achv-tone-green .achv-mini-track span {
-  background: var(--green);
-}
-
-.achv-tone-blue .achv-mini-track span {
-  background: var(--cobalt);
-}
-
-.achv-tone-purple .achv-mini-track span {
-  background: #9f8cff;
-}
-
-.achv-tone-amber .achv-mini-track span {
-  background: var(--amber);
-}
-
+/* ─── Achievement board ──────────────────────────────────────────────────────── */
 .achv-toolbar {
   display: flex;
   justify-content: space-between;
@@ -568,21 +392,21 @@
 }
 
 .achv-chip {
-  height: 29px;
+  height: 28px;
   border-radius: 5px;
   padding: 0 10px;
   border: 1px solid var(--app-border);
-  background: var(--app-panel);
+  background: transparent;
   color: var(--app-text-muted);
-  font-size: 11.5px;
-  font-weight: 620;
+  font-size: 11px;
+  font-weight: 650;
   cursor: pointer;
   transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
 }
 
 .achv-chip:hover,
 .achv-chip.is-active {
-  border-color: rgba(245, 158, 11, 0.28);
+  border-color: rgba(245, 158, 11, 0.35);
   color: var(--amber);
   background: rgba(245, 158, 11, 0.08);
 }
@@ -597,15 +421,48 @@
   gap: 10px;
 }
 
+/* ─── Badge cards ────────────────────────────────────────────────────────────── */
 .achv-badge {
-  min-height: 174px;
-  padding: 12px;
+  min-height: 180px;
+  padding: 13px;
   display: flex;
   flex-direction: column;
   gap: 9px;
   min-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
+/* Rarity — unlocked */
+.achv-rarity-legendary.is-unlocked {
+  background: linear-gradient(150deg, rgba(245,158,11,0.08) 0%, var(--app-panel) 55%);
+  border-color: rgba(245,158,11,0.45);
+  animation: achv-legendary-pulse 3.5s ease-in-out infinite;
+}
+
+.achv-rarity-epic.is-unlocked {
+  background: linear-gradient(150deg, rgba(159,140,255,0.07) 0%, var(--app-panel) 55%);
+  border-color: rgba(159,140,255,0.4);
+}
+
+.achv-rarity-rare.is-unlocked {
+  background: linear-gradient(150deg, rgba(59,130,246,0.05) 0%, var(--app-panel) 55%);
+  border-color: rgba(59,130,246,0.32);
+}
+
+.achv-rarity-common.is-unlocked {
+  border-color: rgba(148,163,184,0.25);
+}
+
+/* Locked state */
+.achv-badge.is-locked {
+  opacity: 0.42;
+  filter: grayscale(0.55);
+}
+
+/* Icon wraps */
 .achv-badge-top {
   display: flex;
   align-items: center;
@@ -614,17 +471,72 @@
 }
 
 .achv-badge-icon-wrap {
-  width: 34px;
-  height: 34px;
-  border-radius: 7px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   border: 1px solid var(--app-border);
   background: var(--app-panel-strong);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--app-text-subtle);
+  transition: background 180ms, border-color 180ms, color 180ms;
 }
 
+.achv-rarity-legendary.is-unlocked .achv-badge-icon-wrap {
+  background: rgba(245,158,11,0.14);
+  border-color: rgba(245,158,11,0.38);
+  color: var(--amber);
+}
+
+.achv-rarity-epic.is-unlocked .achv-badge-icon-wrap {
+  background: rgba(159,140,255,0.12);
+  border-color: rgba(159,140,255,0.32);
+  color: #9f8cff;
+}
+
+.achv-rarity-rare.is-unlocked .achv-badge-icon-wrap {
+  background: rgba(59,130,246,0.1);
+  border-color: rgba(59,130,246,0.28);
+  color: #60a5fa;
+}
+
+.achv-rarity-common.is-unlocked .achv-badge-icon-wrap {
+  color: #cbd5e1;
+}
+
+/* Rarity pill */
+.achv-rarity-pill {
+  font-size: 8.5px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: var(--app-panel-strong);
+  color: var(--app-text-subtle);
+  border: 1px solid var(--app-border);
+}
+
+.achv-rarity-legendary.is-unlocked .achv-rarity-pill {
+  background: rgba(245,158,11,0.12);
+  border-color: rgba(245,158,11,0.3);
+  color: var(--amber);
+}
+
+.achv-rarity-epic.is-unlocked .achv-rarity-pill {
+  background: rgba(159,140,255,0.1);
+  border-color: rgba(159,140,255,0.28);
+  color: #9f8cff;
+}
+
+.achv-rarity-rare.is-unlocked .achv-rarity-pill {
+  background: rgba(59,130,246,0.08);
+  border-color: rgba(59,130,246,0.22);
+  color: #60a5fa;
+}
+
+/* Badge content */
 .achv-badge-title {
   margin: 0;
   font-size: 13px;
@@ -647,73 +559,32 @@
 }
 
 .achv-badge-progress {
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
 }
 
-.achv-rarity-pill {
-  font-size: 8.5px;
-  font-weight: 750;
-  border-radius: 4px;
-  padding: 3px 6px;
-  background: var(--app-panel-strong);
-  color: var(--app-text-subtle);
-  border: 1px solid var(--app-border);
-}
+.achv-rarity-common .achv-badge-progress span { background: #94a3b8; }
+.achv-rarity-rare .achv-badge-progress span { background: var(--cobalt, #3b82f6); }
+.achv-rarity-epic .achv-badge-progress span { background: #9f8cff; }
+.achv-rarity-legendary .achv-badge-progress span { background: var(--amber); }
 
 .achv-unlocked-date {
   font-size: 10px;
+  color: var(--app-text-subtle);
 }
 
-.achv-badge.is-locked {
-  opacity: 0.62;
-}
-
-.achv-rarity-common .achv-badge-progress span {
-  background: #94a3b8;
-}
-
-.achv-rarity-common.is-unlocked .achv-badge-icon-wrap {
-  color: #cbd5e1;
-}
-
-.achv-rarity-rare .achv-badge-progress span {
-  background: var(--cobalt);
-}
-
-.achv-rarity-rare.is-unlocked .achv-badge-icon-wrap {
-  color: var(--cobalt);
-}
-
-.achv-rarity-epic .achv-badge-progress span {
-  background: #9f8cff;
-}
-
-.achv-rarity-epic.is-unlocked .achv-badge-icon-wrap {
-  color: #9f8cff;
-}
-
-.achv-rarity-legendary .achv-badge-progress span {
-  background: var(--amber);
-}
-
-.achv-rarity-legendary.is-unlocked .achv-badge-icon-wrap {
-  color: var(--amber);
-}
-
-.achv-badge.is-unlocked .achv-badge-icon-wrap {
-  background: var(--app-panel-strong);
-}
-
+/* ─── Empty / skeleton ───────────────────────────────────────────────────────── */
 .achv-empty {
-  padding: 44px 18px;
+  padding: 48px 18px;
   text-align: center;
   color: var(--app-text-muted);
+  border: 1px dashed var(--app-border);
+  border-radius: 8px;
 }
 
 .achv-empty svg {
   color: var(--app-text-subtle);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .achv-empty p {
@@ -728,17 +599,23 @@
 }
 
 .achv-streak-grid-loading .achv-skeleton {
-  min-height: 128px;
+  min-height: 130px;
 }
 
 .achv-skeleton-badge {
-  min-height: 174px;
+  min-height: 180px;
 }
 
+/* ─── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 1280px) {
-  .achv-hero,
-  .achv-focus-grid {
+  .achv-hero {
     grid-template-columns: 1fr;
+  }
+
+  .achv-hero-score {
+    border-left: none;
+    border-top: 1px solid var(--app-border);
+    padding: 16px 0 0;
   }
 
   .achv-grid {
@@ -753,10 +630,6 @@
 }
 
 @media (max-width: 760px) {
-  .achv-hero {
-    padding: 16px;
-  }
-
   .achv-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -764,13 +637,7 @@
 
 @media (max-width: 560px) {
   .achv-streak-grid,
-  .achv-grid,
-  .achv-payout-photo-grid {
+  .achv-grid {
     grid-template-columns: 1fr;
-  }
-
-  .achv-focus-card,
-  .achv-payout-head {
-    flex-direction: column;
   }
 }

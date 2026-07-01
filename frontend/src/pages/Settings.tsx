@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, GripVertical, Monitor, Palette, Pencil, Plus, RotateCcw, Scan, Search, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, GripVertical, Monitor, Palette, Pencil, Plus, RotateCcw, Scan, Search, ShieldCheck, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { SectionPanel } from '../components/ds/SectionPanel.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -609,6 +609,7 @@ function StatusSelect({
 
 export default function Settings() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { profile, saveProfile } = useRivals();
@@ -2261,6 +2262,42 @@ export default function Settings() {
                         }}
                       >
                         <Star size={12} />
+                      </button>
+                    )}
+                    {/* Evaluation link — eval/passed/blown accounts */}
+                    {(account.status === 'Eval' || account.status === 'Passed' || account.status === 'Blown') && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/evaluation-coach?account=${account.id}`)}
+                        title="View evaluation page"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'transparent',
+                          border: '1px solid rgba(107,114,128,0.3)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          color: 'rgba(156,163,175,0.8)',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = 'rgba(99,102,241,0.1)';
+                          el.style.color = '#a5b4fc';
+                          el.style.borderColor = 'rgba(99,102,241,0.4)';
+                        }}
+                        onMouseLeave={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = 'transparent';
+                          el.style.color = 'rgba(156,163,175,0.8)';
+                          el.style.borderColor = 'rgba(107,114,128,0.3)';
+                        }}
+                      >
+                        <ShieldCheck size={11} />
+                        Evaluation
                       </button>
                     )}
                     {/* Payouts button — live/funded accounts only */}

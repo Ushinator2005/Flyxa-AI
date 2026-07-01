@@ -1550,22 +1550,13 @@ export default function Billing() {
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: '24px 28px 40px', background: 'var(--app-bg)' }}>
       <style>{`
-        .billing-desk { display: grid; grid-template-columns: minmax(320px, 1.15fr) minmax(320px, 1fr); gap: 14px; margin-bottom: 16px; }
-        .billing-hero-panel { border: 1px solid var(--border); border-top: 2px solid var(--amber); border-radius: 8px; background: var(--surface-1); padding: 18px; }
         .billing-kicker { margin: 0; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 700; }
-        .billing-ledger-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        .billing-stat-card { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); padding: 14px; transition: border-color 140ms ease, transform 140ms ease, background 140ms ease; min-width: 0; }
-        .billing-stat-card:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); background: var(--surface-2); }
         .billing-stat-label { margin: 0; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--txt-3); }
-        .billing-stat-value { margin: 7px 0 4px; font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--txt); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .billing-stat-note { margin: 0; font-size: 11px; color: var(--txt-3); line-height: 1.45; }
-        .billing-phase-rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-        .billing-phase-chip { border: 1px solid var(--border); background: rgba(255,255,255,0.025); border-radius: 7px; padding: 9px 10px; min-width: 0; }
         .billing-command-btn { height: 34px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--txt-2); display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color 120ms, color 120ms, background 120ms; }
         .billing-command-btn:hover { border-color: rgba(255,255,255,0.18); color: var(--txt); }
         .billing-command-btn.primary { border-color: var(--amber); background: var(--amber); color: var(--bg); }
-        .billing-break-even { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); padding: 14px 16px; margin-bottom: 18px; flex-wrap: wrap; }
-        .billing-table-row:hover td { background: var(--surface-2); }
+        .billing-table-row:hover td { background: rgba(255,255,255,0.02); }
         .billing-action-icon { border: none; background: transparent; color: var(--txt-3); display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
         .billing-action-icon:hover { color: var(--txt-2); }
         .billing-action-icon.billing-delete:hover { color: var(--red); }
@@ -1593,12 +1584,6 @@ export default function Billing() {
         .pipeline-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px; padding: 12px 14px; cursor: pointer; transition: border-color 140ms, transform 140ms; }
         .pipeline-card:hover { border-color: var(--amber-border); transform: translateY(-1px); }
         .payout-row { display: grid; grid-template-columns: 1fr 140px 28px; gap: 8px; align-items: center; }
-        @media (max-width: 1120px) {
-          .billing-desk { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 760px) {
-          .billing-ledger-grid, .billing-phase-rail { grid-template-columns: 1fr 1fr; }
-        }
       `}</style>
 
       <section data-tour-id="billing-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1646,93 +1631,91 @@ export default function Billing() {
         <div style={{ margin: '-6px 0 14px', fontSize: 11, color: 'var(--red)' }}>{csvParseError}</div>
       )}
 
-      <section className="billing-desk" data-tour-id="billing-overview">
-        <article className="billing-hero-panel">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
-            <div>
-              <p className="billing-stat-label">Net Position</p>
-              <p style={{ margin: '8px 0 6px', fontFamily: 'var(--font-mono)', fontSize: 36, lineHeight: 1, fontWeight: 500, color: netTone === 'positive' ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>
-                {formatSignedCurrency(derived.netPnL)}
-              </p>
-              <p className="billing-stat-note">
-                {derived.totalPayouts > 0 ? `${formatCurrency(derived.totalPayouts)} received against ${formatCurrency(derived.totalSpent)} spent.` : `${formatCurrency(derived.totalSpent)} in fees logged before payouts.`}
-              </p>
-            </div>
-            <span style={{ width: 38, height: 38, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: netTone === 'positive' ? 'var(--green-dim)' : 'var(--red-dim)', color: netTone === 'positive' ? 'var(--green)' : 'var(--red)', border: netTone === 'positive' ? '1px solid var(--green-border)' : '1px solid var(--red-border)', flexShrink: 0 }}>
-              {netTone === 'positive' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-            </span>
+      {/* ── Flat stat strip ── */}
+      <section data-tour-id="billing-overview" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '14px 0', marginBottom: 0, display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap' }}>
+        {/* Net Position — prominent anchor */}
+        <div style={{ paddingRight: 28, marginRight: 28, borderRight: '1px solid var(--border)', flexShrink: 0 }}>
+          <p className="billing-stat-label">Net Position</p>
+          <div style={{ margin: '6px 0 4px', fontFamily: 'var(--font-mono)', fontSize: 28, lineHeight: 1, fontWeight: 500, color: netTone === 'positive' ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {formatSignedCurrency(derived.netPnL)}
+            {netTone === 'positive' ? <TrendingUp size={15} style={{ opacity: 0.55 }} /> : <TrendingDown size={15} style={{ opacity: 0.55 }} />}
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-            <div>
-              <p className="billing-stat-label">Spent</p>
-              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--red)', fontSize: 15 }}>{formatCurrency(derived.totalSpent)}</p>
-            </div>
-            <div>
-              <p className="billing-stat-label">Payouts</p>
-              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--green)', fontSize: 15 }}>{formatCurrency(derived.totalPayouts)}</p>
-            </div>
-            <div>
-              <p className="billing-stat-label">Saved</p>
-              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontSize: 15 }}>{formatCurrency(derived.totalSaved)}</p>
-            </div>
-          </div>
-
-          <div className="billing-phase-rail">
-            {phaseRail.map(item => (
-              <div key={item.label} className="billing-phase-chip">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</span>
-                </div>
-                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--txt)' }}>{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <div className="billing-ledger-grid">
-          <article className="billing-stat-card">
-            <p className="billing-stat-label">Monthly Burn</p>
-            <p className="billing-stat-value" style={{ color: 'var(--amber)' }}>{formatCurrency(derived.monthlyBurn)}</p>
-            <p className="billing-stat-note">average account fee pressure</p>
-          </article>
-
-          <article className="billing-stat-card">
-            <p className="billing-stat-label">Cost Per Pass</p>
-            <p className="billing-stat-value">{derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '—'}</p>
-            <p className="billing-stat-note">average spend per funded/pass</p>
-          </article>
-
-          <article className="billing-stat-card">
-            <p className="billing-stat-label">Best Firm</p>
-            <p className="billing-stat-value" style={{ fontSize: 15, fontFamily: 'var(--font-sans)', fontWeight: 600 }}>
-              {derived.bestFirm ? derived.bestFirm.firm : '—'}
-            </p>
-            <p className="billing-stat-note">{derived.bestFirm ? `${formatSignedCurrency(derived.bestFirm.roi)} ROI` : 'no payouts yet'}</p>
-          </article>
-
-          <article className="billing-stat-card">
-            <p className="billing-stat-label">Pass Rate</p>
-            <p className="billing-stat-value">{derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}</p>
-            <p className="billing-stat-note">{derived.passedAccounts + derived.fundedAccounts} of {derived.totalAccounts} evaluations ever passed</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="billing-break-even">
-        <div>
-          <p className="billing-stat-label">Break-even pressure</p>
-          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--txt-2)' }}>
-            Your first {formatCurrency(derived.monthlyBurn)} of monthly trading profit covers account fees before real upside starts.
+          <p className="billing-stat-note">
+            {derived.totalPayouts > 0
+              ? `${formatCurrency(derived.totalPayouts)} received vs ${formatCurrency(derived.totalSpent)} spent`
+              : `${formatCurrency(derived.totalSpent)} in fees, no payouts yet`}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)' }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
-          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
-          <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Currently blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)' }}>{derived.blownAccounts}</strong></span>
+
+        {/* Secondary stats */}
+        <div style={{ display: 'flex', gap: 28, flex: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div>
+            <p className="billing-stat-label">Spent</p>
+            <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--red)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalSpent)}</p>
+          </div>
+          <div>
+            <p className="billing-stat-label">Payouts</p>
+            <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--green)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalPayouts)}</p>
+          </div>
+          <div>
+            <p className="billing-stat-label">Saved</p>
+            <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalSaved)}</p>
+          </div>
+          <div>
+            <p className="billing-stat-label">Monthly Burn</p>
+            <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.monthlyBurn)}</p>
+          </div>
+          <div>
+            <p className="billing-stat-label">Best Firm</p>
+            <p style={{ margin: '6px 0 2px', fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+              {derived.bestFirm ? derived.bestFirm.firm : '—'}
+            </p>
+            {derived.bestFirm && (
+              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: derived.bestFirm.roi >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {formatSignedCurrency(derived.bestFirm.roi)} ROI
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="billing-stat-label">Pass Rate</p>
+            <p style={{ margin: '6px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+              {derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}
+            </p>
+            <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
+              {derived.passedAccounts + derived.fundedAccounts} of {derived.totalAccounts} passed
+            </p>
+          </div>
+          <div>
+            <p className="billing-stat-label">Cost / Pass</p>
+            <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+              {derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '—'}
+            </p>
+          </div>
         </div>
       </section>
+
+      {/* ── Phase rail ── */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 24, padding: '10px 0', borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
+        {phaseRail.map(item => (
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--txt)' }}>{item.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Break-even flat strip ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '9px 0', borderBottom: '1px solid var(--border)', marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', fontWeight: 600, flexShrink: 0 }}>Break-even</span>
+        <span style={{ fontSize: 12, color: 'var(--txt-2)', marginRight: 4 }}>
+          First {formatCurrency(derived.monthlyBurn)} of monthly profit covers fees before upside starts
+        </span>
+        <span style={{ width: 1, height: 12, background: 'var(--border)', flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)', fontWeight: 500 }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
+        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)', fontWeight: 500 }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
+        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)', fontWeight: 500 }}>{derived.blownAccounts}</strong></span>
+      </div>
 
       <div data-tour-id="billing-payouts">
         <PayoutGallery
@@ -1743,8 +1726,8 @@ export default function Billing() {
         />
       </div>
 
-      <section data-tour-id="billing-ledger" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-        <header style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+      <section data-tour-id="billing-ledger" style={{ borderTop: '1px solid var(--border)' }}>
+        <header style={{ padding: '12px 0', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>Account Ledger</p>
             <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Every purchase logged</p>
@@ -1992,7 +1975,7 @@ export default function Billing() {
                 </tbody>
               </table>
             </div>
-            <footer style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <footer style={{ padding: '10px 0', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
                 {footerTotals.count} accounts · {footerTotals.chargeCount} billing events · {footerTotals.passedCount} funded/passed
               </span>
@@ -2013,16 +1996,16 @@ export default function Billing() {
       </section>
 
       {/* ── ROI by Firm ──────────────────────────────────────────── */}
-      <section style={{ marginTop: 16, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-        <header style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
+      <section style={{ marginTop: 20, borderTop: '1px solid var(--border)' }}>
+        <header style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>ROI by Firm</p>
           <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Which firms have been worth it</p>
         </header>
         {derived.roiByFirm.length === 0 ? (
-          <div style={{ padding: '16px 18px', fontSize: 12, color: 'var(--txt-3)' }}>No firms logged yet.</div>
+          <div style={{ padding: '14px 0', fontSize: 12, color: 'var(--txt-3)' }}>No firms logged yet.</div>
         ) : (
           derived.roiByFirm.map((row, index) => (
-            <div key={row.firm} style={{ padding: '14px 18px', borderBottom: index === derived.roiByFirm.length - 1 ? 'none' : '1px solid var(--border-sub)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div key={row.firm} style={{ padding: '12px 0', borderBottom: index === derived.roiByFirm.length - 1 ? 'none' : '1px solid var(--border-sub)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <span style={{ minWidth: 140, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{row.firm}</span>
               <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--font-mono)' }}>{row.accounts} accounts</span>
               <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
@@ -2038,12 +2021,12 @@ export default function Billing() {
                   <span>Spent: {formatCurrency(row.spent)}</span>
                   <span>Received: {formatCurrency(row.payouts)}</span>
                 </div>
-                <div style={{ position: 'relative', height: 4, borderRadius: 2, background: 'var(--surface-3)', overflow: 'hidden' }}>
-                  <span style={{ position: 'absolute', inset: 0, background: 'var(--red)' }} />
+                <div style={{ position: 'relative', height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                  <span style={{ position: 'absolute', inset: 0, background: 'var(--red)', opacity: 0.5 }} />
                   <span style={{ position: 'absolute', inset: 0, width: `${row.recoveredRatio * 100}%`, background: 'var(--green)' }} />
                 </div>
               </div>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, borderRadius: 3, padding: '4px 10px', background: row.roi >= 0 ? 'var(--green-dim)' : 'var(--red-dim)', color: row.roi >= 0 ? 'var(--green)' : 'var(--red)', border: row.roi >= 0 ? '1px solid var(--green-border)' : '1px solid var(--red-border)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: row.roi >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {formatSignedCurrency(row.roi)}
               </span>
             </div>

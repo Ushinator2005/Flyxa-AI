@@ -1,9 +1,7 @@
 .billing-payout-gallery {
-  padding: 16px;
-  margin-bottom: 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-1);
+  padding: 14px 0 18px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .billing-payout-gallery-head {

@@ -1276,7 +1276,8 @@ const FLAG_PENALTIES: Record<string, number> = {
 };
 
 // ── Helper: trade pattern detection ──────────────────────────────────────────
-function parseTimeToMinutes(t: string): number {
+function parseTimeToMinutes(t: string | null | undefined): number {
+  if (!t || typeof t !== 'string') return -1;
   const [h, m] = t.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
 }
@@ -1291,7 +1292,9 @@ function computeTradePatternFlags(
     if (i < trades.length - 1) {
       const next = trades[i + 1];
       if (curr.symbol === next.symbol) {
-        const gap = parseTimeToMinutes(next.entryTime) - parseTimeToMinutes(curr.exitTime);
+        const tA = parseTimeToMinutes(curr.exitTime);
+        const tB = parseTimeToMinutes(next.entryTime);
+        const gap = tA >= 0 && tB >= 0 ? tB - tA : -1;
         if (gap >= 0 && gap < 5) {
           const n = Math.max(1, Math.round(gap));
           if (curr.direction !== next.direction) {
@@ -1316,9 +1319,11 @@ function computeTradePatternFlags(
 function detectRapidFire(trades: JournalTrade[]): number | null {
   for (let i = 0; i < trades.length; i++) {
     const windowStart = parseTimeToMinutes(trades[i].entryTime);
+    if (windowStart < 0) continue;
     let count = 1;
     for (let j = i + 1; j < trades.length; j++) {
-      if (parseTimeToMinutes(trades[j].entryTime) - windowStart < 10) count++;
+      const t = parseTimeToMinutes(trades[j].entryTime);
+      if (t >= 0 && t - windowStart < 10) count++;
       else break;
     }
     if (count >= 3) return count;
@@ -1425,15 +1430,6 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {unconfirmedManual.length > 0 && (
-            <button
-              type="button"
-              onClick={markAllManualPassed}
-              style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid var(--green)', background: 'var(--green-dim)', color: 'var(--green)', fontSize: 9, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
-              All passed
-            </button>
-          )}
           {passed > 0 && (
             <span style={{ padding: '3px 9px', borderRadius: 3, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>
               {passed} passed
@@ -1830,17 +1826,16 @@ function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: 
     };
   }, []);
 
-  const COLS: Array<{ key: 'setup'|'invalidation'|'asymmetry'; title: string; sub: string; placeholder: string }> = [
+  const COLS: Array<{ key: 'setup'|'invalidation'; title: string; sub: string; placeholder: string }> = [
     { key:'setup', title:'Trade Thesis', sub:'What specific edge did you see?', placeholder:"What conditions were present? Why this level, this direction, right now?" },
     { key:'invalidation', title:'Invalidation', sub:'What would prove you wrong?', placeholder:"If price does X, the trade is invalid and I should be out. What specific price action kills this thesis?" },
-    { key:'asymmetry', title:'Why this R:R?', sub:'Is the risk worth the reward?', placeholder:"Where is price likely going? What liquidity target makes this trade worth taking at this R:R?" },
   ];
 
   return (
     <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, marginBottom:8 }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', borderBottom:'1px solid var(--app-border)', overflow:'hidden', borderRadius:'5px 5px 0 0' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', borderBottom:'1px solid var(--app-border)', overflow:'hidden', borderRadius:'5px 5px 0 0' }}>
         {COLS.map((col, i) => (
-          <div key={col.key} style={{ borderRight: i < 2 ? '1px solid var(--app-border)' : undefined }}>
+          <div key={col.key} style={{ borderRight: i < 1 ? '1px solid var(--app-border)' : undefined }}>
             <div style={{ padding:'8px 12px 6px', borderBottom:'1px solid var(--app-border)' }}>
               <div style={{ fontSize:11, fontWeight:500, color:'var(--app-text-muted)' }}>{col.title}</div>
               <div style={{ fontSize:9, color:'var(--app-text-subtle)', fontStyle:'italic' }}>{col.sub}</div>
@@ -3768,7 +3763,7 @@ export default function TradeJournal() {
                 const _rapidFire = detectRapidFire(selectedEntry.trades);
                 if (!_rapidFire) return null;
                 return (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', marginBottom:6, background:'var(--amber-dim)', border:'1px solid var(--amber-bdr)', borderRadius:5, fontSize:12, color:'var(--amber)' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', marginBottom:6, background:'var(--amber-dim)', border:'1px solid var(--amber-border)', borderRadius:5, fontSize:12, color:'var(--amber)' }}>
                     <AlertTriangle size={13} style={{ flexShrink:0 }} />
                     {_rapidFire} trades within 10 minutes — review for overtrading.
                   </div>
@@ -3833,7 +3828,7 @@ export default function TradeJournal() {
                       <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
                       <span style={{ flex: 1 }} />
                       {_patternFlags.has(trade.id) && (
-                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-bdr)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-border)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
                           <AlertTriangle size={10} style={{ flexShrink:0 }} />
                           {_patternFlags.get(trade.id)}
                         </span>

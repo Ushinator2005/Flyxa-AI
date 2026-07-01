@@ -270,40 +270,37 @@
 .ec-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 18px;
+  gap: 0;
+  padding: 0 18px;
   flex: 1;
 }
 
-/* ── Top row ──────────────────────────────────────────────────── */
-.ec-top-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: start;
+/* ── Top zone ──────────────────────────────────────────────────── */
+.ec-top-zone {
+  display: block;
 }
 
-.ec-left-col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* ── Metric cards ─────────────────────────────────────────────── */
+/* ── Metric strip (flat row, no cards) ────────────────────────── */
 .ec-metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .ec-metric-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 16px 18px;
+  padding: 16px 18px 16px 0;
   display: flex;
   flex-direction: column;
+  border-right: 1px solid var(--border);
+}
+.ec-metric-card:last-child { border-right: none; padding-right: 0; }
+.ec-metric-card:first-child { padding-left: 0; }
+
+/* shift padding so that inner edge of non-first cards has gap from the divider */
+.ec-metric-card + .ec-metric-card {
+  padding-left: 18px;
 }
 
 .ec-metric-lbl {
@@ -352,14 +349,12 @@
   color: var(--txt-3);
 }
 
-/* ── Stat bar ─────────────────────────────────────────────────── */
+/* ── Stat bar (flat) ──────────────────────────────────────────── */
 .ec-stat-bar {
   display: flex;
   align-items: stretch;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .ec-stat-item {
@@ -398,14 +393,11 @@
   color: var(--txt-3);
 }
 
-/* ── Pass probability card ────────────────────────────────────── */
+/* ── Pass probability card (kept for legacy; currently hidden) ─── */
 .ec-prob-card {
   width: 206px;
   flex-shrink: 0;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 16px;
+  padding: 16px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -481,19 +473,16 @@
   flex-shrink: 0;
 }
 
-/* ── Coaching zone ────────────────────────────────────────────── */
+/* ── Coaching zone (legacy) ───────────────────────────────────── */
 .ec-coaching-zone {
   display: grid;
   grid-template-columns: 1fr 200px;
   gap: 10px;
 }
 
-/* Mission card */
+/* Mission card (legacy) */
 .ec-mission-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
   border-left: 2px solid var(--amber);
-  border-radius: 6px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -542,11 +531,10 @@
   font-size: 12px;
 }
 
-/* Verdict card */
+/* Verdict card (legacy) */
 .ec-verdict-card {
-  border: 1px solid;
-  border-radius: 6px;
-  padding: 12px 14px;
+  border-left: 3px solid;
+  padding: 12px 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -579,10 +567,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   min-height: 36px;
 }
 
@@ -615,14 +602,8 @@
 }
 .ec-dot:hover { transform: scale(1.3); }
 
-.ec-dot-past {
-  opacity: .85;
-}
-
-.ec-dot-future {
-  background: transparent;
-  opacity: .5;
-}
+.ec-dot-past { opacity: .85; }
+.ec-dot-future { background: transparent; opacity: .5; }
 
 .ec-timeline-divider {
   width: 1px;
@@ -639,12 +620,10 @@
   flex-shrink: 0;
 }
 
-/* ── Post-session debrief ─────────────────────────────────────── */
+/* ── Post-session debrief (flat) ──────────────────────────────── */
 .ec-debrief-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
+  border-top: 1px solid var(--border);
+  padding: 20px 0;
 }
 
 .ec-debrief-sub {
@@ -653,7 +632,7 @@
 }
 
 .ec-debrief-body {
-  padding: 12px 14px;
+  padding: 12px 0 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -768,23 +747,23 @@
 .ec-bottom-grid {
   display: grid;
   grid-template-columns: 1fr 240px;
-  gap: 10px;
+  gap: 0 28px;
   align-items: start;
+  border-top: 1px solid var(--border);
+  padding: 20px 0;
 }
 
-/* ── Risk alerts card ─────────────────────────────────────────── */
+/* ── Risk alerts (flat) ───────────────────────────────────────── */
 .ec-alerts-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
+  min-width: 0;
 }
 
+/* Section headers (shared by alerts + debrief + preset) */
 .ec-card-hdr {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 11px 14px;
+  padding: 0 0 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -813,9 +792,10 @@
 }
 
 .ec-alert-item {
-  padding: 12px 14px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-sub);
   border-left: 2px solid transparent;
+  padding-left: 10px;
 }
 .ec-alert-item.last { border-bottom: none; }
 
@@ -842,18 +822,14 @@
 
 .ec-no-alerts {
   margin: 0;
-  padding: 24px;
-  text-align: center;
+  padding: 16px 0;
   font-size: 12px;
   color: var(--txt-3);
 }
 
-/* ── Rules preset card ────────────────────────────────────────── */
+/* ── Rules preset (flat, right column) ───────────────────────── */
 .ec-preset-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .ec-preset-sub {
@@ -862,7 +838,7 @@
 }
 
 .ec-preset-body {
-  padding: 12px 14px;
+  padding: 12px 0 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -915,10 +891,11 @@
 /* ── Disclaimer ───────────────────────────────────────────────── */
 .ec-disclaimer {
   margin: 0;
-  padding: 0 2px;
+  padding: 14px 0;
   font-size: 10px;
   color: var(--txt-3);
   line-height: 1.5;
+  border-top: 1px solid var(--border);
 }
 
 /* ── Pass screen ──────────────────────────────────────────────── */
@@ -1021,15 +998,9 @@
 }
 .ec-pass-btn-ghost:hover { color: var(--txt-2); }
 
-/* ── Top zone (metrics + side card) ──────────────────────────── */
-.ec-top-zone {
-  display: block;
-}
-
-/* ── Side card (verdict + probability merged) ─────────────────── */
+/* ── Side card (verdict + probability — legacy hidden) ────────── */
 .ec-side-card {
-  border: 1px solid;
-  border-radius: 7px;
+  border-left: 3px solid;
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -1072,13 +1043,10 @@
   flex-shrink: 0;
 }
 
-/* ── Mission hero ─────────────────────────────────────────────── */
+/* ── Mission hero (flat, amber accent) ────────────────────────── */
 .ec-mission-hero {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
   border-left: 3px solid var(--amber);
-  border-radius: 7px;
-  padding: 16px 20px;
+  padding: 14px 16px;
 }
 
 .ec-mission-eyebrow {
@@ -1108,15 +1076,13 @@
   font-size: 13px;
 }
 
-/* â”€â”€ Path-to-pass strategy card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Path-to-pass strategy (flat) ─────────────────────────────── */
 .ec-strategy-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 16px 18px;
+  padding: 20px 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .ec-strategy-head {
@@ -1124,7 +1090,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1149,26 +1115,29 @@
 .ec-strategy-status {
   font: 500 12px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--surface-2);
   white-space: nowrap;
+  color: var(--txt-3);
 }
 
+/* Strategy sub-items: flat inline strip */
 .ec-strategy-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .ec-strategy-item {
   min-width: 0;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  border-radius: 6px;
-  padding: 11px 12px;
+  padding: 12px 16px 12px 0;
+  border-right: 1px solid var(--border);
 }
+.ec-strategy-item:last-child { border-right: none; }
+.ec-strategy-item + .ec-strategy-item { padding-left: 16px; }
 
 .ec-strategy-item span {
   display: block;
@@ -1197,11 +1166,10 @@
   color: var(--txt-3);
 }
 
+/* Next session directive — amber accent, no box background */
 .ec-directive {
   border-left: 3px solid var(--amber);
-  background: rgba(245, 158, 11, .05);
-  border-radius: 6px;
-  padding: 12px 14px;
+  padding: 10px 14px;
 }
 
 .ec-directive-label {
@@ -1255,6 +1223,11 @@
   .ec-strategy-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .ec-metric-card:nth-child(2) { border-right: none; }
+  .ec-metric-card:nth-child(4) { border-right: none; }
+  .ec-strategy-item:nth-child(2) { border-right: none; }
+  .ec-strategy-item:nth-child(4) { border-right: none; }
+  .ec-bottom-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -1262,8 +1235,9 @@
   .ec-strategy-grid {
     grid-template-columns: 1fr;
   }
-
-  .ec-strategy-head {
-    flex-direction: column;
-  }
+  .ec-metric-card { border-right: none; border-bottom: 1px solid var(--border); }
+  .ec-metric-card:last-child { border-bottom: none; }
+  .ec-strategy-item { border-right: none; border-bottom: 1px solid var(--border); }
+  .ec-strategy-item:last-child { border-bottom: none; }
+  .ec-strategy-head { flex-direction: column; }
 }
