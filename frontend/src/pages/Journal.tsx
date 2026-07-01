@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState, useCallback, useRef, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
-  Download,
   Flame,
   Leaf,
   Moon,
@@ -13,12 +12,11 @@ import {
   ShieldCheck,
   Target,
   Trash2,
-  Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { journalApi } from '../services/api.js';
-import { JournalBackupPayload, JournalEntry } from '../types/index.js';
+import { JournalEntry } from '../types/index.js';
 import Modal from '../components/common/Modal.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -29,8 +27,6 @@ import { pushToast } from '../store/toastStore.js';
 
 // constants
 
-const JOURNAL_BACKUP_STORAGE_PREFIX = 'tw-journal-backup:';
-const JOURNAL_BACKUP_VERSION = 1;
 const JOURNAL_MOODS_STORAGE_PREFIX = 'flyxa-journal-moods-v1:';
 const JOURNAL_MOODS = ['Calm', 'Focused', 'Confident', 'Tired', 'Frustrated'] as const;
 const MOOD_ICONS: Record<(typeof JOURNAL_MOODS)[number], LucideIcon> = {
@@ -216,26 +212,6 @@ function normalizeJournalMood(value: unknown): string | null {
     : null;
 }
 
-function normalizeBackupEntries(value: unknown): Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>> {
-  if (!Array.isArray(value)) return [];
-  const output: Array<Pick<JournalEntry, 'date' | 'content' | 'screenshots' | 'mood'>> = [];
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue;
-    const record = item as Record<string, unknown>;
-    const date = normalizeBackupDate(record.date);
-    if (!date) continue;
-    output.push({
-      date,
-      content: typeof record.content === 'string' ? record.content : '',
-      screenshots: Array.isArray(record.screenshots)
-        ? record.screenshots.filter((s): s is string => typeof s === 'string')
-        : [],
-      mood: normalizeJournalMood(record.mood),
-    });
-  }
-  return output;
-}
-
 function normalizeStringMap(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object') return {};
   return Object.fromEntries(
@@ -245,22 +221,6 @@ function normalizeStringMap(value: unknown): Record<string, string> {
   );
 }
 
-function buildBackupFilename(date = new Date()) {
-  const stamp = format(date, 'yyyy-MM-dd_HH-mm');
-  return `flyxa-ai-journal-backup-${stamp}.json`;
-}
-
-function downloadBackupPayload(payload: JournalBackupPayload) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = buildBackupFilename();
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
 
 // EntryItem
 
@@ -379,13 +339,7 @@ export default function Journal() {
   });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const backupInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
-  const backupStorageKey = useMemo(
-    () => `${JOURNAL_BACKUP_STORAGE_PREFIX}${user?.id ?? 'anonymous'}`,
-    [user?.id]
-  );
   const moodsStorageKey = useMemo(
     () => `${JOURNAL_MOODS_STORAGE_PREFIX}${user?.id ?? 'anonymous'}`,
     [user?.id]
@@ -410,28 +364,6 @@ export default function Journal() {
       if (titleSaveTimer.current) clearTimeout(titleSaveTimer.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const payload: JournalBackupPayload = {
-      version: JOURNAL_BACKUP_VERSION,
-      exported_at: new Date().toISOString(),
-      user_id: user?.id ?? null,
-      entries: entries.map((entry) => ({
-        date: entry.date,
-        content: typeof entry.content === 'string' ? entry.content : '',
-        screenshots: Array.isArray(entry.screenshots) ? entry.screenshots.filter((s): s is string => typeof s === 'string') : [],
-        mood: normalizeJournalMood(entry.mood) ?? normalizeJournalMood(moodByEntryId[entry.id]),
-      })),
-      moods: moodByEntryId,
-      titles: titleByEntryId,
-    };
-    try {
-      window.localStorage.setItem(backupStorageKey, JSON.stringify(payload));
-    } catch {
-      // Ignore storage quota errors.
-    }
-  }, [backupStorageKey, entries, moodByEntryId, titleByEntryId, user?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -634,92 +566,6 @@ export default function Journal() {
     setDeleteTarget(null);
   }
 
-  async function exportBackup() {
-    setBackupBusy('export');
-    try {
-      const serverPayload = await journalApi.exportBackup();
-      const payload: JournalBackupPayload = {
-        version: JOURNAL_BACKUP_VERSION,
-        exported_at: new Date().toISOString(),
-        user_id: user?.id ?? null,
-        entries: normalizeBackupEntries(serverPayload.entries),
-        moods: Object.fromEntries(
-          entries
-            .map(entry => [entry.id, getEntryMood(entry)])
-            .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-        ),
-        titles: titleByEntryId,
-      };
-      downloadBackupPayload(payload);
-    } catch (error) {
-      console.error(error);
-      const fallbackPayload: JournalBackupPayload = {
-        version: JOURNAL_BACKUP_VERSION,
-        exported_at: new Date().toISOString(),
-        user_id: user?.id ?? null,
-        entries: entries.map((entry) => ({
-          date: entry.date,
-          content: entry.content ?? '',
-          screenshots: Array.isArray(entry.screenshots) ? entry.screenshots : [],
-        })),
-        moods: Object.fromEntries(
-          entries
-            .map(entry => [entry.id, getEntryMood(entry)])
-            .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-        ),
-        titles: titleByEntryId,
-      };
-      downloadBackupPayload(fallbackPayload);
-    } finally {
-      setBackupBusy(null);
-    }
-  }
-
-  function triggerBackupImport() {
-    backupInputRef.current?.click();
-  }
-
-  async function handleBackupImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setBackupBusy('import');
-    try {
-      const raw = await file.text();
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const normalizedEntries = normalizeBackupEntries(parsed.entries);
-      const normalizedMoods = normalizeStringMap(parsed.moods);
-      const normalizedTitles = normalizeStringMap(parsed.titles);
-
-      if (normalizedEntries.length === 0) {
-        pushToast({ tone: 'amber', durationMs: 4000, message: 'This backup file has no valid journal entries.' });
-        return;
-      }
-
-      const restoreResult = await journalApi.restoreBackup(normalizedEntries);
-      if (Object.keys(normalizedMoods).length > 0) {
-        Object.entries(normalizedMoods).forEach(([id, mood]) => setJournalMoodAction(id, mood));
-      }
-      if (Object.keys(normalizedTitles).length > 0) {
-        Object.entries(normalizedTitles).forEach(([id, title]) => setJournalTitleAction(id, title));
-      }
-
-      await fetchEntries();
-
-      pushToast({
-        tone: restoreResult.failed > 0 ? 'amber' : 'green',
-        durationMs: 5000,
-        message: `Backup restored. Created ${restoreResult.created}, updated ${restoreResult.updated}, skipped ${restoreResult.skipped}, failed ${restoreResult.failed}.`,
-      });
-    } catch (error) {
-      console.error(error);
-      pushToast({ tone: 'red', durationMs: 5000, message: 'Import failed. Please verify this is a valid Flyxa AI journal backup JSON file.' });
-    } finally {
-      setBackupBusy(null);
-      event.target.value = '';
-    }
-  }
-
   const filtered = useMemo(
     () => entries.filter(
       entry =>
@@ -801,7 +647,6 @@ export default function Journal() {
       >
         <div>
           <h1 style={{ fontSize: '17px', fontWeight: 600, color: T1, margin: 0, lineHeight: 1.2 }}>Daily Journal</h1>
-          <p style={{ fontSize: '11px', color: T3, marginTop: '3px' }}>Your private trading log — pick up where you left off.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {!isMobile && (() => {
@@ -845,11 +690,7 @@ export default function Journal() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '11px',
-                  padding: '8px 16px 8px 9px',
-                  borderRadius: '12px',
-                  background: 'var(--app-panel-strong)',
-                  border: '1px solid var(--app-border)',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  padding: '4px 8px 4px 4px',
                   flexShrink: 0,
                 }}
               >
@@ -907,63 +748,10 @@ export default function Journal() {
               </div>
             );
           })()}
-          {!isMobile && (
-            <>
-              <button
-                type="button"
-                onClick={() => { void exportBackup(); }}
-                disabled={backupBusy !== null}
-                style={{
-                  height: '32px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: S2,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: '5px',
-                  padding: '0 10px',
-                  color: T2,
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
-                  opacity: backupBusy !== null ? 0.7 : 1,
-                  flexShrink: 0,
-                }}
-              >
-                <Download size={13} />
-                {backupBusy === 'export' ? 'Exporting...' : 'Export backup'}
-              </button>
-              <button
-                type="button"
-                onClick={triggerBackupImport}
-                disabled={backupBusy !== null}
-                style={{
-                  height: '32px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: S2,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: '5px',
-                  padding: '0 10px',
-                  color: T2,
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
-                  opacity: backupBusy !== null ? 0.7 : 1,
-                  flexShrink: 0,
-                }}
-              >
-                <Upload size={13} />
-                {backupBusy === 'import' ? 'Importing...' : 'Import backup'}
-              </button>
-            </>
-          )}
           <button
             type="button"
             data-tour-id="journal-new-entry"
             onClick={createEntry}
-            disabled={backupBusy !== null}
             style={{
               height: '32px',
               display: 'inline-flex',
@@ -976,8 +764,7 @@ export default function Journal() {
               color: '#000',
               fontSize: '12px',
               fontWeight: 600,
-              cursor: backupBusy !== null ? 'not-allowed' : 'pointer',
-              opacity: backupBusy !== null ? 0.7 : 1,
+              cursor: 'pointer',
               flexShrink: 0,
               transition: 'opacity 0.15s',
             }}
@@ -987,13 +774,6 @@ export default function Journal() {
             <Plus size={13} />
             New entry
           </button>
-          <input
-            ref={backupInputRef}
-            type="file"
-            accept="application/json,.json"
-            onChange={(event) => { void handleBackupImport(event); }}
-            style={{ display: 'none' }}
-          />
         </div>
       </div>
 
