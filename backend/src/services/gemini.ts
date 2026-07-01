@@ -290,6 +290,11 @@ IMPORTANT: The ENTRY label should match the user's configured Entry zone color w
 If an attached crop is labelled price-label-focus, use it to read all visible right-axis labels. If an attached crop is labelled entry-color-label-focus, use it to resolve the entry label only.
 FALLBACK — if no colored labels are visible on the right axis at all: trace each zone boundary (entry line, outer edge of pink zone, outer edge of teal zone) horizontally to the price axis gridlines and read the nearest grid price.
 
+⚠ CURSOR CROSSHAIR LABEL — MANDATORY EXCLUSION BEFORE READING ANY PRICE:
+Trading platforms (especially TradingView) render a floating 'cursor price' label on the right axis that tracks the mouse pointer position. This label is NOT a trade level.
+How to identify it: the cursor crosshair label has a ⊕ symbol (circle containing a plus/cross), a + icon, or a circle-with-cross marker on its LEFT edge, immediately before the price number. It appears as a white, light-grey, or dark rectangular tag with this icon on the left side. It can appear in ANY crop — entry-label-focus, price-label-focus, or any other.
+RULE: If any right-axis price label has a ⊕, +, or circle-with-cross icon on its LEFT side — SKIP THAT LABEL ENTIRELY. Never use it as entry_price, sl_price, or tp_price. Instead find the next label at that level that has no such icon and matches the configured zone color or zone boundary position.
+
 Step 2. The user has configured exactly these three zone colors in their Flyxa settings:
   • Entry zone    = ${entryName} — exact hex: ${userColors.entry}
   • Stop Loss     = ${slName} — exact hex: ${userColors.stopLoss}
@@ -335,6 +340,7 @@ Step 4. IGNORE everything else on the chart completely:
   • Horizontal lines (black, white, or any color) drawn across the chart = key levels, NOT trade prices
   • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price UNLESS the label is exactly aligned with the shared boundary between the compact TP and SL zones and no configured-color entry label is visible
   • The live floating price label on the far right (the highlight showing current price) = ignore
+  • The cursor crosshair label — has a ⊕, + or circle-with-cross icon on its LEFT edge = ALWAYS IGNORE in every crop; it tracks the mouse pointer, not a trade level
   • Any price label whose background color does NOT match the configured position-tool colors = ignore, except grey is allowed as an entry fallback
   • Do not use a nearby black horizontal-line label when a configured-color or grey entry label exists. The entry label is the source of truth.
 `;
@@ -345,6 +351,9 @@ Look at the right-hand price axis. Find the three colored price labels (any shap
   • Grey/black/dark label exactly at the shared boundary between the compact teal/green and red/pink position-tool zones = entry_price
   • Red or pink background label = sl_price
   • Teal or green background label = tp_price
+
+⚠ CURSOR CROSSHAIR LABEL — MANDATORY EXCLUSION:
+Any right-axis label with a ⊕, + or circle-with-cross icon on its LEFT side is the platform's cursor price tracker — NOT a trade level. ALWAYS IGNORE it. Never use it as entry, SL, or TP.
 
 ⚠ KEY-LEVEL LINES: Traders draw horizontal lines across their entire chart. These can produce BLACK or DARK GREY right-axis labels. Ignore them unless the label is exactly on the compact position tool's shared entry boundary and no colored/grey entry label is visible.
 NEVER use numeric labels printed inside the chart body (0, 0.5, 1, -1, -2, fib labels, dashed-line labels) as entry/sl/tp.
@@ -357,7 +366,7 @@ STACKED LABELS: If two labels of similar color appear stacked near the TP or SL 
     ? `PIXEL GEOMETRY AUTHORITY — USE THIS BEFORE GUESSING:
 The browser-side scanner has already matched the user's configured colors and selected the compact paired position-tool zones. Treat this geometry as the source of truth for direction and crop roles.
 ${directionHint ? `- Detected compact position-tool direction: ${directionHint}` : '- Direction hint: unavailable'}
-${typeof lineHints?.entryLineRatio === 'number' ? `- entry-label-focus is centered near ${Math.round(lineHints.entryLineRatio * 100)}% image height: read entry_price from the RIGHT-AXIS pill/label at this shared boundary.` : ''}
+${typeof lineHints?.entryLineRatio === 'number' ? `- entry-label-focus is centered near ${Math.round(lineHints.entryLineRatio * 100)}% image height: read entry_price from the RIGHT-AXIS pill/label at this shared boundary. If you see TWO labels at this level — one with a ⊕/+ icon on its left (cursor label) and one without — read the one WITHOUT the ⊕/+ icon.` : ''}
 ${typeof lineHints?.stopLineRatio === 'number' ? `- stop-label-focus is centered near ${Math.round(lineHints.stopLineRatio * 100)}% image height: read sl_price at this stop boundary.` : ''}
 ${typeof lineHints?.targetLineRatio === 'number' ? `- target-label-focus is centered near ${Math.round(lineHints.targetLineRatio * 100)}% image height: read tp_price at this target boundary.` : ''}
 If a right-axis label away from these geometry lines is easier to read, IGNORE IT. Do not use the live/current price label, the last traded price label, or a large orderblock/demand/supply-zone label as entry/sl/tp.
