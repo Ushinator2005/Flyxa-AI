@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   Download,
-  Flame,
   Leaf,
   Moon,
   PenLine,
@@ -742,7 +741,6 @@ export default function Journal() {
     return Array.from(bucket.entries());
   }, [filtered]);
 
-  const totalJournalEntries = entries.length;
   const journalStreak = useMemo(() => {
     const writtenDates = new Set(
       entries
@@ -806,52 +804,106 @@ export default function Journal() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {!isMobile && (() => {
-            const flameColor = journalStreak >= 30 ? '#a855f7'
-              : journalStreak >= 14 ? '#dc2626'
+            // Tier colour palette
+            const flameStroke = journalStreak >= 30 ? '#a855f7'
+              : journalStreak >= 14 ? '#ef4444'
               : journalStreak >= 7  ? '#f97316'
               : journalStreak >= 3  ? '#fb923c'
               : journalStreak >= 1  ? '#f59e0b'
               : '#6b7280';
             const flameFill = journalStreak >= 30 ? '#c084fc'
               : journalStreak >= 14 ? '#f87171'
-              : journalStreak >= 7  ? '#fb923c'
-              : journalStreak >= 3  ? '#fdba74'
-              : journalStreak >= 1  ? '#fcd34d'
-              : '#4b5563';
+              : journalStreak >= 7  ? '#fdba74'
+              : journalStreak >= 3  ? '#fed7aa'
+              : journalStreak >= 1  ? '#fde68a'
+              : '#374151';
+
+            // Tier name (replaces static "Streak" label)
+            const tierName = journalStreak >= 30 ? 'Legend'
+              : journalStreak >= 14 ? 'Inferno'
+              : journalStreak >= 7  ? 'Blazing'
+              : journalStreak >= 3  ? 'On Fire'
+              : journalStreak >= 1  ? 'Warming Up'
+              : 'Start Today';
+
+            // Progress arc — fills toward next milestone
+            const prevMilestone = journalStreak >= 30 ? 30 : journalStreak >= 14 ? 14 : journalStreak >= 7 ? 7 : journalStreak >= 3 ? 3 : 0;
+            const nextMilestone = journalStreak >= 30 ? null : journalStreak >= 14 ? 30 : journalStreak >= 7 ? 14 : journalStreak >= 3 ? 7 : 3;
+            const arcProgress = nextMilestone === null ? 1 : (journalStreak - prevMilestone) / (nextMilestone - prevMilestone);
+            const RING = 46;
+            const R = 19;
+            const circ = 2 * Math.PI * R;
+            const tooltipLabel = nextMilestone
+              ? `${tierName} · ${nextMilestone - journalStreak} day${nextMilestone - journalStreak === 1 ? '' : 's'} to next tier`
+              : `${tierName} · Max streak reached`;
+
             return (
               <div
-                title={`${journalStreak} day streak`}
+                title={tooltipLabel}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  padding: '7px 14px 7px 12px',
-                  borderRadius: '10px',
+                  gap: '11px',
+                  padding: '8px 16px 8px 9px',
+                  borderRadius: '12px',
                   background: 'var(--app-panel-strong)',
-                  border: `1px solid var(--app-border)`,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  border: '1px solid var(--app-border)',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
                   flexShrink: 0,
                 }}
               >
-                <Flame
-                  size={26}
-                  color={flameColor}
-                  fill={flameFill}
-                  fillOpacity={0.9}
-                  strokeWidth={1.5}
-                  style={{ flexShrink: 0 }}
-                />
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {/* Progress ring + candlestick flame icon */}
+                <div style={{ position: 'relative', width: RING, height: RING, flexShrink: 0 }}>
+                  {/* Arc ring */}
+                  <svg
+                    width={RING} height={RING}
+                    style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}
+                  >
+                    <circle cx={RING / 2} cy={RING / 2} r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={2.5} />
+                    {arcProgress > 0 && (
+                      <circle
+                        cx={RING / 2} cy={RING / 2} r={R}
+                        fill="none"
+                        stroke={flameStroke}
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                        strokeDasharray={circ}
+                        strokeDashoffset={circ * (1 - arcProgress)}
+                      />
+                    )}
+                  </svg>
+                  {/* Candlestick flame — 3 ascending candle bars forming a flame silhouette */}
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg viewBox="0 0 20 22" width={18} height={20}>
+                      {/* Left candle */}
+                      <line x1="2.75" y1="8.5" x2="2.75" y2="12" stroke={flameStroke} strokeWidth={1} strokeOpacity={0.65} strokeLinecap="round" />
+                      <rect x="0.5" y="12" width="4.5" height="9" rx="0.75" fill={flameFill} />
+                      <rect x="0.5" y="12" width="4.5" height="9" rx="0.75" fill="none" stroke={flameStroke} strokeWidth={0.6} strokeOpacity={0.5} />
+                      {/* Middle candle (tallest — flame tip) */}
+                      <line x1="10" y1="1" x2="10" y2="4" stroke={flameStroke} strokeWidth={1} strokeOpacity={0.65} strokeLinecap="round" />
+                      <rect x="7.75" y="4" width="4.5" height="17" rx="0.75" fill={flameFill} />
+                      <rect x="7.75" y="4" width="4.5" height="17" rx="0.75" fill="none" stroke={flameStroke} strokeWidth={0.6} strokeOpacity={0.5} />
+                      {/* Right candle */}
+                      <line x1="17.25" y1="10.5" x2="17.25" y2="14" stroke={flameStroke} strokeWidth={1} strokeOpacity={0.65} strokeLinecap="round" />
+                      <rect x="15" y="14" width="4.5" height="7" rx="0.75" fill={flameFill} />
+                      <rect x="15" y="14" width="4.5" height="7" rx="0.75" fill="none" stroke={flameStroke} strokeWidth={0.6} strokeOpacity={0.5} />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Text column */}
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                   <span style={{
                     fontSize: '9px',
                     fontWeight: 700,
-                    letterSpacing: '0.12em',
+                    letterSpacing: '0.1em',
                     textTransform: 'uppercase',
-                    color: T3,
+                    color: flameStroke,
+                    opacity: journalStreak > 0 ? 0.85 : 0.4,
                     lineHeight: 1,
-                  }}>Streak</span>
+                  }}>{tierName}</span>
                   <span style={{
-                    fontSize: '15px',
+                    fontSize: '16px',
                     fontWeight: 700,
                     color: T1,
                     lineHeight: 1,
