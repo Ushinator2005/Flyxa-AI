@@ -165,7 +165,7 @@ export const aiApi = {
     }
     formData.append('entryDate', entryDate);
     formData.append('entryTime', entryTime);
-    return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData, { timeoutMs: 75_000 });
+    return api.postFormData<ExtractedTradeData & { warnings?: string[] }>('/api/ai/scan', formData, { timeoutMs: 120_000 });
   },
   analyzeTradeById: (tradeId: string, trade?: Partial<Trade>, history?: Partial<Trade>[]) =>
     api.post<{ analysis: string }>(`/api/ai/trade-analysis/${tradeId}`, { trade, history }),

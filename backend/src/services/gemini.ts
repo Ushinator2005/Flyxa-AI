@@ -18,7 +18,7 @@ function readBoundedEnvInt(name: string, fallback: number, min: number, max: num
 const GEMINI_MODEL_FALLBACK_CHAIN = parseModelFallbackChain(process.env.GEMINI_MODEL_FALLBACK_CHAIN);
 const GEMINI_MAX_RETRIES_PER_MODEL = readBoundedEnvInt('GEMINI_MAX_RETRIES_PER_MODEL', 2, 0, 4);
 const GEMINI_BASE_RETRY_DELAY_MS = readBoundedEnvInt('GEMINI_BASE_RETRY_DELAY_MS', 1200, 250, 10_000);
-const GEMINI_REQUEST_TIMEOUT_MS = readBoundedEnvInt('GEMINI_REQUEST_TIMEOUT_MS', 30_000, 10_000, 60_000);
+const GEMINI_REQUEST_TIMEOUT_MS = readBoundedEnvInt('GEMINI_REQUEST_TIMEOUT_MS', 60_000, 10_000, 90_000);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
