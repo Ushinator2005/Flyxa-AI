@@ -3825,8 +3825,13 @@ export default function TradeJournal() {
                       {_patternFlags.has(trade.id) && (() => {
                         const _flag = _patternFlags.get(trade.id)!;
                         const _isOvertrading = _flag.includes('trades in 10min');
-                        return (
-                          <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background: _isOvertrading ? 'var(--amber-dim)' : 'var(--red-dim)', border: `1px solid ${_isOvertrading ? 'var(--amber-border)' : 'var(--red-border)'}`, borderRadius:3, fontSize:10, color: _isOvertrading ? 'var(--amber)' : 'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
+                        return _isOvertrading ? (
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.45)', borderRadius:3, fontSize:11, fontWeight:600, letterSpacing:'0.02em', color:'#f87171', flexShrink:0, whiteSpace:'nowrap', textTransform:'uppercase' }}>
+                            <AlertTriangle size={11} style={{ flexShrink:0 }} />
+                            {_flag}
+                          </span>
+                        ) : (
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-border)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
                             <AlertTriangle size={10} style={{ flexShrink:0 }} />
                             {_flag}
                           </span>
