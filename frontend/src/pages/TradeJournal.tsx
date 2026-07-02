@@ -1287,6 +1287,25 @@ function computeTradePatternFlags(
   contractLimitsBySymbol: Record<string, number> = {}
 ): Map<string, string> {
   const flags = new Map<string, string>();
+
+  // Rapid-fire cluster: flag the first trade of any window where 3+ trades
+  // occur within 10 minutes.
+  const rapidFireFlagged = new Set<string>();
+  for (let i = 0; i < trades.length; i++) {
+    const windowStart = parseTimeToMinutes(trades[i].entryTime);
+    if (windowStart < 0) continue;
+    let count = 1;
+    for (let j = i + 1; j < trades.length; j++) {
+      const t = parseTimeToMinutes(trades[j].entryTime);
+      if (t >= 0 && t - windowStart < 10) count++;
+      else break;
+    }
+    if (count >= 3 && !rapidFireFlagged.has(trades[i].id)) {
+      flags.set(trades[i].id, `${count} trades in 10min`);
+      rapidFireFlagged.add(trades[i].id);
+    }
+  }
+
   for (let i = 0; i < trades.length; i++) {
     const curr = trades[i];
     if (i < trades.length - 1) {
@@ -1298,9 +1317,9 @@ function computeTradePatternFlags(
         if (gap >= 0 && gap < 5) {
           const n = Math.max(1, Math.round(gap));
           if (curr.direction !== next.direction) {
-            flags.set(curr.id, `Reversed within ${n}min`);
+            if (!flags.has(curr.id)) flags.set(curr.id, `Reversed within ${n}min`);
           } else if (curr.result === 'loss') {
-            flags.set(next.id, `Re-entry after loss (${n}min)`);
+            if (!flags.has(next.id)) flags.set(next.id, `Re-entry after loss (${n}min)`);
           }
         }
       }
@@ -1316,20 +1335,6 @@ function computeTradePatternFlags(
   return flags;
 }
 
-function detectRapidFire(trades: JournalTrade[]): number | null {
-  for (let i = 0; i < trades.length; i++) {
-    const windowStart = parseTimeToMinutes(trades[i].entryTime);
-    if (windowStart < 0) continue;
-    let count = 1;
-    for (let j = i + 1; j < trades.length; j++) {
-      const t = parseTimeToMinutes(trades[j].entryTime);
-      if (t >= 0 && t - windowStart < 10) count++;
-      else break;
-    }
-    if (count >= 3) return count;
-  }
-  return null;
-}
 
 // ── Helper: computeProcessScore ──────────────────────────────────────────────
 function computeProcessScore(trade: JournalTrade): number {
@@ -3759,16 +3764,6 @@ export default function TradeJournal() {
                   </span>
                 </div>
               )}
-              {(() => {
-                const _rapidFire = detectRapidFire(selectedEntry.trades);
-                if (!_rapidFire) return null;
-                return (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', marginBottom:6, background:'var(--amber-dim)', border:'1px solid var(--amber-border)', borderRadius:5, fontSize:12, color:'var(--amber)' }}>
-                    <AlertTriangle size={13} style={{ flexShrink:0 }} />
-                    {_rapidFire} trades within 10 minutes — review for overtrading.
-                  </div>
-                );
-              })()}
               <div className="tj-trade-list" data-tour-id="scanner-trade-list">
                 {(() => {
                   const _contractRule = riskRules.find(r => r.kind === 'max_contracts');
@@ -3827,12 +3822,16 @@ export default function TradeJournal() {
                       <span className="tj-symbol">{trade.symbol}</span>
                       <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
                       <span style={{ flex: 1 }} />
-                      {_patternFlags.has(trade.id) && (
-                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-border)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
-                          <AlertTriangle size={10} style={{ flexShrink:0 }} />
-                          {_patternFlags.get(trade.id)}
-                        </span>
-                      )}
+                      {_patternFlags.has(trade.id) && (() => {
+                        const _flag = _patternFlags.get(trade.id)!;
+                        const _isOvertrading = _flag.includes('trades in 10min');
+                        return (
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background: _isOvertrading ? 'var(--amber-dim)' : 'var(--red-dim)', border: `1px solid ${_isOvertrading ? 'var(--amber-border)' : 'var(--red-border)'}`, borderRadius:3, fontSize:10, color: _isOvertrading ? 'var(--amber)' : 'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
+                            <AlertTriangle size={10} style={{ flexShrink:0 }} />
+                            {_flag}
+                          </span>
+                        );
+                      })()}
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: trade.pnl > 0 ? 'var(--green)' : trade.pnl < 0 ? 'var(--red)' : 'var(--txt-2)' }}>
                         {formatSignedCurrency(trade.pnl - (trade.commission ?? 0))}
                       </span>
