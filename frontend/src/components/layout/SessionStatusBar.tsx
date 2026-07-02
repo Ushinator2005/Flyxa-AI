@@ -107,6 +107,8 @@ export default function SessionStatusBar() {
   const tradesLow = tradesLeft !== null && tradesLeft <= 2;
 
   return (
+    <>
+    <style>{`.ssb-clickable:hover { background: rgba(255,255,255,0.035); }`}</style>
     <div
       style={{
         display: 'flex',
@@ -120,6 +122,23 @@ export default function SessionStatusBar() {
         overflowX: 'auto',
       }}
     >
+      {/* Clickable session summary — navigates to pre-session view */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => navigate('/pre-session')}
+        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && navigate('/pre-session')}
+        className="ssb-clickable"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          flex: 1, minWidth: 0, cursor: 'pointer',
+          overflow: 'hidden',
+          borderRadius: 4,
+          margin: '4px 0',
+          padding: '0 6px',
+          transition: 'background 150ms',
+        }}
+      >
       {/* Active indicator + time */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <span
@@ -206,8 +225,10 @@ export default function SessionStatusBar() {
         </span>
       )}
 
+      </div>{/* end clickable area */}
+
       {/* Spacer */}
-      <div style={{ flex: 1, minWidth: 12 }} />
+      <div style={{ flexShrink: 0, minWidth: 12 }} />
 
       {/* End session */}
       <button
@@ -229,5 +250,6 @@ export default function SessionStatusBar() {
         End session
       </button>
     </div>
+    </>
   );
 }
