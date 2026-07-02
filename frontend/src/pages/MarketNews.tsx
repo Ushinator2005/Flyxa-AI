@@ -24,7 +24,7 @@ import {
   zonedWallTimeToDate,
 } from '../utils/calendarTime.js';
 
-const PAGE_BG = 'var(--app-bg)';
+const PAGE_BG = 'var(--app-panel)';
 const S1 = 'var(--app-panel)';
 const S2 = 'var(--app-panel-strong)';
 const BORDER = 'var(--app-border)';
