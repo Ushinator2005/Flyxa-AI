@@ -557,9 +557,13 @@ function detectTradeBoxContext(
     stopLineRatio = redBox.yMin / height
     targetLineRatio = greenBox.yMax / height
   }
-  const entryLabelCandidateRatio = directionHint === 'Short'
-    ? greenBox.yMax / height
-    : entryLineRatio
+  // For both Long and Short, the entry color label sits at the shared boundary
+  // (entryLineRatio). Setting this equal to entryLine means the condition
+  // Math.abs(entryLabelCandidateLine - entryLine) > 0.018 is false, so the
+  // entry-color-label-focus crop is never generated (entry-label-focus already
+  // covers that area). Previously for Short this was greenBox.yMax/height (the
+  // TP level), which incorrectly generated a crop at the wrong location.
+  const entryLabelCandidateRatio = entryLineRatio
 
   return {
     direction_hint: directionHint,

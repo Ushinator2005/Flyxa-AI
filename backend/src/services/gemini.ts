@@ -316,6 +316,13 @@ MANDATORY: Do NOT discard a black/dark right-axis label when it is exactly align
 MANDATORY: If entry-label-focus shows a black/dark right-axis pill at the shared boundary and no configured-color entry label is visible, read that pill as entry_price.
 NEVER read entry_price from numeric annotations printed inside the chart/position tool body (examples: 0, 0.5, 1, -1, -2, fib labels, dashed-line labels). Entry must come from the right-axis pill/label at the shared red/green boundary.
 
+⚠ NO-LINE VERIFICATION — MANDATORY FOR EVERY PRICE LEVEL (ENTRY, SL, TP):
+The correct position-tool labels (SL, Entry, TP) appear as STANDALONE right-axis pills/bars. They have NO horizontal line extending leftward from them onto the chart body.
+• Any right-axis label that has a DASHED horizontal line extending left across the chart = a custom drawn level (average entry indicator, scale-in price, risk tool midpoint, R:R cosmetic). This is NOT a position-tool level. REJECT IT for entry_price, sl_price, and tp_price.
+• Any right-axis label that has a SOLID horizontal line extending left across the chart = a key-level support/resistance line. REJECT IT for entry_price, sl_price, and tp_price unless it falls exactly on the compact position-tool zone boundary AND no standalone pill is visible there.
+Apply this check to EVERY candidate label before assigning it to entry/SL/TP. If a label has ANY line (dashed or solid) extending leftward from it onto the chart, reject it — regardless of its color or how close it is to the expected price level.
+This check is critical for entry_price: a dashed line inside the colored zone (e.g., appearing between entry and SL) will have a matching right-axis label — that label MUST be rejected. Read entry from the standalone right-axis pill at the zone boundary instead.
+
 Step 3. Match each right-axis label to the configured hex colors above:
   • Label whose background ≈ ${userColors.entry} (${entryName})  → entry_price
   • Label whose background ≈ ${userColors.stopLoss} (${slName})   → sl_price
@@ -357,6 +364,9 @@ Any right-axis label with a ⊕, + or circle-with-cross icon on its LEFT side is
 
 ⚠ KEY-LEVEL LINES: Traders draw horizontal lines across their entire chart. These can produce BLACK or DARK GREY right-axis labels. Ignore them unless the label is exactly on the compact position tool's shared entry boundary and no colored/grey entry label is visible.
 NEVER use numeric labels printed inside the chart body (0, 0.5, 1, -1, -2, fib labels, dashed-line labels) as entry/sl/tp.
+
+⚠ NO-LINE VERIFICATION — MANDATORY:
+Position-tool price labels (SL, Entry, TP) are standalone right-axis pills with NO horizontal line extending left onto the chart. Any right-axis label that has a dashed or solid line extending from it onto the chart body is NOT a position-tool level — reject it. This especially applies to entry_price: a dashed line inside the colored zone has a right-axis label that must be rejected; use only the standalone pill at the zone boundary.
 
 FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
 STACKED LABELS: If two labels of similar color appear stacked near the TP or SL price, use the one that aligns with the OUTER BOUNDARY of the colored zone (the far edge of the zone from entry). The label floating outside the zone boundary is the live price marker — ignore it.
@@ -431,10 +441,8 @@ ${boxBounds
   ? `The P&L card occupies image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
 The FIRST candle inside the card (at the ${Math.round(boxBounds.leftRatio * 100)}% left edge) is the entry candle — start here.
 HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist. Do not look at it. Do not count it. Even if a large wick from a pre-trade candle visually extends into the price range of SL or TP, that candle is outside the P&L card and must be completely disregarded.
-HARD RULE: Any candle whose center x-position is to the RIGHT of ${Math.round(boxBounds.rightRatio * 100)}% does not exist. Do not look at it.
-Scan only the candles physically inside the card, left to right, starting from the entry candle.
-If neither SL nor TP is touched by any candle inside the card, set exit_reason to null.`
-  : `Scan only candles physically inside the colored P&L overlay. Ignore all candles to the left (pre-trade) and right (post-trade) of the overlay — treat them as if they are not on the chart.`}
+⚠ EXIT CANDLE LOCATION: The colored P&L boxes END at ${Math.round(boxBounds.rightRatio * 100)}% — but the exit candle commonly lands AT or JUST PAST this right boundary (the position tool often closes at the moment of the exit hit). Do NOT stop scanning at ${Math.round(boxBounds.rightRatio * 100)}%. Continue scanning rightward using the exit-path-focus crop (which extends past the box end) until a candle triggers a level or the crop ends. The exit is often the candle whose left body edge is at the right end of the colored box.`
+  : `Scan candles from the left edge of the colored P&L overlay rightward. Ignore all candles to the LEFT (pre-trade) of the overlay. Candles AT or PAST the right edge of the boxes are valid exit candidates — the exit often occurs at the moment the box ends.`}
 
 DO NOT USE ANY COLOR OR SIZE BIAS — CANDLE WICKS ARE THE ONLY EVIDENCE.
 Do NOT use the background color of the teal zone, the red/pink zone, or any P&L label to decide the outcome.
@@ -623,8 +631,8 @@ async function verifyTradeExit(
 }> {
   const isLong = trade.direction === 'Long';
   const bounds = boxBounds
-    ? `Only inspect candle centers between ${Math.round(boxBounds.leftRatio * 100)}% and ${Math.round(boxBounds.rightRatio * 100)}% of the image width.`
-    : 'Only inspect candles physically inside the colored position-tool overlay.';
+    ? `Ignore any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% of the image width (pre-trade candles). The colored boxes end at ${Math.round(boxBounds.rightRatio * 100)}% but the exit candle often lands AT or JUST PAST that boundary — keep scanning rightward past it.`
+    : 'Ignore all pre-trade candles to the left of the colored position-tool overlay. Candles at or past the right edge of the boxes are valid exit candidates.';
   const prompt = `You are the independent exit verifier for a futures trade screenshot.
 Do not re-read or change the supplied prices. Determine only the first touched exit level.
 
@@ -703,11 +711,11 @@ async function detectBoundaryTouch(
       ? `the candle HIGH wick reaches or rises above ${price}`
       : `the candle LOW wick reaches or falls below ${price}`;
   const bounds = boxBounds
-    ? `The position tool spans image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
+    ? `The position tool colored boxes span image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
 HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist for this analysis. Do not look at it. Do not count it. Do not let its wick influence your answer in any way.
 This is especially important for large market-open spike candles (e.g. the 09:30 ET candle on US futures) that frequently appear immediately to the left of the position tool with wicks that reach far beyond SL or TP prices. Those candles are pre-trade and must be completely ignored.
-HARD RULE: Any candle whose center x-position is to the RIGHT of ${Math.round(boxBounds.rightRatio * 100)}% does not exist.`
-    : `Only inspect candles physically inside the colored position-tool overlay. Any candle to the left of where the colored zones begin is a pre-trade candle — ignore it entirely even if its wick reaches the ${boundary} price. Large market-open spike candles immediately left of the box are especially common and must be excluded.`;
+⚠ EXIT CANDLE: The boxes END at ${Math.round(boxBounds.rightRatio * 100)}% but the boundary touch often occurs AT or JUST PAST this right edge. Keep scanning rightward past it — do not stop at the box boundary.`
+    : `Any candle to the LEFT of where the colored zones begin is a pre-trade candle — ignore it entirely even if its wick reaches the ${boundary} price. Large market-open spike candles immediately left of the box are especially common and must be excluded. Candles AT or PAST the right edge of the boxes are valid candidates.`;
 
   const prompt = `You are checking ONE boundary on a futures chart. Do not decide whether the trade won or lost.
 
