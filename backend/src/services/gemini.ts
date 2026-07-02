@@ -440,9 +440,10 @@ The P&L card is the colored overlay on the chart — the region covered by the r
 ${boxBounds
   ? `The P&L card occupies image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
 The FIRST candle inside the card (at the ${Math.round(boxBounds.leftRatio * 100)}% left edge) is the entry candle — start here.
-HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist. Do not look at it. Do not count it. Even if a large wick from a pre-trade candle visually extends into the price range of SL or TP, that candle is outside the P&L card and must be completely disregarded.
-⚠ EXIT CANDLE LOCATION: The colored P&L boxes END at ${Math.round(boxBounds.rightRatio * 100)}% — but the exit candle commonly lands AT or JUST PAST this right boundary (the position tool often closes at the moment of the exit hit). Do NOT stop scanning at ${Math.round(boxBounds.rightRatio * 100)}%. Continue scanning rightward using the exit-path-focus crop (which extends past the box end) until a candle triggers a level or the crop ends. The exit is often the candle whose left body edge is at the right end of the colored box.`
-  : `Scan candles from the left edge of the colored P&L overlay rightward. Ignore all candles to the LEFT (pre-trade) of the overlay. Candles AT or PAST the right edge of the boxes are valid exit candidates — the exit often occurs at the moment the box ends.`}
+HARD RULE — LEFT: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist. Do not look at it. Do not count it. Even if a pre-trade candle's wick extends into SL or TP price range, it is outside the P&L card and must be completely disregarded.
+HARD RULE — RIGHT: Any candle whose center x-position is to the RIGHT of ${Math.round(Math.min(boxBounds.rightRatio + 0.03, 1) * 100)}% does not exist. Do not look at it. The exit candle is typically the rightmost candle inside the box or the one whose center sits right at the right edge — include it, but stop there.
+STOP ON FIRST HIT: The moment any candle's wick triggers SL or TP, that is the exit. Do not continue scanning further candles after a hit.`
+  : `Scan only candles physically inside the colored P&L overlay (left edge to right edge). Ignore all candles to the left (pre-trade). Ignore all candles beyond the right edge of the overlay. Stop scanning the moment SL or TP is first hit.`}
 
 DO NOT USE ANY COLOR OR SIZE BIAS — CANDLE WICKS ARE THE ONLY EVIDENCE.
 Do NOT use the background color of the teal zone, the red/pink zone, or any P&L label to decide the outcome.
@@ -631,8 +632,8 @@ async function verifyTradeExit(
 }> {
   const isLong = trade.direction === 'Long';
   const bounds = boxBounds
-    ? `Ignore any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% of the image width (pre-trade candles). The colored boxes end at ${Math.round(boxBounds.rightRatio * 100)}% but the exit candle often lands AT or JUST PAST that boundary — keep scanning rightward past it.`
-    : 'Ignore all pre-trade candles to the left of the colored position-tool overlay. Candles at or past the right edge of the boxes are valid exit candidates.';
+    ? `Only inspect candles whose center x-position is between ${Math.round(boxBounds.leftRatio * 100)}% and ${Math.round(Math.min(boxBounds.rightRatio + 0.03, 1) * 100)}% of the image width. Candles outside this range do not exist for this analysis. Stop scanning the moment SL or TP is first touched.`
+    : 'Only inspect candles physically inside the colored position-tool overlay (left edge to right edge). Stop scanning the moment SL or TP is first touched.';
   const prompt = `You are the independent exit verifier for a futures trade screenshot.
 Do not re-read or change the supplied prices. Determine only the first touched exit level.
 
@@ -712,10 +713,9 @@ async function detectBoundaryTouch(
       : `the candle LOW wick reaches or falls below ${price}`;
   const bounds = boxBounds
     ? `The position tool colored boxes span image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
-HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist for this analysis. Do not look at it. Do not count it. Do not let its wick influence your answer in any way.
-This is especially important for large market-open spike candles (e.g. the 09:30 ET candle on US futures) that frequently appear immediately to the left of the position tool with wicks that reach far beyond SL or TP prices. Those candles are pre-trade and must be completely ignored.
-⚠ EXIT CANDLE: The boxes END at ${Math.round(boxBounds.rightRatio * 100)}% but the boundary touch often occurs AT or JUST PAST this right edge. Keep scanning rightward past it — do not stop at the box boundary.`
-    : `Any candle to the LEFT of where the colored zones begin is a pre-trade candle — ignore it entirely even if its wick reaches the ${boundary} price. Large market-open spike candles immediately left of the box are especially common and must be excluded. Candles AT or PAST the right edge of the boxes are valid candidates.`;
+HARD RULE: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist. Do not look at it. Do not count it. Do not let its wick influence your answer in any way. This is especially important for large market-open spike candles (e.g. the 09:30 ET candle) immediately left of the box — those are pre-trade and must be completely ignored.
+HARD RULE: Any candle whose center x-position is to the RIGHT of ${Math.round(Math.min(boxBounds.rightRatio + 0.03, 1) * 100)}% does not exist. Stop there.`
+    : `Only inspect candles physically inside the colored position-tool overlay. Ignore candles to the LEFT (pre-trade) and beyond the RIGHT edge of the overlay. Large market-open spike candles immediately left of the box are especially common and must be excluded.`;
 
   const prompt = `You are checking ONE boundary on a futures chart. Do not decide whether the trade won or lost.
 
