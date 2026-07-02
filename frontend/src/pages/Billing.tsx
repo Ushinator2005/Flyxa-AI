@@ -1548,10 +1548,10 @@ export default function Billing() {
   const netTone = derived.netPnL >= 0 ? 'positive' : 'negative';
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: '24px 28px 40px', background: 'var(--app-bg)' }}>
+    <div style={{ height: '100%', overflowY: 'auto', padding: '24px 28px 40px', background: 'var(--surface-1)' }}>
       <style>{`
         .billing-kicker { margin: 0; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 700; }
-        .billing-stat-label { margin: 0; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--txt-3); }
+        .billing-stat-label { margin: 0; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--txt-2); }
         .billing-stat-note { margin: 0; font-size: 11px; color: var(--txt-3); line-height: 1.45; }
         .billing-command-btn { height: 34px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--txt-2); display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color 120ms, color 120ms, background 120ms; }
         .billing-command-btn:hover { border-color: rgba(255,255,255,0.18); color: var(--txt); }
@@ -1632,7 +1632,11 @@ export default function Billing() {
       )}
 
       {/* ── Flat stat strip ── */}
-      <section data-tour-id="billing-overview" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '14px 0', marginBottom: 0, display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap' }}>
+      <section data-tour-id="billing-overview" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '14px 0', marginBottom: 0 }}>
+        <div style={{ marginBottom: 12, borderLeft: '2px solid var(--amber)', paddingLeft: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--txt-2)' }}>Overview</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap' }}>
         {/* Net Position — prominent anchor */}
         <div style={{ paddingRight: 28, marginRight: 28, borderRight: '1px solid var(--border)', flexShrink: 0 }}>
           <p className="billing-stat-label">Net Position</p>
@@ -1692,10 +1696,15 @@ export default function Billing() {
             </p>
           </div>
         </div>
+        </div>
       </section>
 
       {/* ── Phase rail ── */}
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 24, padding: '10px 0', borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
+      <div style={{ padding: '10px 0', borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
+        <div style={{ marginBottom: 8, borderLeft: '2px solid var(--amber)', paddingLeft: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--txt-2)' }}>Pipeline</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 24 }}>
         {phaseRail.map(item => (
           <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
@@ -1703,11 +1712,15 @@ export default function Billing() {
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--txt)' }}>{item.value}</span>
           </div>
         ))}
+        </div>
       </div>
 
       {/* ── Break-even flat strip ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '9px 0', borderBottom: '1px solid var(--border)', marginBottom: 16, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', fontWeight: 600, flexShrink: 0 }}>Break-even</span>
+      <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        <div style={{ marginBottom: 8, borderLeft: '2px solid var(--amber)', paddingLeft: 10 }}>
+          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-2)', fontWeight: 700 }}>Break-even</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--txt-2)', marginRight: 4 }}>
           First {formatCurrency(derived.monthlyBurn)} of monthly profit covers fees before upside starts
         </span>
@@ -1715,6 +1728,7 @@ export default function Billing() {
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)', fontWeight: 500 }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)', fontWeight: 500 }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)', fontWeight: 500 }}>{derived.blownAccounts}</strong></span>
+        </div>
       </div>
 
       <div data-tour-id="billing-payouts">
@@ -1728,8 +1742,8 @@ export default function Billing() {
 
       <section data-tour-id="billing-ledger" style={{ borderTop: '1px solid var(--border)' }}>
         <header style={{ padding: '12px 0', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <div>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>Account Ledger</p>
+          <div style={{ borderLeft: '2px solid var(--amber)', paddingLeft: 10 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Account Ledger</p>
             <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Every purchase logged</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1998,8 +2012,10 @@ export default function Billing() {
       {/* ── ROI by Firm ──────────────────────────────────────────── */}
       <section style={{ marginTop: 20, borderTop: '1px solid var(--border)' }}>
         <header style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>ROI by Firm</p>
-          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Which firms have been worth it</p>
+          <div style={{ borderLeft: '2px solid var(--amber)', paddingLeft: 10 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>ROI by Firm</p>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>Which firms have been worth it</p>
+          </div>
         </header>
         {derived.roiByFirm.length === 0 ? (
           <div style={{ padding: '14px 0', fontSize: 12, color: 'var(--txt-3)' }}>No firms logged yet.</div>
