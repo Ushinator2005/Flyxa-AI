@@ -684,7 +684,7 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
 
   return (
     <article
-      style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, cursor: item.url ? 'pointer' : 'default', transition: 'background .1s', background: item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent' }}
+      style={{ padding: '11px 14px', borderBottom: `1px solid rgba(255,255,255,0.09)`, cursor: item.url ? 'pointer' : 'default', transition: 'background .1s', background: item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent' }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.09)' : 'rgba(255,255,255,0.03)'; }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent'; }}
       onClick={() => { if (item.url) window.open(item.url, '_blank', 'noopener,noreferrer'); }}
@@ -1009,11 +1009,11 @@ function CalendarPanel({
   }, [dates, todaySlice, weekOffset]);
 
   return (
-    <section style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+    <section style={{ paddingTop: 4 }}>
       {/* Calendar header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, padding: '0 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, padding: '0 14px 0 12px', borderLeft: `2px solid ${COBALT}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: T3 }}>Econ Calendar</span>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: T2 }}>Econ Calendar</span>
           <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{subtitle}</span>
           {weekOffset === 0 && <span style={{ fontSize: 9, color: isToday ? GREEN : T3, fontFamily: MONO }}>{isToday ? '● live' : '○ missing'}</span>}
         </div>
@@ -1052,7 +1052,7 @@ function CalendarPanel({
           {dates.map(date => (
             <div key={date} ref={date === todaySlice ? todayRef : undefined} style={{ minWidth: 0 }}>
               {/* Date header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 4px', position: 'sticky', top: 0, background: PAGE_BG, zIndex: 2, borderBottom: `1px solid ${BORDER}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 4px', position: 'sticky', top: 0, background: S2, zIndex: 2, borderBottom: `1px solid ${BORDER}` }}>
                 <span style={{ width: 3, height: 12, borderRadius: 2, background: date === todaySlice ? COBALT : AMBER, flexShrink: 0 }} />
                 <span style={{ fontSize: 10, fontWeight: 800, color: date === todaySlice ? COBALT : AMBER, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {fmtCalendarDate(date, safeDisplayTimezone)}
@@ -1122,19 +1122,20 @@ function SourcesPanel({
   const enabledCount = xAccounts.filter(account => account.enabled).length;
 
   return (
-    <section style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
+    <section style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, marginTop: 14 }}>
       <p
         style={{
           margin: '0 0 10px',
           fontSize: 10,
-          color: T3,
+          color: T2,
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
           fontWeight: 700,
           display: 'inline-flex',
           gap: 5,
           alignItems: 'center',
-          padding: '0 14px',
+          padding: '0 14px 0 12px',
+          borderLeft: `2px solid ${AMBER}`,
         }}
       >
         <Settings2 size={10} />
@@ -1821,6 +1822,10 @@ export default function MarketNews() {
       >
         <main className="mn-feed" style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
           <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 10px 14px' }}>
+          <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid rgba(255,255,255,0.09)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: T3, borderLeft: `2px solid ${AMBER}`, paddingLeft: 10 }}>News Feed</span>
+            {displayed.length > 0 && <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{displayed.length} {displayed.length === 1 ? 'story' : 'stories'}</span>}
+          </div>
           {topBreaking && (
             <div style={{ margin: '8px 0 0', padding: '8px 14px', borderBottom: `1px solid ${RED_BORDER}`, background: 'rgba(239,68,68,0.07)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: RED, fontFamily: MONO, flexShrink: 0, paddingTop: 2 }}>⚡ BREAKING</span>
@@ -1920,18 +1925,18 @@ export default function MarketNews() {
             bottom: 0,
             width: 'min(320px, 92vw)',
             zIndex: 200,
-            background: PAGE_BG,
+            background: S2,
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: 16,
-            borderLeft: `1px solid ${BORDER}`,
+            borderLeft: `1px solid rgba(255,255,255,0.10)`,
             transform: sidebarOpen ? 'translateX(0)' : 'translateX(100%)',
             transition: 'transform 0.22s ease',
           } : {
             width: '100%',
             minWidth: 0,
-            borderLeft: `1px solid ${BORDER}`,
-            background: PAGE_BG,
+            borderLeft: `1px solid rgba(255,255,255,0.10)`,
+            background: S2,
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: 16,
