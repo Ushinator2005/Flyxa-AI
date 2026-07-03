@@ -179,19 +179,28 @@ export default function SessionStatusBar() {
         </>
       )}
 
-      {/* Bias per instrument */}
-      {bias && Object.keys(bias).length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {(Object.entries(bias) as [string, BiasValue][]).map(([inst, val]) => (
-              <span key={inst} style={{ fontSize: 10, color: '#5c5751' }}>
-                {inst}{' '}
-                <span style={{ fontWeight: 700, color: biasColor(val) }}>{val}</span>
-              </span>
-            ))}
-          </div>
-          <SEP />
-        </>
+      {/* Bias */}
+      {bias && Object.keys(bias).length > 0 && (() => {
+        const entries = Object.entries(bias) as [string, BiasValue][];
+        const uniqueVals = [...new Set(entries.map(([, v]) => v))];
+        const unified = uniqueVals.length === 1;
+        return (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              {unified
+                ? <span style={{ fontSize: 10, fontWeight: 700, color: biasColor(uniqueVals[0]) }}>{uniqueVals[0]}</span>
+                : entries.map(([inst, val]) => (
+                    <span key={inst} style={{ fontSize: 10, color: '#5c5751' }}>
+                      {inst}{' '}
+                      <span style={{ fontWeight: 700, color: biasColor(val) }}>{val}</span>
+                    </span>
+                  ))
+              }
+            </div>
+            <SEP />
+          </>
+        );
+      })()}
       )}
 
       {/* Live risk stats */}

@@ -627,12 +627,10 @@ export default function FlyxaAIPreSession() {
     persistPreSession({ note: nextNote });
   };
 
-  const setBiasAndPersist = (instrument: keyof BiasState, value: BiasValue) => {
-    setBias(current => {
-      const next = { ...current, [instrument]: value };
-      persistPreSession({ bias: next });
-      return next;
-    });
+  const setBiasAndPersist = (value: BiasValue) => {
+    const next: BiasState = { ES: value, NQ: value };
+    setBias(next);
+    persistPreSession({ bias: next });
   };
 
   const openOathEditor = () => {
@@ -839,27 +837,22 @@ export default function FlyxaAIPreSession() {
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Market bias</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>What direction are you leaning for today?</p>
                 </div>
-                <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {(['ES', 'NQ'] as const).map(instrument => (
-                    <div key={instrument}>
-                      <p style={{ fontSize: 9, fontFamily: 'monospace', color: C.t2, marginBottom: 6, letterSpacing: '0.07em', fontWeight: 600 }}>{instrument}</p>
-                      <div style={{ display: 'flex', borderRadius: 5, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
-                        {biasOptions.map((opt, i) => {
-                          const sel = bias[instrument] === opt;
-                          const oc = opt === 'Bull' ? C.grn : opt === 'Bear' ? C.red : C.acc;
-                          return (
-                            <button key={opt} type="button" onClick={() => setBiasAndPersist(instrument, opt)} style={{
-                              flex: 1, padding: '8px 0',
-                              border: 'none', borderRight: i < biasOptions.length - 1 ? `1px solid ${C.b0}` : 'none',
-                              backgroundColor: sel ? `${oc}18` : 'transparent',
-                              fontSize: 12, fontWeight: sel ? 700 : 400,
-                              color: sel ? oc : C.t2, cursor: 'pointer',
-                            }}>{opt}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', borderRadius: 5, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
+                    {biasOptions.map((opt, i) => {
+                      const sel = bias.ES === opt;
+                      const oc = opt === 'Bull' ? C.grn : opt === 'Bear' ? C.red : C.acc;
+                      return (
+                        <button key={opt} type="button" onClick={() => setBiasAndPersist(opt)} style={{
+                          flex: 1, padding: '8px 0',
+                          border: 'none', borderRight: i < biasOptions.length - 1 ? `1px solid ${C.b0}` : 'none',
+                          backgroundColor: sel ? `${oc}18` : 'transparent',
+                          fontSize: 12, fontWeight: sel ? 700 : 400,
+                          color: sel ? oc : C.t2, cursor: 'pointer',
+                        }}>{opt}</button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
