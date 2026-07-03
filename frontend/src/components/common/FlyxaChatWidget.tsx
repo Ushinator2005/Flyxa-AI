@@ -12,8 +12,8 @@ export default function FlyxaChatWidget() {
         onClick={() => navigate('/flyxa-ai/ask')}
         className="flyxa-chat-trigger"
       >
-        <span className="icon-wrap" style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <FlyxaLogo size={16} />
+        <span className="icon-wrap">
+          <FlyxaLogo size={22} />
         </span>
         Ask Flyxa
       </button>

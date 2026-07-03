@@ -330,16 +330,16 @@
 }
 
 .flyxa-chat-trigger {
-  border: 1px solid var(--app-border);
+  border: 1px solid rgba(245,158,11,0.22);
   border-radius: 999px;
   background: var(--surface-1);
-  color: var(--txt-2);
-  padding: 8px 13px 8px 8px;
-  height: 44px;
+  color: var(--app-text);
+  padding: 8px 14px 8px 10px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  font-size: 14px;
+  gap: 8px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 16px 40px rgba(2, 6, 23, 0.33);
@@ -347,19 +347,16 @@
 }
 
 .flyxa-chat-trigger .icon-wrap {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  border: 1px solid var(--cobalt-border);
-  background: var(--cobalt-dim);
-  color: var(--cobalt);
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .flyxa-chat-trigger:hover {
-  border-color: var(--cobalt-border);
+  border-color: var(--amber-border);
   background: var(--surface-2);
   color: var(--txt);
 }
