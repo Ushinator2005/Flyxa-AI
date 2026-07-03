@@ -2677,8 +2677,8 @@ For each relevant item return:
   "impact": "high" | "medium" | "low",
   "category": "Fed" | "Earnings" | "Geopolitical" | "Macro" | "Energy" | "Political" | "Crypto" | "Other",
   "marketImpact": {
-    "es": "bullish" | "bearish" | "neutral",
-    "nq": "bullish" | "bearish" | "neutral",
+    "es": "very bullish" | "bullish" | "slightly bullish" | "neutral" | "slightly bearish" | "bearish" | "very bearish",
+    "nq": "very bullish" | "bullish" | "slightly bullish" | "neutral" | "slightly bearish" | "bearish" | "very bearish",
     "note": string (optional, e.g. "wait for reaction")
   },
   "isBreaking": boolean,

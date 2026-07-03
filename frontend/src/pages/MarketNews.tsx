@@ -272,20 +272,14 @@ function impactRank(impact: ImpactLevel) {
   return 2;
 }
 
-function sentimentTone(value: string | undefined) {
-  if (!value) return { color: T2, bg: S2, border: BORDER };
-  const normalized = value.toLowerCase();
-  if (normalized.includes('bull')) return { color: GREEN, bg: GREEN_DIM, border: GREEN_BORDER };
-  if (normalized.includes('bear')) return { color: RED, bg: RED_DIM, border: RED_BORDER };
-  return { color: T2, bg: S2, border: BORDER };
-}
-
-function impactTagLabel(symbol: 'ES' | 'NQ', value: string | undefined) {
-  if (!value) return `${symbol} neutral`;
-  const normalized = value.toLowerCase();
-  if (normalized.includes('bull')) return `${symbol} bullish`;
-  if (normalized.includes('bear')) return `${symbol} bearish`;
-  return `${symbol} neutral`;
+function combinedSentiment(es: string | undefined, nq: string | undefined): { label: string; color: string } {
+  const eNorm = (es ?? 'neutral').toLowerCase().trim();
+  const nNorm = (nq ?? 'neutral').toLowerCase().trim();
+  const isBull = eNorm.includes('bull') || nNorm.includes('bull');
+  const isBear = eNorm.includes('bear') || nNorm.includes('bear');
+  const color = isBull && !isBear ? GREEN : isBear && !isBull ? RED : T2;
+  const label = eNorm === nNorm ? eNorm : 'mixed';
+  return { label, color };
 }
 
 function sidebarCardStyle(): React.CSSProperties {
@@ -678,8 +672,7 @@ function BreakingBadge() {
 function NewsCard({ item }: { item: NewsFilterItem }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetail = Boolean(item.summary || item.marketImpact?.note);
-  const esTone = sentimentTone(item.marketImpact?.es);
-  const nqTone = sentimentTone(item.marketImpact?.nq);
+  const combined = combinedSentiment(item.marketImpact?.es, item.marketImpact?.nq);
   const dotColor = item.isBreaking ? RED : item.impact === 'high' ? RED : item.impact === 'medium' ? AMBER : T3;
 
   return (
@@ -721,13 +714,9 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
                 <span style={{ fontSize: 9, color: T3, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '.05em' }}>{item.category}</span>
               </>
             )}
-            <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 5, flexWrap: 'nowrap' }}>
-              <span style={{ fontSize: 9, fontFamily: MONO, color: esTone.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
-                ES {impactTagLabel('ES', item.marketImpact?.es).replace('ES ', '')}
-              </span>
-              <span style={{ fontSize: 9, color: T3, opacity: 0.4 }}>·</span>
-              <span style={{ fontSize: 9, fontFamily: MONO, color: nqTone.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
-                NQ {impactTagLabel('NQ', item.marketImpact?.nq).replace('NQ ', '')}
+            <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              <span style={{ fontSize: 9, fontFamily: MONO, color: combined.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+                {combined.label}
               </span>
             </span>
           </div>
@@ -1576,22 +1565,26 @@ export default function MarketNews() {
       return;
     }
 
+    // Serve from cache immediately so the calendar shows without waiting for network
+    const cached = readCalendarCache(safeTimeZone);
+    if (cached) {
+      setCalendar(cached.events);
+      setCalendarIsToday(cached.isToday);
+    }
+
     try {
       const calendarResult = await fetchForexFactoryCalendar(safeTimeZone, weeksAhead);
       if (calendarResult.events.length > 0) {
         writeCalendarCache(calendarResult, safeTimeZone);
         setCalendar(calendarResult.events);
         setCalendarIsToday(calendarResult.isToday);
-        return;
       }
-
-      const cached = readCalendarCache(safeTimeZone);
-      setCalendar(cached?.events ?? []);
-      setCalendarIsToday(cached?.isToday ?? true);
     } catch {
-      const cached = readCalendarCache(safeTimeZone);
-      setCalendar(cached?.events ?? []);
-      setCalendarIsToday(cached?.isToday ?? true);
+      // Network failed — cached data already applied above
+      if (!cached) {
+        setCalendar([]);
+        setCalendarIsToday(true);
+      }
     }
   }, [prefs.economicCalendar, preferences.timezone]);
 
