@@ -27,6 +27,7 @@ export interface ScannerContext {
   red_box?: Omit<ComponentBounds, 'count'>
   green_box?: Omit<ComponentBounds, 'count'>
   entry_box?: Omit<ComponentBounds, 'count'>
+  time_axis_entry_x_ratio?: number  // where the entry candle sits within the time-axis-focus crop (0–1)
 }
 
 const SYMBOL_MAP: Record<string, string> = {
@@ -57,6 +58,8 @@ const DEFAULT_FOCUS_CROPS: CropPreset[] = [
   { name: 'entry-label-focus', x: 0.83, y: 0.4, width: 0.17, height: 0.08 },
   { name: 'stop-label-focus', x: 0.83, y: 0.28, width: 0.17, height: 0.08 },
   { name: 'target-label-focus', x: 0.83, y: 0.52, width: 0.17, height: 0.08 },
+  // wide strip of the x-axis bottom — entry position unknown in fallback mode
+  { name: 'time-axis-focus', x: 0.08, y: 0.88, width: 0.72, height: 0.12 },
 ]
 
 const DEFAULT_SCANNER_COLORS = {
@@ -201,11 +204,11 @@ function makeZoneMatcher(
   const maxCh = Math.max(cr, cg, cb)
 
   if (maxCh === cr && cr > cg + 20 && cr > cb + 20) {
-    // Red-dominant (e.g. #C0392B, #E74C3C, any red shade)
+    // Red-dominant (e.g. #C0392B, #E74C3C)
     return (pr, pg, pb) => pr > pg + 8 && pr > pb + 5 && pr > 60
   }
   if (cr > cg + 20 && cg > cb + 20) {
-    // Orange (r > g > b, e.g. #E67E22) — treat as red-dominant for detection
+    // Orange (r > g > b, e.g. #E67E22)
     return (pr, pg, pb) => pr > pb + 30 && pr > pg - 20 && pr > 80
   }
   if (maxCh === cg && cg > cr + 10) {
@@ -220,7 +223,15 @@ function makeZoneMatcher(
     // Teal/cyan (e.g. #1A6B5A — low R, similar G+B)
     return (pr, pg, pb) => pg > pr + 15 && pb > pr + 10 && pg > 50
   }
-  // Neutral/grey — low saturation (all channels similar)
+  if (cr > cg + 10 && cb > cg + 10) {
+    // Purple/magenta (r ≈ b, both above g, e.g. #8E44AD, #FF00FF)
+    return (pr, pg, pb) => pr > pg + 8 && pb > pg + 8 && Math.max(pr, pb) > 60
+  }
+  if (cr > cb + 10 && cg > cb + 10) {
+    // Yellow (r ≈ g, both above b, e.g. #F1C40F, #FFD700)
+    return (pr, pg, pb) => pr > pb + 10 && pg > pb + 10 && Math.min(pr, pg) > 70
+  }
+  // Neutral/grey — low saturation
   const sat = Math.max(cr, cg, cb) - Math.min(cr, cg, cb)
   if (sat < 35) {
     return (pr, pg, pb) => {
@@ -229,7 +240,12 @@ function makeZoneMatcher(
       return (mx - mn) < 30 && mx > 65 && mx < 215
     }
   }
-  return fallback
+  // Generic fallback: match pixels where the same channel that dominates the
+  // configured hex also dominates in the rendered pixel — covers any remaining
+  // color that didn't fit the named branches above.
+  if (cr >= cg && cr >= cb) return (pr, pg, pb) => pr > pg && pr > pb && pr > 55
+  if (cg >= cr && cg >= cb) return (pr, pg, pb) => pg > pr && pg > pb && pg > 55
+  return (pr, pg, pb) => pb > pr && pb > pg && pb > 55
 }
 
 function findLargestComponent(mask: Uint8Array, width: number, height: number): ComponentBounds | null {
@@ -654,6 +670,14 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
     ...(includeEntryCandidateCrop && typeof entryLabelCandidateLine === 'number' ? [labelCrop('entry-color-label-focus', entryLabelCandidateLine)] : []),
     labelCrop('stop-label-focus', stopLine),
     labelCrop('target-label-focus', targetLine),
+    // thin strip of the x-axis bottom, centered on the entry candle, for precise time label reading
+    {
+      name: 'time-axis-focus',
+      x: clampRatio(left - chartWidth * 0.28, chartLeft, 0.72),
+      y: 0.88,
+      width: clampRatio(chartWidth * 0.56, 0.28, 0.70),
+      height: 0.12,
+    },
   ]
 }
 
@@ -677,6 +701,23 @@ export async function buildScannerAssets(
     entry:      colors?.entry      ?? DEFAULT_SCANNER_COLORS.entry,
   }
   const scannerContext = detectTradeBoxContext(image, resolvedColors.stopLoss, resolvedColors.takeProfit, resolvedColors.entry)
+
+  // Compute where the entry candle sits within the time-axis-focus crop (0–1 ratio),
+  // so the Gemini prompt can tell it exactly where to look for the nearest time label.
+  if (scannerContext?.box_left_ratio !== undefined) {
+    const _chartLeft = scannerContext.chart_left_ratio ?? 0
+    const _chartRight = scannerContext.chart_right_ratio ?? 1
+    const _chartW = Math.max(0.22, _chartRight - _chartLeft)
+    const _left = scannerContext.box_left_ratio
+    const _taxX = clampRatio(_left - _chartW * 0.28, _chartLeft, 0.72)
+    const _taxW = clampRatio(_chartW * 0.56, 0.28, 0.70)
+    scannerContext.time_axis_entry_x_ratio = clampRatio(
+      (_left - _taxX) / Math.max(0.01, _taxW),
+      0.05,
+      0.95,
+    )
+  }
+
   const focusCrops = buildDynamicFocusCrops(scannerContext)
 
   const focusImages = await Promise.all(

@@ -398,7 +398,10 @@
 
 .tj-entry-panel {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .tj-entry-panel::-webkit-scrollbar {
@@ -1200,11 +1203,9 @@
 }
 
 .scanner-empty-entry {
-  min-height: calc(100vh - 56px);
-  height: calc(100vh - 56px);
-  align-items: flex-start;
-  padding-top: clamp(88px, 18vh, 180px);
-  padding-bottom: 40px;
+  height: 100%;
+  align-items: center;
+  padding: 40px 24px;
   overflow: hidden;
 }
 

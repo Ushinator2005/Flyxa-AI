@@ -260,6 +260,7 @@ export async function readTradeChart(
     entryLineRatio?: number;
     stopLineRatio?: number;
     targetLineRatio?: number;
+    timeAxisEntryXRatio?: number;
   },
 ): Promise<{
   symbol: string | null;
@@ -379,6 +380,7 @@ ${directionHint ? `- Detected compact position-tool direction: ${directionHint}`
 ${typeof lineHints?.entryLineRatio === 'number' ? `- entry-label-focus is centered near ${Math.round(lineHints.entryLineRatio * 100)}% image height: read entry_price from the RIGHT-AXIS pill/label at this shared boundary. If you see TWO labels at this level — one with a ⊕/+ icon on its left (cursor label) and one without — read the one WITHOUT the ⊕/+ icon.` : ''}
 ${typeof lineHints?.stopLineRatio === 'number' ? `- stop-label-focus is centered near ${Math.round(lineHints.stopLineRatio * 100)}% image height: read sl_price at this stop boundary.` : ''}
 ${typeof lineHints?.targetLineRatio === 'number' ? `- target-label-focus is centered near ${Math.round(lineHints.targetLineRatio * 100)}% image height: read tp_price at this target boundary.` : ''}
+${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `- time-axis-focus crop: a zoomed strip of the chart bottom near the entry candle. The entry candle sits at approximately ${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the LEFT edge of this crop. Use this crop as your primary view for x-axis time labels in Step 5.` : ''}
 If a right-axis label away from these geometry lines is easier to read, IGNORE IT. Do not use the live/current price label, the last traded price label, or a large orderblock/demand/supply-zone label as entry/sl/tp.
 For a Long position tool, TP/green is above entry and SL/red is below entry. For a Short position tool, SL/red is above entry and TP/green is below entry.
 If the numbers you read imply the opposite direction from the detected compact tool, your price read is wrong — re-read the labels at the geometry lines instead of flipping direction.
@@ -497,7 +499,7 @@ NEVER use the live floating current-price label on the right axis as a trade lev
 
 STEP 5 — ESTIMATE ENTRY AND CLOSE TIME (CANDLE-COUNT METHOD — MANDATORY):
 Do NOT simply read the nearest x-axis label as the entry time. That method is wrong when the entry candle sits between two time labels. You MUST use the candle-count interpolation method described below.
-
+${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `PRIMARY SOURCE: A crop labelled time-axis-focus is provided. It is a zoomed strip of the chart bottom around the entry candle — time labels are much clearer here than in the full chart. The pixel geometry section above told you the entry candle sits at ~${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the left of this crop. In Step A below, read labels from time-axis-focus first. Pick the label whose horizontal position is closest to ${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the left of that crop as your primary T_anchor.\n` : ''}
 A. READ ALL VISIBLE X-AXIS TIME LABELS
    Scan the entire bottom edge of the chart and note every time label printed there (e.g. 08:00, 08:15, 08:30, 09:00, 09:30, 10:00, etc.).
    Each label is printed directly below the candle whose open time it represents — that candle is the reference candle for that label.
@@ -833,6 +835,7 @@ export async function analyzeChartImage(
     entryLineRatio: readRatioHint('entry_line_ratio'),
     stopLineRatio: readRatioHint('stop_line_ratio'),
     targetLineRatio: readRatioHint('target_line_ratio'),
+    timeAxisEntryXRatio: readRatioHint('time_axis_entry_x_ratio'),
   };
   const hasLineHints = Object.values(lineHints).some(value => typeof value === 'number');
 

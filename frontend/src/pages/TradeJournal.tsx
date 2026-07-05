@@ -2281,7 +2281,9 @@ export default function TradeJournal() {
     const allTrades = entries.flatMap(e =>
       e.trades.filter(t => t.result !== 'open').map(t => ({ ...t, entryDate: e.date }))
     );
-    const sorted = [...allTrades].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
+    const sorted = [...allTrades].sort((a, b) =>
+      a.entryDate.localeCompare(b.entryDate) || (a.entryTime ?? '').localeCompare(b.entryTime ?? '')
+    );
     const last10 = sorted.slice(-10);
 
     // Per-trade bar data — ratio in [-1, +1] relative to largest trade
@@ -3768,8 +3770,9 @@ export default function TradeJournal() {
                 {(() => {
                   const _contractRule = riskRules.find(r => r.kind === 'max_contracts');
                   const _contractLimits = (_contractRule?.contractLimits as Record<string, number> | undefined) ?? {};
-                  const _patternFlags = computeTradePatternFlags(selectedEntry.trades, _contractLimits);
-                  return selectedEntry.trades.map((trade, tradeIdx) => (
+                  const _sortedTrades = [...selectedEntry.trades].sort((a, b) => (a.entryTime ?? '').localeCompare(b.entryTime ?? ''));
+                  const _patternFlags = computeTradePatternFlags(_sortedTrades, _contractLimits);
+                  return _sortedTrades.map((trade, tradeIdx) => (
                   deleteTradeId === trade.id ? (
                     <div key={trade.id} className="tj-delete-row">
                       <span className="tj-delete-text">Delete this trade?</span>
