@@ -2,8 +2,10 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   FileText,
   Image as ImageIcon,
   Maximize2,
@@ -1383,11 +1385,12 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
   rules: RiskRule[];
   onMutateEntry: (fields: Partial<JournalEntry>) => void;
 }) {
+  const [showPassed, setShowPassed] = useState(false);
   const evaluations = evaluateEntryRules(entry as unknown as StoreJournalEntry, rules);
   const verified = evaluations.filter(item => item.state !== 'unchecked');
   const passed = verified.filter(item => item.state === 'ok').length;
   const broken = verified.filter(item => item.state === 'fail');
-  const pct = verified.length > 0 ? Math.round((passed / verified.length) * 100) : null;
+
   const updateManualRule = (label: string, state: RuleState) => {
     const next = entry.rules.some(rule => rule.text === label)
       ? entry.rules.map(rule => rule.text === label ? { ...rule, state } : rule)
@@ -1395,81 +1398,69 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
     onMutateEntry({ rules: next });
   };
 
-  const unconfirmedManual = evaluations.filter(e => e.source === 'manual' && e.state === 'unchecked');
-  const markAllManualPassed = () => {
-    let next = [...entry.rules];
-    for (const ev of unconfirmedManual) {
-      next = next.some(r => r.text === ev.label)
-        ? next.map(r => r.text === ev.label ? { ...r, state: 'ok' as RuleState } : r)
-        : [...next, { text: ev.label, state: 'ok' as RuleState }];
-    }
-    onMutateEntry({ rules: next });
-  };
+  const visibleRows = evaluations.filter(item =>
+    item.state === 'fail' || (item.source === 'manual' && item.state === 'unchecked') || showPassed
+  );
+  const passedCount = evaluations.filter(item => item.state === 'ok').length;
 
-  const tintBg = pct === null ? 'transparent' : pct >= 80 ? 'var(--green-dim)' : pct >= 60 ? 'var(--amber-dim)' : 'var(--red-dim)';
-  const ringColor = pct === null ? 'var(--app-text-subtle)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
-  const circumference = 2 * Math.PI * 20;
-  const dashoffset = pct !== null ? circumference * (1 - pct / 100) : circumference;
+  const RuleRow = ({ item }: { item: typeof evaluations[number] }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 5, background: 'var(--surface-2)' }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <strong style={{ color: 'var(--txt)', fontSize: 10 }}>{item.label}</strong>
+          <span style={{ color: item.source === 'automatic' ? 'var(--green)' : 'var(--cobalt)', fontSize: 8, textTransform: 'uppercase' }}>{item.source}</span>
+        </div>
+        <span style={{ display: 'block', marginTop: 3, color: 'var(--txt-3)', fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.detail}</span>
+      </div>
+      {item.source === 'manual' ? (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button type="button" onClick={() => updateManualRule(item.label, 'ok')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--border)'}`, background: item.state === 'ok' ? 'var(--green-dim)' : 'transparent', color: item.state === 'ok' ? 'var(--green)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Pass</button>
+          <button type="button" onClick={() => updateManualRule(item.label, 'fail')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--border)'}`, background: item.state === 'fail' ? 'var(--red-dim)' : 'transparent', color: item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Break</button>
+        </div>
+      ) : (
+        <span style={{ color: item.state === 'ok' ? 'var(--green)' : item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)', fontSize: 9, fontWeight: 700 }}>
+          {item.state === 'ok' ? 'PASS' : item.state === 'fail' ? 'BREAK' : 'UNVERIFIED'}
+        </span>
+      )}
+    </div>
+  );
 
   return (
-    <div style={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
-      {/* ── Summary strip ── */}
-      <div style={{ background: tintBg, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <svg width="50" height="50" viewBox="0 0 50 50" style={{ flexShrink: 0 }}>
-            <circle cx="25" cy="25" r="20" fill="none" stroke="var(--app-border)" strokeWidth="4" />
-            <circle cx="25" cy="25" r="20" fill="none" stroke={ringColor} strokeWidth="4"
-              strokeDasharray={circumference} strokeDashoffset={dashoffset}
-              strokeLinecap="round" transform="rotate(-90 25 25)" />
-            <text x="25" y="29" textAnchor="middle" fill={ringColor} fontSize="11" fontWeight="700" fontFamily="var(--font-mono)">
-              {pct !== null ? `${pct}%` : '--'}
-            </text>
-          </svg>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--app-text)', marginBottom: 3 }}>
-              Plan Adherence{pct !== null ? `: ${pct}%` : ''}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--app-text-subtle)' }}>
-              {verified.length > 0 ? `${passed} of ${verified.length} verified checks passed` : 'No rules verified yet'}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {passed > 0 && (
-            <span style={{ padding: '3px 9px', borderRadius: 3, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>
-              {passed} passed
-            </span>
-          )}
-          {broken.length > 0 && (
-            <span style={{ padding: '3px 9px', borderRadius: 3, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>
-              {broken.length} broken
-            </span>
-          )}
-        </div>
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
+      {/* ── Section header with badge counts ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>Rule Verification</span>
+        {passedCount > 0 && (
+          <span style={{ padding: '2px 8px', borderRadius: 3, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>{passedCount} passed</span>
+        )}
+        {broken.length > 0 && (
+          <span style={{ padding: '2px 8px', borderRadius: 3, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>{broken.length} broken</span>
+        )}
       </div>
-      {/* ── Rule rows (unchanged) ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12 }}>
-        {evaluations.map(item => (
-          <div key={item.ruleId} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center', padding: '9px 10px', border: '1px solid var(--app-border)', borderRadius: 5, background: 'var(--app-surface-2)' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <strong style={{ color: 'var(--app-text)', fontSize: 10 }}>{item.label}</strong>
-                <span style={{ color: item.source === 'automatic' ? 'var(--green)' : 'var(--cobalt)', fontSize: 8, textTransform: 'uppercase' }}>{item.source}</span>
-              </div>
-              <span style={{ display: 'block', marginTop: 3, color: 'var(--app-text-subtle)', fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.detail}</span>
-            </div>
-            {item.source === 'manual' ? (
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button type="button" onClick={() => updateManualRule(item.label, 'ok')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--app-border)'}`, background: item.state === 'ok' ? 'var(--green-dim)' : 'transparent', color: item.state === 'ok' ? 'var(--green)' : 'var(--app-text-subtle)', fontSize: 9, cursor: 'pointer' }}>Pass</button>
-                <button type="button" onClick={() => updateManualRule(item.label, 'fail')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--app-border)'}`, background: item.state === 'fail' ? 'var(--red-dim)' : 'transparent', color: item.state === 'fail' ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9, cursor: 'pointer' }}>Break</button>
-              </div>
-            ) : (
-              <span style={{ color: item.state === 'ok' ? 'var(--green)' : item.state === 'fail' ? 'var(--red)' : 'var(--app-text-subtle)', fontSize: 9, fontWeight: 700 }}>
-                {item.state === 'ok' ? 'PASS' : item.state === 'fail' ? 'BREAK' : 'UNVERIFIED'}
-              </span>
-            )}
-          </div>
-        ))}
+      {/* ── Rule rows ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10 }}>
+        {visibleRows.map(item => <RuleRow key={item.ruleId} item={item} />)}
+        {!showPassed && passedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowPassed(true)}
+            style={{ fontSize: 10, color: 'var(--txt-3)', background: 'none', border: '1px dashed var(--border)', borderRadius: 5, padding: '6px 10px', cursor: 'pointer', textAlign: 'left' }}
+          >
+            Show {passedCount} passed check{passedCount !== 1 ? 's' : ''}
+          </button>
+        )}
+        {showPassed && passedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowPassed(false)}
+            style={{ fontSize: 10, color: 'var(--txt-3)', background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'left' }}
+          >
+            Hide passed checks
+          </button>
+        )}
+        {evaluations.length === 0 && (
+          <span style={{ fontSize: 11, color: 'var(--txt-3)', padding: '4px 0' }}>No rules configured</span>
+        )}
       </div>
     </div>
   );
@@ -2264,6 +2255,230 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
   );
 }
 
+const ALL_BEHAVIORAL_FLAGS = [...BEHAVIORAL_FLAGS_LEFT, ...BEHAVIORAL_FLAGS_RIGHT];
+
+function TradeJournalCard({
+  trade, entry, allEntries, onMutate, onMutateEntry,
+}: {
+  trade: JournalTrade;
+  entry: JournalEntry;
+  allEntries: JournalEntry[];
+  onMutate: (f: Partial<JournalTrade>) => void;
+  onMutateEntry: (f: Partial<JournalEntry>) => void;
+}) {
+  const [showPsychDetail, setShowPsychDetail] = useState(false);
+  const [showFlagPopover, setShowFlagPopover] = useState(false);
+
+  // ── Thesis / Invalidation ────────────────────────────────────
+  const th = trade.thesis ?? { setup: '', invalidation: '', asymmetry: '', setupType: '' };
+  const [localThesis, setLocalThesis] = useState({ setup: th.setup ?? '', invalidation: th.invalidation ?? '' });
+  const { confluenceOptions } = useAppSettings();
+  const [confluenceDraft, setConfluenceDraft] = useState('');
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  useEffect(() => {
+    setLocalThesis({ setup: trade.thesis?.setup ?? '', invalidation: trade.thesis?.invalidation ?? '' });
+    setConfluenceDraft('');
+    setSuggestionIndex(-1);
+  }, [trade.id]);
+
+  const commitThesis = (field: 'setup' | 'invalidation', value: string) =>
+    onMutate({ thesis: { ...th, [field]: value } });
+
+  // ── Confluences ───────────────────────────────────────────────
+  const confluences = normalizeConfluences(trade.confluences);
+  const setConfluences = (next: string[]) => onMutate({ confluences: normalizeConfluences(next) });
+  const suggestions = confluenceDraft.trim().length > 0
+    ? confluenceOptions.filter(opt =>
+        opt.toLowerCase().includes(confluenceDraft.toLowerCase()) &&
+        !confluences.some(c => normalizeConfluenceKey(c) === normalizeConfluenceKey(opt))
+      )
+    : [];
+  const addConfluence = () => {
+    const next = (suggestionIndex >= 0 && suggestions[suggestionIndex]) ? suggestions[suggestionIndex] : confluenceDraft.trim();
+    if (!next) return;
+    setConfluences([...confluences, next]);
+    setConfluenceDraft(''); setSuggestionIndex(-1);
+  };
+
+  // ── Behavioral flags ─────────────────────────────────────────
+  const flags = trade.behavioralFlags ?? [];
+  const toggleFlag = (id: string) => {
+    const next = flags.includes(id) ? flags.filter(f => f !== id) : [...flags, id];
+    onMutate({ behavioralFlags: next });
+  };
+  const checkedFlags = ALL_BEHAVIORAL_FLAGS.filter(f => flags.includes(f.id));
+
+  // ── Psychology inline ─────────────────────────────────────────
+  const r = trade.psychologyRatings ?? { setupQuality: 0, discipline: 0, execution: 0, patience: 0, riskManagement: 0, emotionalControl: 0, notes: {} };
+  const updatePsych = (patch: Partial<typeof r>) => onMutate({ psychologyRatings: { ...r, ...patch } });
+  const psychKeys: Array<{ key: keyof Omit<typeof r, 'notes'>; label: string }> = [
+    { key: 'discipline', label: 'Discipline' },
+    { key: 'execution', label: 'Execution' },
+    { key: 'riskManagement', label: 'Risk' },
+    { key: 'emotionalControl', label: 'Control' },
+  ];
+  const pipColor = (score: number, v: number) =>
+    score >= v ? (score <= 2 ? 'var(--red)' : score === 3 ? 'var(--amber)' : 'var(--green)') : 'var(--surface-2)';
+
+  // ── State of mind (from entry) ────────────────────────────────
+  const emotions = entry.emotions;
+  const activeEmotions = emotions.filter(e => e.state !== 'neutral');
+  const somColor = (state: string) => state === 'green' ? 'var(--green)' : state === 'amber' ? 'var(--amber)' : 'var(--red)';
+  const somBorder = (state: string) => state === 'green' ? 'var(--green-border)' : state === 'amber' ? 'var(--amber-border)' : 'var(--red-border)';
+  const somBg = (state: string) => state === 'green' ? 'var(--green-dim)' : state === 'amber' ? 'var(--amber-dim)' : 'var(--red-dim)';
+
+  // Save thesis on unmount
+  const unmountRef = useRef({ localThesis, th, onMutate });
+  unmountRef.current = { localThesis, th, onMutate };
+  useEffect(() => {
+    return () => {
+      const { localThesis: l, th: t, onMutate: m } = unmountRef.current;
+      if (l.setup !== t.setup || l.invalidation !== t.invalidation) {
+        m({ thesis: { ...t, setup: l.setup, invalidation: l.invalidation } });
+      }
+    };
+  }, []);
+
+  const THESIS_COLS = [
+    { key: 'setup' as const, title: 'Trade Thesis', placeholder: 'What edge did you see? Why this level, this direction, right now?' },
+    { key: 'invalidation' as const, title: 'Invalidation', placeholder: 'If price does X, the trade is invalid and I should be out.' },
+  ];
+
+  return (
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'visible', marginBottom: 8 }}>
+      {/* ── Row 1: Thesis + Invalidation ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--border)' }}>
+        {THESIS_COLS.map((col, i) => (
+          <div key={col.key} style={{ borderRight: i < 1 ? '1px solid var(--border)' : undefined }}>
+            <div style={{ padding: '7px 12px 5px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{col.title}</span>
+            </div>
+            <textarea
+              value={localThesis[col.key]}
+              onChange={e => setLocalThesis(p => ({ ...p, [col.key]: e.target.value }))}
+              onBlur={e => commitThesis(col.key, e.target.value)}
+              placeholder={col.placeholder}
+              className="tj-reflect"
+              style={{ minHeight: 64, fontSize: 12, padding: '8px 12px', display: 'block' }}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* ── Row 2: Confluence chips ── */}
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', position: 'relative' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+          {confluences.map((item, idx) => (
+            <button
+              key={`${item}-${idx}`}
+              type="button"
+              onClick={() => setConfluences(confluences.filter((_, i) => i !== idx))}
+              title="Remove"
+              style={{ padding: '3px 8px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--txt-2)', cursor: 'pointer' }}
+            >
+              {item} ×
+            </button>
+          ))}
+          <div style={{ position: 'relative' }}>
+            <input
+              value={confluenceDraft}
+              onChange={e => { setConfluenceDraft(e.target.value); setSuggestionIndex(-1); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); addConfluence(); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); setSuggestionIndex(i => Math.min(i + 1, suggestions.length - 1)); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setSuggestionIndex(i => Math.max(i - 1, -1)); }
+                else if (e.key === 'Escape') { setSuggestionIndex(-1); setConfluenceDraft(''); }
+              }}
+              onBlur={() => { if (confluenceDraft.trim()) addConfluence(); }}
+              placeholder="+ add confluence"
+              style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--txt-2)', outline: 'none', width: 140 }}
+            />
+            {suggestions.length > 0 && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 4px 14px rgba(0,0,0,0.35)', minWidth: 200, maxHeight: 160, overflowY: 'auto' }}>
+                {suggestions.map((opt, i) => (
+                  <button key={opt} type="button" onMouseDown={e => { e.preventDefault(); setConfluences([...confluences, opt]); setConfluenceDraft(''); setSuggestionIndex(-1); }} onMouseEnter={() => setSuggestionIndex(i)}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 11, background: i === suggestionIndex ? 'var(--cobalt-dim)' : 'transparent', color: i === suggestionIndex ? '#8ab6ff' : 'var(--txt-2)', border: 'none', cursor: 'pointer' }}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 3: Behavioral flag chips ── */}
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', position: 'relative' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+          {checkedFlags.map(f => (
+            <button key={f.id} type="button" onClick={() => toggleFlag(f.id)} title="Remove flag"
+              style={{ padding: '3px 8px', fontSize: 10, borderRadius: 4, border: '1px solid var(--red-border)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer' }}>
+              {f.label} ×
+            </button>
+          ))}
+          <div style={{ position: 'relative' }}>
+            <button type="button" onClick={() => setShowFlagPopover(p => !p)}
+              style={{ padding: '3px 8px', fontSize: 10, borderRadius: 4, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--txt-3)', cursor: 'pointer' }}>
+              + add flag
+            </button>
+            {showFlagPopover && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 400, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.45)', minWidth: 260, maxHeight: 320, overflowY: 'auto', padding: 8 }}
+                onMouseLeave={() => setShowFlagPopover(false)}>
+                {ALL_BEHAVIORAL_FLAGS.map(f => {
+                  const checked = flags.includes(f.id);
+                  return (
+                    <button key={f.id} type="button" onClick={() => { toggleFlag(f.id); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', fontSize: 11, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: checked ? 'var(--red)' : 'var(--txt-2)' }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 2, border: `1px solid ${checked ? 'var(--red-border)' : 'var(--border)'}`, background: checked ? 'var(--red-dim)' : 'transparent', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {checked && <span style={{ fontSize: 8, color: 'var(--red)', lineHeight: 1 }}>✕</span>}
+                      </span>
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 4: Psychology inline ── */}
+      <div style={{ padding: '8px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {psychKeys.map(({ key, label }) => {
+            const score = r[key] as number;
+            return (
+              <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>{label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: score === 0 ? 'var(--txt-3)' : score <= 2 ? 'var(--red)' : score === 3 ? 'var(--amber)' : 'var(--green)' }}>
+                  {score === 0 ? '—' : score}
+                </span>
+              </span>
+            );
+          })}
+          {activeEmotions.slice(0, 2).map(e => (
+            <span key={e.label} style={{ padding: '2px 6px', fontSize: 9, borderRadius: 3, border: `1px solid ${somBorder(e.state)}`, background: somBg(e.state), color: somColor(e.state) }}>
+              {e.label}
+            </span>
+          ))}
+          <span style={{ flex: 1 }} />
+          <button type="button" onClick={() => setShowPsychDetail(p => !p)}
+            style={{ fontSize: 10, color: 'var(--cobalt)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            Detail {showPsychDetail ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          </button>
+        </div>
+        {showPsychDetail && (
+          <div style={{ marginTop: 10 }}>
+            <PsychologyRatingsBlock trade={trade} onMutate={onMutate} />
+            <StateOfMindBlock entry={entry} activeTrade={trade} onMutateEntry={onMutateEntry} onMutateTrade={onMutate} />
+            <PreEntryBlock trade={trade} entry={entry} allEntries={allEntries} onMutate={onMutate} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TradeJournal() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -2367,6 +2582,9 @@ export default function TradeJournal() {
   const [isEntryDateEditorOpen, setIsEntryDateEditorOpen] = useState(false);
   const [entryDateDraft, setEntryDateDraft] = useState(getTodayIso(preferences.timezone));
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
+  // Reset expanded row when the selected day changes
+  useEffect(() => { setExpandedTradeId(null); }, [selectedEntryId]);
 
   // Collapsible section state — persisted to localStorage
   const COLLAPSE_KEY = 'flyxa-journal-sections';
@@ -3441,6 +3659,8 @@ export default function TradeJournal() {
                     const pctColor = adherencePct !== null
                       ? (adherencePct >= 80 ? 'var(--green)' : adherencePct >= 60 ? 'var(--amber)' : 'var(--red)')
                       : 'var(--txt-2)';
+                    const headerAccount = accounts.find(a => a.id === selectedEntry.account);
+                    const totalContracts = selectedEntry.trades.reduce((sum, t) => sum + (t.contracts > 0 ? t.contracts : 1), 0);
                     return (
                       <>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: pnlColor, fontWeight: 500 }}>
@@ -3449,8 +3669,20 @@ export default function TradeJournal() {
                         <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--txt-3)', display: 'inline-block', flexShrink: 0 }} />
                         {adherencePct !== null && (
                           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: pctColor, fontWeight: 500 }}>
-                            {adherencePct}% rule adherence
+                            {adherencePct}% adherence
                           </span>
+                        )}
+                        {headerAccount && (
+                          <>
+                            <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--txt-3)', display: 'inline-block', flexShrink: 0 }} />
+                            <span style={{ fontSize: 13, color: 'var(--txt-2)' }}>{headerAccount.name}</span>
+                          </>
+                        )}
+                        {selectedEntry.trades.length > 0 && (
+                          <>
+                            <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--txt-3)', display: 'inline-block', flexShrink: 0 }} />
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--txt-2)' }}>{totalContracts} contract{totalContracts !== 1 ? 's' : ''}</span>
+                          </>
                         )}
                       </>
                     );
@@ -3559,28 +3791,12 @@ export default function TradeJournal() {
                       { label: 'WIN RATE', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{toPercent(stats.winRate)}</span> },
                       { label: 'AVG R:R', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{toR(stats.avgRR)}</span> },
                       { label: 'TRADES', node: <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{String(stats.tradeCount)}</span> },
-                      { label: 'TRADE LENGTH', node: activeTrade ? (
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-                          <input type="number" className="tj-stat-value tj-stat-editable" value={draftDuration} min={0} placeholder="—"
-                            title="Duration in minutes"
-                            onChange={e => setDraftDuration(e.target.value)}
-                            onBlur={() => {
-                              if (!activeTrade) return;
-                              const mins = parseInt(draftDuration, 10);
-                              mutateTradeFields(activeTrade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
-                            }} />
-                          <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>min</span>
-                        </div>
-                      ) : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>{formatDurationLabel(resolveTradeDurationMinutes(null))}</span> },
-                      { label: 'ENTRY TIME', node: activeTrade ? (
-                        <input type="time" className="tj-stat-value tj-stat-editable" value={draftEntryTime}
-                          onChange={e => setDraftEntryTime(e.target.value)}
-                          onBlur={() => {
-                            if (activeTrade && draftEntryTime !== activeTrade.entryTime) {
-                              mutateTradeFields(activeTrade.id, { entryTime: draftEntryTime });
-                            }
-                          }} />
-                      ) : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt)' }}>--:--</span> },
+                      { label: 'PROCESS', node: activeTrade ? (
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--amber)' }}>{computeProcessScore(activeTrade)}</span>
+                      ) : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt-3)' }}>--</span> },
+                      { label: 'ADHERENCE', node: adherencePct !== null ? (
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: adherencePct >= 80 ? 'var(--green)' : adherencePct >= 60 ? 'var(--amber)' : 'var(--red)' }}>{adherencePct}%</span>
+                      ) : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: 'var(--txt-3)' }}>--</span> },
                     ].map((cell, i, arr) => (
                       <div key={cell.label} style={{ flex: 1, padding: '10px 14px', borderRight: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
                         <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', marginBottom: 4 }}>{cell.label}</div>
@@ -3627,17 +3843,6 @@ export default function TradeJournal() {
                   >
                     + Add image
                   </button>
-                  {activeTrade && (
-                    <button
-                      type="button"
-                      className="tj-add-imgs-btn"
-                      title="Add supporting image"
-                      onClick={() => supportingImageInputRef.current?.click()}
-                    >
-                      <Plus size={10} />
-                      Add image
-                    </button>
-                  )}
                 </span>
               </div>
               <div className="tj-shot-viewer" data-tour-id="scanner-screenshot">
@@ -3802,75 +4007,96 @@ export default function TradeJournal() {
                       className={`tj-trade-card ${trade.result}${activeTradeId === trade.id ? ' active' : ''}${selectedTradeIds.has(trade.id) ? ' tj-trade-selected' : ''}`}
                       onClick={() => { setActiveTradeId(trade.id); setSelectedTradeIds(new Set()); setBulkDeleteConfirm(false); }}
                       aria-current={activeTradeId === trade.id ? 'true' : undefined}
-                      style={{ position: 'relative' }}
+                      style={{ position: 'relative', flexDirection: 'column', alignItems: 'stretch', padding: 0 }}
                     >
-                      <button
-                        type="button"
-                        className="tj-check-btn"
-                        aria-label={selectedTradeIds.has(trade.id) ? 'Deselect trade' : 'Select trade'}
-                        onClick={e => {
-                          e.stopPropagation();
-                          setSelectedTradeIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(trade.id)) next.delete(trade.id); else next.add(trade.id);
-                            return next;
-                          });
-                        }}
-                      >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--border)'}`, background: selectedTradeIds.has(trade.id) ? 'var(--amber-dim)' : 'transparent', flexShrink: 0 }}>
-                          {selectedTradeIds.has(trade.id) && <span style={{ fontSize: 9, color: 'var(--amber)', lineHeight: 1 }}>✓</span>}
+                      {/* ── Collapsed header row ── */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px' }}>
+                        <button
+                          type="button"
+                          className="tj-check-btn"
+                          aria-label={selectedTradeIds.has(trade.id) ? 'Deselect trade' : 'Select trade'}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setSelectedTradeIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(trade.id)) next.delete(trade.id); else next.add(trade.id);
+                              return next;
+                            });
+                          }}
+                        >
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--border)'}`, background: selectedTradeIds.has(trade.id) ? 'var(--amber-dim)' : 'transparent', flexShrink: 0 }}>
+                            {selectedTradeIds.has(trade.id) && <span style={{ fontSize: 9, color: 'var(--amber)', lineHeight: 1 }}>✓</span>}
+                          </span>
+                        </button>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>#{tradeIdx + 1}</span>
+                        <span className="tj-symbol">{trade.symbol}</span>
+                        <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
+                        {trade.result === 'breakeven' && (
+                          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', padding: '2px 5px', borderRadius: 3, background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber)', flexShrink: 0 }}>BE</span>
+                        )}
+                        {_patternFlags.has(trade.id) && (() => {
+                          const _flag = _patternFlags.get(trade.id)!;
+                          const _isOvertrading = _flag.includes('trades in 10min');
+                          return _isOvertrading ? (
+                            <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.45)', borderRadius:3, fontSize:11, fontWeight:600, letterSpacing:'0.02em', color:'#f87171', flexShrink:0, whiteSpace:'nowrap', textTransform:'uppercase' }}>
+                              <AlertTriangle size={11} style={{ flexShrink:0 }} />
+                              {_flag}
+                            </span>
+                          ) : (
+                            <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-border)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
+                              <AlertTriangle size={10} style={{ flexShrink:0 }} />
+                              {_flag}
+                            </span>
+                          );
+                        })()}
+                        <span style={{ flex: 1 }} />
+                        {(trade.entryTime || trade.durationMinutes != null) && (
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>
+                            {trade.entryTime ?? '--:--'}{trade.durationMinutes != null ? ` · ${formatDurationLabel(resolveTradeDurationMinutes(trade))}` : ''}
+                          </span>
+                        )}
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: trade.pnl > 0 ? 'var(--green)' : trade.pnl < 0 ? 'var(--red)' : 'var(--txt-2)', flexShrink: 0 }}>
+                          {formatSignedCurrency(trade.pnl - (trade.commission ?? 0))}
                         </span>
-                      </button>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>#{tradeIdx + 1}</span>
-                      <span className="tj-symbol">{trade.symbol}</span>
-                      <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
-                      <span style={{ flex: 1 }} />
-                      {_patternFlags.has(trade.id) && (() => {
-                        const _flag = _patternFlags.get(trade.id)!;
-                        const _isOvertrading = _flag.includes('trades in 10min');
-                        return _isOvertrading ? (
-                          <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.45)', borderRadius:3, fontSize:11, fontWeight:600, letterSpacing:'0.02em', color:'#f87171', flexShrink:0, whiteSpace:'nowrap', textTransform:'uppercase' }}>
-                            <AlertTriangle size={11} style={{ flexShrink:0 }} />
-                            {_flag}
-                          </span>
-                        ) : (
-                          <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 6px', background:'var(--red-dim)', border:'1px solid var(--red-border)', borderRadius:3, fontSize:10, color:'var(--red)', flexShrink:0, whiteSpace:'nowrap' }}>
-                            <AlertTriangle size={10} style={{ flexShrink:0 }} />
-                            {_flag}
-                          </span>
-                        );
-                      })()}
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: trade.pnl > 0 ? 'var(--green)' : trade.pnl < 0 ? 'var(--red)' : 'var(--txt-2)' }}>
-                        {formatSignedCurrency(trade.pnl - (trade.commission ?? 0))}
-                      </span>
-                      <button type="button" className="tj-trash-btn" onClick={e => { e.stopPropagation(); setDeleteTradeId(trade.id); }}>
-                        <Trash2 size={13} />
-                      </button>
+                        <button
+                          type="button"
+                          style={{ background: 'none', border: 'none', padding: '2px 2px', cursor: 'pointer', color: 'var(--txt-3)', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+                          aria-label={expandedTradeId === trade.id ? 'Collapse price levels' : 'Expand price levels'}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setActiveTradeId(trade.id);
+                            setExpandedTradeId(prev => prev === trade.id ? null : trade.id);
+                          }}
+                        >
+                          {expandedTradeId === trade.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                        <button type="button" className="tj-trash-btn" onClick={e => { e.stopPropagation(); setDeleteTradeId(trade.id); }}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      {/* ── Expanded price levels ── */}
+                      {expandedTradeId === trade.id && (
+                        <div style={{ borderTop: '1px solid var(--border)', padding: '0 10px 10px' }} onClick={e => e.stopPropagation()}>
+                          <PriceLevelsBlock
+                            trade={trade}
+                            onMutate={fields => mutateTradeFields(trade.id, fields)}
+                          />
+                        </div>
+                      )}
                     </div>
                   )
                   ))
                 ;})()}
               </div></>)}
 
-              {/* ── SECTION 6: PRICE LEVELS (only when active trade) ── */}
-              {activeTrade && (
-                <PriceLevelsBlock
-                  trade={activeTrade}
-                  onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+              {/* ── SECTION 6B: RULE VERIFICATION — hidden on blank days ── */}
+              {selectedEntry.trades.length > 0 && (
+                <RuleComplianceBlock
+                  entry={selectedEntry}
+                  rules={riskRules}
+                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
                 />
               )}
-
-              {/* ── SECTION 6B: RULE VERIFICATION — hidden on blank days ── */}
-              {selectedEntry.trades.length > 0 && (<>
-                <SectionHead title="Rule Verification" sectionKey="ruleVerification" collapsed={!!collapsed['ruleVerification']} onToggle={() => toggleSection('ruleVerification')} />
-                {!collapsed['ruleVerification'] && (
-                  <RuleComplianceBlock
-                    entry={selectedEntry}
-                    rules={riskRules}
-                    onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                  />
-                )}
-              </>)}
 
               {/* ── SECTION 8: DAILY REFLECTION ── */}
               <SectionHead title="Daily Reflection" sectionKey="dailyReflection" collapsed={!!collapsed['dailyReflection']} onToggle={() => toggleSection('dailyReflection')} />
