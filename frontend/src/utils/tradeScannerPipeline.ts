@@ -423,7 +423,7 @@ function detectOverlayHorizontalSpan(
   redMask: Uint8Array,
   greenMask: Uint8Array,
   width: number,
-  height: number,
+  _height: number,
   yMin: number,
   yMax: number,
   fallbackLeft: number,

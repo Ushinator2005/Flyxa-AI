@@ -344,6 +344,13 @@ YOU MUST USE THE ZONE BOUNDARY TO PICK THE CORRECT LABEL:
     - The correct TP label aligns with the BOTTOM OUTER EDGE of the lower teal zone — ignore any label floating below it.
 RULE: When two similarly-colored labels are stacked, ALWAYS choose the inner one (the one sitting at or inside the zone boundary), NOT the one floating outside the boundary.
 
+DIFFERENT-COLOR STACK — LIVE-PRICE PILL vs POSITION LABEL (CRITICAL, COLOR WINS OVER POSITION):
+The live/current-price pill is very often a DIFFERENT color from the position label it sits beside, and only 1–4 points away. Discriminate by CONFIGURED COLOR — never by which label is higher, lower, or "outermost":
+  • sl_price MUST come from a label whose background matches the configured Stop Loss color (${slName}, ${userColors.stopLoss}). A green/teal label is NEVER the stop loss — not even when it is the topmost/outermost label at the top of a SHORT's red zone. In that exact stack the green live-price pill floats just ABOVE the red stop label; the SL is the ${slName} label sitting one step BELOW it, at the true top edge of the pink fill. Do NOT read sl_price from the green pill just because it is highest.
+  • tp_price MUST come from a label whose background matches the configured Take Profit color (${tpName}, ${userColors.takeProfit}). A red/pink label is NEVER the take profit.
+  • Concretely: if a GREEN label and a RED/pink label are stacked within a few points at the top of a SHORT's red zone, the RED one is sl_price and the GREEN one is the live price — ignore the green one entirely.
+COUNTDOWN-TIMER DISQUALIFIER: the live-price pill usually has a small bar-close countdown timer attached directly beneath or beside it (e.g. "00:29", "0:14", "1:03"). ANY right-axis label that has an attached countdown timer is the live price marker — IGNORE IT for sl_price, tp_price, AND entry_price. Read the adjacent configured-color position label instead.
+
 Step 4. IGNORE everything else on the chart completely:
   • Horizontal lines (black, white, or any color) drawn across the chart = key levels, NOT trade prices
   • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price UNLESS the label is exactly aligned with the shared boundary between the compact TP and SL zones and no configured-color entry label is visible
@@ -371,6 +378,8 @@ Position-tool price labels (SL, Entry, TP) are standalone right-axis pills with 
 
 FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
 STACKED LABELS: If two labels of similar color appear stacked near the TP or SL price, use the one that aligns with the OUTER BOUNDARY of the colored zone (the far edge of the zone from entry). The label floating outside the zone boundary is the live price marker — ignore it.
+DIFFERENT-COLOR STACK: The live/current-price pill is often a different color from the stop/target label and sits only 1–4 points away. sl_price is the RED/pink label; tp_price is the TEAL/green label. A GREEN label is NEVER the stop loss even when it is the highest label at the top of a SHORT's red zone — in that case the green pill is the live price floating just above the red stop label; read sl_price from the RED label one step below it. A RED/pink label is never the take profit.
+COUNTDOWN-TIMER DISQUALIFIER: Any right-axis label with a small bar-close countdown timer attached (e.g. "00:29", "0:14") is the live-price marker — ignore it for entry_price, sl_price, and tp_price and read the adjacent colored position label instead.
 `;
 
   const geometrySection = directionHint || lineHints
@@ -480,6 +489,7 @@ The first numbered candle that triggers either level decides the result. Stop sc
 Return that zero-based number as first_touch_candle_index. If no exit is confirmed, return null.
 If price partially moves toward TP then reverses and hits SL — the result is SL, regardless of how far into the TP zone it went.
 NEVER stop scanning early just because price moved deep into one zone. You must check whether it actually reached the outer boundary.
+FORBIDDEN: inferring an exit from penetration depth, speed of movement, zone color/size, or "price was clearly going to hit it". A wick that covers 90% of a zone but stops short of the exact price line triggers NOTHING — keep scanning. Price MUST physically touch or cross the exact sl_price or tp_price line for an exit to exist. When both levels have true touches, the exit is strictly the one whose touch candle comes FIRST (lower candle index) — never the "bigger" move.
 
 SINGLE-CANDLE SPAN RULE — THIS OVERRIDES FIRST TOUCH:
 A candle "spans both levels" when its full range covers both the TP price and the SL price simultaneously:
@@ -655,6 +665,13 @@ Entering the colored zone is not a hit; the wick must reach the OUTER boundary a
 The first touched boundary wins. If neither boundary is visibly touched or ordering is uncertain, return null.
 Ignore the live-price marker and all candles outside the colored position tool.
 
+FORBIDDEN INFERENCES — never treat these as a hit:
+• Fast or deep penetration INTO a zone that stops short of the exact boundary price. A wick covering most of the zone but not reaching ${trade.stop} / ${trade.target} is NOT a hit — keep scanning.
+• "Price was clearly heading for the level" before reversing. Travel direction is not evidence.
+• Zone color or size, or price action after the candidate candle.
+COMMON FAILURE YOU MUST AVOID: price dives deep into the target zone, reverses without its wick ever reaching ${trade.target}, and later a wick DOES reach ${trade.stop}. The correct answer is SL — not TP. Check every candidate wick against the exact numeric price line before accepting it, then re-verify that no EARLIER candle touched the other boundary.
+MANDATORY ORDER CHECK: before returning, explicitly compare the candle index of the first true SL touch and the first true TP touch. Return whichever index is smaller. Only a wick that reaches/crosses the exact price counts as a touch for this comparison.
+
 SINGLE-CANDLE SPAN RULE — HIGHEST PRIORITY:
 If the first candle to touch either boundary simultaneously spans BOTH boundaries in the same candle (${isLong ? `LOW wick ≤ ${trade.stop} AND HIGH wick ≥ ${trade.target}` : `HIGH wick ≥ ${trade.stop} AND LOW wick ≤ ${trade.target}`}), the intra-candle order is unknowable from a static image.
 In that case you MUST return exit_reason: null, confidence: "low". DO NOT default to either side.
@@ -734,7 +751,15 @@ CRITICAL: If there is a large spike or crash candle just outside the left edge o
 This ${boundary} boundary is touched only when ${touchRule}.
 Entering the colored zone without reaching its far outer edge is NOT a touch. The wick must VISIBLY and CLEARLY reach or cross the exact price line at ${price}. A wick that enters the colored zone but appears to stop before the outer edge does not count.
 
+FORBIDDEN INFERENCES — these are NEVER evidence of a touch:
+• Price moving FAST or DEEP into the colored zone. Depth and speed of penetration are irrelevant — a wick that covers 90% of the zone but stops short of ${price} is touched=false.
+• Price "obviously heading toward" the level before reversing. Direction of travel proves nothing.
+• The zone's color, size, or how much of it price traversed.
+• What price did AFTERWARD (reversing, continuing, closing beyond). Only the wick extreme vs ${price} matters.
+The ONLY question you answer: does a wick extreme physically reach or cross the horizontal line at exactly ${price}? Trace that exact line across the chart and compare wick tips against it.
+
 CONSERVATIVE STANDARD: Only return touched=true when you are highly confident the wick unambiguously reaches or exceeds ${price}. If the wick looks close but you are uncertain whether it reaches exactly ${price}, return touched=false. False negatives (missing a touch) are far less damaging than false positives (calling a touch that did not happen).
+Your evidence string MUST state where the decisive wick tip sits relative to the ${price} line (e.g. "candle 4 high wick crosses the ${price} line by ~2 points" or "deepest wick stops visibly short of the line"). If you cannot describe the wick-vs-line relationship, return touched=false.
 
 Scan strictly left-to-right and stop at the earliest candle touching this boundary.
 
@@ -866,39 +891,75 @@ export async function analyzeChartImage(
       stop: result.sl_price,
       target: result.tp_price,
     };
-    const [stopTouch, targetTouch] = await Promise.all([
+    const [stopTouch, targetTouch, independentExit] = await Promise.all([
       detectBoundaryTouch(base64Image, mimeType, focusImages, tradeForVerification, 'SL', boxBounds),
       detectBoundaryTouch(base64Image, mimeType, focusImages, tradeForVerification, 'TP', boxBounds),
+      verifyTradeExit(base64Image, mimeType, focusImages, tradeForVerification, boxBounds),
     ]);
 
-    const stopIndex = stopTouch.first_touch_candle_index;
-    const targetIndex = targetTouch.first_touch_candle_index;
+    // A boundary counts as a confirmed touch only when the conservative scan is NOT
+    // low-confidence. A shaky "the wick looked close to the zone edge" read must never
+    // flip Win/Loss on its own — a wick that merely enters the colored zone without
+    // clearly crossing the outer price line is exactly what produces phantom TP/SL hits.
+    const stopConfirmed = stopTouch.touched && stopTouch.first_touch_candle_index !== null && stopTouch.confidence !== 'low';
+    const targetConfirmed = targetTouch.touched && targetTouch.first_touch_candle_index !== null && targetTouch.confidence !== 'low';
+    const stopIndex = stopConfirmed ? stopTouch.first_touch_candle_index : null;
+    const targetIndex = targetConfirmed ? targetTouch.first_touch_candle_index : null;
 
-    if (stopTouch.touched && stopIndex !== null && (!targetTouch.touched || targetIndex === null || stopIndex < targetIndex)) {
-      verifiedExitReason = 'SL';
-      verifiedFirstTouchIndex = stopIndex;
-      verifiedConfidence = stopTouch.confidence;
-      verifiedEvidence = stopTouch.evidence;
-    } else if (targetTouch.touched && targetIndex !== null && (!stopTouch.touched || stopIndex === null || targetIndex < stopIndex)) {
-      verifiedExitReason = 'TP';
-      verifiedFirstTouchIndex = targetIndex;
-      verifiedConfidence = targetTouch.confidence;
-      verifiedEvidence = targetTouch.evidence;
-    } else if (stopTouch.touched && targetTouch.touched && stopIndex === targetIndex) {
+    // First-touch verdict from the two independent boundary scans.
+    let boundaryExit: 'TP' | 'SL' | null = null;
+    let boundaryIndex: number | null = null;
+    let boundaryConfidence: 'high' | 'medium' | 'low' = 'low';
+    let boundaryEvidence = result.evidence;
+
+    if (stopConfirmed && (!targetConfirmed || (stopIndex as number) < (targetIndex as number))) {
+      boundaryExit = 'SL';
+      boundaryIndex = stopIndex;
+      boundaryConfidence = stopTouch.confidence;
+      boundaryEvidence = stopTouch.evidence;
+    } else if (targetConfirmed && (!stopConfirmed || (targetIndex as number) < (stopIndex as number))) {
+      boundaryExit = 'TP';
+      boundaryIndex = targetIndex;
+      boundaryConfidence = targetTouch.confidence;
+      boundaryEvidence = targetTouch.evidence;
+    } else if (stopConfirmed && targetConfirmed && stopIndex === targetIndex) {
       verificationWarnings.push(
         `SL and TP were both detected on candle ${stopIndex}; intrabar order cannot be determined from the screenshot.`
       );
-    } else {
-      verificationWarnings.push('Neither SL nor TP had a confirmed boundary touch inside the position tool.');
+    }
+
+    // Cross-check the boundary verdict against an independent first-touch pass. The two
+    // methods must not contradict; when they name different outcomes the read is untrustworthy,
+    // so drop to unconfirmed rather than risk a phantom Win/Loss. An uncorroborated verdict is
+    // accepted only when the boundary scan is high-confidence — a lone medium-confidence touch
+    // with no second opinion is flagged for manual review instead of auto-scored.
+    const contradicted = independentExit.exit_reason !== null && independentExit.exit_reason !== boundaryExit;
+    const corroborated = independentExit.exit_reason === boundaryExit;
+
+    if (boundaryExit && contradicted) {
+      verificationWarnings.push(
+        `Exit unconfirmed: boundary scan reads ${boundaryExit} but the independent verifier reads ${independentExit.exit_reason}. Verify Win/Loss manually.`
+      );
+    } else if (boundaryExit && (corroborated || boundaryConfidence === 'high')) {
+      verifiedExitReason = boundaryExit;
+      verifiedFirstTouchIndex = boundaryIndex;
+      verifiedConfidence = boundaryConfidence;
+      verifiedEvidence = boundaryEvidence;
+    } else if (boundaryExit) {
+      verificationWarnings.push(
+        `Exit unconfirmed: boundary scan reads ${boundaryExit} at medium confidence with no independent corroboration. Verify Win/Loss manually.`
+      );
     }
 
     verificationWarnings.push(
-      `Boundary scan: SL=${stopTouch.touched ? `candle ${stopIndex}` : 'not touched'}, TP=${targetTouch.touched ? `candle ${targetIndex}` : 'not touched'}.`
+      `Boundary scan: SL=${stopTouch.touched ? `candle ${stopTouch.first_touch_candle_index} (${stopTouch.confidence})` : 'not touched'}, `
+      + `TP=${targetTouch.touched ? `candle ${targetTouch.first_touch_candle_index} (${targetTouch.confidence})` : 'not touched'}; `
+      + `independent verifier=${independentExit.exit_reason ?? 'null'}.`
     );
 
     if (!verifiedExitReason) {
       verificationWarnings.push(
-        'Exit remains unconfirmed because no unique earliest boundary touch was established.'
+        'Exit remains unconfirmed because no agreed, high-confidence first-touch was established.'
       );
     }
   }
