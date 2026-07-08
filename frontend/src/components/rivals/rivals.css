@@ -4273,3 +4273,105 @@
     justify-content: flex-start;
   }
 }
+
+/* ── Podium presence — restore tier colors on position numbers.
+   A later layer flattened these to grey; gold/silver/bronze (and blue for
+   "me") make the top of the table read at a glance. ── */
+.rv-card-grid .rv-rival-card .rv-card-pos {
+  color: var(--rv-card-tier-color, var(--rv-text-2));
+}
+
+.rv-card-grid .rv-rival-card:nth-child(-n+3) .rv-card-pos {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--rv-card-tier-color, transparent) 45%, transparent);
+}
+
+/* Inspector meta — rank line + gap context side by side */
+.rv-inspector-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Standings as a true table: fixed columns + header row ── */
+.rv-standings-head,
+.rv-card-grid .rv-rival-card {
+  display: grid;
+  grid-template-columns: 44px 36px minmax(0, 1fr) 96px 76px 222px 132px;
+  align-items: center;
+  gap: 10px;
+}
+
+.rv-standings-head {
+  padding: 8px 16px 8px 14px;
+  border-bottom: 1px solid var(--rv-border);
+  color: var(--rv-text-3);
+  font: 650 9px var(--rv-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.rv-standings-head .rvh-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  text-align: center;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.rv-standings-head .rvh-center { text-align: center; }
+.rv-standings-head .rvh-right { text-align: right; }
+
+/* Column alignment inside rows */
+.rv-card-grid .rv-rival-card .rv-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: auto;
+}
+
+.rv-card-grid .rv-rival-card .rv-card-stat {
+  text-align: center;
+  align-items: center;
+}
+
+/* Header row carries the labels now — hide per-cell labels */
+.rv-card-grid .rv-rival-card .rv-card-stat > span { display: none; }
+
+.rv-card-grid .rv-rival-card .rv-form-dots { justify-content: center; }
+
+.rv-card-grid .rv-rival-card .rv-card-volume {
+  text-align: center;
+  justify-self: center;
+}
+
+.rv-card-grid .rv-rival-card .rv-card-pnl {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.rv-ranking-title-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rv-season-chip {
+  color: var(--rv-text-3);
+  font: 650 9px var(--rv-mono);
+  letter-spacing: .08em;
+}
+
+@media (max-width: 900px) {
+  .rv-standings-head { display: none; }
+  .rv-card-grid .rv-rival-card {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .rv-card-grid .rv-rival-card .rv-card-stat > span { display: block; }
+}

@@ -72,11 +72,6 @@ function metricValue(rival: Rival, metric: LeaderboardMetric, period: Leaderboar
   return rival.mascot.stats.backtestSessions;
 }
 
-function formatMetric(rival: Rival, metric: LeaderboardMetric, period: LeaderboardPeriod): string {
-  const value = metricValue(rival, metric, period);
-  return formatMetricValue(value, metric);
-}
-
 function formatMetricValue(value: number, metric: LeaderboardMetric): string {
   if (metric === 'netPnl') return formatCurrency(value);
   if (metric === 'riskAdjusted') return `${value.toFixed(2)}x`;
@@ -89,14 +84,6 @@ function formatMetricGap(value: number, metric: LeaderboardMetric): string {
   if (metric === 'riskAdjusted') return `${Math.max(0, value).toFixed(2)}x`;
   if (metric === 'journalStreak') return `${Math.ceil(Math.max(0, value))} days`;
   return `${Math.ceil(Math.max(0, value))} points`;
-}
-
-function riskAdjustedGrade(value: number): string {
-  if (value < 0) return 'Losing after drawdown';
-  if (value < 1) return 'Below 1x: risk is not paying yet';
-  if (value < 2) return '1x+: acceptable';
-  if (value < 4) return '2x+: strong';
-  return '4x+: elite';
 }
 
 function positionStripeColor(position: number, isMe: boolean | undefined): string {
@@ -195,7 +182,7 @@ export default function Rivals() {
     try { return JSON.parse(localStorage.getItem('flyxa-private-leagues') ?? '[]') as League[]; } catch { return []; }
   });
   const [activeLeagueId, setActiveLeagueId] = useState('all');
-  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'ranks' | 'trades'>('overview');
+  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'trades'>('overview');
   const [sharedTrades, setSharedTrades] = useState<SharedTradeRecord[]>([]);
   const [sharesLoading, setSharesLoading] = useState(false);
   const [viewingSharedTrade, setViewingSharedTrade] = useState<SharedTradeRecord | null>(null);
@@ -219,11 +206,6 @@ export default function Rivals() {
   );
   const filtered = ranked.filter(rival => `${rival.displayName} ${rival.username}`.toLowerCase().includes(query.trim().toLowerCase()));
   const selectedRival = rivals.find(rival => rival.id === selectedRivalId) ?? currentUser;
-  const myRank = currentUser ? ranked.findIndex(rival => rival.id === currentUser.id) + 1 : 0;
-  const nextRival = myRank > 1 ? ranked[myRank - 2] : null;
-  const gapToNext = currentUser && nextRival
-    ? metricValue(nextRival, metric, period) - metricValue(currentUser, metric, period)
-    : 0;
   const seasonProgress = useMemo(() => getSeasonProgress(), []);
   const pendingRequests = rivalRequests.filter(request => request.status === 'pending');
 
@@ -352,42 +334,25 @@ export default function Rivals() {
           </div>
         </section>
 
-        <section className="rv-summary-bar" data-tour-id="rivals-summary">
-          <div className="rv-summary-identity">
-            <RivalAvatar rival={currentUser} />
-            <div><span>Your standing</span><strong>#{myRank || '—'} of {ranked.length}</strong></div>
-          </div>
-          <div className="rv-season-progress">
-            <span>{seasonProgress.label}</span>
-            <i><u style={{ width: `${seasonProgress.pct}%` }} /></i>
-          </div>
-          <div className="rv-summary-metric">
-            <span>{MODES.find(mode => mode.value === metric)?.label}</span>
-            <AnimatedMetric rival={currentUser} metric={metric} period={period} className={metricValue(currentUser, metric, period) >= 0 ? 'positive' : 'negative'} />
-            {metric === 'riskAdjusted' && (
-              <small className="rv-risk-inline-key">
-                <span>{riskAdjustedGrade(metricValue(currentUser, metric, period))}</span>
-                <i title="Risk adjusted = net P&L / max drawdown"><b>1x</b><b>2x</b><b>4x+</b></i>
-              </small>
-            )}
-          </div>
-          <div className="rv-summary-context">
-            {myRank === 1 ? (
-              <span className="rv-leading-badge"><Trophy size={12} /><span>Leading this board</span></span>
-            ) : (
-              <>
-                <span className="rv-summary-gap">{formatMetricGap(gapToNext, metric)}</span>
-                <span>to rank</span>
-                <span className="rv-summary-rank-target">#{Math.max(1, myRank - 1)}</span>
-              </>
-            )}
-          </div>
-        </section>
-
         <div className="rv-competition-layout">
           <main className="rv-ranking-card" data-tour-id="rivals-standings">
-            <div className="rv-ranking-title"><div><h2>{activeLeague?.name ?? 'Standings'}</h2><p>Updated from saved journal trades</p></div><span className="rv-live-indicator"><i /> Live</span></div>
+            <div className="rv-ranking-title">
+              <div><h2>{activeLeague?.name ?? 'Standings'}</h2><p>Updated from saved journal trades</p></div>
+              <div className="rv-ranking-title-right">
+                <span className="rv-season-chip">{seasonProgress.label}</span>
+                <span className="rv-live-indicator"><i /> Live</span>
+              </div>
+            </div>
             <div className="rv-card-grid">
+              <div className="rv-standings-head" aria-hidden="true">
+                <span>#</span>
+                <span />
+                <span>Trader</span>
+                <span className="rvh-center">Last 5</span>
+                <span className="rvh-center">Trades</span>
+                <div className="rvh-stats"><span>Win</span><span>Avg R</span><span>Consist</span></div>
+                <span className="rvh-right">{MODES.find(mode => mode.value === metric)?.label}</span>
+              </div>
               {filtered.map((rival) => {
                 const stats = getPeriodStats(rival, period);
                 const movement = rankMovement(rival, leagueRivals, metric, period);
@@ -456,20 +421,35 @@ export default function Rivals() {
               <div className="rv-inspector-tabs">
                 <button type="button" className={inspectorTab === 'overview' ? 'active' : ''} onClick={() => setInspectorTab('overview')}>Overview</button>
                 <button type="button" className={inspectorTab === 'progress' ? 'active' : ''} onClick={() => setInspectorTab('progress')}>Progress</button>
-                <button type="button" className={inspectorTab === 'ranks' ? 'active' : ''} onClick={() => setInspectorTab('ranks')}>Ranks</button>
                 <button type="button" className={inspectorTab === 'trades' ? 'active' : ''} onClick={() => setInspectorTab('trades')}>Trades</button>
               </div>
               {inspectorTab === 'overview' ? (
                 <>
-                  <div className="rv-inspector-meta">
-                    <span>Rank #{ranked.findIndex(rival => rival.id === selectedRival.id) + 1} of {ranked.length}</span>
-                  </div>
+                  {(() => {
+                    const selectedPosition = ranked.findIndex(rival => rival.id === selectedRival.id) + 1;
+                    const aheadRival = selectedPosition > 1 ? ranked[selectedPosition - 2] : null;
+                    const selectedGap = aheadRival
+                      ? Math.max(0, metricValue(aheadRival, metric, period) - metricValue(selectedRival, metric, period))
+                      : 0;
+                    return (
+                      <div className="rv-inspector-meta">
+                        <span>Rank #{selectedPosition} of {ranked.length}</span>
+                        {aheadRival
+                          ? <span>{formatMetricGap(selectedGap, metric)} behind #{selectedPosition - 1}</span>
+                          : <span>Leading this board</span>}
+                      </div>
+                    );
+                  })()}
                   <div className="rv-insight-equity"><div><span>{PERIODS.find(item => item.value === period)?.label} equity</span><strong className={selectedStats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(selectedStats.netPnl)}</strong></div><Sparkline values={selectedStats.equityCurve} large /></div>
                   <div className="rv-insight-kpis">
                     <Stat label="Trades" value={String(selectedStats.tradeCount)} />
                     <Stat label="Trading days" value={String(selectedStats.tradingDays)} />
                     <Stat label="Win rate" value={`${selectedStats.winRate}%`} />
                     <Stat label="Consistency" value={`${selectedStats.consistency}/100`} />
+                    <Stat label="Avg R" value={selectedStats.avgR == null ? '—' : `${selectedStats.avgR.toFixed(2)}R`} />
+                    <Stat label="Green days" value={String(selectedStats.greenDays)} />
+                    <Stat label="Max drawdown" value={selectedStats.maxDrawdown > 0 ? `-$${Math.abs(selectedStats.maxDrawdown).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'} />
+                    <Stat label="Rule adherence" value={selectedStats.ruleAdherence > 0 ? `${Math.round(selectedStats.ruleAdherence)}%` : '—'} />
                   </div>
                   <p className="rv-trader-note">{selectedStats.consistency >= 75 ? 'High consistency with controlled downside.' : selectedStats.netPnl > 0 ? 'Profitable, with room to tighten consistency.' : 'Process metrics are the clearest route back up the table.'}</p>
                 </>
@@ -480,16 +460,6 @@ export default function Rivals() {
                   <Challenge icon={<ShieldCheck size={14} />} title="Verified + reported adherence" value={getPeriodStats(selectedRival, 'week').ruleAdherence} target={100} suffix="%" />
                   <Challenge icon={<Flame size={14} />} title="Build a green streak" value={getPeriodStats(selectedRival, 'week').greenDays} target={5} suffix="/5" />
                   <div className="rv-inspector-section-head rv-milestone-head"><h4>Milestones</h4><span>Verified data</span></div>
-                  <div className="rv-achievement-list">
-                    <Badge unlocked={selectedStats.greenDays >= 5} icon={<TrendingUp size={14} />} title="Five green days" />
-                    <Badge unlocked={selectedStats.ruleAdherence >= 90} icon={<ShieldCheck size={14} />} title="90% rule adherence" />
-                    <Badge unlocked={selectedStats.maxDrawdown <= Math.max(100, Math.abs(selectedStats.netPnl) * .3)} icon={<Gauge size={14} />} title="Controlled drawdown" />
-                    <Badge unlocked={selectedStats.tradeCount >= 10} icon={<BookOpen size={14} />} title="10 documented trades" />
-                  </div>
-                </div>
-              ) : inspectorTab === 'ranks' ? (
-                <div className="rv-inspector-progress">
-                  <div className="rv-inspector-section-head"><h4>Milestone achievements</h4><span>Verified data</span></div>
                   <div className="rv-achievement-list">
                     <Badge unlocked={selectedStats.greenDays >= 5} icon={<TrendingUp size={14} />} title="Five green days" />
                     <Badge unlocked={selectedStats.ruleAdherence >= 90} icon={<ShieldCheck size={14} />} title="90% rule adherence" />
