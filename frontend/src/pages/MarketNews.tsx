@@ -38,7 +38,6 @@ const RED = 'var(--red)';
 const RED_DIM = 'var(--red-dim)';
 const RED_BORDER = 'var(--red-border)';
 const COBALT = 'var(--cobalt)';
-const COBALT_DIM = 'var(--cobalt-dim)';
 const COBALT_BORDER = 'var(--cobalt-border)';
 const T1 = 'var(--app-text)';
 const T2 = 'var(--app-text-muted)';
@@ -50,7 +49,7 @@ const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY as string | undefined;
 const POLYGON_KEY = import.meta.env.VITE_POLYGON_KEY as string | undefined;
 const FMP_KEY = import.meta.env.VITE_FMP_KEY as string | undefined;
 const CACHE_KEY = 'flyxa_news_cache_v2';
-const CALENDAR_CACHE_KEY = 'flyxa_calendar_cache_v4';
+const CALENDAR_CACHE_KEY = 'flyxa_calendar_cache_v5';
 const SOURCES_KEY = 'flyxa_news_sources';
 const CACHE_TTL = 15 * 60 * 1000;
 const CALENDAR_CACHE_TTL = 12 * 60 * 60 * 1000;
@@ -490,9 +489,27 @@ function normalizeForexFactoryEvents(
     if (!isUsCalendarCountry(cc)) return;
 
     const normalizedTime = normalizeForexFactoryTime(event.time);
-    const converted = normalizedTime
+    let converted = normalizedTime
       ? convertCalendarWallTime(date, normalizedTime, timeZone, sourceTimeZone)
       : null;
+
+    // Newer FF JSON feeds embed the event time in an ISO `date`
+    // ("2026-07-06T10:00:00-04:00") with no separate `time` field.
+    if (!converted) {
+      const rawDateText = String(event.date ?? '');
+      const clockMatch = rawDateText.match(/[T\s](\d{1,2}:\d{2})/);
+      // Exact midnight is FF's placeholder for all-day/TBD events — leave those blank.
+      if (clockMatch && clockMatch[1] !== '0:00' && clockMatch[1] !== '00:00') {
+        if (/(Z|[+-]\d{2}:?\d{2})$/.test(rawDateText)) {
+          const instant = new Date(rawDateText);
+          if (!Number.isNaN(instant.getTime())) {
+            converted = getTimeZoneParts(instant, timeZone);
+          }
+        } else {
+          converted = convertCalendarWallTime(date, clockMatch[1].padStart(5, '0'), timeZone, sourceTimeZone);
+        }
+      }
+    }
 
     events.push({
       event: String(event.title ?? event.event ?? 'Event'),
@@ -849,10 +866,10 @@ function CalendarImpactFilterButton({
         onClick={() => setOpen((current) => !current)}
         style={{
           height: 28,
-          border: `1px solid ${BORDER}`,
+          border: `1px solid ${open ? AMBER : BORDER}`,
           borderRadius: 6,
-          background: open ? COBALT_DIM : S2,
-          color: open ? COBALT : T2,
+          background: open ? AMBER : S2,
+          color: open ? '#000' : T2,
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
@@ -861,6 +878,7 @@ function CalendarImpactFilterButton({
           fontWeight: 700,
           cursor: 'pointer',
           maxWidth: 118,
+          transition: 'background .12s, color .12s',
         }}
       >
         <Filter size={12} />
@@ -1020,7 +1038,7 @@ function CalendarPanel({
             { label: 'Now', action: () => setWeekOffset(0), active: weekOffset === 0 },
             { label: '›', action: () => setWeekOffset(c => c + 1), active: false },
           ].map(btn => (
-            <button key={btn.label} type="button" onClick={btn.action} style={{ height: 22, borderRadius: 4, border: `1px solid ${btn.active ? COBALT_BORDER : BORDER}`, background: btn.active ? COBALT_DIM : 'transparent', color: btn.active ? COBALT : T3, padding: '0 7px', fontSize: 11, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>
+            <button key={btn.label} type="button" onClick={btn.action} style={{ height: 22, borderRadius: 4, border: `1px solid ${btn.active ? AMBER : BORDER}`, background: btn.active ? AMBER : S2, color: btn.active ? '#000' : T3, padding: '0 7px', fontSize: 11, fontWeight: 700, cursor: 'pointer', lineHeight: 1, transition: 'background .12s, color .12s' }}>
               {btn.label}
             </button>
           ))}
@@ -1791,7 +1809,7 @@ export default function MarketNews() {
           <button
             type="button"
             onClick={() => setSidebarOpen(o => !o)}
-            style={{ height: 28, borderRadius: 6, border: `1px solid ${sidebarOpen ? COBALT_BORDER : BORDER}`, background: sidebarOpen ? COBALT_DIM : S2, color: sidebarOpen ? COBALT : T2, padding: '0 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            style={{ height: 28, borderRadius: 6, border: `1px solid ${sidebarOpen ? AMBER : BORDER}`, background: sidebarOpen ? AMBER : S2, color: sidebarOpen ? '#000' : T2, padding: '0 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, transition: 'background .12s, color .12s' }}
           >
             <Filter size={11} />
             {sidebarOpen ? 'Hide calendar' : 'Calendar & Sources'}
@@ -2027,12 +2045,13 @@ function InlineToggle({
               height: 32,
               border: 'none',
               borderLeft: `1px solid ${BORDER}`,
-              background: active ? COBALT_DIM : 'transparent',
-              color: active ? COBALT : T2,
+              background: active ? AMBER : 'transparent',
+              color: active ? '#000' : T2,
               padding: '0 9px',
               fontSize: 11,
-              fontWeight: 600,
+              fontWeight: active ? 700 : 600,
               cursor: 'pointer',
+              transition: 'background .12s, color .12s',
             }}
           >
             {option.label}
