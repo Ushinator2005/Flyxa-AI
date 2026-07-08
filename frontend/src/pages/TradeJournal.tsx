@@ -1388,7 +1388,6 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
   const [showPassed, setShowPassed] = useState(false);
   const evaluations = evaluateEntryRules(entry as unknown as StoreJournalEntry, rules);
   const verified = evaluations.filter(item => item.state !== 'unchecked');
-  const passed = verified.filter(item => item.state === 'ok').length;
   const broken = verified.filter(item => item.state === 'fail');
 
   const updateManualRule = (label: string, state: RuleState) => {
@@ -1426,7 +1425,7 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
   );
 
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
+    <div style={{ background: 'var(--app-panel)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', marginBottom: 12 }}>
       {/* ── Section header with badge counts ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>Rule Verification</span>
@@ -1473,6 +1472,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
 }) {
   const dr = entry.dailyReflection ?? { pre: entry.reflection.pre, post: entry.reflection.post, lessons: entry.reflection.lessons, bias: null, newsRisk: null, sessionTarget: null, sessionGrade: null, marketRespectedBias: null, lessonCategory: null };
   const [activeTab, setActiveTab] = useState<'pre' | 'post' | 'lessons'>('pre');
+  const [showPhysical, setShowPhysical] = useState(false);
 
   // ── Evaluation coaching context ────────────────────────────────
   const storeAccounts = useFlyxaStore(state => state.accounts);
@@ -1591,6 +1591,87 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
               </div>
             </div>
           </div>
+          {/* ── Physical State — collapsible one-liner ── */}
+          {(() => {
+            const ps = entry.physicalState ?? { sleep: 0, sleepHours: 0, stress: 0, energy: 0, distractions: [], environment: '' };
+            const updatePs = (patch: Partial<typeof ps>) => onMutateEntry({ physicalState: { ...ps, ...patch } });
+            const summary = [
+              ps.sleep > 0 ? `Sleep ${ps.sleep}` : null,
+              ps.energy > 0 ? `Energy ${ps.energy}` : null,
+              ps.stress > 0 ? `Stress ${ps.stress}` : null,
+              ps.environment || null,
+            ].filter(Boolean).join(' · ');
+            const DISTRACTIONS = ['Phone','Other screen','People','Noise','None'];
+            const ENVIRONMENTS = ['Home','Office','Travelling','Unusual environment'];
+            const toggleDistraction = (d: string) => {
+              let next: string[];
+              if (d === 'None') { next = ps.distractions.includes('None') ? [] : ['None']; }
+              else { next = ps.distractions.includes(d) ? ps.distractions.filter((x: string) => x !== d) : [...ps.distractions.filter((x: string) => x !== 'None'), d]; }
+              updatePs({ distractions: next });
+            };
+            const pipColor = (score: number, v: number, colorFn: (s: number) => string) =>
+              score >= v ? colorFn(score) : 'var(--surface-2)';
+            return (
+              <div style={{ borderTop: '1px solid var(--border)' }}>
+                <button type="button" onClick={() => setShowPhysical(p => !p)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Physical</span>
+                  {summary ? (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-2)' }}>{summary}</span>
+                  ) : (
+                    <span style={{ fontSize: 10, color: 'var(--txt-3)', fontStyle: 'italic' }}>not set</span>
+                  )}
+                  <span style={{ marginLeft: 'auto', color: 'var(--txt-3)' }}>{showPhysical ? <ChevronUp size={11} /> : <ChevronDown size={11} />}</span>
+                </button>
+                {showPhysical && (
+                  <div style={{ padding: '0 14px 12px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
+                      {([
+                        { label: 'Sleep', field: 'sleep' as const, colorFn: () => 'var(--cobalt)' },
+                        { label: 'Stress', field: 'stress' as const, colorFn: (v: number) => v <= 2 ? 'var(--green)' : v === 3 ? 'var(--amber)' : 'var(--red)' },
+                        { label: 'Energy', field: 'energy' as const, colorFn: () => 'var(--green)' },
+                      ] as Array<{ label: string; field: 'sleep' | 'stress' | 'energy'; colorFn: (v: number) => string }>).map(({ label, field, colorFn }) => (
+                        <div key={field} style={{ minWidth: 70 }}>
+                          <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</div>
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            {[1,2,3,4,5].map(v => (
+                              <button key={v} type="button" onClick={() => updatePs({ [field]: v })}
+                                style={{ width: 16, height: 5, borderRadius: 2, border: 'none', cursor: 'pointer', background: pipColor(ps[field] as number, v, colorFn) }} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <div>
+                        <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Distractions</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                          {DISTRACTIONS.map(d => {
+                            const sel = ps.distractions.includes(d);
+                            return (
+                              <button key={d} type="button" onClick={() => toggleDistraction(d)}
+                                style={{ padding: '2px 6px', fontSize: 9, borderRadius: 2, border: `1px solid ${sel ? (d === 'None' ? 'var(--green-border)' : 'var(--amber-border)') : 'var(--border)'}`, background: sel ? (d === 'None' ? 'var(--green-dim)' : 'var(--amber-dim)') : 'transparent', color: sel ? (d === 'None' ? 'var(--green)' : 'var(--amber)') : 'var(--txt-3)', cursor: 'pointer' }}>
+                                {d}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Environment</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                          {ENVIRONMENTS.map(env => (
+                            <button key={env} type="button" onClick={() => updatePs({ environment: ps.environment === env ? '' : env })}
+                              style={{ padding: '2px 6px', fontSize: 9, borderRadius: 2, border: `1px solid ${ps.environment === env ? 'var(--amber-border)' : 'var(--border)'}`, background: ps.environment === env ? 'var(--amber-dim)' : 'transparent', color: ps.environment === env ? 'var(--amber)' : 'var(--txt-3)', cursor: 'pointer' }}>
+                              {env}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1767,166 +1848,6 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
   );
 }
 
-// ── C — TradeThesisBlock ──────────────────────────────────────────────────────
-function TradeThesisBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
-  const th = trade.thesis ?? { setup:'', invalidation:'', asymmetry:'', setupType:'' };
-  const confluences = normalizeConfluences(trade.confluences);
-  const [local, setLocal] = useState(th);
-  const [confluenceDraft, setConfluenceDraft] = useState('');
-  const [suggestionIndex, setSuggestionIndex] = useState(-1);
-  const navigate = useNavigate();
-  const { confluenceOptions } = useAppSettings();
-  useEffect(() => { setLocal(trade.thesis ?? { setup:'', invalidation:'', asymmetry:'', setupType:'' }); }, [trade.id]);
-  useEffect(() => { setConfluenceDraft(''); setSuggestionIndex(-1); }, [trade.id]);
-
-  const update = (patch: Partial<typeof th>) => onMutate({ thesis: { ...th, ...patch } });
-  const commit = (field: keyof typeof th, value: string) => update({ [field]: value });
-  const setConfluences = (next: string[]) => onMutate({ confluences: normalizeConfluences(next) });
-
-  const suggestions = confluenceDraft.trim().length > 0
-    ? confluenceOptions.filter(opt =>
-        opt.toLowerCase().includes(confluenceDraft.toLowerCase()) &&
-        !confluences.some(confluence => normalizeConfluenceKey(confluence) === normalizeConfluenceKey(opt))
-      )
-    : [];
-
-  const addConfluence = () => {
-    const next = (suggestionIndex >= 0 && suggestions[suggestionIndex])
-      ? suggestions[suggestionIndex]
-      : confluenceDraft.trim();
-    if (!next) return;
-    setConfluences([...confluences, next]);
-    setConfluenceDraft('');
-    setSuggestionIndex(-1);
-  };
-
-  const selectSuggestion = (opt: string) => {
-    setConfluences([...confluences, opt]);
-    setConfluenceDraft('');
-    setSuggestionIndex(-1);
-  };
-
-  const removeConfluence = (indexToRemove: number) => {
-    setConfluences(confluences.filter((_, index) => index !== indexToRemove));
-  };
-
-  // Save unsaved textarea content on unmount (section collapse)
-  const unmountRef = useRef({ local, th, onMutate });
-  unmountRef.current = { local, th, onMutate };
-  useEffect(() => {
-    return () => {
-      const { local: l, th: t, onMutate: m } = unmountRef.current;
-      if (l.setup !== t.setup || l.invalidation !== t.invalidation || l.asymmetry !== t.asymmetry) {
-        m({ thesis: { ...t, setup: l.setup, invalidation: l.invalidation, asymmetry: l.asymmetry } });
-      }
-    };
-  }, []);
-
-  const COLS: Array<{ key: 'setup'|'invalidation'; title: string; sub: string; placeholder: string }> = [
-    { key:'setup', title:'Trade Thesis', sub:'What specific edge did you see?', placeholder:"What conditions were present? Why this level, this direction, right now?" },
-    { key:'invalidation', title:'Invalidation', sub:'What would prove you wrong?', placeholder:"If price does X, the trade is invalid and I should be out. What specific price action kills this thesis?" },
-  ];
-
-  return (
-    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, marginBottom:8 }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', borderBottom:'1px solid var(--app-border)', overflow:'hidden', borderRadius:'5px 5px 0 0' }}>
-        {COLS.map((col, i) => (
-          <div key={col.key} style={{ borderRight: i < 1 ? '1px solid var(--app-border)' : undefined }}>
-            <div style={{ padding:'8px 12px 6px', borderBottom:'1px solid var(--app-border)' }}>
-              <div style={{ fontSize:11, fontWeight:500, color:'var(--app-text-muted)' }}>{col.title}</div>
-              <div style={{ fontSize:9, color:'var(--app-text-subtle)', fontStyle:'italic' }}>{col.sub}</div>
-            </div>
-            <textarea value={local[col.key]} onChange={e => setLocal(p => ({ ...p, [col.key]: e.target.value }))} onBlur={e => commit(col.key, e.target.value)} placeholder={col.placeholder}
-              className="tj-reflect" style={{ minHeight:72, fontSize:12, padding:'10px 12px', display:'block' }} />
-          </div>
-        ))}
-      </div>
-      <div style={{ padding:'10px 14px', borderTop:'1px solid var(--app-border)' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-          <span style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em' }}>Confluences</span>
-          <button type="button" onClick={() => navigate('/settings#journal')} style={{ background:'none', border:'none', padding:0, cursor:'pointer', fontSize:10, color:'var(--cobalt)', fontFamily:'var(--font-sans)' }}>Manage tags →</button>
-        </div>
-        <div style={{ display:'flex', gap:6, marginBottom:8 }}>
-          <div style={{ flex:1, position:'relative' }}>
-            <input
-              value={confluenceDraft}
-              onChange={(event) => { setConfluenceDraft(event.target.value); setSuggestionIndex(-1); }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  addConfluence();
-                } else if (event.key === 'ArrowDown') {
-                  event.preventDefault();
-                  setSuggestionIndex(i => Math.min(i + 1, suggestions.length - 1));
-                } else if (event.key === 'ArrowUp') {
-                  event.preventDefault();
-                  setSuggestionIndex(i => Math.max(i - 1, -1));
-                } else if (event.key === 'Escape') {
-                  setSuggestionIndex(-1);
-                  setConfluenceDraft('');
-                }
-              }}
-              placeholder="Type a confluence and press Enter (e.g., FVG, HTF bias, liquidity sweep)"
-              style={{ width:'100%', boxSizing:'border-box', padding:'7px 9px', fontSize:11, fontFamily:'var(--font-sans)', background:'var(--app-panel-strong)', border:'1px solid var(--app-border)', borderRadius:4, color:'var(--app-text)', outline:'none' }}
-            />
-            {suggestions.length > 0 && (
-              <div style={{
-                position:'absolute', top:'calc(100% + 2px)', left:0, right:0, zIndex:300,
-                background:'var(--app-panel-strong)', border:'1px solid var(--app-border)',
-                borderRadius:4, boxShadow:'0 4px 14px rgba(0,0,0,0.35)',
-                maxHeight:160, overflowY:'auto',
-              }}>
-                {suggestions.map((opt, i) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onMouseDown={e => { e.preventDefault(); selectSuggestion(opt); }}
-                    onMouseEnter={() => setSuggestionIndex(i)}
-                    style={{
-                      display:'block', width:'100%', textAlign:'left',
-                      padding:'6px 10px', fontSize:11, fontFamily:'var(--font-sans)',
-                      background: i === suggestionIndex ? 'var(--cobalt-dim)' : 'transparent',
-                      color: i === suggestionIndex ? '#8ab6ff' : 'var(--app-text-muted)',
-                      border:'none', borderBottom: i < suggestions.length - 1 ? '1px solid var(--app-border)' : 'none',
-                      cursor:'pointer',
-                    }}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={addConfluence}
-            style={{ padding:'7px 10px', fontSize:10, borderRadius:4, border:'1px solid var(--amber-border)', background:'var(--amber-dim)', color:'var(--amber)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600 }}
-          >
-            Add
-          </button>
-        </div>
-        {confluences.length > 0 ? (
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-            {confluences.map((item, index) => (
-              <button
-                key={`${item}-${index}`}
-                type="button"
-                onClick={() => removeConfluence(index)}
-                title="Remove confluence"
-                style={{ padding:'3px 8px', fontSize:10, borderRadius:4, border:'1px solid var(--app-border)', background:'var(--app-panel-strong)', color:'var(--app-text-muted)', cursor:'pointer', fontFamily:'var(--font-sans)' }}
-              >
-                {item} ×
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div style={{ fontSize:10, color:'var(--app-text-subtle)' }}>No confluences tagged yet.</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── E — PsychologyRatingsBlock ────────────────────────────────────────────────
 function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
   const r = trade.psychologyRatings ?? { setupQuality:0, discipline:0, execution:0, patience:0, riskManagement:0, emotionalControl:0, notes:{} };
@@ -2003,45 +1924,6 @@ const BEHAVIORAL_FLAGS_RIGHT = [
   { id:'reentry-stop',  label:'Re-entered immediately after stop out' },
 ];
 
-function BehavioralFlagsBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (f: Partial<JournalTrade>) => void }) {
-  const flags = trade.behavioralFlags ?? [];
-  const toggle = (id: string) => {
-    const next = flags.includes(id) ? flags.filter(f => f !== id) : [...flags, id];
-    onMutate({ behavioralFlags: next });
-  };
-
-  const FlagRow = ({ id, label }: { id: string; label: string }) => {
-    const checked = flags.includes(id);
-    return (
-      <div onClick={() => toggle(id)} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderBottom:'1px solid var(--app-border)', cursor:'pointer' }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.018)'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
-        <div style={{ width:14, height:14, borderRadius:2, border:`1px solid ${checked?'var(--red-border)':'var(--app-border)'}`, background:checked?'var(--red-dim)':'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          {checked && <span style={{ fontSize:9, color:'var(--red)', lineHeight:1 }}>✕</span>}
-        </div>
-        <span style={{ fontSize:11, color: checked ? 'var(--red)' : 'var(--app-text-muted)' }}>{label}</span>
-      </div>
-    );
-  };
-
-  return (
-    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, overflow:'hidden', marginBottom:8 }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr' }}>
-        <div style={{ borderRight:'1px solid var(--app-border)' }}>
-          {BEHAVIORAL_FLAGS_LEFT.map(f => <FlagRow key={f.id} id={f.id} label={f.label} />)}
-        </div>
-        <div>
-          {BEHAVIORAL_FLAGS_RIGHT.map(f => <FlagRow key={f.id} id={f.id} label={f.label} />)}
-        </div>
-      </div>
-      <div style={{ padding:'10px 14px', borderTop:'1px solid var(--app-border)' }}>
-        {flags.length > 0
-          ? <span style={{ fontSize:11, color:'var(--red)', fontFamily:'var(--font-mono)' }}>{flags.length} behavioral flag{flags.length > 1 ? 's' : ''} this trade</span>
-          : <span style={{ fontSize:11, color:'var(--app-text-subtle)' }}>No behavioral flags</span>}
-      </div>
-    </div>
-  );
-}
 
 // ── G — StateOfMindBlock ──────────────────────────────────────────────────────
 function StateOfMindBlock({ entry, activeTrade, onMutateEntry, onMutateTrade }: {
@@ -2108,72 +1990,6 @@ function StateOfMindBlock({ entry, activeTrade, onMutateEntry, onMutateTrade }: 
   );
 }
 
-// ── H — PhysicalStateBlock ────────────────────────────────────────────────────
-function PhysicalStateBlock({ entry, onMutateEntry }: { entry: JournalEntry; onMutateEntry: (f: Partial<JournalEntry>) => void }) {
-  const ps = entry.physicalState ?? { sleep:0, sleepHours:0, stress:0, energy:0, distractions:[], environment:'' };
-  const update = (patch: Partial<typeof ps>) => onMutateEntry({ physicalState: { ...ps, ...patch } });
-
-  const DISTRACTIONS = ['Phone','Other screen','People','Noise','None'];
-  const ENVIRONMENTS = ['Home','Office','Travelling','Unusual environment'];
-
-  const PipRow = ({ label, value, field, colorFn }: { label: string; value: number; field: keyof typeof ps; colorFn: (v: number) => string }) => (
-    <div style={{ minWidth:80 }}>
-      <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:4 }}>{label}</div>
-      <div style={{ display:'flex', gap:3 }}>
-        {[1,2,3,4,5].map(v => (
-          <button key={v} type="button" onClick={() => update({ [field]: v } as Partial<typeof ps>)}
-            style={{ width:16, height:5, borderRadius:2, border:'none', cursor:'pointer', background: (value as number) >= v ? colorFn(value) : 'var(--app-panel-strong)' }} />
-        ))}
-      </div>
-    </div>
-  );
-
-  const toggleDistraction = (d: string) => {
-    let next: string[];
-    if (d === 'None') { next = ps.distractions.includes('None') ? [] : ['None']; }
-    else { next = ps.distractions.includes(d) ? ps.distractions.filter(x => x !== d) : [...ps.distractions.filter(x => x !== 'None'), d]; }
-    update({ distractions: next });
-  };
-
-  return (
-    <div style={{ background:'var(--app-panel)', border:'1px solid var(--app-border)', borderRadius:6, padding:'12px 14px', marginBottom:8 }}>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:16, alignItems:'flex-start' }}>
-        <PipRow label="Sleep" value={ps.sleep} field="sleep" colorFn={() => 'var(--cobalt)'} />
-        <PipRow label="Stress" value={ps.stress} field="stress" colorFn={v => v <= 2 ? 'var(--green)' : v === 3 ? 'var(--amber)' : 'var(--red)'} />
-        <PipRow label="Energy" value={ps.energy} field="energy" colorFn={() => 'var(--green)'} />
-        <div>
-          <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:4 }}>Distractions</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-            {DISTRACTIONS.map(d => {
-              const sel = ps.distractions.includes(d);
-              const isNone = d === 'None';
-              return (
-                <button key={d} type="button" onClick={() => toggleDistraction(d)}
-                  style={{ padding:'2px 6px', fontSize:9, borderRadius:2, border:`1px solid ${sel?(isNone?'var(--green-border)':'var(--amber-border)'):'var(--app-border)'}`, background:sel?(isNone?'var(--green-dim)':'var(--amber-dim)'):'transparent', color:sel?(isNone?'var(--green)':'var(--amber)'):'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)' }}>
-                  {d}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:4 }}>Environment</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-            {ENVIRONMENTS.map(e => {
-              const sel = ps.environment === e;
-              return (
-                <button key={e} type="button" onClick={() => update({ environment: sel ? '' : e })}
-                  style={{ padding:'2px 6px', fontSize:9, borderRadius:2, border:`1px solid ${sel?'var(--amber-border)':'var(--app-border)'}`, background:sel?'var(--amber-dim)':'transparent', color:sel?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)' }}>
-                  {e}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── I — ProcessScoreBlock ─────────────────────────────────────────────────────
 function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade: JournalTrade; entries: JournalEntry[]; navigate: (path: string) => void; onSaveEntries: () => void }) {
@@ -2189,66 +2005,52 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
   const avgLossScore = losses.length ? Math.round(losses.reduce((s, t) => s + (t.processScore ?? computeProcessScore(t)), 0) / losses.length) : null;
 
   const insights: Array<{ text: string; color: string }> = [];
-  if (flags.length > 0) insights.push({ text: `${flags.length} behavioral flag${flags.length > 1 ? 's' : ''} reduced your score by ${Math.min(flags.length * 8, 40)} points`, color: 'var(--red)' });
-  if (avgWinScore !== null && avgLossScore !== null) insights.push({ text: `Your avg score on wins is ${avgWinScore} vs ${avgLossScore} on losses`, color: 'var(--app-text-muted)' });
+  if (flags.length > 0) insights.push({ text: `${flags.length} behavioral flag${flags.length > 1 ? 's' : ''} reduced your score by ${Math.min(flags.length * 8, 40)} pts`, color: 'var(--red)' });
+  if (avgWinScore !== null && avgLossScore !== null) insights.push({ text: `Avg score: wins ${avgWinScore} vs losses ${avgLossScore}`, color: 'var(--txt-2)' });
   const conf = trade.preEntry?.confidenceAtEntry ?? 0;
   const disc = trade.psychologyRatings?.discipline ?? 0;
-  if (conf >= 4 && disc <= 2) insights.push({ text: 'Confidence was high but discipline was low — review your sizing decision', color: 'var(--amber)' });
+  if (conf >= 4 && disc <= 2) insights.push({ text: 'High confidence, low discipline — review sizing', color: 'var(--amber)' });
+  if (insights.length === 0 && score === 0) insights.push({ text: 'Rate psychology + flag behaviors to generate a score', color: 'var(--txt-3)' });
 
-  const RING = 80;
-  const R = 34;
+  const RING = 48;
+  const R = 19;
   const circ = 2 * Math.PI * R;
   const offset = circ * (1 - (score > 0 ? score : 0) / 100);
 
   return (
-    <div style={{ background:'var(--app-panel)', border:`1px solid ${score > 0 && score < 50 ? 'var(--red-border, rgba(239,68,68,0.25))' : 'var(--app-border)'}`, borderRadius:8, overflow:'hidden', marginBottom:8 }}>
-      {/* Top block */}
-      <div style={{ background: score >= 70 ? 'rgba(34,197,94,0.05)' : score >= 50 ? 'rgba(245,166,35,0.05)' : score > 0 ? 'rgba(239,68,68,0.05)' : 'transparent', padding:'18px 20px', display:'flex', alignItems:'center', gap:20, borderBottom:'1px solid var(--app-border)' }}>
-        {/* Ring */}
-        <div style={{ position:'relative', width:RING, height:RING, flexShrink:0 }}>
-          <svg width={RING} height={RING} style={{ transform:'rotate(-90deg)' }}>
-            <circle cx={RING/2} cy={RING/2} r={R} fill="none" stroke="var(--app-panel-strong)" strokeWidth={6} />
+    <div style={{ background: 'var(--app-panel)', border: `1px solid ${score > 0 && score < 50 ? 'var(--red-border, rgba(239,68,68,0.25))' : 'var(--border)'}`, borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
+      {/* Compact horizontal card */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+        {/* 48px ring */}
+        <div style={{ position: 'relative', width: RING, height: RING, flexShrink: 0 }}>
+          <svg width={RING} height={RING} style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx={RING/2} cy={RING/2} r={R} fill="none" stroke="var(--surface-2)" strokeWidth={4} />
             {score > 0 && (
-              <circle cx={RING/2} cy={RING/2} r={R} fill="none" stroke={scoreColor} strokeWidth={6}
-                strokeDasharray={`${circ} ${circ}`} strokeDashoffset={offset} strokeLinecap="round" style={{ transition:'stroke-dashoffset 0.4s ease' }} />
+              <circle cx={RING/2} cy={RING/2} r={R} fill="none" stroke={scoreColor} strokeWidth={4}
+                strokeDasharray={`${circ} ${circ}`} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.4s ease' }} />
             )}
           </svg>
-          <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>
-            <span style={{ fontSize:26, fontWeight:700, fontFamily:'var(--font-mono)', color:score > 0 ? scoreColor : 'var(--app-text-subtle)', lineHeight:1 }}>{score > 0 ? score : '—'}</span>
-            {score > 0 && <span style={{ fontSize:9, color:'var(--app-text-subtle)', lineHeight:1 }}>/100</span>}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', color: score > 0 ? scoreColor : 'var(--txt-3)', lineHeight: 1 }}>{score > 0 ? score : '—'}</span>
           </div>
         </div>
-        {/* Info */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)', marginBottom:3 }}>Flyxa Process Score</div>
-          <div style={{ fontSize:12, color:'var(--app-text-muted)' }}>
-            {score > 0 ? 'Based on psychology ratings, discipline, and behavioral flags.' : 'Rate your psychology and flag behaviors to generate a score.'}
+        {/* Title + insights */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>Process Score</span>
+            {score > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: scoreColor }}>{grade}</span>}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {insights.slice(0, 2).map((ins, i) => (
+              <span key={i} style={{ fontSize: 11, color: ins.color, lineHeight: 1.4 }}>{ins.text}</span>
+            ))}
           </div>
         </div>
-        {/* Grade */}
-        <div style={{ fontSize:22, fontWeight:600, fontFamily:'var(--font-mono)', color:score > 0 ? scoreColor : 'var(--app-text-subtle)', flexShrink:0 }}>{score > 0 ? grade : '—'}</div>
       </div>
-      {/* Insight bullets */}
-      {(insights.length > 0 || score === 0) && (
-        <div style={{ padding:'14px 20px', display:'flex', flexDirection:'column', gap:8, borderBottom:'1px solid var(--app-border)' }}>
-          {insights.map((ins, i) => (
-            <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
-              <span style={{ width:6, height:6, borderRadius:'50%', background:ins.color, flexShrink:0, marginTop:4 }} />
-              <span style={{ fontSize:12, color:'var(--app-text-muted)' }}>{ins.text}</span>
-            </div>
-          ))}
-          {insights.length === 0 && score === 0 && (
-            <div style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
-              <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--app-border)', flexShrink:0, marginTop:4 }} />
-              <span style={{ fontSize:12, color:'var(--app-text-subtle)' }}>Complete psychology ratings and behavioral flags to see personalised insights.</span>
-            </div>
-          )}
-        </div>
-      )}
       {/* AI button */}
       <button type="button" onClick={() => { onSaveEntries(); navigate(`/flyxa-ai/ask?tradeId=${trade.id}`); }}
-        style={{ width:'100%', padding:13, fontSize:13, fontWeight:600, fontFamily:'var(--font-sans)', background:'var(--amber)', color:'#000', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, boxSizing:'border-box' }}>
-        <Sparkles size={14} />
+        style={{ width: '100%', padding: 11, fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-sans)', background: 'var(--amber)', color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
+        <Sparkles size={13} />
         Analyse this trade with Flyxa AI
       </button>
     </div>
@@ -2310,15 +2112,12 @@ function TradeJournalCard({
 
   // ── Psychology inline ─────────────────────────────────────────
   const r = trade.psychologyRatings ?? { setupQuality: 0, discipline: 0, execution: 0, patience: 0, riskManagement: 0, emotionalControl: 0, notes: {} };
-  const updatePsych = (patch: Partial<typeof r>) => onMutate({ psychologyRatings: { ...r, ...patch } });
   const psychKeys: Array<{ key: keyof Omit<typeof r, 'notes'>; label: string }> = [
     { key: 'discipline', label: 'Discipline' },
     { key: 'execution', label: 'Execution' },
     { key: 'riskManagement', label: 'Risk' },
     { key: 'emotionalControl', label: 'Control' },
   ];
-  const pipColor = (score: number, v: number) =>
-    score >= v ? (score <= 2 ? 'var(--red)' : score === 3 ? 'var(--amber)' : 'var(--green)') : 'var(--surface-2)';
 
   // ── State of mind (from entry) ────────────────────────────────
   const emotions = entry.emotions;
@@ -2345,7 +2144,7 @@ function TradeJournalCard({
   ];
 
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'visible', marginBottom: 8 }}>
+    <div style={{ background: 'var(--app-panel)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'visible', marginBottom: 8 }}>
       {/* ── Row 1: Thesis + Invalidation ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--border)' }}>
         {THESIS_COLS.map((col, i) => (
@@ -2394,7 +2193,7 @@ function TradeJournalCard({
               style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--txt-2)', outline: 'none', width: 140 }}
             />
             {suggestions.length > 0 && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 4px 14px rgba(0,0,0,0.35)', minWidth: 200, maxHeight: 160, overflowY: 'auto' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, zIndex: 300, background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 4px 14px rgba(0,0,0,0.35)', minWidth: 200, maxHeight: 160, overflowY: 'auto' }}>
                 {suggestions.map((opt, i) => (
                   <button key={opt} type="button" onMouseDown={e => { e.preventDefault(); setConfluences([...confluences, opt]); setConfluenceDraft(''); setSuggestionIndex(-1); }} onMouseEnter={() => setSuggestionIndex(i)}
                     style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 11, background: i === suggestionIndex ? 'var(--cobalt-dim)' : 'transparent', color: i === suggestionIndex ? '#8ab6ff' : 'var(--txt-2)', border: 'none', cursor: 'pointer' }}>
@@ -2422,7 +2221,7 @@ function TradeJournalCard({
               + add flag
             </button>
             {showFlagPopover && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 400, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.45)', minWidth: 260, maxHeight: 320, overflowY: 'auto', padding: 8 }}
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 400, background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.45)', minWidth: 260, maxHeight: 320, overflowY: 'auto', padding: 8 }}
                 onMouseLeave={() => setShowFlagPopover(false)}>
                 {ALL_BEHAVIORAL_FLAGS.map(f => {
                   const checked = flags.includes(f.id);
@@ -2605,10 +2404,6 @@ export default function TradeJournal() {
 
   const [viewingImageIndex, setViewingImageIndex] = useState(0);
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('right');
-
-  // Editable entry time / duration drafts
-  const [draftEntryTime, setDraftEntryTime] = useState('');
-  const [draftDuration, setDraftDuration] = useState('');
 
   const mutateEntries = useCallback((updater: (prev: JournalEntry[]) => JournalEntry[]) => {
     const storeState = useFlyxaStore.getState();
@@ -3298,12 +3093,6 @@ export default function TradeJournal() {
   useEffect(() => {
     setViewingImageIndex(0);
   }, [activeTradeId]);
-
-  // Sync editable drafts when active trade changes
-  useEffect(() => {
-    setDraftEntryTime(activeTrade?.entryTime ?? '');
-    setDraftDuration(activeTrade?.durationMinutes != null ? String(activeTrade.durationMinutes) : '');
-  }, [activeTrade?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On trade days: prefer the active trade's screenshot, then the first entry slot, then the scanner image.
   // On blank days: show manually-uploaded screenshots (entry.screenshots) but NOT the scanner image,
@@ -4031,7 +3820,7 @@ export default function TradeJournal() {
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>#{tradeIdx + 1}</span>
                         <span className="tj-symbol">{trade.symbol}</span>
                         <span className={`tj-tc-badge ${trade.direction === 'LONG' ? 'b-long' : 'b-short'}`}>{trade.direction === 'LONG' ? 'LONG' : 'SHORT'}</span>
-                        {trade.result === 'breakeven' && (
+                        {trade.result === 'be' && (
                           <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', padding: '2px 5px', borderRadius: 3, background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber)', flexShrink: 0 }}>BE</span>
                         )}
                         {_patternFlags.has(trade.id) && (() => {
@@ -4077,6 +3866,62 @@ export default function TradeJournal() {
                       {/* ── Expanded price levels ── */}
                       {expandedTradeId === trade.id && (
                         <div style={{ borderTop: '1px solid var(--border)', padding: '0 10px 10px' }} onClick={e => e.stopPropagation()}>
+                          {/* Correction row — fix scanner misreads (symbol, direction, time, duration) */}
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap', padding: '10px 2px 8px' }}>
+                            <div>
+                              <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Symbol</div>
+                              <input
+                                type="text"
+                                defaultValue={trade.symbol}
+                                key={`sym-${trade.id}`}
+                                onBlur={e => {
+                                  const v = e.target.value.trim().toUpperCase();
+                                  if (v && v !== trade.symbol) mutateTradeFields(trade.id, { symbol: v });
+                                }}
+                                style={{ width: 52, padding: '4px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none', textTransform: 'uppercase' }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Direction</div>
+                              <div style={{ display: 'flex', gap: 3 }}>
+                                {(['LONG', 'SHORT'] as const).map(dir => (
+                                  <button
+                                    key={dir}
+                                    type="button"
+                                    onClick={() => { if (trade.direction !== dir) mutateTradeFields(trade.id, { direction: dir }); }}
+                                    style={{ padding: '4px 9px', fontSize: 9, fontWeight: 700, borderRadius: 4, cursor: 'pointer', border: `1px solid ${trade.direction === dir ? (dir === 'LONG' ? 'var(--green-border)' : 'var(--red-border)') : 'var(--border)'}`, background: trade.direction === dir ? (dir === 'LONG' ? 'var(--green-dim)' : 'var(--red-dim)') : 'transparent', color: trade.direction === dir ? (dir === 'LONG' ? 'var(--green)' : 'var(--red)') : 'var(--txt-3)' }}
+                                  >
+                                    {dir}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Entry time</div>
+                              <input
+                                type="time"
+                                defaultValue={trade.entryTime}
+                                key={`et-${trade.id}`}
+                                onBlur={e => { if (e.target.value && e.target.value !== trade.entryTime) mutateTradeFields(trade.id, { entryTime: e.target.value }); }}
+                                style={{ padding: '3px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none' }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Duration (min)</div>
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={trade.durationMinutes ?? ''}
+                                key={`dur-${trade.id}`}
+                                placeholder="—"
+                                onBlur={e => {
+                                  const mins = parseInt(e.target.value, 10);
+                                  mutateTradeFields(trade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
+                                }}
+                                style={{ width: 60, padding: '4px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none' }}
+                              />
+                            </div>
+                          </div>
                           <PriceLevelsBlock
                             trade={trade}
                             onMutate={fields => mutateTradeFields(trade.id, fields)}
@@ -4107,71 +3952,21 @@ export default function TradeJournal() {
                 />
               )}
 
+              {/* ── SECTION 9: TRADE JOURNAL CARD (thesis + flags + psychology) ── */}
               {activeTrade && (
                 <>
-                  {/* ── SECTION 9: PRE-ENTRY STATE ── */}
-                  <SectionHead title="Pre-entry State" sectionKey="preEntry" collapsed={!!collapsed['preEntry']} onToggle={() => toggleSection('preEntry')} />
-                  {!collapsed['preEntry'] && (
-                    <PreEntryBlock
+                  <SectionHead title="Trade Journal" sectionKey="tradeJournal" collapsed={!!collapsed['tradeJournal']} onToggle={() => toggleSection('tradeJournal')} />
+                  {!collapsed['tradeJournal'] && (
+                    <TradeJournalCard
                       trade={activeTrade}
                       entry={selectedEntry}
                       allEntries={entries}
                       onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                      onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
                     />
                   )}
 
-                  {/* ── SECTION 10: TRADE THESIS ── */}
-                  <SectionHead title="Trade Thesis" sectionKey="tradeTh" collapsed={!!collapsed['tradeTh']} onToggle={() => toggleSection('tradeTh')} />
-                  {!collapsed['tradeTh'] && (
-                    <TradeThesisBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  )}
-
-                  {/* ── SECTION 11: BEHAVIORAL FLAGS ── */}
-                  <SectionHead title="Behavioral Flags" sectionKey="behavFlags" collapsed={!!collapsed['behavFlags']} onToggle={() => toggleSection('behavFlags')} />
-                  {!collapsed['behavFlags'] && (
-                    <BehavioralFlagsBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  )}
-
-                  {/* ── SECTION 12: PSYCHOLOGY RATINGS ── */}
-                  <SectionHead title="Psychology Ratings" sectionKey="psychRatings" collapsed={!!collapsed['psychRatings']} onToggle={() => toggleSection('psychRatings')} />
-                  {!collapsed['psychRatings'] && (
-                    <PsychologyRatingsBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  )}
-                </>
-              )}
-
-              {/* ── SECTION 13: STATE OF MIND ── */}
-              <SectionHead title="State of Mind" sectionKey="stateOfMind" collapsed={!!collapsed['stateOfMind']} onToggle={() => toggleSection('stateOfMind')} />
-              {!collapsed['stateOfMind'] && (
-                <StateOfMindBlock
-                  entry={selectedEntry}
-                  activeTrade={activeTrade ?? null}
-                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                  onMutateTrade={activeTrade ? (fields => mutateTradeFields(activeTrade.id, fields)) : undefined}
-                />
-              )}
-
-              {/* ── SECTION 14: PHYSICAL STATE ── */}
-              <SectionHead title="Physical State" sectionKey="physState" collapsed={!!collapsed['physState']} onToggle={() => toggleSection('physState')} />
-              {!collapsed['physState'] && (
-                <PhysicalStateBlock
-                  entry={selectedEntry}
-                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                />
-              )}
-
-              {activeTrade && (
-                <>
-                  {/* ── SECTION 15: FLYXA PROCESS SCORE ── */}
+                  {/* ── SECTION 10: FLYXA PROCESS SCORE ── */}
                   <SectionHead title="Flyxa Process Score" sectionKey="processScore" collapsed={!!collapsed['processScore']} onToggle={() => toggleSection('processScore')} />
                   {!collapsed['processScore'] && (
                     <ProcessScoreBlock
