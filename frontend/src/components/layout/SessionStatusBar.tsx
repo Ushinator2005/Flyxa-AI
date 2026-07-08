@@ -144,12 +144,12 @@ export default function SessionStatusBar() {
         overflowX: 'auto',
       }}
     >
-      {/* Clickable session summary — navigates to pre-session view */}
+      {/* Clickable session summary — opens the live session view */}
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate('/pre-session')}
-        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && navigate('/pre-session')}
+        onClick={() => navigate('/session')}
+        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && navigate('/session')}
         className="ssb-clickable"
         style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -241,6 +241,29 @@ export default function SessionStatusBar() {
 
       {/* Spacer */}
       <div style={{ flexShrink: 0, minWidth: 12 }} />
+
+      {/* View session */}
+      <button
+        type="button"
+        onClick={() => navigate('/session')}
+        style={{
+          fontSize: 10,
+          fontWeight: 500,
+          color: '#f59e0b',
+          background: 'transparent',
+          border: 'none',
+          padding: '2px 4px',
+          cursor: 'pointer',
+          flexShrink: 0,
+          letterSpacing: '0.02em',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        View session
+        <span style={{ fontSize: 11, lineHeight: 1 }}>→</span>
+      </button>
 
       {/* End session */}
       <button

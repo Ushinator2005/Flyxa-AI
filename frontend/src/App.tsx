@@ -20,6 +20,7 @@ const FlyxaAIPatterns = lazy(() => import('./pages/FlyxaAIPatterns.js'));
 const FlyxaAIAsk = lazy(() => import('./pages/FlyxaAIAsk.js'));
 const FlyxaAIPreSession = lazy(() => import('./pages/FlyxaAIPreSession.js'));
 const FlyxaAIPostSession = lazy(() => import('./pages/FlyxaAIPostSession.js'));
+const SessionActive = lazy(() => import('./pages/SessionActive.js'));
 const FlyxaAIWeeklyReport = lazy(() => import('./pages/FlyxaAIWeeklyReport.js'));
 const Analytics = lazy(() => import('./pages/Analytics.js'));
 const Achievements = lazy(() => import('./pages/Achievements.js'));
@@ -416,7 +417,7 @@ export default function App() {
               <Route path="/evaluation-coach" element={<EvaluationCoach />} />
               <Route path="/chart" element={<Navigate to="/backtest" replace />} />
               <Route path="/psychology" element={<PsychologyTracker />} />
-              <Route path="/session" element={<Navigate to="/pre-session" replace />} />
+              <Route path="/session" element={<SessionActive />} />
               <Route path="/journal" element={<Journal />} />
               <Route path="/goals" element={<Goals />} />
               <Route path="/rivals" element={<Rivals />} />

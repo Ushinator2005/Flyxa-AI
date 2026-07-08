@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  TrendingUp, TrendingDown, Minus,
-  FileText, BarChart2, ScanLine,
-  LogOut, Shield,
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { useRisk } from '../contexts/RiskContext.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -29,8 +25,6 @@ const MONO    = 'var(--font-mono)';
 const T1      = 'var(--app-text)';
 const T2      = 'var(--app-text-muted)';
 const T3      = 'var(--app-text-subtle)';
-const S1      = 'var(--app-panel)';
-const S2      = 'var(--app-panel-strong)';
 const BORDER  = 'var(--app-border)';
 
 function biasColor(v: string): string {
@@ -67,90 +61,6 @@ function formatMoney(val: number, withSign = false): string {
   const str = abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (!withSign) return `$${str}`;
   return `${val >= 0 ? '+' : '−'}$${str}`;
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function StatCard({ children, dimBorder = false }: { children: React.ReactNode; dimBorder?: boolean }) {
-  return (
-    <div style={{
-      border: `1px solid ${dimBorder ? 'rgba(255,255,255,0.05)' : BORDER}`,
-      borderRadius: 12,
-      background: S1,
-      padding: '16px 18px',
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: '0.12em',
-      textTransform: 'uppercase',
-      color: T3,
-      marginBottom: 12,
-      fontFamily: SANS,
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function QuickBtn({
-  icon, label, onClick, variant = 'default',
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  variant?: 'default' | 'primary' | 'danger';
-}) {
-  const [hov, setHov] = useState(false);
-  const styles: Record<string, React.CSSProperties> = {
-    default: {
-      background: hov ? S2 : 'transparent',
-      border: `1px solid ${hov ? 'rgba(255,255,255,0.12)' : BORDER}`,
-      color: hov ? T1 : T2,
-    },
-    primary: {
-      background: hov ? `${AMBER}22` : `${AMBER}12`,
-      border: `1px solid ${hov ? `${AMBER}50` : `${AMBER}28`}`,
-      color: AMBER,
-    },
-    danger: {
-      background: hov ? `${RED}18` : `${RED}0a`,
-      border: `1px solid ${hov ? `${RED}45` : `${RED}25`}`,
-      color: hov ? '#f87171' : `${RED}cc`,
-    },
-  };
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 7,
-        height: 36,
-        padding: '0 14px',
-        borderRadius: 8,
-        fontSize: 12,
-        fontWeight: 500,
-        fontFamily: SANS,
-        cursor: 'pointer',
-        transition: 'all 0.13s ease',
-        ...styles[variant],
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -209,6 +119,15 @@ export default function SessionActive() {
     };
   }, [activeStartedAt]);
 
+  // Rotate the session-rule ticker every 8 seconds
+  const [ruleIdx, setRuleIdx] = useState(0);
+  const planLen = isLivePreSession(preSession) ? (preSession.sessionPlan?.length ?? 0) : 0;
+  useEffect(() => {
+    if (planLen < 2) return;
+    const id = window.setInterval(() => setRuleIdx(i => (i + 1) % planLen), 8000);
+    return () => window.clearInterval(id);
+  }, [planLen]);
+
   if (!isLivePreSession(preSession)) return null;
 
   // ── Derived values ──────────────────────────────────────
@@ -251,313 +170,232 @@ export default function SessionActive() {
   };
 
   // ── Render ──────────────────────────────────────────────
+  const profitTarget = (preSession as { dailyTarget?: number | null }).dailyTarget ?? null;
+  const targetPct = profitTarget && profitTarget > 0 ? Math.min(100, Math.max(0, (pnl / profitTarget) * 100)) : null;
+  const tradePips = maxTrades > 0 && maxTrades <= 12 ? maxTrades : 0;
+  const startedLabel = new Date(preSession.startedAt).toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York', hour12: true,
+  });
+  const locked = riskLevel === 'locked';
+  const glowColor = locked ? RED : pnlPositive ? GREEN : pnlNegative ? RED : AMBER;
+  const activeRule = plan.length > 0 ? plan[ruleIdx % plan.length] : null;
+  const activeRuleTag = activeRule ? planLabel(activeRule.source) : null;
+
   return (
     <div style={{
       height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
+      position: 'relative',
+      overflow: 'hidden',
       background: 'var(--app-bg)',
       fontFamily: SANS,
-      overflow: 'hidden',
-      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
     }}>
-      {/* Decorative ambient glow — top-centre radial */}
+      {/* ── Top strip ──────────────────────────────── */}
       <div style={{
-        position: 'absolute',
-        top: -60,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 700,
-        height: 320,
-        background: `radial-gradient(ellipse at top, ${AMBER}0f 0%, transparent 68%)`,
-        pointerEvents: 'none',
-        zIndex: 0,
-      }} />
-
-      <div style={{
-        position: 'relative',
-        zIndex: 1,
-        flex: 1,
-        overflow: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '28px 32px 32px',
-        gap: 20,
-        maxWidth: 860,
-        margin: '0 auto',
-        width: '100%',
-        boxSizing: 'border-box',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, padding: '22px 32px', position: 'relative', zIndex: 1,
       }}>
-
-        {/* ── Top status row ─────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          {/* Left: live indicator + timer */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8, flexShrink: 0 }}>
-              <span className="session-ping" style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: GREEN, opacity: 0.75,
-              }} />
-              <span style={{
-                position: 'relative', width: 8, height: 8,
-                borderRadius: '50%', background: GREEN, display: 'inline-block',
-              }} />
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: GREEN, textTransform: 'uppercase' }}>
-              Session live
-            </span>
-            <span style={{ width: 1, height: 12, background: BORDER, display: 'inline-block', flexShrink: 0 }} />
-            <span style={{ fontSize: 12, color: T3, fontFamily: MONO, letterSpacing: '0.04em' }}>
-              {elapsed}
-            </span>
-          </div>
-          {/* Right: emotion tag */}
-          {emotion && (
-            <div style={{
-              fontSize: 11, color: T3,
-              padding: '4px 10px', borderRadius: 6,
-              border: `1px solid ${BORDER}`,
-              background: S1,
-            }}>
-              Feeling: <span style={{ color: T2 }}>{emotion}</span>
-            </div>
-          )}
-        </div>
-
-        {/* ── Hero P&L ───────────────────────────────── */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 10,
-          padding: '32px 24px',
-          borderRadius: 16,
-          border: `1px solid ${pnlNegative ? `${RED}28` : pnlPositive ? `${GREEN}28` : BORDER}`,
-          background: pnlNegative ? `${RED}06` : pnlPositive ? `${GREEN}06` : 'transparent',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          {/* Glow behind the number */}
-          <div style={{
-            position: 'absolute',
-            top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            width: 300, height: 140,
-            background: `radial-gradient(ellipse, ${pnlColor}0e 0%, transparent 70%)`,
-            pointerEvents: 'none',
-          }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative' }}>
-            <PnLIcon size={24} color={pnlColor} strokeWidth={1.8} />
-            <span style={{
-              fontSize: 52,
-              fontWeight: 700,
-              letterSpacing: '-0.035em',
-              color: pnlColor,
-              fontFamily: MONO,
-              lineHeight: 1,
-              WebkitFontSmoothing: 'antialiased',
-              MozOsxFontSmoothing: 'grayscale',
-            }}>
-              {formatMoney(pnl, true)}
-            </span>
-          </div>
-
-          <span style={{ fontSize: 12, color: T3, position: 'relative' }}>
-            {tradesCount} trade{tradesCount !== 1 ? 's' : ''} today
-            {maxTrades > 0 && (
-              <> &middot; {Math.max(0, maxTrades - tradesCount)} remaining</>
-            )}
-            {hasGuardLog && (
-              <> &middot; synced from Trade Lens</>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8, flexShrink: 0 }}>
+            <span className="session-ping" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: GREEN, opacity: 0.75 }} />
+            <span style={{ position: 'relative', width: 8, height: 8, borderRadius: '50%', background: GREEN, display: 'inline-block' }} />
           </span>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', color: GREEN, textTransform: 'uppercase' }}>
+            Session live
+          </span>
+          <span style={{ fontSize: 11, color: T3, letterSpacing: '0.04em' }}>since {startedLabel} ET</span>
         </div>
-
-        {/* ── Three stat cards ───────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-
-          {/* Readiness */}
-          <StatCard>
-            <SectionLabel>Readiness</SectionLabel>
-            {readiness ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                    color: readinessColor(readiness.status),
-                    padding: '3px 8px', borderRadius: 5,
-                    background: `${readinessColor(readiness.status)}14`,
-                    border: `1px solid ${readinessColor(readiness.status)}30`,
-                  }}>
-                    {readiness.status}
-                  </span>
-                  <span style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: readinessColor(readiness.status) }}>
-                    {readiness.score}
-                  </span>
-                </div>
-                {emotion && (
-                  <span style={{ fontSize: 11, color: T3 }}>Feeling: <span style={{ color: T2 }}>{emotion}</span></span>
-                )}
-              </div>
-            ) : (
-              <span style={{ fontSize: 12, color: T3 }}>Not assessed</span>
-            )}
-          </StatCard>
-
-          {/* Market bias */}
-          <StatCard>
-            <SectionLabel>Market Bias</SectionLabel>
-            {bias && Object.keys(bias).length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {Object.entries(bias).map(([sym, val]) => (
-                  <div key={sym} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, fontFamily: MONO, color: T2, minWidth: 28 }}>
-                      {sym}
-                    </span>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
-                      color: biasColor(val as string),
-                      padding: '2px 7px', borderRadius: 4,
-                      background: `${biasColor(val as string)}14`,
-                      border: `1px solid ${biasColor(val as string)}28`,
-                    }}>
-                      {val}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <span style={{ fontSize: 12, color: T3 }}>No bias set</span>
-            )}
-          </StatCard>
-
-          {/* Risk meter */}
-          <StatCard>
-            <SectionLabel>Loss Used</SectionLabel>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontSize: 28, fontWeight: 700, fontFamily: MONO, color: riskColor, lineHeight: 1 }}>
-                {Math.round(lossUsedPct)}%
-              </span>
-              {lossRemaining !== null && (
-                <span style={{ fontSize: 11, color: T3, paddingBottom: 2 }}>
-                  {formatMoney(lossRemaining)} left
-                </span>
-              )}
-            </div>
-            <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%',
-                width: `${lossUsedPct}%`,
-                borderRadius: 3,
-                background: riskColor,
-                transition: 'width 0.7s ease, background 0.4s ease',
-              }} />
-            </div>
-            {riskLevel === 'locked' && (
-              <div style={{ marginTop: 8, fontSize: 10, fontWeight: 700, color: RED, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Limit reached — stop trading
-              </div>
-            )}
-          </StatCard>
-        </div>
-
-        {/* ── Session rules ──────────────────────────── */}
-        {hasGuardLog && (
-          <div style={{
-            border: `1px solid ${BORDER}`,
-            borderRadius: 12,
-            background: S1,
-            padding: '14px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}>
-            <div>
-              <SectionLabel>Trade Lens log</SectionLabel>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, color: T2 }}>
-                  {guardSummary.wins}W {guardSummary.losses}L{guardSummary.breakevens > 0 ? ` ${guardSummary.breakevens}BE` : ''}
-                </span>
-                <span style={{
-                  fontSize: 13,
-                  color: guardSummary.pnl > 0 ? GREEN : guardSummary.pnl < 0 ? RED : T2,
-                  fontFamily: MONO,
-                  fontWeight: 700,
-                  WebkitFontSmoothing: 'antialiased',
-                  MozOsxFontSmoothing: 'grayscale',
-                }}>
-                  {formatMoney(guardSummary.pnl, true)}
-                </span>
-              </div>
-            </div>
-            <QuickBtn
-              icon={<Shield size={14} />}
-              label="Open Guard"
-              onClick={() => window.dispatchEvent(new CustomEvent('flyxa:open-trade-check'))}
-              variant="primary"
-            />
-          </div>
-        )}
-
-        {plan.length > 0 && (
-          <div style={{
-            border: `1px solid ${BORDER}`,
-            borderRadius: 12,
-            background: S1,
-            padding: '16px 20px',
-          }}>
-            <SectionLabel>Session rules</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {plan.map(item => {
-                const { tag, color } = planLabel(item.source);
-                return (
-                  <div key={item.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{
-                      fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
-                      color, padding: '2px 6px', borderRadius: 3,
-                      background: `${color}12`, border: `1px solid ${color}28`,
-                      flexShrink: 0, marginTop: 1, whiteSpace: 'nowrap',
-                    }}>
-                      {tag}
-                    </span>
-                    <span style={{ fontSize: 12, color: T2, lineHeight: 1.55 }}>{item.rule}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Session note (if set) ──────────────────── */}
-        {preSession.note?.trim() && (
-          <div style={{
-            border: `1px solid ${AMBER}20`,
-            borderRadius: 10,
-            background: `${AMBER}06`,
-            padding: '12px 16px',
-            fontSize: 12,
-            color: T2,
-            lineHeight: 1.6,
-            fontStyle: 'italic',
-          }}>
-            "{preSession.note.trim()}"
-          </div>
-        )}
-
-        {/* ── Quick actions ──────────────────────────── */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 'auto', paddingTop: 8 }}>
-          <QuickBtn icon={<FileText size={14} />}   label="Journal"        onClick={() => navigate('/journal')}    variant="primary" />
-          <QuickBtn icon={<BarChart2 size={14} />}  label="Analytics"      onClick={() => navigate('/analytics')} />
-          <QuickBtn icon={<ScanLine size={14} />}   label="Trade Scanner"  onClick={() => navigate('/scanner')}   />
-          <QuickBtn icon={<Shield size={14} />}     label="Pre-session"    onClick={() => navigate('/pre-session')} />
-          <div style={{ flex: 1 }} />
-          <QuickBtn icon={<LogOut size={14} />}     label="End session"    onClick={handleEnd}                     variant="danger" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {readiness && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: readinessColor(readiness.status),
+              padding: '3px 10px', borderRadius: 999,
+              border: `1px solid ${readinessColor(readiness.status)}35`,
+              background: `${readinessColor(readiness.status)}0d`,
+            }}>
+              {readiness.status} {readiness.score}
+            </span>
+          )}
+          {bias && Object.entries(bias).map(([sym, val]) => (
+            <span key={sym} style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: biasColor(val as string),
+              padding: '3px 10px', borderRadius: 999,
+              border: `1px solid ${biasColor(val as string)}30`,
+              background: `${biasColor(val as string)}0d`,
+            }}>
+              <span style={{ fontFamily: MONO, color: T3, marginRight: 5 }}>{sym}</span>{val}
+            </span>
+          ))}
+          {emotion && (
+            <span style={{
+              fontSize: 10, color: T3, letterSpacing: '0.04em',
+              padding: '3px 10px', borderRadius: 999, border: `1px solid ${BORDER}`,
+            }}>
+              {emotion}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Pulse animation */}
+      {/* ── Center: timer + P&L ────────────────────── */}
+      <div style={{
+        flex: 1,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 6, position: 'relative', zIndex: 1,
+        paddingBottom: 40,
+      }}>
+        <span style={{
+          fontSize: 'clamp(72px, 12vw, 150px)',
+          fontWeight: 250,
+          fontFamily: MONO,
+          color: T1,
+          lineHeight: 1,
+          letterSpacing: '0.02em',
+          fontVariantNumeric: 'tabular-nums',
+          textShadow: `0 0 80px ${glowColor}30`,
+        }}>
+          {elapsed}
+        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
+          {pnl !== 0 && <PnLIcon size={26} color={pnlColor} strokeWidth={1.6} />}
+          <span style={{
+            fontSize: 'clamp(28px, 3.4vw, 42px)',
+            fontWeight: 600,
+            fontFamily: MONO,
+            color: pnlColor,
+            lineHeight: 1,
+            letterSpacing: '-0.01em',
+          }}>
+            {formatMoney(pnl, true)}
+          </span>
+        </div>
+
+        <span style={{ fontSize: 12, color: T3, letterSpacing: '0.06em', marginTop: 8 }}>
+          {tradesCount} trade{tradesCount !== 1 ? 's' : ''}
+          {maxTrades > 0 && <> · {Math.max(0, maxTrades - tradesCount)} remaining</>}
+        </span>
+
+        {/* Trade pips */}
+        {tradePips > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+            {Array.from({ length: tradePips }, (_, i) => (
+              <span key={i} style={{
+                width: 22, height: 4, borderRadius: 2,
+                background: i < tradesCount ? (tradesCount >= maxTrades ? RED : AMBER) : 'rgba(255,255,255,0.08)',
+                transition: 'background 0.4s ease',
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Rule ticker / locked callout ───────────── */}
+      <div style={{
+        minHeight: 64,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 8, padding: '0 48px', position: 'relative', zIndex: 1,
+      }}>
+        {locked ? (
+          <span className="sa-locked" style={{
+            fontSize: 15, fontWeight: 800, letterSpacing: '0.25em', textTransform: 'uppercase',
+            color: RED,
+          }}>
+            Loss limit reached — stand down
+          </span>
+        ) : activeRule && activeRuleTag ? (
+          <div key={ruleIdx} className="sa-rule" style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 720 }}>
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+              color: activeRuleTag.color, padding: '3px 8px', borderRadius: 3,
+              background: `${activeRuleTag.color}12`, border: `1px solid ${activeRuleTag.color}30`,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}>
+              {activeRuleTag.tag}
+            </span>
+            <span style={{ fontSize: 14, color: T2, lineHeight: 1.5, textAlign: 'left' }}>{activeRule.rule}</span>
+          </div>
+        ) : null}
+        {!locked && plan.length > 1 && (
+          <div style={{ display: 'flex', gap: 5 }}>
+            {plan.map((_, i) => (
+              <span key={i} style={{
+                width: 4, height: 4, borderRadius: '50%',
+                background: i === ruleIdx % plan.length ? T2 : 'rgba(255,255,255,0.12)',
+                transition: 'background 0.3s ease',
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom gauges ──────────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: targetPct !== null ? '1fr 1fr' : '1fr',
+        gap: 40,
+        padding: '26px 48px 18px',
+        position: 'relative', zIndex: 1,
+      }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: T3 }}>Loss budget</span>
+            <span style={{ fontSize: 12, fontFamily: MONO, color: riskColor, fontWeight: 600 }}>
+              {Math.round(lossUsedPct)}%{lossRemaining !== null && <span style={{ color: T3, fontWeight: 400 }}> · {formatMoney(lossRemaining)} left</span>}
+            </span>
+          </div>
+          <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${lossUsedPct}%`, borderRadius: 2, background: riskColor, transition: 'width 0.7s ease, background 0.4s ease', boxShadow: `0 0 10px ${riskColor}60` }} />
+          </div>
+        </div>
+        {targetPct !== null && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: T3 }}>Daily target</span>
+              <span style={{ fontSize: 12, fontFamily: MONO, color: targetPct >= 100 ? GREEN : T2, fontWeight: 600 }}>
+                {Math.round(targetPct)}%<span style={{ color: T3, fontWeight: 400 }}> of {formatMoney(profitTarget!)}</span>
+              </span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${targetPct}%`, borderRadius: 2, background: GREEN, transition: 'width 0.7s ease', boxShadow: targetPct >= 100 ? `0 0 10px ${GREEN}60` : 'none' }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Hover-reveal controls ──────────────────── */}
+      <div className="sa-controls" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 22, padding: '4px 0 18px', position: 'relative', zIndex: 1,
+      }}>
+        {[
+          { label: 'Journal', to: '/journal' },
+          { label: 'Scanner', to: '/scanner' },
+          { label: 'Analytics', to: '/analytics' },
+          { label: 'Pre-session', to: '/pre-session' },
+        ].map(link => (
+          <button key={link.to} type="button" onClick={() => navigate(link.to)} style={{
+            background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer',
+            fontSize: 11, color: T3, letterSpacing: '0.06em', fontFamily: SANS,
+          }}>
+            {link.label}
+          </button>
+        ))}
+        <span style={{ width: 1, height: 12, background: BORDER, display: 'inline-block' }} />
+        <button type="button" onClick={handleEnd} style={{
+          background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer',
+          fontSize: 11, color: `${RED}cc`, letterSpacing: '0.06em', fontFamily: SANS, fontWeight: 600,
+        }}>
+          End session
+        </button>
+      </div>
+
+      {/* ── Animations ─────────────────────────────── */}
       <style>{`
         @keyframes session-ping {
           75%, 100% { transform: scale(2); opacity: 0; }
@@ -565,7 +403,32 @@ export default function SessionActive() {
         .session-ping {
           animation: session-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
         }
+        @keyframes sa-rule-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .sa-rule {
+          animation: sa-rule-in 0.6s ease both;
+        }
+        @keyframes sa-locked-pulse {
+          0%, 100% { opacity: 1; }
+          50%      { opacity: 0.45; }
+        }
+        .sa-locked {
+          animation: sa-locked-pulse 2.2s ease-in-out infinite;
+        }
+        .sa-controls {
+          opacity: 0.25;
+          transition: opacity 0.35s ease;
+        }
+        .sa-controls:hover {
+          opacity: 1;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .sa-rule, .sa-locked, .session-ping { animation: none; }
+        }
       `}</style>
     </div>
   );
 }
+

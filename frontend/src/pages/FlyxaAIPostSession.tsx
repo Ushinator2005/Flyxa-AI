@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye } from 'lucide-react';
 import { useTrades } from '../hooks/useTrades.js';
@@ -11,6 +11,7 @@ import DatePicker from '../components/common/DatePicker.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { limitsFromPreSession, summarizePerformanceOutcome } from '../utils/performanceLoop.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
+import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -21,9 +22,6 @@ const C = {
 };
 
 const CARD_BORDER = `1px solid ${C.b0}`;
-const SECTION_LABEL: CSSProperties = {
-  fontSize: 11, fontWeight: 500, color: C.t2,
-};
 
 function fmtCurrency(v: number) {
   return v.toLocaleString('en-US', {
@@ -213,16 +211,23 @@ export default function FlyxaAIPostSession() {
     return { checked, total: oathKeys.length };
   }, [checklistState]);
 
-  // Reflection note — synced when date or ps changes
+  // Reflection note — resync only when the selected date changes, never on
+  // store updates: `ps` gets a new object reference every time this page's
+  // outcome-sync effect writes to the store, and keying on it clobbered the
+  // textarea mid-typing and cleared the Saved indicator right after saving.
   const [postNote, setPostNote] = useState(() => ps?.postSessionNote ?? '');
   const [noteSaved, setNoteSaved] = useState(false);
-  useEffect(() => { setPostNote(ps?.postSessionNote ?? ''); setNoteSaved(false); }, [ps]);
+  useEffect(() => {
+    setPostNote(preSessionHistory[selectedDate]?.postSessionNote ?? '');
+    setNoteSaved(false);
+  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveNote = () => {
     const base: PreSessionData = ps ?? {
       emotion: '', note: '', bias: {}, checklistState: {}, startedAt: null,
     };
     setPreSessionForDate(selectedDate, { ...base, postSessionNote: postNote });
+    void flushSupabaseStoreNow().catch(() => {});
     setNoteSaved(true);
   };
 
@@ -398,9 +403,13 @@ export default function FlyxaAIPostSession() {
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(280px, 0.7fr)', gap: 10, alignItems: 'start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', borderRadius: 6, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(300px, 0.75fr)', gap: 12, alignItems: 'start' }}>
+
+              {/* ── LEFT COLUMN ─────────────────────────── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                {/* Stat strip */}
+                <div style={{ display: 'flex', borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
                   {([
                     { label: 'DATE', value: displayDate, color: C.t0, wide: true },
                     { label: 'RESULT', value: reviewStatus, color: reviewColor },
@@ -416,10 +425,11 @@ export default function FlyxaAIPostSession() {
                   ))}
                 </div>
 
+                {/* Carry-forward rule */}
                 {dayTrades.length > 0 && (
                   <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                    padding: '8px 12px', borderRadius: 4,
+                    padding: '9px 14px', borderRadius: 8,
                     border: `1px solid ${dailyFlow.biggestLeak ? `${C.red}30` : `${C.grn}28`}`,
                     borderLeft: `3px solid ${dailyFlow.biggestLeak ? C.red : C.grn}`,
                     backgroundColor: dailyFlow.biggestLeak ? `${C.red}0a` : `${C.grn}08`,
@@ -432,555 +442,352 @@ export default function FlyxaAIPostSession() {
                   </div>
                 )}
 
-            {/* PRE-SESSION PLAN */}
-            <div className="flex flex-col gap-2">
-              <p style={SECTION_LABEL}>Pre-session plan</p>
-
-              {!ps ? (
-                <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                  <p className="text-[13px]" style={{ color: C.t2 }}>
-                    No pre-session data recorded for this day.
-                  </p>
-                  <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>
-                    Use the pre-session brief before the market opens to capture your plan.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Emotion + readiness */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Emotion</p>
-                      <p
-                        className="mt-2 text-[18px] font-semibold"
-                        style={{ color: emotionColor(ps.emotion) }}
-                      >
-                        {ps.emotion || 'Not set'}
-                      </p>
-                    </div>
-                    {ps.readiness && (
-                      <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                        <p style={SECTION_LABEL}>Readiness</p>
-                        <p
-                          className="mt-2 text-[18px] font-semibold"
-                          style={{ color: readinessColor(ps.readiness.status) }}
-                        >
-                          {ps.readiness.status}
-                        </p>
-                        <p className="mt-0.5 text-[11px]" style={{ color: C.t2, fontFamily: C.mono }}>
-                          {ps.readiness.score}/100
-                        </p>
-                      </div>
+                {/* ── Pre-session plan card ── */}
+                <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ width: 3, height: 12, borderRadius: 2, background: C.acc, flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Pre-session plan</span>
+                    <span style={{ flex: 1 }} />
+                    {ps?.emotion && (
+                      <span style={{ fontSize: 10, fontWeight: 600, color: emotionColor(ps.emotion), padding: '2px 9px', borderRadius: 999, background: `${emotionColor(ps.emotion)}12`, border: `1px solid ${emotionColor(ps.emotion)}30` }}>
+                        {ps.emotion}
+                      </span>
+                    )}
+                    {ps?.readiness && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: readinessColor(ps.readiness.status), padding: '2px 9px', borderRadius: 999, background: `${readinessColor(ps.readiness.status)}12`, border: `1px solid ${readinessColor(ps.readiness.status)}30` }}>
+                        {ps.readiness.status} · <span style={{ fontFamily: C.mono }}>{ps.readiness.score}</span>
+                      </span>
+                    )}
+                    {ps && oathsChecked.total > 0 && (
+                      <span style={{ fontSize: 10, fontWeight: 600, color: oathsChecked.checked === oathsChecked.total ? C.grn : C.amb, padding: '2px 9px', borderRadius: 999, background: `${oathsChecked.checked === oathsChecked.total ? C.grn : C.amb}12`, border: `1px solid ${oathsChecked.checked === oathsChecked.total ? C.grn : C.amb}30`, fontFamily: C.mono }}>
+                        {oathsChecked.checked}/{oathsChecked.total} oaths
+                      </span>
                     )}
                   </div>
 
-                  {/* Bias */}
-                  {Object.keys(bias).length > 0 && (
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Market bias</p>
-                      <div className="mt-3 flex flex-wrap gap-4">
-                        {Object.entries(bias).map(([inst, dir]) => (
-                          <div key={inst} className="flex items-center gap-2">
-                            <span
-                              className="text-[11px]"
-                              style={{ color: C.t2, fontFamily: C.mono }}
-                            >
-                              {inst}
+                  {!ps ? (
+                    <div style={{ padding: '12px 14px' }}>
+                      <p style={{ fontSize: 12, color: C.t1 }}>No pre-session data recorded for this day.</p>
+                      <p style={{ fontSize: 11, color: C.t2, marginTop: 3 }}>Use the pre-session brief before the market opens to capture your plan.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {Object.keys(bias).length > 0 && (
+                        <div style={{ padding: '9px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t2, marginRight: 2 }}>Bias</span>
+                          {Object.entries(bias).map(([inst, dir]) => (
+                            <span key={inst} style={{
+                              fontSize: 10, fontWeight: 600, color: biasColor(String(dir)),
+                              padding: '2px 9px', borderRadius: 4,
+                              background: `${biasColor(String(dir))}14`, border: `1px solid ${biasColor(String(dir))}30`,
+                            }}>
+                              <span style={{ fontFamily: C.mono, color: C.t2, marginRight: 5 }}>{inst}</span>{String(dir)}
                             </span>
-                            <span
-                              className="rounded-[4px] px-2 py-[2px] text-[10.5px] font-medium"
-                              style={{
-                                color: biasColor(String(dir)),
-                                backgroundColor: `${biasColor(String(dir))}18`,
-                                border: `1px solid ${biasColor(String(dir))}35`,
-                              }}
-                            >
-                              {String(dir)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Session plan */}
-                  {ps.sessionPlan && ps.sessionPlan.length > 0 && (
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Session plan ({ps.sessionPlan.length} rules)</p>
-                      <div className="mt-3 space-y-2">
-                        {ps.sessionPlan.map(row => (
-                          <div key={row.id} className="flex items-start gap-2">
-                            <span
-                              className="mt-[1px] shrink-0 rounded-[3px] px-1.5 py-[1px] text-[9px] font-medium uppercase tracking-[0.08em]"
-                              style={{
-                                color: row.source === 'Primary focus'
-                                  ? C.grn
-                                  : row.source === 'Avoid today'
-                                    ? C.amb
-                                    : C.red,
-                                backgroundColor: row.source === 'Primary focus'
-                                  ? `${C.grn}15`
-                                  : row.source === 'Avoid today'
-                                    ? `${C.amb}15`
-                                    : `${C.red}15`,
-                              }}
-                            >
-                              {row.source}
-                            </span>
-                            <span className="text-[12px]" style={{ color: C.t0 }}>{row.rule}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Oaths */}
-                  {oathsChecked.total > 0 && (
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Commitment</p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <span
-                          className="text-[20px] font-bold"
-                          style={{
-                            color: oathsChecked.checked === oathsChecked.total ? C.grn : C.amb,
-                            fontFamily: C.mono,
-                          }}
-                        >
-                          {oathsChecked.checked}/{oathsChecked.total}
-                        </span>
-                        <span className="text-[12px]" style={{ color: C.t1 }}>oaths committed before session</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Pre-session note */}
-                  {ps.note?.trim() && (
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Pre-session note</p>
-                      <p
-                        className="mt-2 text-[12.5px] leading-relaxed"
-                        style={{ color: C.t1 }}
-                      >
-                        {ps.note}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {dayTrades.length > 0 && ps?.prescriptions && ps.prescriptions.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <p style={SECTION_LABEL}>Performance loop</p>
-                <div className="rounded-[8px] overflow-hidden" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
-                    {[
-                      { label: 'Rules followed', value: `${performanceOutcome.rulesFollowed}/${performanceOutcome.totalRules}`, color: adherenceColor(performanceOutcome.adherencePct) },
-                      { label: 'Violations', value: String(performanceOutcome.violations.length), color: performanceOutcome.violations.length ? C.red : C.grn },
-                      { label: 'Estimated cost', value: fmtCurrency(performanceOutcome.estimatedCost), color: performanceOutcome.estimatedCost > 0 ? C.red : C.grn },
-                    ].map((item, index) => (
-                      <div key={item.label} style={{ padding: '13px 15px', borderLeft: index ? `1px solid ${C.b0}` : 'none' }}>
-                        <p style={SECTION_LABEL}>{item.label}</p>
-                        <p style={{ marginTop: 7, color: item.color, fontFamily: C.mono, fontSize: 16, fontWeight: 700 }}>{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {performanceOutcome.violations.slice(0, 3).map((item, index) => (
-                    <div key={item.id} style={{ padding: '10px 15px', borderTop: `1px solid ${C.b0}`, display: 'flex', gap: 10 }}>
-                      <span style={{ color: item.severity === 'critical' ? C.red : C.amb, fontSize: 9, fontWeight: 700, minWidth: 52, textTransform: 'uppercase' }}>{item.severity}</span>
-                      <p style={{ margin: 0, color: C.t1, fontSize: 11, lineHeight: 1.45 }}>{item.evidence}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ACTUAL EXECUTION */}
-            <div className="flex flex-col gap-2">
-              <p style={SECTION_LABEL}>Actual execution</p>
-
-              {dayTrades.length === 0 ? (
-                <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                  <p className="text-[13px]" style={{ color: C.t2 }}>
-                    No trades logged for this day.
-                  </p>
-                  <p className="mt-1 text-[11px]" style={{ color: C.t2 }}>
-                    Trades from the Journal will appear here once logged.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* P&L summary */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Net P&L</p>
-                      <p
-                        className="mt-2 text-[20px] font-bold"
-                        style={{ color: netPnl >= 0 ? C.grn : C.red, fontFamily: C.mono }}
-                      >
-                        {fmtSigned(netPnl)}
-                      </p>
-                    </div>
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Win rate</p>
-                      <p
-                        className="mt-2 text-[20px] font-bold"
-                        style={{ color: winRate >= 50 ? C.grn : C.red, fontFamily: C.mono }}
-                      >
-                        {winRate}%
-                      </p>
-                      <p className="mt-0.5 text-[10.5px]" style={{ color: C.t2 }}>
-                        {wins}W / {losses}L
-                      </p>
-                    </div>
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Plan adherence</p>
-                      {planAdherence !== null ? (
-                        <p
-                          className="mt-2 text-[20px] font-bold"
-                          style={{ color: adherenceColor(planAdherence), fontFamily: C.mono }}
-                        >
-                          {planAdherence}%
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-[13px]" style={{ color: C.t2 }}>—</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Bias adherence */}
-                  {biasAdherence.length > 0 && (
-                    <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                      <p style={SECTION_LABEL}>Bias adherence</p>
-                      <div className="mt-3 space-y-3">
-                        {biasAdherence.map(({ instrument, direction, total, aligned }) => {
-                          const pct = total > 0 ? Math.round((aligned / total) * 100) : null;
-                          return (
-                            <div key={instrument} className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="text-[11px] font-medium"
-                                  style={{ color: C.t1, fontFamily: C.mono }}
-                                >
-                                  {instrument}
-                                </span>
-                                <span
-                                  className="rounded-[3px] px-1.5 py-[1px] text-[10px]"
-                                  style={{
-                                    color: biasColor(direction),
-                                    backgroundColor: `${biasColor(direction)}15`,
-                                    border: `1px solid ${biasColor(direction)}30`,
-                                  }}
-                                >
-                                  {direction}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px]" style={{ color: C.t2 }}>
-                                  {total} trade{total !== 1 ? 's' : ''}
-                                </span>
-                                {pct !== null ? (
-                                  <span
-                                    className="text-[12px] font-semibold"
-                                    style={{ color: adherenceColor(pct), fontFamily: C.mono }}
-                                  >
-                                    {pct}% aligned
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px]" style={{ color: C.t2 }}>no trades</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Trades list */}
-                  <div className="rounded-[8px] overflow-hidden" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                    <div className="border-b px-4 py-3" style={{ borderColor: C.b0 }}>
-                      <p style={SECTION_LABEL}>Trades ({dayTrades.length})</p>
-                    </div>
-                    {dayTrades.map((t, idx) => {
-                      const pnl = Number(t.pnl ?? 0);
-                      const dir = (t.direction as string | undefined)?.toLowerCase();
-                      return (
-                        <div
-                          key={t.id}
-                          className="flex items-center justify-between px-4 py-3 transition-colors"
-                          style={{
-                            borderTop: idx > 0 ? `1px solid ${C.b0}` : 'none',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => {
-                            const date = t.trade_date || selectedDate;
-                            navigate(`/scanner?date=${encodeURIComponent(date)}&tradeId=${encodeURIComponent(t.id)}`);
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')}
-                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[12px] font-medium" style={{ color: C.t0 }}>
-                              {t.symbol}
-                            </span>
-                            <span
-                              className="rounded-[3px] px-1.5 py-[1px] text-[10px] font-medium uppercase"
-                              style={{
-                                color: dir === 'long' ? C.grn : C.red,
-                                backgroundColor: dir === 'long' ? `${C.grn}15` : `${C.red}15`,
-                              }}
-                            >
-                              {t.direction}
-                            </span>
-                            {typeof t.followed_plan === 'boolean' && (
-                              <span
-                                className="text-[10px]"
-                                style={{ color: t.followed_plan ? C.grn : C.red }}
-                              >
-                                {t.followed_plan ? '✓ plan' : '✗ off-plan'}
-                              </span>
-                            )}
-                            {t.trade_time && (
-                              <span className="text-[10px]" style={{ color: C.t2, fontFamily: C.mono }}>
-                                {t.trade_time}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="text-[12px] font-semibold"
-                              style={{ color: pnl >= 0 ? C.grn : C.red, fontFamily: C.mono }}
-                            >
-                              {fmtSigned(pnl)}
-                            </span>
-                            <span
-                              title="View trade"
-                              className="inline-flex items-center"
-                              style={{ color: C.t2, lineHeight: 0 }}
-                            >
-                              <Eye size={13} />
-                            </span>
-                          </div>
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+                      )}
 
-          {/* AI Debrief — always shown if there are trades */}
-          <aside style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'sticky', top: 0 }}>
-          {dayTrades.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p style={SECTION_LABEL}>AI debrief</p>
-              <div className="mt-3 rounded-[8px] overflow-hidden" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-                {aiInsights.length === 0 ? (
-                  <div className="p-5">
-                    <p className="text-[12.5px]" style={{ color: C.t2 }}>
-                      Not enough data to generate observations — tag trades with plan adherence to unlock deeper analysis.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y" style={{ borderColor: C.b0 }}>
-                    {aiInsights.map((insight, i) => (
-                      <div key={i} className="flex items-start gap-3 px-5 py-3.5"
-                        style={{ backgroundColor: i % 2 === 0 ? 'transparent' : `${C.d1}` }}>
-                        <span style={{
-                          width: 6, height: 6, borderRadius: '50%',
-                          backgroundColor: insightDot(insight.type),
-                          flexShrink: 0, marginTop: 6,
-                        }} />
-                        <p className="text-[12.5px] leading-relaxed" style={{ color: insightColor(insight.type) }}>
-                          {insight.text}
-                        </p>
+                      {ps.sessionPlan && ps.sessionPlan.length > 0 && ps.sessionPlan.map((row, i) => (
+                        <div key={row.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 14px', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}` }}>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                            color: row.source === 'Primary focus' ? C.grn : row.source === 'Avoid today' ? C.amb : C.red,
+                            backgroundColor: row.source === 'Primary focus' ? `${C.grn}12` : row.source === 'Avoid today' ? `${C.amb}12` : `${C.red}12`,
+                            border: `1px solid ${row.source === 'Primary focus' ? C.grn : row.source === 'Avoid today' ? C.amb : C.red}30`,
+                            padding: '2px 7px', borderRadius: 3, flexShrink: 0, marginTop: 1, whiteSpace: 'nowrap',
+                          }}>
+                            {row.source}
+                          </span>
+                          <span style={{ fontSize: 12, color: C.t0, lineHeight: 1.5 }}>{row.rule}</span>
+                        </div>
+                      ))}
+
+                      {ps.note?.trim() && (
+                        <div style={{ padding: '10px 14px', borderTop: `1px solid ${C.b0}`, background: `${C.acc}05`, fontSize: 12, color: C.t1, lineHeight: 1.6, fontStyle: 'italic' }}>
+                          "{ps.note.trim()}"
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* ── Performance loop ── */}
+                {dayTrades.length > 0 && ps?.prescriptions && ps.prescriptions.length > 0 && (
+                  <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 3, height: 12, borderRadius: 2, background: adherenceColor(performanceOutcome.adherencePct), flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Performance loop</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
+                      {[
+                        { label: 'Rules followed', value: `${performanceOutcome.rulesFollowed}/${performanceOutcome.totalRules}`, color: adherenceColor(performanceOutcome.adherencePct) },
+                        { label: 'Violations', value: String(performanceOutcome.violations.length), color: performanceOutcome.violations.length ? C.red : C.grn },
+                        { label: 'Estimated cost', value: fmtCurrency(performanceOutcome.estimatedCost), color: performanceOutcome.estimatedCost > 0 ? C.red : C.grn },
+                      ].map((item, index) => (
+                        <div key={item.label} style={{ padding: '11px 14px', borderLeft: index ? `1px solid ${C.b0}` : 'none' }}>
+                          <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>{item.label}</p>
+                          <p style={{ color: item.color, fontFamily: C.mono, fontSize: 15, fontWeight: 700 }}>{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {performanceOutcome.violations.slice(0, 3).map(item => (
+                      <div key={item.id} style={{ padding: '9px 14px', borderTop: `1px solid ${C.b0}`, display: 'flex', gap: 10 }}>
+                        <span style={{ color: item.severity === 'critical' ? C.red : C.amb, fontSize: 9, fontWeight: 700, minWidth: 52, textTransform: 'uppercase', paddingTop: 1 }}>{item.severity}</span>
+                        <p style={{ margin: 0, color: C.t1, fontSize: 11, lineHeight: 1.45 }}>{item.evidence}</p>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-          )}
 
-          {/* User reflection */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between mb-3">
-              <p style={SECTION_LABEL}>Your reflection</p>
-            </div>
-            <div className="rounded-[8px] p-4" style={{ border: CARD_BORDER, backgroundColor: C.d2 }}>
-              {riskRules.filter(r => r.enabled !== false).length > 0 && (
-                <div className="mb-3 space-y-1">
-                  <p className="text-[10px] uppercase tracking-[0.1em]" style={{ color: C.t2 }}>Your rules</p>
-                  {riskRules.filter(r => r.enabled !== false).slice(0, 4).map(rule => (
-                    <p key={rule.id} className="text-[11px] leading-relaxed" style={{ color: C.t2 }}>
-                      <span style={{
-                        color: rule.color === 'red' ? C.red : rule.color === 'green' ? C.grn : C.amb,
-                        fontWeight: 600,
-                      }}>– </span>
-                      {rule.label}{rule.value ? `: ${rule.value}${rule.unit ? ' ' + rule.unit : ''}` : ''}
-                    </p>
-                  ))}
-                </div>
-              )}
-              <textarea
-                value={postNote}
-                onChange={e => { setPostNote(e.target.value); setNoteSaved(false); }}
-                placeholder="How close was the actual session to what you planned? What matched, what deviated, and what's the one thing to carry forward?"
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  minHeight: 110, resize: 'vertical',
-                  background: C.d3, border: `1px solid ${C.b0}`,
-                  borderRadius: 6, color: C.t0, fontSize: 12.5,
-                  lineHeight: 1.65, padding: '10px 12px',
-                  outline: 'none', fontFamily: 'inherit',
-                }}
-              />
-              <div className="mt-3 flex items-center justify-between">
-                <p className="text-[11px]" style={{ color: C.t2 }}>
-                  {noteSaved ? (
-                    <span style={{ color: C.grn }}>Saved</span>
-                  ) : postNote.trim() ? '' : 'Write your post-session reflection above'}
-                </p>
-                <button
-                  type="button"
-                  onClick={saveNote}
-                  disabled={!postNote.trim()}
-                  style={{
-                    height: 30, padding: '0 14px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-                    border: `1px solid ${C.acc}44`,
-                    background: postNote.trim() ? `${C.acc}12` : 'transparent',
-                    color: postNote.trim() ? C.acc : C.t2,
-                    cursor: postNote.trim() ? 'pointer' : 'default',
-                  }}
-                >
-                  Save reflection
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Comparison summary — only shown when both sides have data */}
-          {ps && dayTrades.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p style={SECTION_LABEL}>Debrief summary</p>
-              <div
-                className="mt-3 rounded-[8px] p-5"
-                style={{ border: CARD_BORDER, backgroundColor: C.d2 }}
-              >
-                <div className="space-y-4">
-                  {/* Emotion vs outcome */}
-                  <div className="flex items-start gap-3">
-                    <span
-                      className="mt-[2px] shrink-0 text-[9.5px] uppercase tracking-[0.1em]"
-                      style={{ color: C.t2, fontFamily: C.mono, minWidth: 100 }}
-                    >
-                      Emotion
-                    </span>
-                    <span
-                      className="text-[12.5px] font-medium"
-                      style={{ color: emotionColor(ps.emotion) }}
-                    >
-                      {ps.emotion || 'Not set'}
-                    </span>
-                    <span className="text-[12px]" style={{ color: C.t2 }}>→</span>
-                    <span className="text-[12.5px]" style={{ color: netPnl >= 0 ? C.grn : C.red }}>
-                      {netPnl >= 0 ? 'Profitable' : 'Unprofitable'} session ({fmtSigned(netPnl)})
-                    </span>
+                {/* ── Actual execution card ── */}
+                <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ width: 3, height: 12, borderRadius: 2, background: dayTrades.length === 0 ? C.t2 : netPnl >= 0 ? C.grn : C.red, flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Actual execution</span>
+                    <span style={{ flex: 1 }} />
+                    {dayTrades.length > 0 && (
+                      <>
+                        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: C.mono, color: netPnl >= 0 ? C.grn : C.red }}>{fmtSigned(netPnl)}</span>
+                        <span style={{ fontSize: 10, color: C.t2 }}>·</span>
+                        <span style={{ fontSize: 11, fontFamily: C.mono, color: winRate >= 50 ? C.grn : C.red, fontWeight: 600 }}>{winRate}%</span>
+                        <span style={{ fontSize: 10, color: C.t2 }}>{wins}W / {losses}L</span>
+                        {planAdherence !== null && (
+                          <>
+                            <span style={{ fontSize: 10, color: C.t2 }}>·</span>
+                            <span style={{ fontSize: 11, fontFamily: C.mono, color: adherenceColor(planAdherence), fontWeight: 600 }}>{planAdherence}% plan</span>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
 
-                  {/* Readiness vs execution */}
-                  {ps.readiness && (
-                    <div className="flex items-start gap-3">
-                      <span
-                        className="mt-[2px] shrink-0 text-[9.5px] uppercase tracking-[0.1em]"
-                        style={{ color: C.t2, fontFamily: C.mono, minWidth: 100 }}
-                      >
-                        Readiness
-                      </span>
-                      <span
-                        className="text-[12.5px] font-medium"
-                        style={{ color: readinessColor(ps.readiness.status) }}
-                      >
-                        {ps.readiness.status} ({ps.readiness.score}/100)
-                      </span>
-                      <span className="text-[12px]" style={{ color: C.t2 }}>→</span>
-                      <span className="text-[12.5px]" style={{ color: C.t1 }}>
-                        {winRate}% win rate across {dayTrades.length} trade{dayTrades.length !== 1 ? 's' : ''}
-                      </span>
+                  {dayTrades.length === 0 ? (
+                    <div style={{ padding: '12px 14px' }}>
+                      <p style={{ fontSize: 12, color: C.t1 }}>No trades logged for this day.</p>
+                      <p style={{ fontSize: 11, color: C.t2, marginTop: 3 }}>Trades from the Journal will appear here once logged.</p>
                     </div>
-                  )}
+                  ) : (
+                    <>
+                      {biasAdherence.length > 0 && (
+                        <div style={{ padding: '9px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t2 }}>Bias adherence</span>
+                          {biasAdherence.map(({ instrument, direction, total, aligned }) => {
+                            const pct = total > 0 ? Math.round((aligned / total) * 100) : null;
+                            return (
+                              <span key={instrument} style={{ fontSize: 11, color: C.t1 }}>
+                                <span style={{ fontFamily: C.mono }}>{instrument}</span>{' '}
+                                <span style={{ color: biasColor(direction) }}>{direction}</span>
+                                {pct !== null
+                                  ? <> → <span style={{ color: adherenceColor(pct), fontFamily: C.mono, fontWeight: 600 }}>{pct}% aligned</span> <span style={{ color: C.t2 }}>({total})</span></>
+                                  : <span style={{ color: C.t2 }}> — no trades</span>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
 
-                  {/* Plan adherence */}
-                  {planAdherence !== null && ps.sessionPlan && ps.sessionPlan.length > 0 && (
-                    <div className="flex items-start gap-3">
-                      <span
-                        className="mt-[2px] shrink-0 text-[9.5px] uppercase tracking-[0.1em]"
-                        style={{ color: C.t2, fontFamily: C.mono, minWidth: 100 }}
-                      >
-                        Plan
-                      </span>
-                      <span className="text-[12.5px]" style={{ color: C.t1 }}>
-                        {ps.sessionPlan.length} rule{ps.sessionPlan.length !== 1 ? 's' : ''} defined
-                      </span>
-                      <span className="text-[12px]" style={{ color: C.t2 }}>→</span>
-                      <span
-                        className="text-[12.5px] font-medium"
-                        style={{ color: adherenceColor(planAdherence) }}
-                      >
-                        {planAdherence}% plan adherence
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Bias adherence summary */}
-                  {biasAdherence.length > 0 && (
-                    <div className="flex items-start gap-3">
-                      <span
-                        className="mt-[2px] shrink-0 text-[9.5px] uppercase tracking-[0.1em]"
-                        style={{ color: C.t2, fontFamily: C.mono, minWidth: 100 }}
-                      >
-                        Bias
-                      </span>
-                      <div className="flex flex-wrap gap-3">
-                        {biasAdherence.map(({ instrument, direction, total, aligned }) => {
-                          const pct = total > 0 ? Math.round((aligned / total) * 100) : null;
-                          return (
-                            <span key={instrument} className="text-[12px]" style={{ color: C.t1 }}>
-                              {instrument}{' '}
-                              <span style={{ color: biasColor(direction) }}>{direction}</span>
-                              {pct !== null && (
-                                <>
-                                  {' → '}
-                                  <span style={{ color: adherenceColor(pct) }}>{pct}% aligned</span>
-                                </>
+                      {dayTrades.map((t, idx) => {
+                        const pnl = Number(t.pnl ?? 0);
+                        const dir = (t.direction as string | undefined)?.toLowerCase();
+                        return (
+                          <div
+                            key={t.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              padding: '9px 14px',
+                              borderTop: idx > 0 || biasAdherence.length > 0 ? `1px solid ${C.b0}` : 'none',
+                              cursor: 'pointer', transition: 'background 0.1s',
+                            }}
+                            onClick={() => {
+                              const date = t.trade_date || selectedDate;
+                              navigate(`/scanner?date=${encodeURIComponent(date)}&tradeId=${encodeURIComponent(t.id)}`);
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)')}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: C.t0 }}>{t.symbol}</span>
+                              <span style={{
+                                fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+                                color: dir === 'long' ? C.grn : C.red,
+                                backgroundColor: dir === 'long' ? `${C.grn}14` : `${C.red}14`,
+                                border: `1px solid ${dir === 'long' ? C.grn : C.red}28`,
+                                padding: '2px 6px', borderRadius: 3,
+                              }}>
+                                {t.direction}
+                              </span>
+                              {typeof t.followed_plan === 'boolean' && (
+                                <span style={{ fontSize: 10, color: t.followed_plan ? C.grn : C.red }}>
+                                  {t.followed_plan ? '✓ plan' : '✗ off-plan'}
+                                </span>
                               )}
-                            </span>
-                          );
-                        })}
+                              {t.trade_time && (
+                                <span style={{ fontSize: 10, color: C.t2, fontFamily: C.mono }}>{t.trade_time}</span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: pnl >= 0 ? C.grn : C.red, fontFamily: C.mono }}>
+                                {fmtSigned(pnl)}
+                              </span>
+                              <span title="View trade" style={{ color: C.t2, lineHeight: 0 }}>
+                                <Eye size={13} />
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* ── RIGHT RAIL ──────────────────────────── */}
+              <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 0 }}>
+
+                {/* Your reflection */}
+                <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 3, height: 12, borderRadius: 2, background: C.acc, flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Your reflection</span>
+                    <span style={{ flex: 1 }} />
+                    {noteSaved && <span style={{ fontSize: 10, color: C.grn, fontWeight: 600 }}>Saved</span>}
+                  </div>
+                  <div style={{ padding: '12px 14px' }}>
+                    {riskRules.filter(r => r.enabled !== false).length > 0 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t2, marginBottom: 5 }}>Your rules</p>
+                        {riskRules.filter(r => r.enabled !== false).slice(0, 4).map(rule => (
+                          <p key={rule.id} style={{ fontSize: 11, lineHeight: 1.55, color: C.t2 }}>
+                            <span style={{ color: rule.color === 'red' ? C.red : rule.color === 'green' ? C.grn : C.amb, fontWeight: 600 }}>– </span>
+                            {rule.label}{rule.value ? `: ${rule.value}${rule.unit ? ' ' + rule.unit : ''}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    <textarea
+                      value={postNote}
+                      onChange={e => { setPostNote(e.target.value); setNoteSaved(false); }}
+                      placeholder="How close was the actual session to what you planned? What matched, what deviated, and what's the one thing to carry forward?"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        minHeight: 110, resize: 'vertical',
+                        background: C.d3, border: `1px solid ${C.b0}`,
+                        borderRadius: 6, color: C.t0, fontSize: 12.5,
+                        lineHeight: 1.65, padding: '10px 12px',
+                        outline: 'none', fontFamily: 'inherit',
+                      }}
+                    />
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={saveNote}
+                        disabled={!postNote.trim()}
+                        style={{
+                          height: 30, padding: '0 14px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                          border: `1px solid ${C.acc}44`,
+                          background: postNote.trim() ? `${C.acc}12` : 'transparent',
+                          color: postNote.trim() ? C.acc : C.t2,
+                          cursor: postNote.trim() ? 'pointer' : 'default',
+                        }}
+                      >
+                        Save reflection
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI debrief */}
+                {dayTrades.length > 0 && (
+                  <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 3, height: 12, borderRadius: 2, background: C.grn, flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>AI debrief</span>
+                    </div>
+                    {aiInsights.length === 0 ? (
+                      <div style={{ padding: '12px 14px' }}>
+                        <p style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>
+                          Not enough data to generate observations — tag trades with plan adherence to unlock deeper analysis.
+                        </p>
+                      </div>
+                    ) : (
+                      aiInsights.map((insight, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}` }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            backgroundColor: insightDot(insight.type),
+                            flexShrink: 0, marginTop: 5,
+                          }} />
+                          <p style={{ fontSize: 12, lineHeight: 1.55, color: insightColor(insight.type), margin: 0 }}>
+                            {insight.text}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Debrief summary */}
+                {ps && dayTrades.length > 0 && (
+                  <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 3, height: 12, borderRadius: 2, background: C.t2, flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Debrief summary</span>
+                    </div>
+                    <div style={{ padding: '4px 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
+                        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Emotion</span>
+                        <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>
+                          <span style={{ color: emotionColor(ps.emotion), fontWeight: 600 }}>{ps.emotion || 'Not set'}</span>
+                          {' → '}
+                          <span style={{ color: netPnl >= 0 ? C.grn : C.red }}>{netPnl >= 0 ? 'Profitable' : 'Unprofitable'} ({fmtSigned(netPnl)})</span>
+                        </span>
+                      </div>
+                      {ps.readiness && (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
+                          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Readiness</span>
+                          <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>
+                            <span style={{ color: readinessColor(ps.readiness.status), fontWeight: 600 }}>{ps.readiness.status} ({ps.readiness.score}/100)</span>
+                            {' → '}{winRate}% win rate across {dayTrades.length} trade{dayTrades.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      )}
+                      {planAdherence !== null && ps.sessionPlan && ps.sessionPlan.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
+                          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Plan</span>
+                          <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>
+                            {ps.sessionPlan.length} rule{ps.sessionPlan.length !== 1 ? 's' : ''} defined
+                            {' → '}
+                            <span style={{ color: adherenceColor(planAdherence), fontWeight: 600 }}>{planAdherence}% adherence</span>
+                          </span>
+                        </div>
+                      )}
+                      {biasAdherence.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
+                          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Bias</span>
+                          <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>
+                            {biasAdherence.map(({ instrument, direction, total, aligned }, i) => {
+                              const pct = total > 0 ? Math.round((aligned / total) * 100) : null;
+                              return (
+                                <span key={instrument}>
+                                  {i > 0 && ' · '}
+                                  {instrument} <span style={{ color: biasColor(direction) }}>{direction}</span>
+                                  {pct !== null && <> → <span style={{ color: adherenceColor(pct) }}>{pct}%</span></>}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
+                        <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Next rule</span>
+                        <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t0 }}>{dailyFlow.tomorrowRule}</span>
                       </div>
                     </div>
-                  )}
-
-                  <div className="flex items-start gap-3">
-                    <span
-                      className="mt-[2px] shrink-0 text-[9.5px] uppercase tracking-[0.1em]"
-                      style={{ color: C.t2, fontFamily: C.mono, minWidth: 100 }}
-                    >
-                      Next rule
-                    </span>
-                    <span className="text-[12.5px]" style={{ color: C.t0 }}>
-                      {dailyFlow.tomorrowRule}
-                    </span>
                   </div>
-                </div>
-              </div>
+                )}
+              </aside>
             </div>
-          )}
-          </aside>
-            </div>
-          </div>{/* end scroll wrapper */}
+          </div>
         </main>
     </div>
   );
