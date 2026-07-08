@@ -536,7 +536,9 @@ E. CROSS-CHECK WITH A SECOND ANCHOR (when possible)
    If there is a second visible x-axis time label on the other side of the trade, verify your candle count produces the correct time from that anchor too. If the two anchors disagree, prefer the one whose candle is physically closer to the entry.
 
 F. COMPUTE DURATION
-   trade_length_seconds = (N_exit − N_entry) × timeframe_minutes × 60
+   trade_length_seconds measures from the ENTRY candle to the candle where price FIRST touches TP or SL (the Step-4 exit candle). It is NOT the width of the P&L box and NOT the distance to the box's right edge.
+   If an exit was found in Step 4: trade_length_seconds = first_touch_candle_index × timeframe_minutes × 60. Your close_time MUST equal entry_time + trade_length_seconds. If your Step-D anchor count (N_exit − N_entry) disagrees with first_touch_candle_index, TRUST first_touch_candle_index — it comes from the direct candle-by-candle exit scan — and recompute close_time from it.
+   If no exit was found (exit_reason null): trade_length_seconds = (N_exit − N_entry) × timeframe_minutes × 60 using the last candle inside the P&L box.
 
 IMPORTANT: If the entire P&L box sits exactly at one x-axis label and there are zero candles between the anchor and the entry, entry_time = T_anchor exactly. Only in that case is it valid to return the anchor time directly.
 
@@ -600,6 +602,22 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
         exitReason = null;
       }
 
+      // Trade length must measure entry → first touch of TP/SL. Gemini's Step-5
+      // anchor recount can disagree with its own Step-4 first-touch scan, so when
+      // both the exit candle index and timeframe are known, derive the duration
+      // from them instead of trusting the model's arithmetic.
+      let finalDurationSeconds = durationSeconds;
+      let finalCloseTime = explicitCloseTime;
+      if (exitReason !== null && firstTouchCandleIndex !== null && timeframeMinutes !== null && timeframeMinutes > 0) {
+        const derivedSeconds = firstTouchCandleIndex * timeframeMinutes * 60;
+        if (durationSeconds !== null && Math.abs(derivedSeconds - durationSeconds) >= timeframeMinutes * 60) {
+          finalWarnings.push(`Trade length corrected from ${Math.round(durationSeconds / 60)}m to ${Math.round(derivedSeconds / 60)}m to match the first-touch exit candle.`);
+        }
+        finalDurationSeconds = derivedSeconds;
+        // The reported close_time came from the same recount — recompute from entry + duration.
+        finalCloseTime = addSecondsToHHMM(entryTime, derivedSeconds) ?? explicitCloseTime;
+      }
+
       return {
         symbol: typeof parsed.symbol === 'string' ? parsed.symbol : null,
         direction,
@@ -607,10 +625,10 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
         sl_price,
         tp_price,
         exit_reason: exitReason,
-        trade_length_seconds: durationSeconds,
+        trade_length_seconds: finalDurationSeconds,
         timeframe_minutes: timeframeMinutes,
         entry_time: entryTime,
-        close_time: explicitCloseTime ?? addSecondsToHHMM(entryTime, durationSeconds),
+        close_time: finalCloseTime ?? addSecondsToHHMM(entryTime, finalDurationSeconds),
         confidence: parsedConfidence,
         first_touch_candle_index: exitReason ? firstTouchCandleIndex : null,
         evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
