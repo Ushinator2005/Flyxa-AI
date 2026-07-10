@@ -778,6 +778,15 @@ export default function FlyxaAIPostSession() {
                       <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Debrief summary</span>
                     </div>
                     <div style={{ padding: '4px 0' }}>
+                      {typeof ps.premortem === 'string' && ps.premortem.trim() && (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
+                          <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Pre-mortem</span>
+                          <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>
+                            You predicted: <span style={{ fontStyle: 'italic', color: C.t0 }}>"{ps.premortem.trim()}"</span>
+                            {' — '}<span style={{ color: netPnl < 0 ? C.amb : C.t2 }}>did it play out?</span>
+                          </span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 14px' }}>
                         <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Emotion</span>
                         <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>

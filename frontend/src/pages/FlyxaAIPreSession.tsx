@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -29,13 +29,45 @@ type ChecklistItem = {
 
 type SessionPlanRow = {
   id: string;
-  source: 'Primary focus' | 'Avoid today' | 'Hard stop';
+  source: 'Primary focus' | 'Avoid today' | 'Hard stop' | 'If–then';
   rule: string;
 };
 
+// If-then response plans (implementation intentions). Pre-deciding the exact
+// reaction to an emotional trigger is the most evidence-backed behavior-change
+// tool there is — suggestions adapt to today's reported emotion and the
+// trader's actual behavioral history.
+function buildIfThenSuggestions(
+  emotion: string,
+  recentBehavior: { planAdherence: number | null; revengeTagged: number },
+): string[] {
+  const suggestions: string[] = [];
+
+  if (emotion === 'Frustrated') {
+    suggestions.push('If I notice frustration after a loss, then I flatten, stand up, and walk away for 10 minutes.');
+  } else if (emotion === 'Anxious') {
+    suggestions.push('If I hesitate on a setup that meets my plan, then I take it at half size instead of skipping it.');
+  } else if (emotion === 'Confident') {
+    suggestions.push('If I am up early, then I stop adding risk and protect the green day.');
+  } else if (emotion === 'Focused') {
+    suggestions.push('If the market goes quiet and I feel the urge to force a trade, then I close the DOM until the next session window.');
+  }
+
+  if (recentBehavior.revengeTagged > 0) {
+    suggestions.push('If I feel the urge to win it back, then my session is over for the day.');
+  }
+  if (recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80) {
+    suggestions.push('If a setup is not written in my plan, then I do not take it — no exceptions.');
+  }
+
+  suggestions.push('If I take two losses in a row, then I step away for 15 minutes before the next entry.');
+
+  return Array.from(new Set(suggestions)).slice(0, 4);
+}
+
 const MARKET_OPEN_MINUTES = 9 * 60 + 30;
 const MARKET_CLOSE_MINUTES = 16 * 60;
-const OATH_CHECK_DELAY_MS = 3000;
+const OATH_HOLD_MS = 900;
 
 const C = {
   d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
@@ -178,15 +210,6 @@ function getEtParts(now: Date) {
   };
 }
 
-function formatDuration(minutes: number) {
-  const days = Math.floor(minutes / (24 * 60));
-  const hours = Math.floor((minutes % (24 * 60)) / 60);
-  const mins = minutes % 60;
-  if (days > 0) return `${days}d ${hours}h ${mins}m`;
-  if (hours > 0) return `${hours}h ${mins}m`;
-  return `${mins}m`;
-}
-
 function getRthTiming(now: Date) {
   const et = getEtParts(now);
   const weekdayIndexMap: Record<string, number> = {
@@ -266,6 +289,9 @@ export default function FlyxaAIPreSession() {
   const todayIso = useMemo(() => getTimeZoneParts(now, preferences.timezone).date, [now, preferences.timezone]);
   const [emotion, setEmotion] = useState<string>(() => (storedPreSession?.emotion ?? ''));
   const [note, setNote] = useState<string>(() => (storedPreSession?.note ?? ''));
+  const [ifThenPlans, setIfThenPlans] = useState<string[]>(() => (storedPreSession?.ifThenPlans ?? []));
+  const [customIfThenDraft, setCustomIfThenDraft] = useState('');
+  const [premortem, setPremortem] = useState<string>(() => (storedPreSession?.premortem ?? ''));
   const [bias, setBias] = useState<BiasState>(() => (storedPreSession?.bias as BiasState ?? { ES: 'Neutral', NQ: 'Neutral' }));
   const [checklistState, setChecklistState] = useState<ChecklistState>(() => (storedPreSession?.checklistState as ChecklistState ?? {}));
   const [storedRiskSettings] = useState(() => parseRiskSettingsFromStorage());
@@ -277,31 +303,21 @@ export default function FlyxaAIPreSession() {
   );
   const [oathEditOpen, setOathEditOpen] = useState(false);
   const [oathDraft, setOathDraft] = useState<Array<{ id: string; label: string }>>([]);
-  const [oathCooldownUntil, setOathCooldownUntil] = useState(0);
-  const [oathCooldownNow, setOathCooldownNow] = useState(() => Date.now());
   const [maxWinStored] = useState<number | null>(() => parseMaxWinFromStorage());
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [launching, setLaunching] = useState(false);
+
+  // Direction of the last step change — drives the slide animation.
+  const prevStepRef = useRef<1 | 2 | 3 | 4>(1);
+  const slideDirection = step >= prevStepRef.current ? 'fwd' : 'back';
+  useEffect(() => { prevStepRef.current = step; }, [step]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(new Date()), 30_000);
+    // 1s tick keeps the market-open countdown alive; rthTiming itself is
+    // minute-resolution, seconds are derived from the wall clock.
+    const interval = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (!oathCooldownUntil) return;
-    setOathCooldownNow(Date.now());
-
-    const interval = window.setInterval(() => {
-      const timestamp = Date.now();
-      setOathCooldownNow(timestamp);
-      if (timestamp >= oathCooldownUntil) {
-        setOathCooldownUntil(0);
-        window.clearInterval(interval);
-      }
-    }, 250);
-
-    return () => window.clearInterval(interval);
-  }, [oathCooldownUntil]);
 
   const accountTrades = useMemo(
     () => filterTradesBySelectedAccount(trades),
@@ -463,7 +479,7 @@ export default function FlyxaAIPreSession() {
     [accountTrades, riskLimits.maxContracts, riskLimits.maxDailyLoss, riskLimits.maxTrades, riskLimits.noLossLimit],
   );
 
-  const sessionPlan = useMemo<SessionPlanRow[]>(() => {
+  const baseSessionPlan = useMemo<SessionPlanRow[]>(() => {
     const topEdge = confirmedEdgePatterns[0];
     const topRisk = activeRiskPatterns[0];
     const recentPlanDrag = recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80;
@@ -514,6 +530,13 @@ export default function FlyxaAIPreSession() {
       },
     ].slice(0, 4);
   }, [activeRiskPatterns, confirmedEdgePatterns, prescriptions, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
+
+  // Armed if-then contracts lead the session plan — they're the trader's own
+  // pre-decided reactions, so they cycle first on the live session ticker.
+  const sessionPlan = useMemo<SessionPlanRow[]>(() => [
+    ...ifThenPlans.map((rule, index) => ({ id: `ifthen-${index}`, source: 'If–then' as const, rule })),
+    ...baseSessionPlan,
+  ].slice(0, 6), [baseSessionPlan, ifThenPlans]);
 
   const rthTiming = useMemo(() => getRthTiming(now), [now]);
   const emotionLogged = emotion.trim().length > 0;
@@ -597,12 +620,14 @@ export default function FlyxaAIPreSession() {
     if (active) setPreSessionAction({ ...active, readiness });
   }, [readiness, todayIso, setPreSessionForDate, setPreSessionAction]);
 
-  const persistPreSession = (updates: Partial<{ emotion: string; note: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null; sessionMaxLoss: number | null; dailyTarget: number | null }>) => {
+  const persistPreSession = (updates: Partial<{ emotion: string; note: string; ifThenPlans: string[]; premortem: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null; sessionMaxLoss: number | null; dailyTarget: number | null }>) => {
     const parsedLoss = parseFloat(sessionMaxLoss);
     const parsedTarget = parseFloat(sessionTarget);
     const data = {
       emotion: updates.emotion ?? emotion,
       note: updates.note ?? note,
+      ifThenPlans: updates.ifThenPlans ?? ifThenPlans,
+      premortem: updates.premortem ?? premortem,
       bias: updates.bias ?? bias,
       checklistState: updates.checklistState ?? checklistState,
       startedAt: updates.startedAt ?? storedPreSession?.startedAt ?? null,
@@ -620,6 +645,19 @@ export default function FlyxaAIPreSession() {
   const setEmotionAndPersist = (nextEmotion: string) => {
     setEmotion(nextEmotion);
     persistPreSession({ emotion: nextEmotion });
+  };
+
+  const setPremortemAndPersist = (next: string) => {
+    setPremortem(next);
+    persistPreSession({ premortem: next });
+  };
+
+  const toggleIfThenPlan = (plan: string) => {
+    const next = ifThenPlans.includes(plan)
+      ? ifThenPlans.filter(existing => existing !== plan)
+      : [...ifThenPlans, plan];
+    setIfThenPlans(next);
+    persistPreSession({ ifThenPlans: next });
   };
 
   const setNoteAndPersist = (nextNote: string) => {
@@ -653,15 +691,6 @@ export default function FlyxaAIPreSession() {
     });
   };
 
-  const oathCooldownRemaining = Math.max(0, Math.ceil((oathCooldownUntil - oathCooldownNow) / 1000));
-  const oathCooldownActive = oathCooldownRemaining > 0;
-
-  const toggleOathChecklist = (item: ChecklistItem) => {
-    if (oathCooldownActive) return;
-    toggleChecklist(item);
-    setOathCooldownUntil(Date.now() + OATH_CHECK_DELAY_MS);
-  };
-
   const sessionAlreadyStarted = useMemo(() => {
     if (!isLivePreSession(storedPreSession)) return false;
     return getTimeZoneParts(new Date(storedPreSession.startedAt), preferences.timezone).date === todayIso;
@@ -675,6 +704,8 @@ export default function FlyxaAIPreSession() {
     const sessionData = {
       emotion,
       note,
+      ifThenPlans,
+      premortem,
       bias,
       checklistState,
       startedAt: committedAt,
@@ -750,17 +781,26 @@ export default function FlyxaAIPreSession() {
               }}>{tab.label}</button>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.t2 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: rthTiming.marketOpenToday ? C.grn : C.t2, flexShrink: 0 }} />
-            <span style={{ color: C.t1 }}>{rthTiming.marketOpenToday ? 'RTH open' : `RTH in ${formatDuration(rthTiming.minutesUntilOpen)}`}</span>
-            <span>·</span>
-            <span>{etDateLabel(now)}</span>
+          {/* Market-open countdown */}
+          <div style={{ textAlign: 'right', minWidth: 96 }}>
+            {rthTiming.marketOpenNow ? (
+              <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: C.grn, lineHeight: 1 }}>Market open</div>
+            ) : (
+              <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 600, color: C.t0, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                {rthTiming.minutesUntilOpen >= 90
+                  ? `${Math.floor(rthTiming.minutesUntilOpen / 60)}h ${String(rthTiming.minutesUntilOpen % 60).padStart(2, '0')}m`
+                  : `${String(Math.max(0, rthTiming.minutesUntilOpen - 1)).padStart(2, '0')}:${String(59 - now.getSeconds()).padStart(2, '0')}`}
+              </div>
+            )}
+            <div style={{ fontSize: 9, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2, marginTop: 4 }}>
+              {rthTiming.marketOpenNow ? 'Regular hours' : 'Until open'} · {etDateLabel(now)}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* ── Step indicator ── */}
-      <div style={{ padding: '0 16px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'stretch' }}>
+      {/* ── Step indicator + live readiness ── */}
+      <div style={{ position: 'relative', padding: '0 16px', borderBottom: `1px solid ${C.b0}`, flexShrink: 0, display: 'flex', alignItems: 'stretch' }}>
         {stepLabels.map((s, i) => {
           const isActive = step === s.n;
           const isDone = step > s.n;
@@ -790,17 +830,33 @@ export default function FlyxaAIPreSession() {
             </button>
           );
         })}
+
+        {/* Live readiness — quiet label + mono score that ticks as inputs change */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2 }}>
+            Readiness
+          </span>
+          <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: readinessColor }}>
+            <AnimatedScore value={readiness.score} />
+          </span>
+        </div>
+
+        {/* Progress bar — fills as the pre-flight advances */}
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, background: 'transparent' }}>
+          <div style={{ height: '100%', width: `${(step / 4) * 100}%`, background: C.acc, opacity: 0.85, transition: 'width 0.35s ease' }} />
+        </div>
       </div>
 
       {/* ── Step content ── */}
       <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 16px' }}>
-        <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div key={step} className={slideDirection === 'fwd' ? 'ps-step-fwd' : 'ps-step-back'} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* ─── STEP 1: Mindset ─── */}
           {step === 1 && (
             <>
               <div data-tour-id="pre-session-mindset" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
+                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${emotion ? (emotion === 'Frustrated' ? C.red : emotion === 'Anxious' ? '#f97316' : emotion === 'Neutral' ? '#94a3b8' : emotion === 'Focused' ? '#60a5fa' : C.grn) : C.acc}`, transition: 'border-color 0.3s ease' }}>
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>State of mind</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>How are you coming into the session?</p>
                 </div>
@@ -812,11 +868,16 @@ export default function FlyxaAIPreSession() {
                       return (
                         <button key={em} type="button" onClick={() => setEmotionAndPersist(em)} style={{
                           flex: 1, padding: '9px 4px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                           border: 'none', borderRight: i < emotions.length - 1 ? `1px solid ${C.b0}` : 'none',
                           backgroundColor: sel ? `${ec}18` : 'transparent',
                           color: sel ? ec : C.t2,
                           fontSize: 11, fontWeight: sel ? 700 : 400, cursor: 'pointer',
-                        }}>{em}</button>
+                          transition: 'background-color 0.15s ease, color 0.15s ease',
+                        }}>
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: ec, opacity: sel ? 1 : 0.35, flexShrink: 0, transition: 'opacity 0.15s ease' }} />
+                          {em}
+                        </button>
                       );
                     })}
                   </div>
@@ -832,8 +893,97 @@ export default function FlyxaAIPreSession() {
                 </div>
               </div>
 
+              {/* ── Response plan — if-then contracts. You don't promise to be
+                    disciplined; you pre-decide the exact reaction to the exact
+                    trigger. Armed contracts lead the session plan and cycle on
+                    the live session view. ── */}
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
+                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${ifThenPlans.length > 0 ? C.grn : C.acc}`, transition: 'border-color 0.3s ease' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                    <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Response plan</h2>
+                    {ifThenPlans.length > 0 && (
+                      <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.grn }}>{ifThenPlans.length} armed</span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11, color: C.t2 }}>
+                    Decide your reaction before the trigger hits — not during it. Suggestions adapt to your state and history.
+                  </p>
+                </div>
+                <div>
+                  {buildIfThenSuggestions(emotion, recentBehavior).map((plan, i) => {
+                    const armed = ifThenPlans.includes(plan);
+                    const thenIndex = plan.toLowerCase().indexOf(', then ');
+                    const ifPart = thenIndex > 0 ? plan.slice(0, thenIndex) : plan;
+                    const thenPart = thenIndex > 0 ? plan.slice(thenIndex + 2) : '';
+                    return (
+                      <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        width: '100%', textAlign: 'left', padding: '11px 16px',
+                        border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                        borderLeft: `3px solid ${armed ? C.grn : 'transparent'}`,
+                        backgroundColor: armed ? `${C.grn}08` : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                      }}>
+                        <span style={{
+                          width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
+                          border: `1px solid ${armed ? `${C.grn}70` : C.b1}`,
+                          backgroundColor: armed ? `${C.grn}20` : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, color: C.grn,
+                          transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                        }}>
+                          {armed ? '✓' : ''}
+                        </span>
+                        <span style={{ fontSize: 12, lineHeight: 1.55, color: armed ? C.t0 : C.t1 }}>
+                          <span style={{ fontWeight: 600 }}>{ifPart}</span>{thenPart}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.b0}` }}>
+                    <input
+                      value={customIfThenDraft}
+                      onChange={e => setCustomIfThenDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && customIfThenDraft.trim()) {
+                          toggleIfThenPlan(customIfThenDraft.trim());
+                          setCustomIfThenDraft('');
+                        }
+                      }}
+                      placeholder="If [trigger], then [my response]... press Enter to arm"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        borderRadius: 5, border: `1px solid ${C.b0}`,
+                        backgroundColor: C.d2, color: C.t0,
+                        fontSize: 12, padding: '8px 11px', outline: 'none', fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+                  {/* Custom armed contracts that aren't in today's suggestions */}
+                  {ifThenPlans.filter(plan => !buildIfThenSuggestions(emotion, recentBehavior).includes(plan)).map(plan => (
+                    <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      width: '100%', textAlign: 'left', padding: '11px 16px',
+                      border: 'none', borderTop: `1px solid ${C.b0}`,
+                      borderLeft: `3px solid ${C.grn}`,
+                      backgroundColor: `${C.grn}08`,
+                      cursor: 'pointer',
+                    }}>
+                      <span style={{
+                        width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
+                        border: `1px solid ${C.grn}70`, backgroundColor: `${C.grn}20`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: C.grn,
+                      }}>✓</span>
+                      <span style={{ fontSize: 12, lineHeight: 1.55, color: C.t0 }}>{plan}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div data-tour-id="pre-session-risk" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
+                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${bias.ES === 'Bull' ? C.grn : bias.ES === 'Bear' ? C.red : C.acc}`, transition: 'border-color 0.3s ease' }}>
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Market bias</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>What direction are you leaning for today?</p>
                 </div>
@@ -849,6 +999,7 @@ export default function FlyxaAIPreSession() {
                           backgroundColor: sel ? `${oc}18` : 'transparent',
                           fontSize: 12, fontWeight: sel ? 700 : 400,
                           color: sel ? oc : C.t2, cursor: 'pointer',
+                          transition: 'background-color 0.15s ease, color 0.15s ease',
                         }}>{opt}</button>
                       );
                     })}
@@ -857,7 +1008,7 @@ export default function FlyxaAIPreSession() {
               </div>
 
               {(recentBehavior.planAdherence !== null || recentBehavior.revengeTagged > 0 || lastSession) && (
-                <div data-tour-id="pre-session-behavior" style={{ padding: '10px 14px', borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                <div data-tour-id="pre-session-behavior" style={{ padding: '10px 14px', borderRadius: 8, border: `1px solid ${C.b0}`, borderLeft: `3px solid ${recentBehavior.revengeTagged > 0 ? C.red : (recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80) ? C.acc : C.grn}`, backgroundColor: C.d1, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                   <span style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', textTransform: 'uppercase', marginRight: 4 }}>Recent</span>
                   {recentBehavior.planAdherence !== null && (
                     <span style={{ fontSize: 11, color: recentBehavior.planAdherence < 80 ? C.acc : C.t1 }}>
@@ -876,6 +1027,30 @@ export default function FlyxaAIPreSession() {
                   )}
                 </div>
               )}
+
+              {/* ── Pre-mortem — prospective hindsight. Imagining the failure
+                    as already-happened surfaces the risks confidence hides,
+                    and post-session compares the prediction to what actually
+                    happened. ── */}
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
+                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${premortem.trim() ? C.grn : C.acc}`, transition: 'border-color 0.3s ease' }}>
+                  <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Pre-mortem</h2>
+                  <p style={{ fontSize: 11, color: C.t2 }}>
+                    The session has ended and finished red. What was the reason this most likely happened? Name it now — catch it live.
+                  </p>
+                </div>
+                <div style={{ padding: '14px 16px' }}>
+                  <textarea value={premortem} onChange={e => setPremortemAndPersist(e.target.value)}
+                    style={{
+                      width: '100%', height: 60, resize: 'none',
+                      borderRadius: 5, border: `1px solid ${C.b0}`,
+                      backgroundColor: C.d2, color: C.t0,
+                      fontSize: 12, padding: '9px 11px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5,
+                    }}
+                    placeholder="e.g. I got chopped at the open, forced a revenge trade, and sized up to recover..."
+                  />
+                </div>
+              </div>
             </>
           )}
 
@@ -964,20 +1139,6 @@ export default function FlyxaAIPreSession() {
                 })()}
               </div>
 
-              {priorFlow?.biggestLeak && (
-                <div style={{
-                  padding: '14px 16px', borderRadius: 8,
-                  border: `1px solid ${C.b0}`,
-                  borderLeft: `3px solid ${priorFlow.biggestLeak ? C.red : C.grn}`,
-                  backgroundColor: C.d1,
-                }}>
-                  <p style={{ fontSize: 9, fontWeight: 700, color: priorFlow.biggestLeak ? C.red : C.grn, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                    Carry-forward rule
-                  </p>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.5, marginBottom: 5 }}>{priorFlow.tomorrowRule}</p>
-                  <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.45 }}>From {priorFlow.date}: {priorFlow.summary}</p>
-                </div>
-              )}
             </>
           )}
 
@@ -1066,24 +1227,14 @@ export default function FlyxaAIPreSession() {
                     )}
                   </div>
 
-                  {/* Accept — card footer, always at bottom */}
+                  {/* Hold-to-commit — card footer. Keyed by item so each new
+                      commitment starts from an empty hold. */}
                   {activeOathIdx !== -1 && (
-                    <button
-                      type="button"
-                      disabled={oathCooldownActive}
-                      onClick={() => toggleOathChecklist(activeOathItems[activeOathIdx])}
-                      style={{
-                        width: '100%', padding: '13px 16px',
-                        border: 'none', borderTop: `1px solid ${C.b0}`,
-                        backgroundColor: oathCooldownActive ? 'transparent' : C.d3,
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        color: oathCooldownActive ? C.t2 : C.acc,
-                        fontSize: 12, fontWeight: 600,
-                        cursor: oathCooldownActive ? 'default' : 'pointer',
-                      }}>
-                      <span>{oathCooldownActive ? `Accepted — next in ${oathCooldownRemaining}s` : 'I accept this'}</span>
-                      {!oathCooldownActive && <span style={{ fontSize: 14, opacity: 0.7 }}>→</span>}
-                    </button>
+                    <HoldToCommit
+                      key={activeOathItems[activeOathIdx].id}
+                      label="Hold to commit"
+                      onCommit={() => toggleChecklist(activeOathItems[activeOathIdx])}
+                    />
                   )}
                   </>
                 )}
@@ -1226,11 +1377,12 @@ export default function FlyxaAIPreSession() {
                 </div>
               )}
 
-              <div data-tour-id="pre-session-begin" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
+              {/* ── Ignition ── */}
+              <div data-tour-id="pre-session-begin">
                 {sessionAlreadyStarted ? (
                   <button type="button" onClick={() => navigate('/session')} style={{
-                    width: '100%', padding: '14px 16px',
-                    border: 'none', backgroundColor: 'transparent',
+                    width: '100%', padding: '16px 20px', borderRadius: 10,
+                    border: `1px solid ${C.grn}50`, backgroundColor: `${C.grn}12`,
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     color: C.grn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
                   }}>
@@ -1238,19 +1390,44 @@ export default function FlyxaAIPreSession() {
                     <span style={{ fontSize: 15, opacity: 0.8 }}>→</span>
                   </button>
                 ) : (
-                  <button type="button" onClick={startSession} style={{
-                    width: '100%', padding: '14px 16px',
-                    border: 'none', backgroundColor: C.d3,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    color: C.acc, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}>
-                    <span>Begin session</span>
-                    <span style={{ fontSize: 15, opacity: 0.8 }}>→</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={launching}
+                      onClick={() => {
+                        setLaunching(true);
+                        window.setTimeout(() => startSession(), 650);
+                      }}
+                      style={{
+                        width: '100%', padding: '15px 20px', borderRadius: 8,
+                        border: 'none',
+                        background: C.acc,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                        color: '#000', fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+                        cursor: launching ? 'default' : 'pointer',
+                        transition: 'transform 0.12s ease',
+                      }}
+                      onMouseDown={event => { (event.currentTarget as HTMLElement).style.transform = 'scale(0.99)'; }}
+                      onMouseUp={event => { (event.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
+                      onMouseLeave={event => { (event.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
+                    >
+                      <span>Begin session</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}>
+                        {readiness.score}
+                      </span>
+                    </button>
+                    {readiness.status === 'Stand Down' && (
+                      <p style={{ marginTop: 8, fontSize: 11, color: C.red, textAlign: 'center' }}>
+                        Your readiness score says stand down — launching anyway is a choice you're making.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </>
           )}
+
+        </div>{/* end slide wrapper */}
 
           {/* ── Step navigation ── */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: `1px solid ${C.b0}` }}>
@@ -1282,7 +1459,140 @@ export default function FlyxaAIPreSession() {
 
         </div>
       </main>
+
+      {/* ── Wizard motion + ignition styles ── */}
+      <style>{`
+        @keyframes ps-slide-fwd {
+          from { opacity: 0; transform: translateX(28px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes ps-slide-back {
+          from { opacity: 0; transform: translateX(-28px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        .ps-step-fwd  { animation: ps-slide-fwd 0.26s ease both; }
+        .ps-step-back { animation: ps-slide-back 0.26s ease both; }
+        @keyframes ps-launch-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        .ps-launch-overlay { animation: ps-launch-in 0.4s ease both; }
+        @media (prefers-reduced-motion: reduce) {
+          .ps-step-fwd, .ps-step-back, .ps-launch-overlay { animation: none; }
+        }
+      `}</style>
+
+      {/* ── Ignition overlay: score locks in, then the session begins ── */}
+      {launching && (
+        <div className="ps-launch-overlay" style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(10, 9, 8, 0.94)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+        }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 64, fontWeight: 600, color: readinessColor, lineHeight: 1, letterSpacing: '-0.03em' }}>
+            {readiness.score}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: C.t2 }}>
+            Session armed
+          </span>
+        </div>
+      )}
     </div>
   );
 
+}
+
+// Press-and-hold commitment button. The fill sweeps left→right while held;
+// releasing early resets. Completing the hold fires onCommit once. This
+// replaces a click + cooldown timer with an interaction that mechanically
+// enforces the pause an oath is supposed to create.
+function HoldToCommit({ label, onCommit }: { label: string; onCommit: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [done, setDone] = useState(false);
+  const frameRef = useRef<number | null>(null);
+  const startRef = useRef<number | null>(null);
+  const firedRef = useRef(false);
+
+  const stop = () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    startRef.current = null;
+    if (!firedRef.current) setProgress(0);
+  };
+
+  useEffect(() => stop, []);
+
+  const begin = () => {
+    if (firedRef.current) return;
+    startRef.current = performance.now();
+    const tick = (nowTs: number) => {
+      if (startRef.current === null) return;
+      const ratio = Math.min(1, (nowTs - startRef.current) / OATH_HOLD_MS);
+      setProgress(ratio);
+      if (ratio >= 1) {
+        firedRef.current = true;
+        setDone(true);
+        onCommit();
+        return;
+      }
+      frameRef.current = requestAnimationFrame(tick);
+    };
+    frameRef.current = requestAnimationFrame(tick);
+  };
+
+  return (
+    <button
+      type="button"
+      onPointerDown={begin}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={event => event.preventDefault()}
+      style={{
+        position: 'relative', width: '100%', padding: '14px 16px',
+        border: 'none', borderTop: `1px solid ${C.b0}`,
+        backgroundColor: C.d3, overflow: 'hidden',
+        color: done ? C.grn : progress > 0 ? '#000' : C.acc,
+        fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+        cursor: 'pointer', userSelect: 'none', touchAction: 'none',
+      }}
+    >
+      {/* Fill sweep */}
+      <span style={{
+        position: 'absolute', inset: 0,
+        width: `${progress * 100}%`,
+        background: done ? C.grn : C.acc,
+        transition: progress === 0 ? 'width 0.18s ease' : 'none',
+      }} />
+      <span style={{ position: 'relative' }}>
+        {done ? 'Committed ✓' : progress > 0 ? 'Keep holding…' : label}
+      </span>
+    </button>
+  );
+}
+
+// Tweened readiness score — the number visibly ticks when inputs change it.
+function AnimatedScore({ value }: { value: number }) {
+  const [display, setDisplay] = useState(value);
+  const previousRef = useRef(value);
+
+  useEffect(() => {
+    const from = previousRef.current;
+    const to = value;
+    previousRef.current = value;
+    if (from === to) return;
+    const started = performance.now();
+    const duration = 420;
+    let frame = 0;
+    const tick = (nowTs: number) => {
+      const t = Math.min(1, (nowTs - started) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
+  return <span style={{ display: 'inline-block', fontFamily: 'monospace', fontWeight: 700 }}>{display}</span>;
 }
