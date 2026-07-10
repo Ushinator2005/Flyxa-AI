@@ -221,6 +221,15 @@ export interface ExtractedTradeData {
   first_touch_candle_index: number | null;
   first_touch_evidence: string | null;
   warnings?: string[];
+  scanner_debug?: {
+    direction_hint?: 'Long' | 'Short';
+    entry_line_ratio?: number;
+    stop_line_ratio?: number;
+    target_line_ratio?: number;
+    box_left_ratio?: number;
+    box_right_ratio?: number;
+    used_dynamic_crops: boolean;
+  };
 }
 
 export type TradingAccountType = 'Futures' | 'Forex' | 'Stocks';
