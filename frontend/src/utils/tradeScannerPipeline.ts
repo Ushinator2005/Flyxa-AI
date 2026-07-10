@@ -21,13 +21,12 @@ export interface ScannerContext {
   box_left_ratio?: number
   box_right_ratio?: number
   entry_line_ratio?: number
-  entry_label_candidate_ratio?: number
   stop_line_ratio?: number
   target_line_ratio?: number
   red_box?: Omit<ComponentBounds, 'count'>
   green_box?: Omit<ComponentBounds, 'count'>
-  entry_box?: Omit<ComponentBounds, 'count'>
   time_axis_entry_x_ratio?: number  // where the entry candle sits within the time-axis-focus crop (0–1)
+  label_anchored?: boolean          // line ratios came from right-axis label pills, not zone fills
 }
 
 const SYMBOL_MAP: Record<string, string> = {
@@ -49,15 +48,16 @@ const SYMBOL_MAP: Record<string, string> = {
   MESZ26: 'MES',
 }
 
+// Fallback crops used when pixel detection fails. Deliberately EXCLUDES the
+// dedicated label strips (entry/stop/target-label-focus): without detected
+// geometry their positions would be arbitrary, and the backend prompt treats
+// those crop names as boundary-centered — shipping mispositioned ones makes
+// Gemini trust the wrong labels.
 const DEFAULT_FOCUS_CROPS: CropPreset[] = [
   { name: 'header-focus', x: 0, y: 0, width: 0.34, height: 0.12 },
   { name: 'trade-box-focus', x: 0.46, y: 0.1, width: 0.3, height: 0.72 },
-  { name: 'entry-window-focus', x: 0.4, y: 0.16, width: 0.22, height: 0.62 },
   { name: 'exit-path-focus', x: 0.46, y: 0.16, width: 0.24, height: 0.62 },
   { name: 'price-label-focus', x: 0.78, y: 0, width: 0.22, height: 1 },
-  { name: 'entry-label-focus', x: 0.83, y: 0.4, width: 0.17, height: 0.08 },
-  { name: 'stop-label-focus', x: 0.83, y: 0.28, width: 0.17, height: 0.08 },
-  { name: 'target-label-focus', x: 0.83, y: 0.52, width: 0.17, height: 0.08 },
   // wide strip of the x-axis bottom — entry position unknown in fallback mode
   { name: 'time-axis-focus', x: 0.08, y: 0.88, width: 0.72, height: 0.12 },
 ]
@@ -175,12 +175,6 @@ function isRedOverlay(r: number, g: number, b: number): boolean {
   return r > g + 12 && r > b + 6 && r > 150
 }
 
-function isNeutralOverlay(r: number, g: number, b: number): boolean {
-  const mx = Math.max(r, g, b)
-  const mn = Math.min(r, g, b)
-  return (mx - mn) < 30 && mx > 65 && mx < 215
-}
-
 function hexToRgbParts(hex: string): { r: number; g: number; b: number } | null {
   const cleaned = hex.replace('#', '')
   if (cleaned.length !== 6) return null
@@ -248,9 +242,74 @@ function makeZoneMatcher(
   return (pr, pg, pb) => pb > pr && pb > pg && pb > 55
 }
 
-function findLargestComponent(mask: Uint8Array, width: number, height: number): ComponentBounds | null {
-  return findComponents(mask, width, height)
-    .sort((a, b) => b.count - a.count)[0] ?? null
+// Strict matcher for right-axis label pills. Unlike zone fills (semi-transparent,
+// blended with whatever sits behind them), label pills render at full opacity in
+// the exact configured hex — a tight RGB distance is reliable here.
+function makeLabelMatcher(hex: string): ((r: number, g: number, b: number) => boolean) | null {
+  const ref = hexToRgbParts(hex)
+  if (!ref) return null
+  return (pr, pg, pb) =>
+    Math.abs(pr - ref.r) < 55 && Math.abs(pg - ref.g) < 55 && Math.abs(pb - ref.b) < 55
+}
+
+interface LabelAnchors {
+  entryY?: number
+  stopY?: number
+  tpY?: number
+}
+
+// Locate the position tool's three price pills on the right axis. This is the
+// robust anchor: overlapping drawn zones corrupt zone-fill detection (they merge
+// into one blob), but they cannot corrupt the solid pills in the axis column.
+// When all three are found with a consistent ordering, their y-centers ARE the
+// entry/SL/TP lines.
+function detectAxisLabelAnchors(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  colors: { entry: string; stopLoss: string; takeProfit: string },
+): LabelAnchors {
+  const bandStart = Math.floor(width * 0.865)
+  const bandWidth = width - bandStart
+  if (bandWidth < 6) return {}
+
+  const findPill = (hex: string): number | undefined => {
+    const match = makeLabelMatcher(hex)
+    if (!match) return undefined
+    const mask = new Uint8Array(width * height)
+    const yStart = Math.round(height * 0.03)
+    for (let y = yStart; y < height; y += 1) {
+      for (let x = bandStart; x < width; x += 1) {
+        const index = (y * width + x) * 4
+        if (match(data[index], data[index + 1], data[index + 2])) mask[y * width + x] = 1
+      }
+    }
+    // A pill is a short, wide, dense rectangle spanning most of the axis column.
+    // Axis text and gridline ticks fail the width/density filters.
+    const pill = findComponents(mask, width, height)
+      .filter(component => {
+        const pillHeight = componentHeight(component)
+        const pillWidth = componentWidth(component)
+        return pillHeight >= height * 0.008 && pillHeight <= height * 0.05
+          && pillWidth >= bandWidth * 0.5
+          && componentDensity(component) >= 0.45
+      })
+      .sort((a, b) => b.count - a.count)[0]
+    return pill ? ((pill.yMin + pill.yMax) / 2) / height : undefined
+  }
+
+  return {
+    entryY: findPill(colors.entry),
+    stopY: findPill(colors.stopLoss),
+    tpY: findPill(colors.takeProfit),
+  }
+}
+
+// The trio is trustworthy only when entry sits strictly between stop and target.
+function anchorsConsistent(anchors: LabelAnchors): anchors is Required<LabelAnchors> {
+  const { entryY, stopY, tpY } = anchors
+  if (typeof entryY !== 'number' || typeof stopY !== 'number' || typeof tpY !== 'number') return false
+  return (stopY < entryY && entryY < tpY) || (tpY < entryY && entryY < stopY)
 }
 
 function findComponents(mask: Uint8Array, width: number, height: number): ComponentBounds[] {
@@ -498,7 +557,6 @@ function detectTradeBoxContext(
   const { data } = context.getImageData(0, 0, width, height)
   const redMask = new Uint8Array(width * height)
   const greenMask = new Uint8Array(width * height)
-  const entryMask = entryHex ? new Uint8Array(width * height) : null
 
   const matchStop = stopHex
     ? makeZoneMatcher(stopHex, isRedOverlay)
@@ -506,9 +564,6 @@ function detectTradeBoxContext(
   const matchTp = tpHex
     ? makeZoneMatcher(tpHex, isGreenOverlay)
     : isGreenOverlay
-  const matchEntry = entryHex
-    ? makeZoneMatcher(entryHex, isNeutralOverlay)
-    : null
 
   // Skip the top 5 % of the image — chart headers (ticker, OHLCV row,
   // indicator values) often contain teal/green text that would otherwise
@@ -525,16 +580,33 @@ function detectTradeBoxContext(
 
       if (matchStop(r, g, b)) redMask[pixelIndex] = 1
       if (matchTp(r, g, b)) greenMask[pixelIndex] = 1
-      if (matchEntry && entryMask && matchEntry(r, g, b)) entryMask[pixelIndex] = 1
     }
   }
 
-  const zonePair = findBestPositionToolPair(redMask, greenMask, width, height)
-  if (!zonePair) return null
-  const { redBox, greenBox } = zonePair
+  // Label pills first: they survive overlapping drawn zones that corrupt fills.
+  const anchors = (stopHex && tpHex && entryHex)
+    ? detectAxisLabelAnchors(data, width, height, { entry: entryHex, stopLoss: stopHex, takeProfit: tpHex })
+    : {}
+  const hasAnchorTrio = anchorsConsistent(anchors)
 
-  const entryBox = entryMask ? findLargestComponent(entryMask, width, height) : null
-  const hasEntryBox = entryBox !== null && entryBox.count >= 150
+  const zonePair = findBestPositionToolPair(redMask, greenMask, width, height)
+  if (!zonePair) {
+    // No usable zone pair, but a consistent label trio still gives us direction
+    // and all three price lines — enough for label crops and prompt hints.
+    if (hasAnchorTrio) {
+      return {
+        direction_hint: anchors.stopY < anchors.entryY ? 'Short' : 'Long',
+        chart_left_ratio: 0,
+        chart_right_ratio: 1,
+        entry_line_ratio: anchors.entryY,
+        stop_line_ratio: anchors.stopY,
+        target_line_ratio: anchors.tpY,
+        label_anchored: true,
+      }
+    }
+    return null
+  }
+  const { redBox, greenBox } = zonePair
 
   const fallbackLeft = Math.min(redBox.xMin, greenBox.xMin)
   const fallbackRight = Math.max(redBox.xMax, greenBox.xMax)
@@ -553,14 +625,24 @@ function detectTradeBoxContext(
   const chartPane = inferChartPaneBounds(boxLeftRatio, boxRightRatio)
   const redCenterY = (redBox.yMin + redBox.yMax) / 2
   const greenCenterY = (greenBox.yMin + greenBox.yMax) / 2
-  const directionHint =
+  let directionHint: 'Long' | 'Short' | undefined =
     redCenterY < greenCenterY ? 'Short' : greenCenterY < redCenterY ? 'Long' : undefined
 
   let entryLineRatio: number | undefined
   let stopLineRatio: number | undefined
   let targetLineRatio: number | undefined
 
-  if (directionHint === 'Long') {
+  if (hasAnchorTrio) {
+    // Label pills are the authoritative source for the three lines AND direction.
+    // Zone fills stay in play only for the horizontal box span. This is the
+    // structural fix for overlapping drawn zones: a supply zone merged into the
+    // red fill can push the zone-derived stop line to the wrong level, but it
+    // cannot move the solid red pill on the axis.
+    directionHint = anchors.stopY < anchors.entryY ? 'Short' : 'Long'
+    entryLineRatio = anchors.entryY
+    stopLineRatio = anchors.stopY
+    targetLineRatio = anchors.tpY
+  } else if (directionHint === 'Long') {
     // Entry is the shared boundary between the compact TP and SL zones.
     // Do not use the largest neutral/entry-colored component: charts often
     // contain grey fib/range drawings that can sit inside the position tool and
@@ -573,14 +655,6 @@ function detectTradeBoxContext(
     stopLineRatio = redBox.yMin / height
     targetLineRatio = greenBox.yMax / height
   }
-  // For both Long and Short, the entry color label sits at the shared boundary
-  // (entryLineRatio). Setting this equal to entryLine means the condition
-  // Math.abs(entryLabelCandidateLine - entryLine) > 0.018 is false, so the
-  // entry-color-label-focus crop is never generated (entry-label-focus already
-  // covers that area). Previously for Short this was greenBox.yMax/height (the
-  // TP level), which incorrectly generated a crop at the wrong location.
-  const entryLabelCandidateRatio = entryLineRatio
-
   return {
     direction_hint: directionHint,
     chart_left_ratio: chartPane.left,
@@ -588,17 +662,40 @@ function detectTradeBoxContext(
     box_left_ratio: boxLeftRatio,
     box_right_ratio: boxRightRatio,
     entry_line_ratio: entryLineRatio,
-    entry_label_candidate_ratio: entryLabelCandidateRatio,
     stop_line_ratio: stopLineRatio,
     target_line_ratio: targetLineRatio,
     red_box: toRatioBounds(redBox, width, height),
     green_box: toRatioBounds(greenBox, width, height),
-    entry_box: hasEntryBox ? toRatioBounds(entryBox!, width, height) : undefined,
+    label_anchored: hasAnchorTrio || undefined,
   }
 }
 
 function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPreset[] {
-  if (!scannerContext?.box_left_ratio || !scannerContext.box_right_ratio) {
+  // typeof checks: a box starting exactly at the left edge has box_left_ratio 0,
+  // which is falsy — a plain truthiness test would discard valid geometry.
+  if (typeof scannerContext?.box_left_ratio !== 'number' || typeof scannerContext.box_right_ratio !== 'number') {
+    // Label-anchored-only context: no box span, but the three price lines are
+    // known from the axis pills — position the label crops precisely and keep
+    // the wide fallback crops for everything else.
+    if (
+      typeof scannerContext?.entry_line_ratio === 'number'
+      && typeof scannerContext.stop_line_ratio === 'number'
+      && typeof scannerContext.target_line_ratio === 'number'
+    ) {
+      const axisLabelCrop = (name: string, yCenter: number): CropPreset => ({
+        name,
+        x: 0.83,
+        y: clampRatio(yCenter - 0.045),
+        width: 0.17,
+        height: 0.09,
+      })
+      return [
+        ...DEFAULT_FOCUS_CROPS,
+        axisLabelCrop('entry-label-focus', scannerContext.entry_line_ratio),
+        axisLabelCrop('stop-label-focus', scannerContext.stop_line_ratio),
+        axisLabelCrop('target-label-focus', scannerContext.target_line_ratio),
+      ]
+    }
     return DEFAULT_FOCUS_CROPS
   }
 
@@ -614,13 +711,6 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
   const entryLine = scannerContext.entry_line_ratio ?? (top + boxHeight / 2)
   const stopLine = scannerContext.stop_line_ratio ?? top
   const targetLine = scannerContext.target_line_ratio ?? bottom
-  const entryLabelCandidateLine = scannerContext.entry_label_candidate_ratio
-    ?? (scannerContext.direction_hint === 'Short'
-      ? scannerContext.green_box?.yMax
-      : scannerContext.entry_line_ratio)
-  const includeEntryCandidateCrop = typeof entryLabelCandidateLine === 'number'
-    && Number.isFinite(entryLabelCandidateLine)
-    && Math.abs(entryLabelCandidateLine - entryLine) > 0.018
 
   const labelCrop = (name: string, yCenter: number): CropPreset => ({
     name,
@@ -646,13 +736,6 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
       height: clampRatio(boxHeight * 1.35, 0.3, 0.78),
     },
     {
-      name: 'entry-window-focus',
-      x: clampRatio(left - boxWidth * 0.45, chartLeft, chartRight - 0.12),
-      y: clampRatio(top - boxHeight * 0.15),
-      width: clampRatio(boxWidth * 1.2, 0.16, chartRight - clampRatio(left - boxWidth * 0.45, chartLeft, chartRight - 0.12)),
-      height: clampRatio(boxHeight * 1.2, 0.32, 0.74),
-    },
-    {
       name: 'exit-path-focus',
       x: clampRatio(left, chartLeft, chartRight - 0.12),
       y: clampRatio(top - boxHeight * 0.15),
@@ -667,17 +750,18 @@ function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPres
       height: 1,
     },
     labelCrop('entry-label-focus', entryLine),
-    ...(includeEntryCandidateCrop && typeof entryLabelCandidateLine === 'number' ? [labelCrop('entry-color-label-focus', entryLabelCandidateLine)] : []),
     labelCrop('stop-label-focus', stopLine),
     labelCrop('target-label-focus', targetLine),
     // thin strip of the x-axis bottom, centered on the entry candle, for precise time label reading
-    {
-      name: 'time-axis-focus',
-      x: clampRatio(left - chartWidth * 0.28, chartLeft, 0.72),
-      y: 0.88,
-      width: clampRatio(chartWidth * 0.56, 0.28, 0.70),
-      height: 0.12,
-    },
+    (() => {
+      const taxX = clampRatio(left - chartWidth * 0.28, chartLeft, 0.72)
+      const taxW = clampRatio(chartWidth * 0.56, 0.28, 0.70)
+      // Record where the entry candle sits within this crop (0–1) so the prompt
+      // can point Gemini at the right time label. Computed HERE, from the same
+      // values that position the crop, so the hint can never drift from the crop.
+      scannerContext.time_axis_entry_x_ratio = clampRatio((left - taxX) / Math.max(0.01, taxW), 0.05, 0.95)
+      return { name: 'time-axis-focus', x: taxX, y: 0.88, width: taxW, height: 0.12 }
+    })(),
   ]
 }
 
@@ -686,7 +770,7 @@ export async function buildScannerAssets(
   colors?: { entry?: string; stopLoss?: string; takeProfit?: string },
 ): Promise<{
   focusImages: File[]
-  scannerContext: Record<string, unknown> | null
+  scannerContext: Record<string, unknown>
   uploadImage: File
 }> {
   const image = await loadImage(file)
@@ -702,22 +786,7 @@ export async function buildScannerAssets(
   }
   const scannerContext = detectTradeBoxContext(image, resolvedColors.stopLoss, resolvedColors.takeProfit, resolvedColors.entry)
 
-  // Compute where the entry candle sits within the time-axis-focus crop (0–1 ratio),
-  // so the Gemini prompt can tell it exactly where to look for the nearest time label.
-  if (scannerContext?.box_left_ratio !== undefined) {
-    const _chartLeft = scannerContext.chart_left_ratio ?? 0
-    const _chartRight = scannerContext.chart_right_ratio ?? 1
-    const _chartW = Math.max(0.22, _chartRight - _chartLeft)
-    const _left = scannerContext.box_left_ratio
-    const _taxX = clampRatio(_left - _chartW * 0.28, _chartLeft, 0.72)
-    const _taxW = clampRatio(_chartW * 0.56, 0.28, 0.70)
-    scannerContext.time_axis_entry_x_ratio = clampRatio(
-      (_left - _taxX) / Math.max(0.01, _taxW),
-      0.05,
-      0.95,
-    )
-  }
-
+  // Also sets scannerContext.time_axis_entry_x_ratio from the time-axis crop geometry.
   const focusCrops = buildDynamicFocusCrops(scannerContext)
 
   const focusImages = await Promise.all(
@@ -729,54 +798,38 @@ export async function buildScannerAssets(
       const boundedWidth = Math.min(sw, image.width - sx)
       const boundedHeight = Math.min(sh, image.height - sy)
 
+      // Label strips carry the digits that decide the trade — upscale them so
+      // Gemini reads characters at 2.5x the source resolution.
+      const scale = crop.name.includes('label-focus') ? 2.5 : 1
+
       const canvas = document.createElement('canvas')
-      canvas.width = boundedWidth
-      canvas.height = boundedHeight
+      canvas.width = Math.round(boundedWidth * scale)
+      canvas.height = Math.round(boundedHeight * scale)
 
       const context = canvas.getContext('2d')
       if (!context) throw new Error('Failed to prepare scanner crop canvas')
 
-      context.drawImage(image, sx, sy, boundedWidth, boundedHeight, 0, 0, boundedWidth, boundedHeight)
+      context.imageSmoothingEnabled = true
+      context.imageSmoothingQuality = 'high'
+      context.drawImage(image, sx, sy, boundedWidth, boundedHeight, 0, 0, canvas.width, canvas.height)
       return canvasToFile(canvas, `${crop.name}-${file.name}`, sourceType)
     })
   )
 
   const uploadImage = await buildUploadImage(image, file.name)
-  return { focusImages, scannerContext: scannerContext ? (scannerContext as Record<string, unknown>) : null, uploadImage }
-}
 
-function tryReadHex(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-export function buildScannerColorContext(raw: unknown): {
-  entryZone: { hex: string }
-  supplyStopZone: { hex: string }
-  targetDemandZone: { hex: string }
-} {
-  const source = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
-  const scannerColors = typeof source.scanner_colors === 'object' && source.scanner_colors !== null
-    ? (source.scanner_colors as Record<string, unknown>)
-    : source
-
-  const entryHex =
-    tryReadHex((scannerColors.entryZone as { hex?: unknown } | undefined)?.hex)
-    ?? tryReadHex(scannerColors.entry)
-    ?? DEFAULT_SCANNER_COLORS.entry
-
-  const stopHex =
-    tryReadHex((scannerColors.supplyStopZone as { hex?: unknown } | undefined)?.hex)
-    ?? tryReadHex(scannerColors.stopLoss)
-    ?? DEFAULT_SCANNER_COLORS.stopLoss
-
-  const tpHex =
-    tryReadHex((scannerColors.targetDemandZone as { hex?: unknown } | undefined)?.hex)
-    ?? tryReadHex(scannerColors.takeProfit)
-    ?? DEFAULT_SCANNER_COLORS.takeProfit
-
-  return {
-    entryZone: { hex: entryHex },
-    supplyStopZone: { hex: stopHex },
-    targetDemandZone: { hex: tpHex },
+  // Ship the resolved colors with the context so the backend prompt always
+  // references the exact same hexes the pixel detector used. Call sites should
+  // not assemble scanner_colors themselves.
+  const contextWithColors: Record<string, unknown> = {
+    ...(scannerContext ?? {}),
+    scanner_colors: {
+      entryZone: { hex: resolvedColors.entry },
+      supplyStopZone: { hex: resolvedColors.stopLoss },
+      targetDemandZone: { hex: resolvedColors.takeProfit },
+    },
   }
+
+  return { focusImages, scannerContext: contextWithColors, uploadImage }
 }
+

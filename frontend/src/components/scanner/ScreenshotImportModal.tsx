@@ -326,39 +326,20 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
         setCurrentDate(fileTradeDate);
       }
       const colors = preferences.scannerColors;
-      const { focusImages, scannerContext: rawContext, uploadImage } = await buildScannerAssets(file, {
+      // buildScannerAssets resolves the colors and embeds scanner_colors in the context
+      const { focusImages, scannerContext, uploadImage } = await buildScannerAssets(file, {
         entry: colors?.entry,
         stopLoss: colors?.stopLoss,
         takeProfit: colors?.takeProfit,
       });
-      const enrichedContext: Record<string, unknown> = {
-        ...(rawContext ?? {}),
-        scanner_colors: {
-          entryZone: { hex: colors?.entry ?? '#E67E22' },
-          supplyStopZone: { hex: colors?.stopLoss ?? '#C0392B' },
-          targetDemandZone: { hex: colors?.takeProfit ?? '#1A6B5A' },
-        },
-      };
       const extracted = await scanChart(
         uploadImage,
         scanDate,
         scanTime,
         focusImages,
-        enrichedContext
+        scannerContext
       );
-      const INTERNAL_WARNINGS = new Set([
-        'Exact price-label review failed, so price levels relied on the broader chart reads.',
-        'Exit verification failed — relying on manual chart read.',
-        'Exit verification failed, so the final answer relied on the manual chart read.',
-        'Stop/target sanity check failed, so the final answer relied on the broader exit review.',
-        'Header symbol/timeframe read failed, so identity relied on the broader chart reads.',
-        'Primary chart extraction failed, so the scanner fell back to the human-style review pass.',
-        'Human-style review failed, so the scanner relied on the primary extraction pass.',
-        'Final consensus review failed, so the result relied on the primary extraction passes.',
-        'Sanity check failed — relying on exit verification result.',
-      ]);
-      const w: string[] = (Array.isArray(extracted.warnings) ? extracted.warnings : [])
-        .filter((msg: string) => !INTERNAL_WARNINGS.has(msg));
+      const w: string[] = Array.isArray(extracted.warnings) ? extracted.warnings : [];
       const fields = new Set<string>();
       const baseTrade = editTrade ?? prefillTrade ?? formData ?? null;
       const mapped: Partial<Trade> = {

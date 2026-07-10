@@ -1,5 +1,48 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import type { ResponseSchema } from '@google/generative-ai';
 import type { ExtractedTradeData } from '../types/index';
+
+// ── Structured-output schemas (Gemini JSON mode) ──────────────────────────────
+
+const EXTRACTION_SCHEMA: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    symbol: { type: SchemaType.STRING, nullable: true },
+    direction: { type: SchemaType.STRING, nullable: true },
+    entry_price: { type: SchemaType.NUMBER, nullable: true },
+    sl_price: { type: SchemaType.NUMBER, nullable: true },
+    tp_price: { type: SchemaType.NUMBER, nullable: true },
+    timeframe_minutes: { type: SchemaType.NUMBER, nullable: true },
+    entry_time: { type: SchemaType.STRING, nullable: true },
+    price_confidence: { type: SchemaType.STRING },
+    time_confidence: { type: SchemaType.STRING },
+    evidence: { type: SchemaType.STRING },
+    warnings: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+  },
+  required: ['symbol', 'direction', 'entry_price', 'sl_price', 'tp_price', 'timeframe_minutes', 'entry_time', 'price_confidence', 'time_confidence', 'evidence', 'warnings'],
+};
+
+const BOUNDARY_SCHEMA: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    touched: { type: SchemaType.BOOLEAN },
+    first_touch_candle_index: { type: SchemaType.NUMBER, nullable: true },
+    confidence: { type: SchemaType.STRING },
+    evidence: { type: SchemaType.STRING },
+  },
+  required: ['touched', 'first_touch_candle_index', 'confidence', 'evidence'],
+};
+
+const VERIFY_EXIT_SCHEMA: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    exit_reason: { type: SchemaType.STRING, nullable: true },
+    confidence: { type: SchemaType.STRING },
+    first_touch_candle_index: { type: SchemaType.NUMBER, nullable: true },
+    evidence: { type: SchemaType.STRING },
+  },
+  required: ['exit_reason', 'confidence', 'first_touch_candle_index', 'evidence'],
+};
 
 function parseModelFallbackChain(value: string | undefined): string[] {
   const models = (value ?? '')
@@ -70,7 +113,13 @@ async function generateWithFallback(
   systemPrompt: string,
   mimeType: string,
   base64Image: string,
-  focusImages: Array<{ base64Image: string; mimeType: string; label: string }> = []
+  focusImages: Array<{ base64Image: string; mimeType: string; label: string }> = [],
+  options?: {
+    // JSON mode: eliminates the "Failed to parse Gemini response" failure class.
+    responseSchema?: ResponseSchema;
+    // Override the model chain (e.g. quality escalation to pro).
+    modelChain?: string[];
+  }
 ): Promise<{ text: string; model: string }> {
   const errors: string[] = [];
   const selectedFocusImages = focusImages
@@ -96,9 +145,18 @@ async function generateWithFallback(
     ]),
   ];
 
-  for (let modelIndex = 0; modelIndex < GEMINI_MODEL_FALLBACK_CHAIN.length; modelIndex++) {
-    const modelName = GEMINI_MODEL_FALLBACK_CHAIN[modelIndex];
-    const model = genAI.getGenerativeModel({ model: modelName });
+  const modelChain = options?.modelChain ?? GEMINI_MODEL_FALLBACK_CHAIN;
+  for (let modelIndex = 0; modelIndex < modelChain.length; modelIndex++) {
+    const modelName = modelChain[modelIndex];
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      ...(options?.responseSchema ? {
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: options.responseSchema,
+        },
+      } : {}),
+    });
 
     // Brief pause before switching to the fallback model
     if (modelIndex > 0) await sleep(2000);
@@ -205,6 +263,16 @@ function hexToColorName(hex: string): string {
   return 'red';
 }
 
+function levelsConsistent(
+  direction: 'Long' | 'Short',
+  entry: number | null,
+  sl: number | null,
+  tp: number | null,
+): boolean {
+  if (entry === null || sl === null || tp === null) return false;
+  return direction === 'Long' ? tp > entry && sl < entry : tp < entry && sl > entry;
+}
+
 function sanitizePriceLevels(
   direction: 'Long' | 'Short' | null,
   entry_price: number | null,
@@ -262,6 +330,23 @@ type ScannerLineHints = {
   timeAxisEntryXRatio?: number;
 };
 
+type ExtractionRead = {
+  symbol: string | null;
+  direction: 'Long' | 'Short' | null;
+  entry_price: number | null;
+  sl_price: number | null;
+  tp_price: number | null;
+  exit_reason: 'TP' | 'SL' | null;
+  trade_length_seconds: number | null;
+  timeframe_minutes: number | null;
+  entry_time: string | null;
+  close_time: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  first_touch_candle_index: number | null;
+  evidence: string | null;
+  warnings: string[];
+};
+
 function buildIdentityRules(): string {
   return `IDENTITY
 1. Read symbol and timeframe from header-focus first, then full_chart.
@@ -286,7 +371,7 @@ ${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `- time-axis-focus center
 Use labels at these geometry lines. Ignore easier-to-read labels away from these lines.`;
 }
 
-function buildPriceRules(userColors?: ScannerUserColors): string {
+function buildPriceRules(userColors?: ScannerUserColors, hasGeometry = false): string {
   const entryText = userColors
     ? `${hexToColorName(userColors.entry)} (${userColors.entry})`
     : 'configured entry color, or neutral grey/dark fallback';
@@ -296,15 +381,20 @@ function buildPriceRules(userColors?: ScannerUserColors): string {
   const targetText = userColors
     ? `${hexToColorName(userColors.takeProfit)} (${userColors.takeProfit})`
     : 'teal/green take-profit color';
+  // Only claim the dedicated crops are boundary-centered when the pixel scanner
+  // actually placed them. In fallback mode those crops are not sent at all.
+  const stepThree = hasGeometry
+    ? `3. For each level, start at the geometry crop/line:
+   - entry_price: entry-label-focus at the shared red/green boundary.
+   - sl_price: stop-label-focus at the outer red/pink stop boundary.
+   - tp_price: target-label-focus at the outer teal/green target boundary.
+   Use price-label-focus as the full right-axis backup when a dedicated crop contains a rejected label.`
+    : `3. No boundary-centered crops are available for this scan. Locate each level yourself: find the compact position tool's boundaries in full_chart / trade-box-focus, then read the right-axis label aligned with each boundary using price-label-focus.`;
 
   return `PRICE LABEL DECISION TREE - FOLLOW IN ORDER
 1. Find the compact position tool. It is the paired red/stop and teal/take-profit box with shared horizontal span and a shared entry boundary. Ignore large supply/demand/orderblock/session zones.
 2. Read right-axis labels only. Do not use numbers printed inside the chart body, fib labels, R:R labels, confluence labels, or annotations.
-3. For each level, start at the geometry crop/line:
-   - entry_price: entry-label-focus at the shared red/green boundary.
-   - sl_price: stop-label-focus at the outer red/pink stop boundary.
-   - tp_price: target-label-focus at the outer teal/green target boundary.
-   Use price-label-focus as the full right-axis backup when a dedicated crop contains a rejected label.
+${stepThree}
 4. Reject cursor/live labels before reading numbers:
    - Any label with a circle-plus/crosshair/plus icon on its left is a cursor price tracker.
    - Any label with an attached countdown timer such as 00:29 or 1:03 is the live/current price marker.
@@ -356,7 +446,7 @@ ${buildIdentityRules()}
 ${buildGeometryRules(directionHint, lineHints)}
 ${boxText}
 
-${buildPriceRules(userColors)}
+${buildPriceRules(userColors, Boolean(lineHints))}
 
 ${buildTimeRules(lineHints)}
 
@@ -396,455 +486,78 @@ export async function readTradeChart(
     targetLineRatio?: number;
     timeAxisEntryXRatio?: number;
   },
-): Promise<{
-  symbol: string | null;
-  direction: 'Long' | 'Short' | null;
-  entry_price: number | null;
-  sl_price: number | null;
-  tp_price: number | null;
-  exit_reason: 'TP' | 'SL' | null;
-  trade_length_seconds: number | null;
-  timeframe_minutes: number | null;
-  entry_time: string | null;
-  close_time: string | null;
-  confidence: 'high' | 'medium' | 'low';
-  first_touch_candle_index: number | null;
-  evidence: string | null;
-  warnings: string[];
-}> {
-  {
-    const systemPrompt = buildMainExtractionPrompt(userColors, boxBounds, directionHint, lineHints);
+): Promise<ExtractionRead> {
+  const basePrompt = buildMainExtractionPrompt(userColors, boxBounds, directionHint, lineHints);
+  const escalationModel = process.env.GEMINI_ESCALATION_MODEL?.trim() || 'gemini-2.5-pro';
 
+  type AttemptOutcome = ExtractionRead & { structuralFailures: string[]; priceConfidenceLow: boolean };
+
+  const runAttempt = async (prompt: string, modelChain?: string[]): Promise<AttemptOutcome> => {
     try {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-      const { text } = await generateWithFallback(genAI, systemPrompt, mimeType, base64Image, focusImages);
+      const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages, {
+        responseSchema: EXTRACTION_SCHEMA,
+        modelChain,
+      });
       const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
 
+      let parsed: Record<string, unknown>;
       try {
-        const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-        const modelDirection = parseDirection(parsed.direction);
-        const direction = directionHint ?? modelDirection;
-        const entryPrice = parseNullableNumber(parsed.entry_price);
-        const baseWarnings: string[] = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w: unknown) => typeof w === 'string') : [];
-        if (directionHint && modelDirection && modelDirection !== directionHint) {
-          baseWarnings.push(`Direction corrected from ${modelDirection} to ${directionHint} using compact position-tool geometry.`);
-        }
-
-        const { sl_price, tp_price, warnings: sanityWarnings } = sanitizePriceLevels(
-          direction,
-          entryPrice,
-          parseNullableNumber(parsed.sl_price),
-          parseNullableNumber(parsed.tp_price),
-          baseWarnings,
-        );
-        const priceConfidence = parsed.price_confidence === 'high' || parsed.price_confidence === 'medium' ? parsed.price_confidence : 'low';
-        const timeConfidence = parsed.time_confidence === 'high' || parsed.time_confidence === 'medium' ? parsed.time_confidence : 'low';
-        if (priceConfidence === 'low') {
-          sanityWarnings.push('Price read is low confidence; verify entry/SL/TP manually.');
-        }
-
-        const timeframeRaw = parseNullableNumber(parsed.timeframe_minutes);
-        const timeframeMinutes = timeframeRaw !== null ? Math.max(0, Math.round(timeframeRaw)) : null;
-
-        return {
-          symbol: typeof parsed.symbol === 'string' ? parsed.symbol : null,
-          direction,
-          entry_price: entryPrice,
-          sl_price,
-          tp_price,
-          exit_reason: null,
-          trade_length_seconds: null,
-          timeframe_minutes: timeframeMinutes,
-          entry_time: parseTimeToken(parsed.entry_time),
-          close_time: null,
-          confidence: timeConfidence,
-          first_touch_candle_index: null,
-          evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
-          warnings: sanityWarnings,
-        };
+        parsed = JSON.parse(cleaned) as Record<string, unknown>;
       } catch {
-        return nullResult(['Failed to parse Gemini response']);
+        return { ...nullResult(['Failed to parse Gemini response']), structuralFailures: ['response was not valid JSON'], priceConfidenceLow: true };
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gemini API error';
-      return nullResult([msg]);
-    }
-  }
-
-}
-
-  /*
-  Legacy monolithic extraction prompt disabled. The active scanner path above now
-  extracts identity, prices, direction, and entry time only; exit resolution is
-  owned by the dedicated boundary/verifier passes below.
-  const colorSection = userColors
-    ? (() => {
-        const entryName = hexToColorName(userColors.entry);
-        const slName    = hexToColorName(userColors.stopLoss);
-        const tpName    = hexToColorName(userColors.takeProfit);
-        return `
-PRICE LEVEL IDENTIFICATION — FOLLOW THESE STEPS EXACTLY:
-
-Step 1. Look at the right-hand price axis of the chart. You will see colored price labels — these may be rounded pills, sharp rectangles, or any other colored tag shape depending on the trading platform (TradingView standalone, TopstepX, Apex, FTMO, Tradovate, etc.). Shape does not matter — only the background color and the number inside matter.
-IMPORTANT: The ENTRY label should match the user's configured Entry zone color when they have changed it. If no configured-color entry label is visible, the entry can be the neutral/grey/black right-axis pill exactly aligned with the shared boundary between the compact take-profit and stop-loss zones. Never use a black/white horizontal-line label as entry when a colored or grey entry label is visible.
-If an attached crop is labelled price-label-focus, use it to read all visible right-axis labels. If an attached crop is labelled entry-color-label-focus, use it to resolve the entry label only.
-FALLBACK — if no colored labels are visible on the right axis at all: trace each zone boundary (entry line, outer edge of pink zone, outer edge of teal zone) horizontally to the price axis gridlines and read the nearest grid price.
-
-⚠ CURSOR CROSSHAIR LABEL — MANDATORY EXCLUSION BEFORE READING ANY PRICE:
-Trading platforms (especially TradingView) render a floating 'cursor price' label on the right axis that tracks the mouse pointer position. This label is NOT a trade level.
-How to identify it: the cursor crosshair label has a ⊕ symbol (circle containing a plus/cross), a + icon, or a circle-with-cross marker on its LEFT edge, immediately before the price number. It appears as a white, light-grey, or dark rectangular tag with this icon on the left side. It can appear in ANY crop — entry-label-focus, price-label-focus, or any other.
-RULE: If any right-axis price label has a ⊕, +, or circle-with-cross icon on its LEFT side — SKIP THAT LABEL ENTIRELY. Never use it as entry_price, sl_price, or tp_price. Instead find the next label at that level that has no such icon and matches the configured zone color or zone boundary position.
-
-Step 2. The user has configured exactly these three zone colors in their Flyxa settings:
-  • Entry zone    = ${entryName} — exact hex: ${userColors.entry}
-  • Stop Loss     = ${slName} — exact hex: ${userColors.stopLoss}
-  • Take Profit   = ${tpName} — exact hex: ${userColors.takeProfit}
-These hex values describe the background color of the position-tool price labels on the right axis. The label whose background most closely matches each hex is the correct one for that level.
-
-MANDATORY - POSITION TOOL vs MARKET-STRUCTURE ZONES:
-Charts often contain extra colored boxes such as demand zones, supply zones, order blocks, FVGs, or session zones. These may use the same green/red colors as the scanner settings, but they are NOT the trade.
-The active trade is the compact paired position tool: its red/stop zone and teal/take-profit zone share roughly the same horizontal start/end span and touch the same entry boundary. Ignore any large colored zone that spans most of the chart, sits far away from the paired red/teal tool, or continues far beyond the P&L box.
-Only read right-axis labels that align with the compact position-tool boundaries. If a green/red price label belongs to a large demand/supply/orderblock zone, ignore it even if its color matches the configured Take Profit or Stop Loss color.
-
-⚠ MANDATORY — KEY-LEVEL LINE LABELS vs POSITION TOOL ENTRY LABELS:
-Traders draw horizontal support/resistance lines across their entire chart. These lines can produce their own right-axis labels with TRUE BLACK or VERY DARK backgrounds (close to #000000). Some platforms also use a black/dark right-axis pill for the actual ENTRY label.
-How to tell them apart:
-  • KEY-LEVEL label: the line it belongs to runs horizontally across the ENTIRE chart, extending far beyond the compact P&L box. Ignore it unless it is exactly the shared entry boundary and no better entry label exists.
-  • POSITION TOOL ENTRY label: sits on the right axis at the exact shared boundary where the compact teal/green and red/pink zones meet. It may be grey, black, or dark depending on the platform.
-WHEN BOTH APPEAR AT THE SAME PRICE (common case): a key-level line happens to be drawn exactly at the entry/SL/TP price, so two labels stack at the same Y position on the right axis — one black (key-level), one colored/grey (position tool). You MUST use the non-black one.
-MANDATORY: Do NOT discard a black/dark right-axis label when it is exactly aligned with the shared boundary between the compact TP and SL zones. In that case it is the entry pill and is the correct entry_price.
-MANDATORY: If entry-label-focus shows a black/dark right-axis pill at the shared boundary and no configured-color entry label is visible, read that pill as entry_price.
-NEVER read entry_price from numeric annotations printed inside the chart/position tool body (examples: 0, 0.5, 1, -1, -2, fib labels, dashed-line labels). Entry must come from the right-axis pill/label at the shared red/green boundary.
-
-⚠ MATCHING-COLOR LINE TEST — MANDATORY FOR EVERY PRICE LEVEL (ENTRY, SL, TP):
-The correct position-tool labels (Entry, SL, TP) are STANDALONE right-axis pills. They NEVER have a horizontal line of THEIR OWN COLOR extending leftward from them onto the chart body. User-drawn levels always do: a horizontal-line drawing produces a right-axis label whose background color MATCHES the color of its line (black label + black line, blue label + blue line, etc.).
-THE TEST: for each candidate label, look immediately left of it on the chart. If a horizontal line (solid or dashed) of the SAME COLOR as the label's background extends from it across the chart → that label belongs to a drawn level. REJECT IT for entry_price, sl_price, and tp_price — regardless of how close its price is to the expected level.
-WHAT DOES NOT DISQUALIFY A LABEL:
-• The P&L box's own zone borders. The true SL label sits exactly at the outer edge of the red zone and the true TP label at the outer edge of the teal zone — the semi-transparent zone fill/border touching the label from the left is part of the position tool, NOT a drawn line. Do NOT reject a configured-color label because the zone edge meets it.
-• Lines of a DIFFERENT color passing near or through the label's price.
-STACKED SAME-PRICE CASE (very common): a trader draws a key level at exactly the SL/entry/TP price, so TWO labels stack at the same Y on the right axis — e.g. a black key-level label AND the red position-tool SL label, both reading the same price. Apply the test: the label WITH a matching-color line is the drawn level (ignore it); the label WITHOUT any matching-color line is the position-tool label (use it). If two labels have similar colors or similar prices, the one with a matching-color line coming out of it is ALWAYS the one to ignore.
-Concrete anchors:
-• sl_price = the ${slName}-colored standalone pill that aligns with the outer edge of the red/pink zone of the P&L box, with no ${slName} line extending from it.
-• entry_price = the standalone pill matching the configured entry color (or grey/dark fallback) at the shared zone boundary, with NO line of its own color extending from it onto the chart.
-• A dashed line inside the colored zone (average-entry indicator, scale-in marker) produces a matching right-axis label — that label MUST be rejected for entry. Read entry from the standalone pill at the zone boundary instead.
-
-⚠ COLOR-ROLE EXCLUSIVITY — ABSOLUTE, OVERRIDES ALL PIXEL-GEOMETRY HINTS AND CROPS:
-Traders draw large supply/demand/orderblock zones in colors similar to the position tool, and these drawn zones can OVERLAP or sit directly adjacent to the compact position tool. When that happens the scanner's pixel-derived crops (stop-label-focus, entry-label-focus) may be centered at the DRAWN zone's edge instead of the position tool's edge. The configured-color right-axis labels are the FINAL AUTHORITY — never the crop position.
-1. sl_price may ONLY come from a label whose background matches the configured Stop Loss color (${slName}). If the stop-label-focus crop contains NO ${slName}-colored label, do NOT substitute a black, grey, or other-colored label from that crop — the crop is centered on the wrong zone. Re-scan price-label-focus and the full chart for the ${slName}-colored standalone pill and use that price instead.
-2. If MULTIPLE ${slName}-family labels are candidates, sl_price is the one CLOSEST to the entry boundary on the risk side. A red label sitting further away at the edge of a larger drawn zone is that zone's boundary, not the stop.
-3. entry_price may NEVER equal the price of a ${slName}-colored or ${tpName}-colored label. If the value you are about to output for entry_price matches a ${slName}-colored label's price, you have misread — that label is sl_price. Entry is the grey/dark/${entryName} standalone pill strictly BETWEEN sl_price and tp_price.
-4. FINAL CHECK before answering: entry_price must lie strictly between sl_price and tp_price, sl_price must come from a ${slName}-colored label, tp_price from a ${tpName}-colored label, and entry_price from a non-SL-colored, non-TP-colored label. If any of these fail, re-read the labels — do not output the failing combination.
-
-Step 3. Match each right-axis label to the configured hex colors above:
-  • Label whose background ≈ ${userColors.entry} (${entryName})  → entry_price
-  • Label whose background ≈ ${userColors.stopLoss} (${slName})   → sl_price
-  • Label whose background ≈ ${userColors.takeProfit} (${tpName}) → tp_price
-  If no ${entryName} entry label is visible, fall back to the grey/black/dark right-axis label at the shared entry boundary as entry_price.
-  A Take Profit-colored label can NEVER be used as sl_price. A Stop Loss-colored label can NEVER be used as tp_price. If a dedicated crop contains the wrong color for its role, ignore that label and re-read price-label-focus at the correct compact position-tool boundary.
-
-CRITICAL — STACKED LABELS DISAMBIGUATION:
-On many platforms (especially TradingView), you will see TWO labels of identical or very similar color stacked close together at the TP or SL price level. One is the position-tool price label (the correct value). The other is the LIVE floating price label that shows the current market price — it can coincidentally match your configured color and float near the zone boundary.
-YOU MUST USE THE ZONE BOUNDARY TO PICK THE CORRECT LABEL:
-  • For a LONG trade:
-    - The correct TP label is the one whose vertical position aligns with the TOP OUTER EDGE of the teal zone (the highest horizontal boundary line of the teal colored area). It will be INSIDE or exactly ON the zone boundary.
-    - Any label that appears ABOVE the top edge of the teal zone (floating beyond the boundary, outside the zone) is the live price marker — IGNORE IT.
-    - The correct SL label is the one whose vertical position aligns with the BOTTOM OUTER EDGE of the red/pink zone (the lowest horizontal boundary line of the red area). It will be INSIDE or exactly ON the zone boundary.
-    - Any label that appears BELOW the bottom edge of the red zone is the live price marker — IGNORE IT.
-  • For a SHORT trade (mirror image):
-    - The correct SL label aligns with the TOP OUTER EDGE of the upper red/pink zone — ignore any label floating above it.
-    - The correct TP label aligns with the BOTTOM OUTER EDGE of the lower teal zone — ignore any label floating below it.
-RULE: When two similarly-colored labels are stacked, ALWAYS choose the inner one (the one sitting at or inside the zone boundary), NOT the one floating outside the boundary.
-
-DIFFERENT-COLOR STACK — LIVE-PRICE PILL vs POSITION LABEL (CRITICAL, COLOR WINS OVER POSITION):
-The live/current-price pill is very often a DIFFERENT color from the position label it sits beside, and only 1–4 points away. Discriminate by CONFIGURED COLOR — never by which label is higher, lower, or "outermost":
-  • sl_price MUST come from a label whose background matches the configured Stop Loss color (${slName}, ${userColors.stopLoss}). A green/teal label is NEVER the stop loss — not even when it is the topmost/outermost label at the top of a SHORT's red zone. In that exact stack the green live-price pill floats just ABOVE the red stop label; the SL is the ${slName} label sitting one step BELOW it, at the true top edge of the pink fill. Do NOT read sl_price from the green pill just because it is highest.
-  • tp_price MUST come from a label whose background matches the configured Take Profit color (${tpName}, ${userColors.takeProfit}). A red/pink label is NEVER the take profit.
-  • Concretely: if a GREEN label and a RED/pink label are stacked within a few points at the top of a SHORT's red zone, the RED one is sl_price and the GREEN one is the live price — ignore the green one entirely.
-COUNTDOWN-TIMER DISQUALIFIER: the live-price pill usually has a small bar-close countdown timer attached directly beneath or beside it (e.g. "00:29", "0:14", "1:03"). ANY right-axis label that has an attached countdown timer is the live price marker — IGNORE IT for sl_price, tp_price, AND entry_price. Read the adjacent configured-color position label instead.
-
-Step 4. IGNORE everything else on the chart completely:
-  • Horizontal lines (black, white, or any color) drawn across the chart = key levels, NOT trade prices
-  • Black or white right-axis labels attached to horizontal key levels = ignore for entry_price UNLESS the label is exactly aligned with the shared boundary between the compact TP and SL zones and no configured-color entry label is visible
-  • The live floating price label on the far right (the highlight showing current price) = ignore
-  • The cursor crosshair label — has a ⊕, + or circle-with-cross icon on its LEFT edge = ALWAYS IGNORE in every crop; it tracks the mouse pointer, not a trade level
-  • Any price label whose background color does NOT match the configured position-tool colors = ignore, except grey is allowed as an entry fallback
-  • Do not use a nearby black horizontal-line label when a configured-color or grey entry label exists. The entry label is the source of truth.
-`;
-      })()
-    : `
-PRICE LEVEL IDENTIFICATION:
-Look at the right-hand price axis. Find the three colored price labels (any shape — pill, rectangle, tag):
-  • Grey/black/dark label exactly at the shared boundary between the compact teal/green and red/pink position-tool zones = entry_price
-  • Red or pink background label = sl_price
-  • Teal or green background label = tp_price
-
-⚠ CURSOR CROSSHAIR LABEL — MANDATORY EXCLUSION:
-Any right-axis label with a ⊕, + or circle-with-cross icon on its LEFT side is the platform's cursor price tracker — NOT a trade level. ALWAYS IGNORE it. Never use it as entry, SL, or TP.
-
-⚠ KEY-LEVEL LINES: Traders draw horizontal lines across their entire chart. These can produce BLACK or DARK GREY right-axis labels. Ignore them unless the label is exactly on the compact position tool's shared entry boundary and no colored/grey entry label is visible.
-NEVER use numeric labels printed inside the chart body (0, 0.5, 1, -1, -2, fib labels, dashed-line labels) as entry/sl/tp.
-
-⚠ MATCHING-COLOR LINE TEST — MANDATORY:
-Position-tool price labels (SL, Entry, TP) are standalone right-axis pills. They NEVER have a horizontal line of THEIR OWN COLOR extending left from them onto the chart. A user-drawn level always does — its right-axis label color matches its line color (black label + black line, etc.).
-For each candidate label: if a solid or dashed line of the SAME COLOR as the label extends from it onto the chart body, that label is a drawn level — REJECT it for entry/SL/TP, even if its price matches the expected level. When two labels stack at the same price (e.g. a black key-level label and a red SL label), use the one WITHOUT a matching-color line.
-The P&L box's own semi-transparent zone borders touching a label do NOT disqualify it — the true SL/TP labels sit exactly at the zone edges. A dashed line inside the colored zone (average-entry marker) has a matching right-axis label that must be rejected for entry; use only the standalone pill at the zone boundary.
-
-⚠ COLOR-ROLE EXCLUSIVITY — ABSOLUTE:
-Drawn supply/demand zones can overlap the position tool and mislead the crop positions. The colored labels are the final authority:
-1. sl_price ONLY from a red/pink label. If a crop shows no red/pink label, do NOT substitute a black or grey one — find the red/pink standalone pill elsewhere in the image.
-2. When multiple red/pink labels are candidates, sl_price is the one CLOSEST to the entry boundary — a red label further out belongs to a drawn zone edge.
-3. entry_price may NEVER equal a red/pink or teal/green label's price. If it does, that label is the SL (or TP) — entry is the grey/dark pill strictly BETWEEN sl_price and tp_price.
-4. FINAL CHECK: entry strictly between SL and TP; SL from a red/pink label; TP from a teal/green label. If any check fails, re-read — do not output the failing combination.
-
-FALLBACK — if no colored labels are visible: trace each zone boundary to the price axis gridlines and read the nearest grid price.
-STACKED LABELS: If two labels of similar color appear stacked near the TP or SL price, use the one that aligns with the OUTER BOUNDARY of the colored zone (the far edge of the zone from entry). The label floating outside the zone boundary is the live price marker — ignore it.
-DIFFERENT-COLOR STACK: The live/current-price pill is often a different color from the stop/target label and sits only 1–4 points away. sl_price is the RED/pink label; tp_price is the TEAL/green label. A GREEN label is NEVER the stop loss even when it is the highest label at the top of a SHORT's red zone — in that case the green pill is the live price floating just above the red stop label; read sl_price from the RED label one step below it. A RED/pink label is never the take profit.
-COUNTDOWN-TIMER DISQUALIFIER: Any right-axis label with a small bar-close countdown timer attached (e.g. "00:29", "0:14") is the live-price marker — ignore it for entry_price, sl_price, and tp_price and read the adjacent colored position label instead.
-`;
-
-  const geometrySection = directionHint || lineHints
-    ? `PIXEL GEOMETRY AUTHORITY — USE THIS BEFORE GUESSING:
-The browser-side scanner has already matched the user's configured colors and selected the compact paired position-tool zones. Treat this geometry as the source of truth for direction and crop roles.
-${directionHint ? `- Detected compact position-tool direction: ${directionHint}` : '- Direction hint: unavailable'}
-${typeof lineHints?.entryLineRatio === 'number' ? `- entry-label-focus is centered near ${Math.round(lineHints.entryLineRatio * 100)}% image height: read entry_price from the RIGHT-AXIS pill/label at this shared boundary. If you see TWO labels at this level — one with a ⊕/+ icon on its left (cursor label) and one without — read the one WITHOUT the ⊕/+ icon.` : ''}
-${typeof lineHints?.stopLineRatio === 'number' ? `- stop-label-focus is centered near ${Math.round(lineHints.stopLineRatio * 100)}% image height: read sl_price at this stop boundary.` : ''}
-${typeof lineHints?.targetLineRatio === 'number' ? `- target-label-focus is centered near ${Math.round(lineHints.targetLineRatio * 100)}% image height: read tp_price at this target boundary.` : ''}
-${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `- time-axis-focus crop: a zoomed strip of the chart bottom near the entry candle. The entry candle sits at approximately ${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the LEFT edge of this crop. Use this crop as your primary view for x-axis time labels in Step 5.` : ''}
-If a right-axis label away from these geometry lines is easier to read, IGNORE IT. Do not use the live/current price label, the last traded price label, or a large orderblock/demand/supply-zone label as entry/sl/tp.
-For a Long position tool, TP/green is above entry and SL/red is below entry. For a Short position tool, SL/red is above entry and TP/green is below entry.
-If the numbers you read imply the opposite direction from the detected compact tool, your price read is wrong — re-read the labels at the geometry lines instead of flipping direction.
-The entry boundary may have a neutral/black/grey right-axis label if no configured entry-color label is visible. That neutral/dark pill is valid ONLY when it aligns with the shared boundary between the compact TP and SL zones. Do not read entry from a dashed line, fib label, or any number printed inside the chart body.
-`
-    : '';
-
-  const systemPrompt = `You are a professional futures chart reader. Your ONLY job is to extract exact trade data from a P&L card screenshot — the chart may come from TradingView, TopstepX, Apex Trader, FTMO, Tradovate, or any other platform.
-You may receive the full chart plus labelled scanner crops. The crop labels are included as text immediately before each image.
-Use price-label-focus as the primary OCR view for right-axis price labels. Use entry-label-focus as the primary OCR view for the entry price pill at the shared red/green boundary. Use entry-color-label-focus only as a secondary entry check. If entry-label-focus shows a black/dark right-axis pill at the shared TP/SL boundary, that can be the valid entry label. If stop-label-focus or target-label-focus show black/white horizontal-line labels, treat them as crop hints only and ignore those black/white values as SL/TP prices.
-
-${geometrySection}
-
-CROP AUTHORITY RULE — HIGHEST PRIORITY FOR SL/TP PRICES:
-The crops labelled stop-label-focus and target-label-focus are scanner-generated strips precisely centered on the SL and TP zone boundary lines — each only ~9% of the chart height tall, placed right at that level.
-Before trusting any colored label in these crops, run the MATCHING-COLOR LINE TEST from Step 2. A crop can be centered on a drawn horizontal level, so color alone is not enough.
-• If stop-label-focus contains a Stop Loss-colored label AND there is no same-color solid/dashed line extending left from that label into the chart body → that label's number is the DEFINITIVE sl_price. It overrides every other reading, including the full chart and price-label-focus.
-• If target-label-focus contains a Take Profit-colored label AND there is no same-color solid/dashed line extending left from that label into the chart body → that label's number is the DEFINITIVE tp_price. It overrides every other reading, including the full chart and price-label-focus.
-• If a colored label has a same-color horizontal line extending from it, it is a drawn level. Reject it even when it appears in stop-label-focus or target-label-focus, then re-read price-label-focus/full_chart for the standalone position-tool pill at the compact zone boundary.
-• Only fall back to price-label-focus or the full chart for a price if the dedicated crop shows only rejected labels: black/white key-level labels, wrong-role colors, live/current-price labels, market-structure zone labels, or colored labels with same-color lines.
-IMPORTANT OVERRIDE TO THE CROP RULE ABOVE:
-Do NOT treat "any colored label" as valid. The color must match the crop role:
-- stop-label-focus is authoritative ONLY when the label background matches the configured Stop Loss color.
-- target-label-focus is authoritative ONLY when the label background matches the configured Take Profit color.
-- If a dedicated crop contains the wrong role color, a black/white key-level label, a live-price marker, a market-structure zone label, or a same-color horizontal-line label, ignore it and re-read price-label-focus at the correct compact position-tool boundary.
-
-FINAL PRICE-LABEL LINE AUDIT — REQUIRED BEFORE RETURNING JSON:
-For entry_price, sl_price, and tp_price separately, look immediately left of the exact right-axis label you chose.
-- If a solid or dashed line of the same color as that label extends leftward across the chart body, that chosen label is invalid. Replace it with the standalone position-tool label at the same compact zone boundary.
-- If there are two labels at the same Y/price, choose the one without a matching-color line. The one with the matching-color line is a drawn level.
-- The only horizontal edges allowed to touch a valid SL/TP label are the P&L box's own semi-transparent zone border/fill edges. Those are not user-drawn horizontal lines.
-
-Read each number in the colored label CHARACTER BY CHARACTER — digit by digit. Do not approximate or round. "823" and "830" are completely different numbers — read every digit individually.
-
-STEP 1 — READ THE TICKER:
-Look at the top-left corner of the chart for the instrument header.
-Read the ticker symbol. Examples:
-- 'NQM26 · 1 · CME' → symbol is NQ, timeframe_minutes is 1
-- 'MNQM26 · 1' → symbol is MNQ, timeframe_minutes is 1
-- 'ESM26 · 5' → symbol is ES, timeframe_minutes is 5
-Always return the ROOT ticker only (NQ not NQM26, MNQ not MNQM26).
-Product-name mapping is mandatory:
-- "Micro Nasdaq" or "Micro E-mini Nasdaq-100" = MNQ
-- "E-mini Nasdaq-100" without the word Micro = NQ
-- "Micro S&P" or "Micro E-mini S&P 500" = MES
-- "E-mini S&P 500" without the word Micro = ES
-Valid roots: NQ, MNQ, ES, MES, YM, MYM, RTY, M2K, CL, MCL, GC, MGC, SI, 6E, 6B, BTC, MBT
-
-STEP 2 — IDENTIFY entry_price, sl_price, tp_price:
-${colorSection}
-
-STEP 3 — DETERMINE DIRECTION:
-${directionHint
-  ? `Pixel-level color analysis of the chart has pre-determined the direction as ${directionHint}. Return direction = "${directionHint}".
-Consistency check (${directionHint === 'Long' ? 'Long: TP > entry > SL' : 'Short: TP < entry < SL'}): if your prices conflict with this, re-examine the price labels first. Keep direction = "${directionHint}" regardless, but add a warning if prices still look inconsistent.`
-  : `First determine direction from the compact colored position tool layout:
-- Teal/take-profit zone above the red/stop zone = LONG.
-- Red/stop zone above the teal/take-profit zone = SHORT.
-Only use price order as a fallback AFTER you are sure the labels belong to the compact position tool:
-- TP > entry > SL = LONG.
-- SL > entry > TP = SHORT.
-Never use the live/current price label, last traded price label, or a large market-structure zone label to infer direction.`}
-
-STEP 4 — FIND THE EXIT (FIRST TOUCH ONLY, INSIDE THE P&L CARD ONLY):
-⚠ CRITICAL: Use the crop labelled exit-path-focus for all exit detection. This crop is generated by the scanner starting exactly at the left edge of the P&L card, so pre-trade candles are physically absent. The full chart image is NOT authoritative for exit detection — it contains pre-trade candles (including the 09:30 market open spike) that must not be counted. If exit-path-focus is not available, fall back to the full chart with the pixel geometry rules below.
-The P&L card is the colored overlay on the chart — the region covered by the red/pink zone and the teal zone together. You must ONLY read candles whose bodies and wicks fall physically inside this colored overlay. Nothing outside it exists for this analysis.
-${boxBounds
-  ? `The P&L card occupies image columns ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% from the left edge.
-The FIRST candle inside the card (at the ${Math.round(boxBounds.leftRatio * 100)}% left edge) is the entry candle — start here.
-HARD RULE — LEFT: Any candle whose center x-position is to the LEFT of ${Math.round(boxBounds.leftRatio * 100)}% does not exist. Do not look at it. Do not count it. Even if a pre-trade candle's wick extends into SL or TP price range, it is outside the P&L card and must be completely disregarded.
-HARD RULE — RIGHT: Any candle whose center x-position is to the RIGHT of ${Math.round(Math.min(boxBounds.rightRatio + 0.03, 1) * 100)}% does not exist. Do not look at it. The exit candle is typically the rightmost candle inside the box or the one whose center sits right at the right edge — include it, but stop there.
-STOP ON FIRST HIT: The moment any candle's wick triggers SL or TP, that is the exit. Do not continue scanning further candles after a hit.`
-  : `Scan only candles physically inside the colored P&L overlay (left edge to right edge). Ignore all candles to the left (pre-trade). Ignore all candles beyond the right edge of the overlay. Stop scanning the moment SL or TP is first hit.`}
-
-DO NOT USE ANY COLOR OR SIZE BIAS — CANDLE WICKS ARE THE ONLY EVIDENCE.
-Do NOT use the background color of the teal zone, the red/pink zone, or any P&L label to decide the outcome.
-Those zone colors are fixed regardless of what happened. A large teal zone just means TP was far away — it says nothing about whether TP was hit.
-Do NOT use the size of either zone as a signal. Ignore all color cues. The answer comes only from candle wicks inside the P&L card.
-
-ANNOTATION EXCLUSION RULE — IGNORE ALL TEXT LABELS ON THE CHART:
-POS Bracket drawing tools (and similar tools) render number labels directly onto the colored zones: commonly −2, −1, 0, +1, +2, +3, etc. These are purely cosmetic design elements of the drawing tool. They do NOT mark price levels that matter, and their position tells you nothing about whether TP or SL was hit.
-Also ignore: confluence marker labels, order-block labels, session-range labels, horizontal-line labels, any floating annotation, and any other text overlay you see on the chart.
-Your ONLY evidence for an exit decision is the physical position of candle wicks relative to the FAR OUTER BOUNDARY of the colored zones — never text, numbers, or annotation positions.
-
-EXACT RULES — WHAT COUNTS AS A HIT:
-You must trace a horizontal line at the exact SL price and another at the exact TP price across the chart.
-A level is ONLY hit when a candle wick visually reaches or crosses that exact price line.
-Entering the colored zone is NOT enough — the wick must reach the FAR OUTER BOUNDARY of the zone (the price line itself).
-
-Zone boundary clarification (applies to both LONG and SHORT):
-- The teal/blue zone spans from the entry price outward to tp_price. Its outer edge IS the TP line.
-- The red/pink zone spans from the entry price outward to sl_price. Its outer edge IS the SL line.
-- A candle that enters a zone but turns back before reaching the outer edge has NOT triggered that level. Keep scanning.
-
-For SHORT trades:
-- SL hit: a candle HIGH wick reaches or exceeds sl_price (top edge of upper red/pink zone)
-- TP hit: a candle LOW wick reaches or goes below tp_price (bottom edge of lower teal zone)
-
-For LONG trades:
-- SL hit: a candle LOW wick reaches or goes below sl_price (bottom edge of lower red/pink zone)
-- TP hit: a candle HIGH wick reaches or exceeds tp_price (top edge of upper teal zone)
-
-FIRST TOUCH RULE: Number the entry candle as candle 0, then candle 1, candle 2, and so on moving left-to-right.
-The first numbered candle that triggers either level decides the result. Stop scanning immediately at that candle.
-Return that zero-based number as first_touch_candle_index. If no exit is confirmed, return null.
-If price partially moves toward TP then reverses and hits SL — the result is SL, regardless of how far into the TP zone it went.
-NEVER stop scanning early just because price moved deep into one zone. You must check whether it actually reached the outer boundary.
-FORBIDDEN: inferring an exit from penetration depth, speed of movement, zone color/size, or "price was clearly going to hit it". A wick that covers 90% of a zone but stops short of the exact price line triggers NOTHING — keep scanning. Price MUST physically touch or cross the exact sl_price or tp_price line for an exit to exist. When both levels have true touches, the exit is strictly the one whose touch candle comes FIRST (lower candle index) — never the "bigger" move.
-
-SINGLE-CANDLE SPAN RULE — THIS OVERRIDES FIRST TOUCH:
-A candle "spans both levels" when its full range covers both the TP price and the SL price simultaneously:
-  • For LONG: that candle's LOW wick ≤ sl_price AND its HIGH wick ≥ tp_price in the same candle.
-  • For SHORT: that candle's HIGH wick ≥ sl_price AND its LOW wick ≤ tp_price in the same candle.
-When the first candle to touch either level also spans the other level in the same candle, the intra-candle order of events is UNKNOWABLE from a static chart image.
-In this case you MUST:
-  1. Set exit_reason to null.
-  2. Set confidence to "low".
-  3. Add "Single candle spans both TP and SL — intra-candle order unknown. Verify Win/Loss manually." to warnings.
-DO NOT default to TP. DO NOT default to SL. DO NOT guess. This situation is genuinely ambiguous — report it as such.
-This rule is especially common on the first 1-minute candle after market open (e.g. 09:30 ET) which often has an outsized range.
-
-When in doubt on a borderline wick (barely grazing the line), set exit_reason to null.
-If a wick clearly breaks THROUGH the zone boundary (extends past the outer edge entirely), that is an unambiguous hit.
-NEVER use the live floating current-price label on the right axis as a trade level.
-
-STEP 5 — ESTIMATE ENTRY AND CLOSE TIME (CANDLE-COUNT METHOD — MANDATORY):
-Do NOT simply read the nearest x-axis label as the entry time. That method is wrong when the entry candle sits between two time labels. You MUST use the candle-count interpolation method described below.
-${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `PRIMARY SOURCE: A crop labelled time-axis-focus is provided. It is a zoomed strip of the chart bottom around the entry candle — time labels are much clearer here than in the full chart. The pixel geometry section above told you the entry candle sits at ~${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the left of this crop. In Step A below, read labels from time-axis-focus first. Pick the label whose horizontal position is closest to ${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the left of that crop as your primary T_anchor.\n` : ''}
-A. READ ALL VISIBLE X-AXIS TIME LABELS
-   Scan the entire bottom edge of the chart and note every time label printed there (e.g. 08:00, 08:15, 08:30, 09:00, 09:30, 10:00, etc.).
-   Each label is printed directly below the candle whose open time it represents — that candle is the reference candle for that label.
-
-B. PICK THE CLOSEST ANCHOR LABEL
-   Choose the x-axis time label whose candle sits closest to the left edge of the P&L box (the entry candle). Call this:
-     T_anchor = the time shown on that label (e.g. 09:30)
-     C_anchor = the horizontal position of that anchor candle on the chart
-
-C. COUNT CANDLES FROM ANCHOR TO ENTRY
-   The entry candle is the first candle whose center x-position is at or inside the left edge of the P&L box.
-   Count the number of candles between C_anchor and the entry candle, moving left or right:
-     N_entry = number of candles from C_anchor to the entry candle
-               (positive = entry is to the RIGHT of anchor, negative = to the LEFT)
-   Compute: entry_time = T_anchor + (N_entry × timeframe_minutes), expressed as HH:MM in 24-hour ET.
-   Example: T_anchor=09:30, N_entry=3, timeframe=1min → entry_time = 09:33
-
-D. COUNT CANDLES FROM ANCHOR TO EXIT
-   The exit candle is the one identified in Step 4 (first candle to touch SL or TP). If exit_reason is null, use the last candle inside the right edge of the P&L box.
-   Count: N_exit = number of candles from C_anchor to the exit candle
-   Compute: close_time = T_anchor + (N_exit × timeframe_minutes), expressed as HH:MM in 24-hour ET.
-
-E. CROSS-CHECK WITH A SECOND ANCHOR (when possible)
-   If there is a second visible x-axis time label on the other side of the trade, verify your candle count produces the correct time from that anchor too. If the two anchors disagree, prefer the one whose candle is physically closer to the entry.
-
-F. COMPUTE DURATION
-   trade_length_seconds measures from the ENTRY candle to the candle where price FIRST touches TP or SL (the Step-4 exit candle). It is NOT the width of the P&L box and NOT the distance to the box's right edge.
-   If an exit was found in Step 4: trade_length_seconds = first_touch_candle_index × timeframe_minutes × 60. Your close_time MUST equal entry_time + trade_length_seconds. If your Step-D anchor count (N_exit − N_entry) disagrees with first_touch_candle_index, TRUST first_touch_candle_index — it comes from the direct candle-by-candle exit scan — and recompute close_time from it.
-   If no exit was found (exit_reason null): trade_length_seconds = (N_exit − N_entry) × timeframe_minutes × 60 using the last candle inside the P&L box.
-
-IMPORTANT: If the entire P&L box sits exactly at one x-axis label and there are zero candles between the anchor and the entry, entry_time = T_anchor exactly. Only in that case is it valid to return the anchor time directly.
-
-Return ONLY this raw JSON with no markdown, no explanation, no code fences:
-{
-  "symbol": string or null,
-  "direction": "Long" or "Short" or null,
-  "entry_price": number or null,
-  "sl_price": number or null,
-  "tp_price": number or null,
-  "exit_reason": "TP" or "SL" or null,
-  "trade_length_seconds": number or null,
-  "timeframe_minutes": number or null,
-  "entry_time": string or null,
-  "close_time": string or null,
-  "confidence": "high" or "medium" or "low",
-  "first_touch_candle_index": integer or null,
-  "evidence": string describing exactly what you saw for the exit decision,
-  "warnings": array of strings for anything you were uncertain about
-}`;
-
-  try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-    const { text } = await generateWithFallback(genAI, systemPrompt, mimeType, base64Image, focusImages);
-    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-
-    try {
-      const parsed = JSON.parse(cleaned);
-      const entryTime = parseTimeToken(parsed.entry_time);
-      const explicitCloseTime = parseTimeToken(parsed.close_time);
-      const durationSecondsRaw = parseNullableNumber(parsed.trade_length_seconds);
-      const durationSeconds = durationSecondsRaw !== null ? Math.max(0, Math.round(durationSecondsRaw)) : null;
-      const timeframeMinutesRaw = parseNullableNumber(parsed.timeframe_minutes);
-      const timeframeMinutes = timeframeMinutesRaw !== null ? Math.max(0, Math.round(timeframeMinutesRaw)) : null;
-      const firstTouchIndexRaw = parseNullableNumber(parsed.first_touch_candle_index);
-      const firstTouchCandleIndex = firstTouchIndexRaw !== null ? Math.max(0, Math.round(firstTouchIndexRaw)) : null;
 
       const modelDirection = parseDirection(parsed.direction);
-      const direction = directionHint ?? modelDirection;
       const entryPrice = parseNullableNumber(parsed.entry_price);
-      const parsedConfidence = parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low' as const;
+      const slRaw = parseNullableNumber(parsed.sl_price);
+      const tpRaw = parseNullableNumber(parsed.tp_price);
       const baseWarnings: string[] = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w: unknown) => typeof w === 'string') : [];
+
+      // The pixel-derived direction hint usually wins, but it has a known
+      // failure mode: overlapping drawn zones corrupt the zone pairing. When
+      // the model disagrees AND the price structure is only consistent under
+      // the model's direction, the hint is the wrong one — prefer the read
+      // that fits the numbers instead of nulling out valid prices.
+      let direction = directionHint ?? modelDirection;
       if (directionHint && modelDirection && modelDirection !== directionHint) {
-        baseWarnings.push(`Direction corrected from ${modelDirection} to ${directionHint} using compact position-tool geometry.`);
+        const hintFits = levelsConsistent(directionHint, entryPrice, slRaw, tpRaw);
+        const modelFits = levelsConsistent(modelDirection, entryPrice, slRaw, tpRaw);
+        if (!hintFits && modelFits) {
+          direction = modelDirection;
+          baseWarnings.push(`Direction hint (${directionHint}) contradicted the price structure — used the model's ${modelDirection} read. Verify direction manually.`);
+        } else {
+          baseWarnings.push(`Direction corrected from ${modelDirection} to ${directionHint} using compact position-tool geometry.`);
+        }
       }
 
-      // Price sanity: auto-swap TP/SL if they look reversed for the detected direction
+      // Structural acceptance checks — these drive the repair/escalation loop.
+      const structuralFailures: string[] = [];
+      if (entryPrice === null || slRaw === null || tpRaw === null) {
+        structuralFailures.push(`one or more prices missing (entry=${entryPrice}, sl=${slRaw}, tp=${tpRaw})`);
+      } else {
+        if (entryPrice === slRaw) structuralFailures.push(`entry_price equals sl_price (${entryPrice}) — you read the SL label as entry`);
+        if (entryPrice === tpRaw) structuralFailures.push(`entry_price equals tp_price (${entryPrice}) — you read the TP label as entry`);
+        if (direction && !levelsConsistent(direction, entryPrice, slRaw, tpRaw)) {
+          structuralFailures.push(`levels inconsistent for ${direction} (entry=${entryPrice}, sl=${slRaw}, tp=${tpRaw})`);
+        }
+      }
+
       const { sl_price, tp_price, warnings: sanityWarnings } = sanitizePriceLevels(
         direction,
         entryPrice,
-        parseNullableNumber(parsed.sl_price),
-        parseNullableNumber(parsed.tp_price),
+        slRaw,
+        tpRaw,
         baseWarnings,
       );
-
-      // Confidence gating: a low-confidence exit could flip Win/Loss — clear it so user confirms manually
-      let exitReason = parseExitReason(parsed.exit_reason);
-      const finalWarnings = [...sanityWarnings];
-      if (parsedConfidence === 'low' && exitReason !== null) {
-        finalWarnings.push('Exit outcome cleared (low confidence) — please verify Win/Loss manually.');
-        exitReason = null;
+      const priceConfidence = parsed.price_confidence === 'high' || parsed.price_confidence === 'medium' ? parsed.price_confidence : 'low';
+      const timeConfidence = parsed.time_confidence === 'high' || parsed.time_confidence === 'medium' ? parsed.time_confidence : 'low';
+      if (priceConfidence === 'low') {
+        sanityWarnings.push('Price read is low confidence; verify entry/SL/TP manually.');
       }
 
-      // Trade length must measure entry → first touch of TP/SL. Gemini's Step-5
-      // anchor recount can disagree with its own Step-4 first-touch scan, so when
-      // both the exit candle index and timeframe are known, derive the duration
-      // from them instead of trusting the model's arithmetic.
-      let finalDurationSeconds = durationSeconds;
-      let finalCloseTime = explicitCloseTime;
-      if (exitReason !== null && firstTouchCandleIndex !== null && timeframeMinutes !== null && timeframeMinutes > 0) {
-        const derivedSeconds = firstTouchCandleIndex * timeframeMinutes * 60;
-        if (durationSeconds !== null && Math.abs(derivedSeconds - durationSeconds) >= timeframeMinutes * 60) {
-          finalWarnings.push(`Trade length corrected from ${Math.round(durationSeconds / 60)}m to ${Math.round(derivedSeconds / 60)}m to match the first-touch exit candle.`);
-        }
-        finalDurationSeconds = derivedSeconds;
-        // The reported close_time came from the same recount — recompute from entry + duration.
-        finalCloseTime = addSecondsToHHMM(entryTime, derivedSeconds) ?? explicitCloseTime;
-      }
+      const timeframeRaw = parseNullableNumber(parsed.timeframe_minutes);
+      const timeframeMinutes = timeframeRaw !== null ? Math.max(0, Math.round(timeframeRaw)) : null;
 
       return {
         symbol: typeof parsed.symbol === 'string' ? parsed.symbol : null,
@@ -852,25 +565,63 @@ Return ONLY this raw JSON with no markdown, no explanation, no code fences:
         entry_price: entryPrice,
         sl_price,
         tp_price,
-        exit_reason: exitReason,
-        trade_length_seconds: finalDurationSeconds,
+        exit_reason: null,
+        trade_length_seconds: null,
         timeframe_minutes: timeframeMinutes,
-        entry_time: entryTime,
-        close_time: finalCloseTime ?? addSecondsToHHMM(entryTime, finalDurationSeconds),
-        confidence: parsedConfidence,
-        first_touch_candle_index: exitReason ? firstTouchCandleIndex : null,
+        entry_time: parseTimeToken(parsed.entry_time),
+        close_time: null,
+        confidence: timeConfidence,
+        first_touch_candle_index: null,
         evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
-        warnings: finalWarnings,
+        warnings: sanityWarnings,
+        structuralFailures,
+        priceConfidenceLow: priceConfidence === 'low',
       };
-    } catch {
-      return nullResult(['Failed to parse Gemini response']);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gemini API error';
+      return { ...nullResult([msg]), structuralFailures: [msg], priceConfidenceLow: true };
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Gemini API error';
-    return nullResult([msg]);
+  };
+
+  const repairPrompt = (failures: string[], previous: AttemptOutcome) =>
+    `${basePrompt}\n\nPREVIOUS ATTEMPT REJECTED — DO NOT REPEAT IT:\nYou returned entry_price=${previous.entry_price}, sl_price=${previous.sl_price}, tp_price=${previous.tp_price}, direction=${previous.direction}.\nRejected because: ${failures.join('; ')}.\nRe-read the right-axis labels character by character and return corrected values. If a level's label is genuinely not visible, return null for that level instead of guessing.`;
+
+  // Attempt 1: standard chain.
+  let outcome = await runAttempt(basePrompt);
+
+  // Attempt 2 — repair: same model, with the failure fed back.
+  if (outcome.structuralFailures.length > 0) {
+    const repaired = await runAttempt(repairPrompt(outcome.structuralFailures, outcome));
+    if (repaired.structuralFailures.length < outcome.structuralFailures.length) {
+      repaired.warnings.push('Extraction required a repair pass — first read failed structural checks.');
+      outcome = repaired;
+    }
   }
+
+  // Attempt 3 — escalation: stronger model when still structurally broken, or
+  // when the read is structurally fine but low-confidence.
+  if (outcome.structuralFailures.length > 0 || outcome.priceConfidenceLow) {
+    const escalated = await runAttempt(
+      outcome.structuralFailures.length > 0 ? repairPrompt(outcome.structuralFailures, outcome) : basePrompt,
+      [escalationModel],
+    );
+    const escalatedBetter =
+      escalated.structuralFailures.length < outcome.structuralFailures.length
+      || (escalated.structuralFailures.length === outcome.structuralFailures.length && !escalated.priceConfidenceLow && outcome.priceConfidenceLow);
+    if (escalatedBetter) {
+      escalated.warnings.push(`Extraction escalated to ${escalationModel}.`);
+      outcome = escalated;
+    }
+  }
+
+  const { structuralFailures, priceConfidenceLow, ...result } = outcome;
+  if (structuralFailures.length > 0) {
+    result.warnings.push(`Extraction failed structural checks after retries: ${structuralFailures.join('; ')}.`);
+  }
+  void priceConfidenceLow;
+  return result;
 }
-*/
+
 
 async function verifyTradeExit(
   base64Image: string,
@@ -933,7 +684,7 @@ Return only JSON:
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages);
+    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages, { responseSchema: VERIFY_EXIT_SCHEMA });
     const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
     return {
@@ -1020,7 +771,7 @@ Return only JSON:
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
-    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages);
+    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages, { responseSchema: BOUNDARY_SCHEMA });
     const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
     const index = parseNullableNumber(parsed.first_touch_candle_index);
@@ -1120,10 +871,25 @@ export async function analyzeChartImage(
     used_dynamic_crops: boxBounds !== undefined && hasLineHints,
   } : undefined;
 
+  // Role-specific image subsets. Each pass only receives the crops relevant to
+  // its job — the exit verifiers must not see price-label strips (distractors
+  // for a wick-vs-line question), and the extraction pass doesn't need the
+  // exit path. This halves image tokens per scan and removes noise.
+  const EXTRACTION_CROPS = [
+    'header-focus', 'trade-box-focus', 'price-label-focus',
+    'entry-label-focus', 'stop-label-focus',
+    'target-label-focus', 'time-axis-focus',
+  ];
+  const EXIT_CROPS = ['exit-path-focus', 'trade-box-focus'];
+  const selectImages = (names: string[]) =>
+    focusImages.filter(image => names.some(name => image.label.startsWith(name)));
+  const extractionImages = selectImages(EXTRACTION_CROPS);
+  const exitImages = selectImages(EXIT_CROPS);
+
   const result = await readTradeChart(
     base64Image,
     mimeType,
-    focusImages,
+    extractionImages.length > 0 ? extractionImages : focusImages,
     userColors,
     boxBounds,
     directionHint,
@@ -1148,9 +914,9 @@ export async function analyzeChartImage(
       target: result.tp_price,
     };
     const [stopTouch, targetTouch, independentExit] = await Promise.all([
-      detectBoundaryTouch(base64Image, mimeType, focusImages, tradeForVerification, 'SL', boxBounds),
-      detectBoundaryTouch(base64Image, mimeType, focusImages, tradeForVerification, 'TP', boxBounds),
-      verifyTradeExit(base64Image, mimeType, focusImages, tradeForVerification, boxBounds),
+      detectBoundaryTouch(base64Image, mimeType, exitImages, tradeForVerification, 'SL', boxBounds),
+      detectBoundaryTouch(base64Image, mimeType, exitImages, tradeForVerification, 'TP', boxBounds),
+      verifyTradeExit(base64Image, mimeType, exitImages, tradeForVerification, boxBounds),
     ]);
 
     // A boundary counts as a confirmed touch only when the conservative scan is NOT
