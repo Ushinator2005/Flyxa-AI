@@ -31,6 +31,10 @@ export function buildAnalyticsSummary(trades: Trade[]): AnalyticsSummary {
   const ep = (trade: Trade) => trade.pnl - (trade.commission ?? 0);
   const wins = sortedTrades.filter(trade => ep(trade) > 0);
   const losses = sortedTrades.filter(trade => ep(trade) < 0);
+  // Real breakevens closed at a price; zero-P&L rows without an exit are open
+  // trades or skeleton records and must not dilute the win rate denominator.
+  const breakevens = sortedTrades.filter(trade => ep(trade) === 0 && (trade.exit_price ?? 0) > 0);
+  const decidedCount = wins.length + losses.length + breakevens.length;
   const rrValues = sortedTrades.map(getTradeRiskReward).filter((value): value is number => value !== null);
 
   let currentWins = 0;
@@ -55,7 +59,7 @@ export function buildAnalyticsSummary(trades: Trade[]): AnalyticsSummary {
 
   return {
     netPnL: sortedTrades.reduce((sum, trade) => sum + ep(trade), 0),
-    winRate: (wins.length / sortedTrades.length) * 100,
+    winRate: decidedCount > 0 ? (wins.length / decidedCount) * 100 : 0,
     profitFactor: grossLoss === 0 ? (grossProfit > 0 ? 999 : 0) : grossProfit / grossLoss,
     avgRR: rrValues.length > 0 ? rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length : 0,
     totalTrades: sortedTrades.length,

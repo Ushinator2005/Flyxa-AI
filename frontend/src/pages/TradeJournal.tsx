@@ -30,6 +30,7 @@ import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/conflu
 import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
 import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
+import { maybeCaptureCorrection, maybeCaptureScanBundle } from '../utils/scannerEvalCapture.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { evaluateEntryRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
 import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
@@ -2507,6 +2508,18 @@ export default function TradeJournal() {
         ...entry,
         trades: entry.trades.map(trade => {
           if (trade.id !== tradeId) return trade;
+          // Dev eval flywheel: the first manual correction of an AI-scanned
+          // trade's price levels is ground truth the scanner got wrong.
+          if (trade.priceLevelsSource === 'ai' && !trade.priceLevelsEdited && fields.priceLevelsEdited === true) {
+            maybeCaptureCorrection({
+              tradeId: trade.id,
+              symbol: trade.symbol,
+              date: trade.date ?? '',
+              screenshotUrl: trade.screenshotUrl,
+              before: { entry: trade.entry, sl: trade.sl, tp: trade.tp, exit: trade.exit, direction: trade.direction, entryTime: trade.entryTime },
+              after: { entry: fields.entry, sl: fields.sl, tp: fields.tp, exit: fields.exit },
+            });
+          }
           const nextFields = { ...fields };
           if (typeof fields.contracts === 'number' && fields.contracts !== trade.contracts) {
             nextFields.pnlOverride = scaleContractAmount(trade.pnlOverride, trade.contracts, fields.contracts);
@@ -2883,20 +2896,25 @@ export default function TradeJournal() {
       setScanPreviewUrl(fileDataUrl);
 
       const colors = preferences.scannerColors;
+      // buildScannerAssets resolves the colors and embeds scanner_colors in the context
       const { focusImages, scannerContext, uploadImage } = await buildScannerAssets(file, {
         entry: colors?.entry,
         stopLoss: colors?.stopLoss,
         takeProfit: colors?.takeProfit,
       });
-      const context = {
-        ...(scannerContext ?? {}),
-        scanner_colors: {
-          entryZone: { hex: colors?.entry ?? '#E67E22' },
-          supplyStopZone: { hex: colors?.stopLoss ?? '#C0392B' },
-          targetDemandZone: { hex: colors?.takeProfit ?? '#1A6B5A' },
-        },
-      };
-      const extracted = await scanChart(uploadImage, tradeDate, tradeTime, focusImages, context);
+      let extracted: Awaited<ReturnType<typeof scanChart>>;
+      try {
+        extracted = await scanChart(uploadImage, tradeDate, tradeTime, focusImages, scannerContext);
+      } catch (scanError) {
+        // Failed scans are the most valuable eval cases — capture before rethrowing.
+        void maybeCaptureScanBundle({
+          uploadImage, focusImages, scannerContext,
+          error: scanError instanceof Error ? scanError.message : String(scanError),
+          sourceFileName: file.name,
+        });
+        throw scanError;
+      }
+      void maybeCaptureScanBundle({ uploadImage, focusImages, scannerContext, result: extracted, sourceFileName: file.name });
 
       const normalizedSymbol = normalizeResolvedSymbol(extracted.symbol) ?? inferSymbolFromFileName(file.name) ?? 'NQ';
       const direction: TradeDirection = extracted.direction === 'Short' ? 'SHORT' : 'LONG';
@@ -2966,7 +2984,22 @@ export default function TradeJournal() {
 
       applyScannedTrade(screenshotUrl, withTradeDerivedValues(trade), tradeDate);
       scanSucceeded = true;
-      pushToast({ tone: 'green', durationMs: 3000, message: 'Trade scanned and saved' });
+      // Surface scanner warnings — "verify Win/Loss manually" etc. matter to the
+      // user and were previously dropped on success.
+      const scanWarnings = (Array.isArray(extracted.warnings) ? extracted.warnings : [])
+        .filter(w => typeof w === 'string' && !w.startsWith('Boundary scan:'));
+      if (!exitIsReliable || scanWarnings.length > 0) {
+        const detail = scanWarnings.find(w => w.toLowerCase().includes('verify')) ?? scanWarnings[0];
+        pushToast({
+          tone: 'amber',
+          durationMs: 6000,
+          message: detail
+            ? `Trade saved — ${detail}`
+            : 'Trade saved — exit unconfirmed, set the exit price manually.',
+        });
+      } else {
+        pushToast({ tone: 'green', durationMs: 3000, message: 'Trade scanned and saved' });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Scan failed.';
       const lowered = message.toLowerCase();
