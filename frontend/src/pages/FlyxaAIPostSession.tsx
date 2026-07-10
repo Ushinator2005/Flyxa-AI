@@ -323,11 +323,32 @@ export default function FlyxaAIPostSession() {
     return insights;
   }, [ps, dayTrades, netPnl, planAdherence, biasAdherence]);
 
+  // Intraday cumulative P&L for the hero sparkline
+  const sparkValues = useMemo(() => {
+    const sorted = [...dayTrades].sort((a, b) => String(a.trade_time ?? '').localeCompare(String(b.trade_time ?? '')));
+    const points = [0];
+    let cum = 0;
+    for (const t of sorted) { cum += Number(t.pnl ?? 0); points.push(cum); }
+    return points;
+  }, [dayTrades]);
+
   const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
-  const reviewStatus = dayTrades.length === 0 ? 'No trades' : netPnl >= 0 ? 'Profitable' : 'Drawdown';
-  const reviewColor = dayTrades.length === 0 ? C.t2 : netPnl >= 0 ? C.grn : C.red;
+
+  // Verdict hero: grade + headline
+  const loopPct = performanceOutcome.adherencePct;
+  const gradeScore = Math.round(loopPct * 0.5 + (planAdherence ?? loopPct) * 0.3 + (netPnl >= 0 ? 100 : 40) * 0.2);
+  const grade = dayTrades.length === 0 ? null
+    : gradeScore >= 90 ? 'A+' : gradeScore >= 80 ? 'A' : gradeScore >= 70 ? 'B' : gradeScore >= 55 ? 'C' : 'D';
+  const heroColor = grade === null ? C.t2 : gradeScore >= 80 ? C.grn : gradeScore >= 60 ? C.amb : C.red;
+  const heroHeadline = dayTrades.length === 0
+    ? (ps ? "No trades logged — planned but didn't execute, or a deliberate sit-out?" : 'No trades logged for this day.')
+    : netPnl >= 0 && loopPct >= 90 ? 'Disciplined and green — the process paid today.'
+    : netPnl >= 0 && loopPct < 70 ? "Green day, but the rules didn't hold — profit despite process."
+    : netPnl < 0 && loopPct >= 90 ? 'Red day with rules intact — variance, not indiscipline.'
+    : netPnl < 0 && loopPct < 70 ? 'Rules broke and the day went red — start with the violations.'
+    : `Session closed ${fmtSigned(netPnl)} at ${loopPct}% rule adherence.`;
 
   if (loading) {
     return (
@@ -403,27 +424,50 @@ export default function FlyxaAIPostSession() {
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(300px, 0.75fr)', gap: 12, alignItems: 'start' }}>
+            <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* ── Verdict hero ─────────────────────────── */}
+              <div style={{
+                position: 'relative', overflow: 'hidden',
+                borderRadius: 10, border: `1px solid ${grade ? `${heroColor}30` : C.b0}`, backgroundColor: C.d1,
+                padding: '18px 22px',
+                display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap',
+              }}>
+                <div style={{ position: 'absolute', inset: 0, background: grade ? `linear-gradient(120deg, ${heroColor}0e 0%, transparent 55%)` : 'none', pointerEvents: 'none' }} />
+                {grade && (
+                  <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, paddingRight: 22, borderRight: `1px solid ${C.b0}`, flexShrink: 0 }}>
+                    <span style={{ fontSize: 50, fontWeight: 700, fontFamily: C.mono, color: heroColor, lineHeight: 1, letterSpacing: '-0.02em' }}>{grade}</span>
+                    <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.t2 }}>Session grade</span>
+                  </div>
+                )}
+                <div style={{ position: 'relative', flex: 1, minWidth: 240 }}>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: C.t0, lineHeight: 1.4, marginBottom: 8 }}>{heroHeadline}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 11, color: C.t2 }}>
+                    <span>{displayDate}</span>
+                    {dayTrades.length > 0 && (<>
+                      <span>·</span>
+                      <span>{dayTrades.length} trade{dayTrades.length !== 1 ? 's' : ''}</span>
+                      <span>·</span>
+                      <span style={{ fontFamily: C.mono, color: winRate >= 50 ? C.grn : C.red }}>{winRate}% win</span>
+                      {planAdherence !== null && (<><span>·</span><span>Plan <b style={{ fontFamily: C.mono, color: adherenceColor(planAdherence) }}>{planAdherence}%</b></span></>)}
+                      <span>·</span>
+                      <span>Rules <b style={{ fontFamily: C.mono, color: adherenceColor(loopPct) }}>{loopPct}%</b></span>
+                    </>)}
+                    {dayTrades.length === 0 && ps && (<><span>·</span><span>Pre-session recorded</span></>)}
+                  </div>
+                </div>
+                {dayTrades.length > 0 && (
+                  <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 28, fontWeight: 700, fontFamily: C.mono, color: netPnl >= 0 ? C.grn : C.red, lineHeight: 1 }}>{fmtSigned(netPnl)}</span>
+                    <DaySparkline values={sparkValues} color={netPnl >= 0 ? C.grn : C.red} />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(300px, 0.75fr)', gap: 12, alignItems: 'start' }}>
 
               {/* ── LEFT COLUMN ─────────────────────────── */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-                {/* Stat strip */}
-                <div style={{ display: 'flex', borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
-                  {([
-                    { label: 'DATE', value: displayDate, color: C.t0, wide: true },
-                    { label: 'RESULT', value: reviewStatus, color: reviewColor },
-                    { label: 'NET P&L', value: dayTrades.length ? fmtSigned(netPnl) : '--', color: reviewColor },
-                    { label: 'TRADES', value: String(dayTrades.length), color: C.t0 },
-                    { label: 'PLAN', value: planAdherence !== null ? `${planAdherence}%` : '--', color: planAdherence !== null ? adherenceColor(planAdherence) : C.t2 },
-                    { label: 'LOOP', value: `${performanceOutcome.adherencePct}%`, color: adherenceColor(performanceOutcome.adherencePct) },
-                  ] as { label: string; value: string; color: string; wide?: boolean }[]).map((stat, i) => (
-                    <div key={stat.label} style={{ flex: stat.wide ? 1.6 : 1, padding: '9px 12px', borderLeft: i === 0 ? 'none' : `1px solid ${C.b0}`, minWidth: 0 }}>
-                      <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', marginBottom: 4 }}>{stat.label}</p>
-                      <p style={{ fontFamily: stat.wide ? 'inherit' : C.mono, fontSize: 13, fontWeight: 600, color: stat.color, fontVariantNumeric: 'tabular-nums', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stat.value}</p>
-                    </div>
-                  ))}
-                </div>
 
                 {/* Carry-forward rule */}
                 {dayTrades.length > 0 && (
@@ -786,9 +830,35 @@ export default function FlyxaAIPostSession() {
                   </div>
                 )}
               </aside>
+              </div>{/* end grid */}
             </div>
           </div>
         </main>
     </div>
+  );
+}
+
+function DaySparkline({ values, color }: { values: number[]; color: string }) {
+  const pts = values.length > 1 ? values : [0, values[0] ?? 0];
+  const min = Math.min(...pts, 0);
+  const max = Math.max(...pts, 0);
+  const range = Math.max(1, max - min);
+  const W = 170, H = 44, PAD = 3;
+  const xOf = (i: number) => (i / Math.max(1, pts.length - 1)) * (W - PAD * 2) + PAD;
+  const yOf = (v: number) => H - PAD - ((v - min) / range) * (H - PAD * 2);
+  const line = pts.map((v, i) => `${xOf(i)},${yOf(v)}`).join(' ');
+  const area = [`${PAD},${yOf(0)}`, ...pts.map((v, i) => `${xOf(i)},${yOf(v)}`), `${W - PAD},${yOf(0)}`].join(' ');
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} aria-hidden="true">
+      <defs>
+        <linearGradient id="ps-day-spark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <line x1={PAD} x2={W - PAD} y1={yOf(0)} y2={yOf(0)} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 3" strokeWidth="1" />
+      <polygon points={area} fill="url(#ps-day-spark)" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" />
+    </svg>
   );
 }

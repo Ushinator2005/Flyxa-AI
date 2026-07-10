@@ -507,7 +507,7 @@ export default function FlyxaAIPreSession() {
       // Hard stop: always data-driven
       {
         id: 'hard-stop',
-        source: 'Hard stop',
+        source: 'Hard stop' as const,
         rule: riskLimits.noLossLimit
           ? `Stop after ${riskLimits.maxTrades} trades or when you feel the session is done.`
           : `Stop at ${formatCurrency(-riskLimits.maxDailyLoss)} loss or after ${riskLimits.maxTrades} trades — whichever comes first.`,
