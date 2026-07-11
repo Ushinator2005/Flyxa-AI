@@ -15,6 +15,7 @@ import { saveGuardSessionTrades } from '../hooks/useGuardSessionTrades.js';
 import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
+import { evaluateEntryRules } from '../utils/tradingRules.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -298,7 +299,7 @@ export default function FlyxaAIPreSession() {
   const [sessionMaxLoss] = useState<string>(() =>
     storedPreSession?.sessionMaxLoss != null ? String(storedPreSession.sessionMaxLoss) : ''
   );
-  const [sessionTarget] = useState<string>(() =>
+  const [sessionTarget, setSessionTarget] = useState<string>(() =>
     storedPreSession?.dailyTarget != null ? String(storedPreSession.dailyTarget) : ''
   );
   const [oathEditOpen, setOathEditOpen] = useState(false);
@@ -384,6 +385,56 @@ export default function FlyxaAIPreSession() {
     () => getMostRecentDailyFlowBefore(accountTrades, todayIso),
     [accountTrades, todayIso]
   );
+
+  // Which limits does this trader actually break? Evaluated over the last 10
+  // traded sessions with the same rule engine the journal uses — the strip
+  // shows the rules, this shows the rap sheet.
+  const limitBreaches = useMemo(() => {
+    const recent = [...(journalEntries as StoreJournalEntry[])]
+      .filter(entry => entry.date < todayIso && (entry.trades?.length ?? 0) > 0)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 10);
+    if (recent.length === 0) return null;
+    const counts = new Map<string, { label: string; fails: number }>();
+    for (const entry of recent) {
+      for (const check of evaluateEntryRules(entry as never, riskRules)) {
+        if (check.source !== 'automatic') continue;
+        const current = counts.get(check.ruleId) ?? { label: check.label, fails: 0 };
+        if (check.state === 'fail') current.fails += 1;
+        counts.set(check.ruleId, current);
+      }
+    }
+    const breached = [...counts.values()].filter(item => item.fails > 0).sort((a, b) => b.fails - a.fails);
+    return { sessions: recent.length, breached };
+  }, [journalEntries, riskRules, todayIso]);
+
+  // Variance inoculation: from the trader's own win rate, how often is a
+  // losing streak *expected*? Knowing "a 3-loss streak is normal every ~N
+  // trades" before the session is what stops the third loss from reading as
+  // "my edge is broken" — the trigger for most tilt spirals.
+  const varianceCheck = useMemo(() => {
+    const decided = [...accountTrades]
+      .filter(trade => trade && Boolean(tradeDateKey(trade)) && (trade.pnl - (trade.commission ?? 0)) !== 0)
+      .sort((a, b) => {
+        const dateCompare = tradeDateKey(a).localeCompare(tradeDateKey(b));
+        return dateCompare !== 0 ? dateCompare : (a.trade_time ?? '').localeCompare(b.trade_time ?? '');
+      })
+      .slice(-30);
+    if (decided.length < 10) return null;
+    const wins = decided.filter(trade => (trade.pnl - (trade.commission ?? 0)) > 0).length;
+    const winRate = wins / decided.length;
+    const lossRate = 1 - winRate;
+    if (winRate <= 0 || winRate >= 1) return null;
+    const streak = 3;
+    // Expected number of trades until a run of `streak` consecutive losses.
+    const expectedEvery = Math.round((1 - Math.pow(lossRate, streak)) / (winRate * Math.pow(lossRate, streak)));
+    return {
+      winRatePct: Math.round(winRate * 100),
+      streak,
+      expectedEvery,
+      sample: decided.length,
+    };
+  }, [accountTrades]);
 
   const riskLimits = useMemo(() => {
     const planDailyLoss = enabledPlanRuleValue(riskRules, 'max_daily_loss');
@@ -848,19 +899,19 @@ export default function FlyxaAIPreSession() {
       </div>
 
       {/* ── Step content ── */}
-      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 16px' }}>
-        <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div key={step} className={slideDirection === 'fwd' ? 'ps-step-fwd' : 'ps-step-back'} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px' }}>
+        <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div key={step} className={slideDirection === 'fwd' ? 'ps-step-fwd' : 'ps-step-back'} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
           {/* ─── STEP 1: Mindset ─── */}
           {step === 1 && (
             <>
               <div data-tour-id="pre-session-mindset" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${emotion ? (emotion === 'Frustrated' ? C.red : emotion === 'Anxious' ? '#f97316' : emotion === 'Neutral' ? '#94a3b8' : emotion === 'Focused' ? '#60a5fa' : C.grn) : C.acc}`, transition: 'border-color 0.3s ease' }}>
+                <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>State of mind</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>How are you coming into the session?</p>
                 </div>
-                <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', borderRadius: 5, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
                     {emotions.map((em, i) => {
                       const sel = emotion === em;
@@ -883,7 +934,7 @@ export default function FlyxaAIPreSession() {
                   </div>
                   <textarea value={note} onChange={e => setNoteAndPersist(e.target.value)}
                     style={{
-                      width: '100%', height: 68, resize: 'none',
+                      width: '100%', height: 52, resize: 'none',
                       borderRadius: 5, border: `1px solid ${C.b0}`,
                       backgroundColor: C.d2, color: C.t0,
                       fontSize: 12, padding: '9px 11px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5,
@@ -893,101 +944,12 @@ export default function FlyxaAIPreSession() {
                 </div>
               </div>
 
-              {/* ── Response plan — if-then contracts. You don't promise to be
-                    disciplined; you pre-decide the exact reaction to the exact
-                    trigger. Armed contracts lead the session plan and cycle on
-                    the live session view. ── */}
-              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${ifThenPlans.length > 0 ? C.grn : C.acc}`, transition: 'border-color 0.3s ease' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                    <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Response plan</h2>
-                    {ifThenPlans.length > 0 && (
-                      <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.grn }}>{ifThenPlans.length} armed</span>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 11, color: C.t2 }}>
-                    Decide your reaction before the trigger hits — not during it. Suggestions adapt to your state and history.
-                  </p>
-                </div>
-                <div>
-                  {buildIfThenSuggestions(emotion, recentBehavior).map((plan, i) => {
-                    const armed = ifThenPlans.includes(plan);
-                    const thenIndex = plan.toLowerCase().indexOf(', then ');
-                    const ifPart = thenIndex > 0 ? plan.slice(0, thenIndex) : plan;
-                    const thenPart = thenIndex > 0 ? plan.slice(thenIndex + 2) : '';
-                    return (
-                      <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10,
-                        width: '100%', textAlign: 'left', padding: '11px 16px',
-                        border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
-                        borderLeft: `3px solid ${armed ? C.grn : 'transparent'}`,
-                        backgroundColor: armed ? `${C.grn}08` : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.15s ease, border-color 0.15s ease',
-                      }}>
-                        <span style={{
-                          width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
-                          border: `1px solid ${armed ? `${C.grn}70` : C.b1}`,
-                          backgroundColor: armed ? `${C.grn}20` : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 9, color: C.grn,
-                          transition: 'background-color 0.15s ease, border-color 0.15s ease',
-                        }}>
-                          {armed ? '✓' : ''}
-                        </span>
-                        <span style={{ fontSize: 12, lineHeight: 1.55, color: armed ? C.t0 : C.t1 }}>
-                          <span style={{ fontWeight: 600 }}>{ifPart}</span>{thenPart}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.b0}` }}>
-                    <input
-                      value={customIfThenDraft}
-                      onChange={e => setCustomIfThenDraft(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && customIfThenDraft.trim()) {
-                          toggleIfThenPlan(customIfThenDraft.trim());
-                          setCustomIfThenDraft('');
-                        }
-                      }}
-                      placeholder="If [trigger], then [my response]... press Enter to arm"
-                      style={{
-                        width: '100%', boxSizing: 'border-box',
-                        borderRadius: 5, border: `1px solid ${C.b0}`,
-                        backgroundColor: C.d2, color: C.t0,
-                        fontSize: 12, padding: '8px 11px', outline: 'none', fontFamily: 'inherit',
-                      }}
-                    />
-                  </div>
-                  {/* Custom armed contracts that aren't in today's suggestions */}
-                  {ifThenPlans.filter(plan => !buildIfThenSuggestions(emotion, recentBehavior).includes(plan)).map(plan => (
-                    <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
-                      display: 'flex', alignItems: 'flex-start', gap: 10,
-                      width: '100%', textAlign: 'left', padding: '11px 16px',
-                      border: 'none', borderTop: `1px solid ${C.b0}`,
-                      borderLeft: `3px solid ${C.grn}`,
-                      backgroundColor: `${C.grn}08`,
-                      cursor: 'pointer',
-                    }}>
-                      <span style={{
-                        width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
-                        border: `1px solid ${C.grn}70`, backgroundColor: `${C.grn}20`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, color: C.grn,
-                      }}>✓</span>
-                      <span style={{ fontSize: 12, lineHeight: 1.55, color: C.t0 }}>{plan}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div data-tour-id="pre-session-risk" style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${bias.ES === 'Bull' ? C.grn : bias.ES === 'Bear' ? C.red : C.acc}`, transition: 'border-color 0.3s ease' }}>
+                <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Market bias</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>What direction are you leaning for today?</p>
                 </div>
-                <div style={{ padding: '14px 16px' }}>
+                <div style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', borderRadius: 5, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
                     {biasOptions.map((opt, i) => {
                       const sel = bias.ES === opt;
@@ -1008,7 +970,7 @@ export default function FlyxaAIPreSession() {
               </div>
 
               {(recentBehavior.planAdherence !== null || recentBehavior.revengeTagged > 0 || lastSession) && (
-                <div data-tour-id="pre-session-behavior" style={{ padding: '10px 14px', borderRadius: 8, border: `1px solid ${C.b0}`, borderLeft: `3px solid ${recentBehavior.revengeTagged > 0 ? C.red : (recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80) ? C.acc : C.grn}`, backgroundColor: C.d1, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                <div data-tour-id="pre-session-behavior" style={{ padding: '10px 14px', borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                   <span style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', textTransform: 'uppercase', marginRight: 4 }}>Recent</span>
                   {recentBehavior.planAdherence !== null && (
                     <span style={{ fontSize: 11, color: recentBehavior.planAdherence < 80 ? C.acc : C.t1 }}>
@@ -1028,21 +990,46 @@ export default function FlyxaAIPreSession() {
                 </div>
               )}
 
+              {/* ── Variance check — losing streaks are scheduled by the math,
+                    not caused by a broken edge. The focal number forces the
+                    read; a sentence would get skimmed. ── */}
+              {varianceCheck && (
+                <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
+                  <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRight: `1px solid ${C.b0}`, flexShrink: 0, minWidth: 110 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 700, color: C.t0, lineHeight: 1 }}>
+                      ~{varianceCheck.expectedEvery.toLocaleString()}
+                    </span>
+                    <span style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2, textAlign: 'center', lineHeight: 1.4 }}>
+                      trades between<br />{varianceCheck.streak}-loss streaks
+                    </span>
+                  </div>
+                  <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.45 }}>
+                      Losing streaks are inevitable — yours is due about every {varianceCheck.expectedEvery.toLocaleString()} trades.
+                    </p>
+                    <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>
+                      That's your real {varianceCheck.winRatePct}% win rate over the last {varianceCheck.sample} trades. If it hits today, it's the math working — not your edge failing.
+                      {ifThenPlans.length > 0 && ' Your response plan already covers it.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* ── Pre-mortem — prospective hindsight. Imagining the failure
                     as already-happened surfaces the risks confidence hides,
                     and post-session compares the prediction to what actually
                     happened. ── */}
               <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.b0}`, borderLeft: `3px solid ${premortem.trim() ? C.grn : C.acc}`, transition: 'border-color 0.3s ease' }}>
+                <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Pre-mortem</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>
                     The session has ended and finished red. What was the reason this most likely happened? Name it now — catch it live.
                   </p>
                 </div>
-                <div style={{ padding: '14px 16px' }}>
+                <div style={{ padding: '12px 16px' }}>
                   <textarea value={premortem} onChange={e => setPremortemAndPersist(e.target.value)}
                     style={{
-                      width: '100%', height: 60, resize: 'none',
+                      width: '100%', height: 48, resize: 'none',
                       borderRadius: 5, border: `1px solid ${C.b0}`,
                       backgroundColor: C.d2, color: C.t0,
                       fontSize: 12, padding: '9px 11px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5,
@@ -1059,27 +1046,19 @@ export default function FlyxaAIPreSession() {
             <>
               <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
                 {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.b0}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <div>
                     <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Today&apos;s risk limits</h2>
-                    <p style={{ fontSize: 11, color: C.t2 }}>From your active risk rules. Confirm before you start.</p>
+                    <p style={{ fontSize: 11, color: C.t2 }}>These are the terms of today's session. Accept them before you trade them.</p>
                   </div>
                   <button type="button" onClick={() => navigate('/trading-plan')}
-                    style={{ fontSize: 11, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    style={{ fontSize: 11, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
                     edit rules →
                   </button>
                 </div>
 
-                {/* Rules driven from Zustand riskRules store */}
+                {/* Rules as stat tiles — value first, meaning underneath */}
                 {(() => {
-                  const KIND_LABEL: Record<string, string> = {
-                    max_daily_loss:     'Max daily loss',
-                    max_trades:         'Max trades / day',
-                    max_contracts:      'Max contracts',
-                    min_rr:             'Min R:R',
-                    time_window:        'Trade window',
-                    cooldown_after_loss:'Cooldown after loss',
-                  };
                   const activeRules = riskRules.filter(r => r.enabled !== false && r.kind && r.kind !== 'manual');
 
                   if (activeRules.length === 0) {
@@ -1094,51 +1073,127 @@ export default function FlyxaAIPreSession() {
                     );
                   }
 
-                  return activeRules.map((rule, i) => {
+                  const tiles = activeRules.map(rule => {
                     const kind = rule.kind!;
-                    let displayValue = '—';
-                    let valueColor = C.t1;
+                    let label: string = kind;
+                    let value = '—';
+                    let valueColor = C.t0;
 
                     if (kind === 'max_daily_loss') {
                       const v = Number(rule.value);
-                      if (Number.isFinite(v) && v > 0) { displayValue = formatCurrency(-v); valueColor = C.red; }
-                      else { displayValue = 'No limit'; valueColor = C.t2; }
+                      label = 'Max daily loss';
+                      if (Number.isFinite(v) && v > 0) { value = formatCurrency(-v); valueColor = C.red; }
+                      else { value = 'No limit'; valueColor = C.t2; }
                     } else if (kind === 'max_trades') {
                       const v = Number(rule.value);
-                      if (Number.isFinite(v) && v > 0) displayValue = String(v);
+                      label = 'Max trades';
+                      if (Number.isFinite(v) && v > 0) value = String(v);
                     } else if (kind === 'max_contracts') {
                       const limits = rule.contractLimits;
                       const v = Number(rule.value);
+                      label = 'Max size';
                       if (limits && Object.keys(limits).length > 0) {
-                        const entries = Object.entries(limits);
-                        displayValue = entries.map(([sym, max]) => `${max} ${sym}`).join('  ·  ');
+                        value = Object.entries(limits).map(([sym, max]) => `${max} ${sym}`).join(' · ');
                       } else if (Number.isFinite(v) && v > 0) {
-                        displayValue = String(v);
+                        value = String(v);
                       }
                     } else if (kind === 'min_rr') {
                       const v = Number(rule.value);
-                      if (Number.isFinite(v) && v > 0) displayValue = `1:${v}`;
+                      label = 'Min R:R';
+                      if (Number.isFinite(v) && v > 0) value = `1:${v}`;
                     } else if (kind === 'time_window') {
-                      displayValue = `${rule.startTime ?? '09:30'} – ${rule.endTime ?? '16:00'}`;
+                      label = 'Trade window';
+                      value = `${rule.startTime ?? '09:30'}–${rule.endTime ?? '16:00'}`;
                     } else if (kind === 'cooldown_after_loss') {
                       const v = Number(rule.value);
-                      if (Number.isFinite(v) && v > 0) displayValue = `${v} min`;
+                      label = 'Loss cooldown';
+                      if (Number.isFinite(v) && v > 0) value = `${v} min`;
                     }
 
-                    return (
-                      <div key={rule.id} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 16px',
-                        borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
-                      }}>
-                        <span style={{ fontSize: 11, color: C.t2 }}>{KIND_LABEL[kind] ?? kind}</span>
-                        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 500, color: valueColor, letterSpacing: '-0.01em' }}>{displayValue}</span>
-                      </div>
-                    );
+                    return { id: rule.id, label, value, valueColor };
                   });
-                })()}
-              </div>
 
+                  return (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', borderBottom: `1px solid ${C.b0}` }}>
+                      {tiles.map((tile, i) => (
+                        <div key={tile.id} style={{
+                          flex: '1 1 auto',
+                          padding: '10px 16px',
+                          borderLeft: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                          minWidth: 0,
+                        }}>
+                          <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.t2, marginBottom: 4 }}>{tile.label}</p>
+                          <p style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 600, color: tile.valueColor, lineHeight: 1, whiteSpace: 'nowrap' }}>{tile.value}</p>
+                        </div>
+                      ))}
+                      {/* Daily profit target — powers the target gauge on the live session view */}
+                      <div style={{ flex: '1 1 auto', padding: '7px 16px 8px', borderLeft: `1px solid ${C.b0}`, minWidth: 0 }}>
+                        <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.t2, marginBottom: 4 }}>Daily target</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: 13, color: C.t2 }}>$</span>
+                          <input
+                            type="number" min={0} value={sessionTarget}
+                            onChange={e => setSessionTarget(e.target.value)}
+                            onBlur={() => persistPreSession({})}
+                            placeholder="—"
+                            style={{
+                              width: 84, boxSizing: 'border-box',
+                              borderRadius: 4, border: `1px solid ${C.b0}`,
+                              backgroundColor: C.d2, color: C.t0,
+                              fontFamily: 'monospace', fontSize: 13, padding: '3px 7px', outline: 'none',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Which limits actually get broken — the rap sheet from the
+                    last 10 traded sessions, same engine as journal verification */}
+                {limitBreaches && (
+                  <div style={{ padding: '9px 16px', borderBottom: `1px solid ${C.b0}` }}>
+                    {limitBreaches.breached.length === 0 ? (
+                      <span style={{ fontSize: 11, color: C.t2 }}>
+                        No limit breaches detected in your last {limitBreaches.sessions} sessions.
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: C.t1, lineHeight: 1.55 }}>
+                        Last {limitBreaches.sessions} sessions:{' '}
+                        {limitBreaches.breached.map((item, i) => (
+                          <span key={item.label}>
+                            {i > 0 && ' · '}
+                            {item.label} broken <span style={{ fontFamily: 'monospace', fontWeight: 700, color: C.red }}>{item.fails}×</span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Risk acceptance — a limit you've signed is different from a
+                    limit you were told about. Un-accepted risk is where tilt
+                    comes from. */}
+                {riskRules.some(r => r.enabled !== false && r.kind && r.kind !== 'manual') && (
+                  checklistState['risk-accepted'] ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: C.grn }}>
+                        ✓ Risk accepted — whatever today costs, it's already priced in.
+                      </span>
+                      <button type="button" onClick={() => toggleChecklist({ id: 'risk-accepted', label: 'Risk accepted' })}
+                        style={{ background: 'none', border: 'none', color: C.t2, fontSize: 10, cursor: 'pointer', padding: 0 }}>
+                        reset
+                      </button>
+                    </div>
+                  ) : (
+                    <HoldToCommit
+                      key={`risk-accept-${todayIso}`}
+                      label="Hold to hold yourself accountable"
+                      onCommit={() => toggleChecklist({ id: 'risk-accepted', label: 'Risk accepted' })}
+                    />
+                  )
+                )}
+              </div>
             </>
           )}
 
@@ -1238,6 +1293,92 @@ export default function FlyxaAIPreSession() {
                   )}
                   </>
                 )}
+              </div>
+
+              {/* ── Response plan — if-then contracts. Pre-decide the exact
+                    reaction to the exact trigger; armed contracts lead the
+                    session plan and cycle on the live session view. ── */}
+              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
+                <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                    <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Response plan</h2>
+                    {ifThenPlans.length > 0 && (
+                      <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.grn }}>{ifThenPlans.length} armed</span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11, color: C.t2 }}>
+                    Decide your reaction before the trigger hits — not during it. Suggestions adapt to your state and history.
+                  </p>
+                </div>
+                <div>
+                  {buildIfThenSuggestions(emotion, recentBehavior).map((plan, i) => {
+                    const armed = ifThenPlans.includes(plan);
+                    const thenIndex = plan.toLowerCase().indexOf(', then ');
+                    const ifPart = thenIndex > 0 ? plan.slice(0, thenIndex) : plan;
+                    const thenPart = thenIndex > 0 ? plan.slice(thenIndex + 2) : '';
+                    return (
+                      <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        width: '100%', textAlign: 'left', padding: '10px 16px',
+                        border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                        backgroundColor: armed ? `${C.grn}08` : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease',
+                      }}>
+                        <span style={{
+                          width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
+                          border: `1px solid ${armed ? `${C.grn}70` : C.b1}`,
+                          backgroundColor: armed ? `${C.grn}20` : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, color: C.grn,
+                          transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                        }}>
+                          {armed ? '✓' : ''}
+                        </span>
+                        <span style={{ fontSize: 12, lineHeight: 1.55, color: armed ? C.t0 : C.t1 }}>
+                          <span style={{ fontWeight: 600 }}>{ifPart}</span>{thenPart}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {/* Custom armed contracts that aren't in today's suggestions */}
+                  {ifThenPlans.filter(plan => !buildIfThenSuggestions(emotion, recentBehavior).includes(plan)).map(plan => (
+                    <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      width: '100%', textAlign: 'left', padding: '10px 16px',
+                      border: 'none', borderTop: `1px solid ${C.b0}`,
+                      backgroundColor: `${C.grn}08`,
+                      cursor: 'pointer',
+                    }}>
+                      <span style={{
+                        width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
+                        border: `1px solid ${C.grn}70`, backgroundColor: `${C.grn}20`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: C.grn,
+                      }}>✓</span>
+                      <span style={{ fontSize: 12, lineHeight: 1.55, color: C.t0 }}>{plan}</span>
+                    </button>
+                  ))}
+                  <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.b0}` }}>
+                    <input
+                      value={customIfThenDraft}
+                      onChange={e => setCustomIfThenDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && customIfThenDraft.trim()) {
+                          toggleIfThenPlan(customIfThenDraft.trim());
+                          setCustomIfThenDraft('');
+                        }
+                      }}
+                      placeholder="If [trigger], then [my response]... press Enter to arm"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        borderRadius: 5, border: `1px solid ${C.b0}`,
+                        backgroundColor: C.d2, color: C.t0,
+                        fontSize: 12, padding: '8px 11px', outline: 'none', fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Readiness checks */}
