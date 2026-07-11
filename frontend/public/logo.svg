@@ -1,6 +1,8 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" stroke-width="2.6" stroke-linecap="round"/>
-  <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" stroke-width="2.6" stroke-linecap="round"/>
-  <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
+<svg width="64" height="64" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Flyxa mark: four petals around an open center; top-right in brand orange.
+       Petals are light for the dark-first app UI (favicon + in-app img uses). -->
+  <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#F97316"/>
+  <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#E8E3DC" transform="rotate(-90 50 50) translate(9 9) scale(0.82)"/>
+  <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#E8E3DC" transform="rotate(90 50 50) translate(6 6) scale(0.88)"/>
+  <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#E8E3DC" transform="rotate(180 50 50) translate(18 18) scale(0.64)"/>
 </svg>

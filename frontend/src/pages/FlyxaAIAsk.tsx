@@ -798,11 +798,11 @@ export default function FlyxaAIAsk() {
                   {focusedTradeAnalysisLoading && (
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <svg width="20" height="20" viewBox="0 0 64 64" fill="none" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
-                          <line x1="5" y1="42" x2="22" y2="42" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round"/>
-                          <line x1="22" y1="42" x2="38" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
-                          <line x1="38" y1="26" x2="59" y2="26" stroke="#F59E0B" strokeWidth="2.6" strokeLinecap="round"/>
-                          <circle cx="22" cy="42" r="4.4" fill="#F59E0B"/>
+                        <svg width="20" height="20" viewBox="0 0 100 100" fill="none" style={{ flexShrink: 0, animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }}>
+                          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#F97316" />
+                          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(-90 50 50) translate(9 9) scale(0.82)" />
+                          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(90 50 50) translate(6 6) scale(0.88)" />
+                          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(180 50 50) translate(18 18) scale(0.64)" />
                         </svg>
                         <p style={{ fontSize: 11.5, color: C.t1, margin: 0 }}>Cross-referencing {trades.length} trades...</p>
                         <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>

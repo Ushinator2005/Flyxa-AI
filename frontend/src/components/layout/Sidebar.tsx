@@ -201,21 +201,26 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
         width: '100%',
       }}>
         <svg
-          viewBox="0 0 160 38"
+          viewBox="0 0 100 100"
           fill="none"
-          preserveAspectRatio="xMinYMid meet"
           aria-hidden="true"
           style={{
-            width: collapsed ? 52 : 112,
-            height: collapsed ? 12 : 24,
+            width: collapsed ? 26 : 28,
+            height: collapsed ? 26 : 28,
             pointerEvents: 'none',
+            flexShrink: 0,
           }}
         >
-          <line x1="0" y1="27" x2="48" y2="27" stroke="rgba(245,158,11,0.55)" strokeWidth="1.8" strokeLinecap="round" />
-          <line x1="48" y1="27" x2="76" y2="9" stroke="#F59E0B" strokeWidth="2.2" strokeLinecap="round" />
-          <line x1="76" y1="9" x2="160" y2="9" stroke="#F59E0B" strokeWidth="2.2" strokeLinecap="round" />
-          <circle cx="48" cy="27" r="4.8" fill="#F59E0B" />
+          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#F97316" />
+          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(-90 50 50) translate(9 9) scale(0.82)" />
+          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(90 50 50) translate(6 6) scale(0.88)" />
+          <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(180 50 50) translate(18 18) scale(0.64)" />
         </svg>
+        {!collapsed && (
+          <span style={{ marginLeft: 10, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--app-text)', letterSpacing: '-0.01em' }}>
+            Flyxa
+          </span>
+        )}
       </button>
 
       {/* Nav + Accounts */}

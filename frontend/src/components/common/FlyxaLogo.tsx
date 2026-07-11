@@ -8,6 +8,32 @@ interface FlyxaLogoProps {
   subtitleClassName?: string;
 }
 
+// The Flyxa mark: four petals in a pinwheel around an open center, the
+// top-right petal in brand orange. Petals use the theme text color so the
+// mark adapts to dark/light backgrounds.
+const PETAL_PATH = 'M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z';
+const ORANGE = '#F97316';
+
+function petalTransform(rotation: number, scale: number): string {
+  const offset = 50 * (1 - scale);
+  return `rotate(${rotation} 50 50) translate(${offset} ${offset}) scale(${scale})`;
+}
+
+function FlyxaMark({ petal }: { petal: string }) {
+  return (
+    <svg viewBox="0 0 100 100" fill="none" className="h-full w-full" aria-hidden="true">
+      {/* top-right — brand orange, largest */}
+      <path d={PETAL_PATH} fill={ORANGE} transform={petalTransform(0, 1)} />
+      {/* top-left */}
+      <path d={PETAL_PATH} fill={petal} transform={petalTransform(-90, 0.82)} />
+      {/* bottom-right */}
+      <path d={PETAL_PATH} fill={petal} transform={petalTransform(90, 0.88)} />
+      {/* bottom-left — smallest */}
+      <path d={PETAL_PATH} fill={petal} transform={petalTransform(180, 0.64)} />
+    </svg>
+  );
+}
+
 export default function FlyxaLogo({
   size = 48,
   showWordmark = false,
@@ -18,21 +44,12 @@ export default function FlyxaLogo({
   subtitleClassName = '',
 }: FlyxaLogoProps) {
   const palette = {
-    lineDim: 'rgba(245,158,11,0.45)',
-    lineBright: '#f59e0b',
-    dot: '#f59e0b',
+    petal: 'var(--app-text)',
     word: 'var(--app-text)',
     subtitle: 'var(--app-text-subtle)',
   };
 
-  const mark = (
-    <svg viewBox="0 0 120 120" fill="none" className="h-full w-full" aria-hidden="true">
-      <line x1="6" y1="78" x2="40" y2="78" stroke={palette.lineDim} strokeWidth="3" strokeLinecap="round" />
-      <line x1="40" y1="78" x2="72" y2="46" stroke={palette.lineBright} strokeWidth="3.2" strokeLinecap="round" />
-      <line x1="72" y1="46" x2="112" y2="46" stroke={palette.lineBright} strokeWidth="3.2" strokeLinecap="round" />
-      <circle cx="40" cy="78" r="7" fill={palette.dot} />
-    </svg>
-  );
+  const mark = <FlyxaMark petal={palette.petal} />;
 
   if (!showWordmark) {
     return (
@@ -49,7 +66,7 @@ export default function FlyxaLogo({
           <div className="relative shrink-0" style={{ width: size, height: size }}>
             {mark}
           </div>
-          <div className={`auth-display text-xl font-light leading-none tracking-[-0.04em] ${wordmarkClassName}`.trim()} style={{ color: palette.word }}>
+          <div className={`text-xl leading-none tracking-[-0.02em] ${wordmarkClassName}`.trim()} style={{ color: palette.word, fontFamily: 'var(--font-display)', fontWeight: 700 }}>
             Flyxa
           </div>
         </div>
@@ -65,16 +82,12 @@ export default function FlyxaLogo({
       className={`relative w-full min-w-0 overflow-hidden ${className}`.trim()}
       style={{ minHeight: Math.max(58, Math.round(size * 1.5)) }}
     >
-      <svg viewBox="0 0 860 214" fill="none" className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="none" aria-hidden="true">
-        <line x1="112" y1="126" x2="270" y2="126" stroke={palette.lineDim} strokeWidth="2.4" strokeLinecap="round" />
-        <line x1="270" y1="126" x2="355" y2="56" stroke={palette.lineBright} strokeWidth="2.8" />
-        <line x1="355" y1="56" x2="850" y2="56" stroke={palette.lineBright} strokeWidth="2.8" strokeLinecap="round" />
-        <circle cx="270" cy="126" r="8" fill={palette.dot} />
-      </svg>
-
-      <div className="relative flex items-center justify-center px-6 py-5">
+      <div className="relative flex items-center justify-center gap-4 px-6 py-5">
+        <div className="relative shrink-0" style={{ width: Math.max(34, Math.round(size * 0.8)), height: Math.max(34, Math.round(size * 0.8)) }}>
+          {mark}
+        </div>
         <div className="min-w-0 text-center">
-          <div className={`auth-display text-xl font-light leading-none tracking-[-0.04em] ${wordmarkClassName}`.trim()} style={{ color: palette.word }}>
+          <div className={`text-xl leading-none tracking-[-0.02em] ${wordmarkClassName}`.trim()} style={{ color: palette.word, fontFamily: 'var(--font-display)', fontWeight: 700 }}>
             Flyxa
           </div>
           <div className={`mt-2 text-[10px] uppercase tracking-[0.5em] ${subtitleClassName}`.trim()} style={{ color: palette.subtitle }}>
