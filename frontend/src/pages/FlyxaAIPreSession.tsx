@@ -1445,23 +1445,20 @@ export default function FlyxaAIPreSession() {
           {step === 4 && (
             <>
               <div style={{ borderRadius: 8, border: `1px solid ${C.b0}`, backgroundColor: C.d1, overflow: 'hidden' }}>
-                {/* Colored top bar */}
-                <div style={{ height: 3, backgroundColor: `${readinessColor}30` }}>
-                  <div style={{ height: '100%', width: `${readiness.score}%`, backgroundColor: readinessColor, transition: 'width 0.4s ease' }} />
-                </div>
-                {/* Score + status + summary */}
+                {/* Score + status + summary — the score number is the only
+                    colored element on this card; everything else stays neutral */}
                 <div style={{ padding: '14px 18px 16px', borderBottom: readiness.reasons.length > 0 ? `1px solid ${C.b0}` : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 40, fontWeight: 500, color: readinessColor, lineHeight: 1, letterSpacing: '-0.04em' }}>{readiness.score}</span>
                     <span style={{ fontFamily: 'monospace', fontSize: 11, color: C.t2 }}>/100</span>
-                    <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, color: readinessColor, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.85 }}>{readiness.status}</span>
+                    <span style={{ marginLeft: 4, fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{readiness.status}</span>
                   </div>
                   <p style={{ fontSize: 12, color: C.t1, lineHeight: 1.6 }}>{readiness.summary}</p>
                 </div>
                 {/* Reasons */}
                 {readiness.reasons.map((r, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 18px', borderTop: `1px solid ${C.b0}` }}>
-                    <span style={{ width: 3, height: 3, borderRadius: '50%', flexShrink: 0, backgroundColor: readinessColor, marginTop: 6, opacity: 0.7 }} />
+                    <span style={{ width: 3, height: 3, borderRadius: '50%', flexShrink: 0, backgroundColor: C.t2, marginTop: 6, opacity: 0.7 }} />
                     <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>{r}</p>
                   </div>
                 ))}
@@ -1473,19 +1470,15 @@ export default function FlyxaAIPreSession() {
                   <p style={{ fontSize: 11, color: C.t2 }}>Your rules for today.</p>
                 </div>
                 <div>
-                  {sessionPlan.map((row, i) => {
-                    const bc = row.source === 'Primary focus' ? C.grn : row.source === 'Hard stop' ? C.red : C.acc;
-                    return (
-                      <div key={row.id} style={{
-                        padding: '12px 16px',
-                        borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
-                        borderLeft: `3px solid ${bc}`,
-                      }}>
-                        <p style={{ fontSize: 9, fontWeight: 700, color: bc, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>{row.source}</p>
-                        <p style={{ fontSize: 12, lineHeight: 1.55, color: C.t0 }}>{row.rule}</p>
-                      </div>
-                    );
-                  })}
+                  {sessionPlan.map((row, i) => (
+                    <div key={row.id} style={{
+                      padding: '12px 16px',
+                      borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
+                    }}>
+                      <p style={{ fontSize: 9, fontWeight: 600, color: C.t2, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>{row.source}</p>
+                      <p style={{ fontSize: 12, lineHeight: 1.55, color: C.t0 }}>{row.rule}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -1504,8 +1497,8 @@ export default function FlyxaAIPreSession() {
                         }}>
                           <span style={{
                             flexShrink: 0, marginTop: 1,
-                            fontSize: 8, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
-                            color: risk ? C.red : C.grn, border: `1px solid ${risk ? C.red : C.grn}38`, borderRadius: 3, padding: '2px 6px',
+                            fontSize: 8, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase',
+                            color: C.t2, border: `1px solid ${C.b0}`, borderRadius: 3, padding: '2px 6px',
                           }}>{risk ? 'Watch' : 'Edge'}</span>
                           <div>
                             <p style={{ fontSize: 12, fontWeight: 600, color: C.t0, marginBottom: 3 }}>{p.title}</p>
@@ -1558,7 +1551,7 @@ export default function FlyxaAIPreSession() {
                       </span>
                     </button>
                     {readiness.status === 'Stand Down' && (
-                      <p style={{ marginTop: 8, fontSize: 11, color: C.red, textAlign: 'center' }}>
+                      <p style={{ marginTop: 8, fontSize: 11, color: C.t2, textAlign: 'center' }}>
                         Your readiness score says stand down — launching anyway is a choice you're making.
                       </p>
                     )}
