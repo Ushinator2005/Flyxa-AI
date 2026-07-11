@@ -43,7 +43,9 @@ export default function Layout() {
         )}
         <main className={isFullBleed ? 'flex-1 overflow-hidden p-0' : 'flex-1 overflow-auto p-4 md:p-8'}>
           <div className={isFullBleed ? 'h-full w-full' : 'mx-auto max-w-[1400px]'}>
-            <ErrorBoundary>
+            {/* Keyed by pathname so a crashed page's error state clears as soon
+                as the user navigates somewhere else. */}
+            <ErrorBoundary key={location.pathname}>
               <div key={location.key} className="page-transition h-full">
                 <Outlet />
               </div>

@@ -160,23 +160,6 @@
 .ec-bal-delta.neg { color: var(--red); }
 
 /* Strip buttons */
-.ec-btn-reduce {
-  height: 28px;
-  padding: 0 12px;
-  background: var(--red-dim);
-  border: 1px solid var(--red-border);
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: var(--font-sans);
-  letter-spacing: .04em;
-  color: var(--red);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: opacity .12s;
-}
-.ec-btn-reduce:hover { opacity: .8; }
-
 .ec-btn-trade-lens {
   height: 28px;
   padding: 0 12px;
@@ -270,10 +253,13 @@
 .ec-body {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 0 18px;
+  gap: 10px;
+  padding: 14px 18px 24px;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  box-sizing: border-box;
   flex: 1;
-  background: var(--app-bg);
 }
 
 /* ── Top zone ──────────────────────────────────────────────────── */
@@ -281,53 +267,146 @@
   display: block;
 }
 
-/* ── Metric strip (flat row, no cards) ────────────────────────── */
+/* ── Hero: pass probability + equity path ─────────────────────── */
+.ec-hero {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.ec-hero-stat {
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ec-hero-num {
+  font: 600 42px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em;
+  color: var(--txt);
+  margin: 4px 0 8px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ec-hero-pct {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--txt-3);
+  margin-left: 2px;
+}
+
+.ec-hero-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt);
+  margin-bottom: 3px;
+}
+
+.ec-hero-weak {
+  font-size: 11px;
+  color: var(--txt-2);
+}
+
+.ec-hero-chart {
+  padding: 14px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ec-hero-chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ec-hero-chart-meta {
+  font-size: 10px;
+  color: var(--txt-2);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ec-spark {
+  width: 100%;
+  height: 84px;
+  display: block;
+  margin-top: 6px;
+}
+
+.ec-hero-days {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.ec-hero-days-dots {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ec-day-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.ec-day-dot.pos { background: var(--green); opacity: .75; }
+.ec-day-dot.neg { background: var(--red); opacity: .7; }
+
+/* ── Metric card row ──────────────────────────────────────────── */
 .ec-metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,0.02);
-  margin: 0 -18px;
-  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
 }
 
 .ec-metric-card {
-  padding: 16px 18px 16px 0;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
+  min-width: 0;
 }
-.ec-metric-card:last-child { border-right: none; padding-right: 0; }
-.ec-metric-card:first-child { padding-left: 0; }
-
-/* shift padding so that inner edge of non-first cards has gap from the divider */
-.ec-metric-card + .ec-metric-card {
-  padding-left: 18px;
-}
+.ec-metric-card:last-child { border-right: none; }
 
 .ec-metric-lbl {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: .09em;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--txt-3);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .ec-metric-val {
   display: block;
-  font: 500 30px/1 var(--font-mono);
+  font: 600 20px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.03em;
+  letter-spacing: -.02em;
   color: var(--txt);
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   -webkit-font-smoothing: antialiased;
 }
 
 .ec-metric-denom {
-  font-size: 19px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--txt-3);
 }
@@ -337,19 +416,21 @@
   background: var(--surface-3);
   border-radius: 2px;
   overflow: hidden;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .ec-metric-fill {
   height: 100%;
   border-radius: 2px;
+  background: var(--amber);
+  opacity: .75;
   max-width: 100%;
   transition: width .5s ease;
 }
 
 .ec-metric-sub {
-  font: 500 11px/1.4 var(--font-mono);
-  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  line-height: 1.45;
   color: var(--txt-2);
 }
 
@@ -624,19 +705,22 @@
   flex-shrink: 0;
 }
 
-/* ── Post-session debrief (flat) ──────────────────────────────── */
+/* ── Post-session debrief card ────────────────────────────────── */
 .ec-debrief-card {
-  border-top: 1px solid var(--border);
-  padding: 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
 }
 
 .ec-debrief-sub {
   font-size: 10px;
   color: var(--txt-3);
+  margin: 3px 0 0;
 }
 
 .ec-debrief-body {
-  padding: 12px 0 0;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -757,9 +841,22 @@
   padding: 20px 0;
 }
 
-/* ── Risk alerts (flat) ───────────────────────────────────────── */
+/* ── Bottom two-up: leaks beside debrief ──────────────────────── */
+.ec-bottom-two {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 10px;
+  align-items: start;
+}
+.ec-bottom-two > :only-child { grid-column: 1 / -1; }
+
+/* ── Risk alerts card ─────────────────────────────────────────── */
 .ec-alerts-card {
   min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
 }
 
 /* Section headers (shared by alerts + debrief + preset) */
@@ -767,7 +864,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 10px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -778,30 +875,41 @@
 }
 
 .ec-card-hdr-title {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--txt);
 }
 
 .ec-card-badge {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: .04em;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
   color: var(--amber);
-  background: var(--amber-dim);
   border: 1px solid var(--amber-border);
-  border-radius: 2px;
+  background: var(--amber-dim);
+  border-radius: 3px;
   padding: 2px 7px;
   flex-shrink: 0;
 }
 
 .ec-alert-item {
-  padding: 12px 0;
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-sub);
-  border-left: 2px solid transparent;
-  padding-left: 10px;
 }
 .ec-alert-item.last { border-bottom: none; }
+
+.ec-alert-idx {
+  flex-shrink: 0;
+  font: 600 10px/1 var(--font-mono);
+  color: var(--txt-3);
+  padding-top: 3px;
+}
+
+.ec-alert-content { min-width: 0; }
+
+.ec-alert-severity.critical { color: var(--red); font-weight: 600; }
 
 .ec-alert-item-title {
   margin: 0 0 4px;
@@ -895,11 +1003,10 @@
 /* ── Disclaimer ───────────────────────────────────────────────── */
 .ec-disclaimer {
   margin: 0;
-  padding: 14px 0;
+  padding: 2px 2px 8px;
   font-size: 10px;
   color: var(--txt-3);
   line-height: 1.5;
-  border-top: 1px solid var(--border);
 }
 
 /* ── Pass screen ──────────────────────────────────────────────── */
@@ -1080,13 +1187,14 @@
   font-size: 13px;
 }
 
-/* ── Path-to-pass strategy (flat) ─────────────────────────────── */
+/* ── Path-to-pass strategy card ───────────────────────────────── */
 .ec-strategy-card {
-  padding: 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  border-bottom: 1px solid var(--border);
 }
 
 .ec-strategy-head {
@@ -1094,7 +1202,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding-bottom: 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1102,54 +1210,47 @@
   display: block;
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--amber);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .ec-strategy-head h2 {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.25;
+  font-size: 16px;
+  line-height: 1.5;
   color: var(--txt);
   font-weight: 600;
+  letter-spacing: -.01em;
+  max-width: 72ch;
 }
 
-.ec-strategy-status {
-  font: 500 12px/1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  white-space: nowrap;
+.ec-strategy-head h2.loading {
   color: var(--txt-3);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13px;
 }
 
-/* Strategy sub-items: flat inline strip */
+/* Strategy sub-items */
 .ec-strategy-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,0.02);
-  margin: 0 -18px;
-  padding: 0 18px;
 }
 
 .ec-strategy-item {
   min-width: 0;
-  padding: 12px 16px 12px 0;
+  padding: 12px 16px;
   border-right: 1px solid var(--border);
 }
 .ec-strategy-item:last-child { border-right: none; }
-.ec-strategy-item + .ec-strategy-item { padding-left: 16px; }
 
 .ec-strategy-item span {
   display: block;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--txt-3);
@@ -1158,9 +1259,9 @@
 
 .ec-strategy-item strong {
   display: block;
-  font: 500 16px/1.15 var(--font-mono);
+  font: 600 15px/1.15 var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.02em;
+  letter-spacing: -.015em;
   color: var(--txt);
   margin-bottom: 7px;
   -webkit-font-smoothing: antialiased;
@@ -1173,23 +1274,6 @@
   color: var(--txt-2);
 }
 
-/* Next session directive — amber accent, no box background */
-.ec-directive {
-  border-left: 3px solid var(--amber);
-  padding: 10px 14px;
-}
-
-.ec-directive-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--amber);
-  margin-bottom: 8px;
-}
 
 /* ── Debrief status indicator ─────────────────────────────────── */
 .ec-debrief-status {
@@ -1226,15 +1310,13 @@
 }
 
 @media (max-width: 1180px) {
-  .ec-metric-grid,
   .ec-strategy-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .ec-metric-card:nth-child(2) { border-right: none; }
-  .ec-metric-card:nth-child(4) { border-right: none; }
   .ec-strategy-item:nth-child(2) { border-right: none; }
   .ec-strategy-item:nth-child(4) { border-right: none; }
   .ec-bottom-grid { grid-template-columns: 1fr; }
+  .ec-bottom-two { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -1247,4 +1329,6 @@
   .ec-strategy-item { border-right: none; border-bottom: 1px solid var(--border); }
   .ec-strategy-item:last-child { border-bottom: none; }
   .ec-strategy-head { flex-direction: column; }
+  .ec-hero { grid-template-columns: 1fr; }
+  .ec-hero-stat { border-right: none; border-bottom: 1px solid var(--border); }
 }

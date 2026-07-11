@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, Download, ShieldCheck, Sparkles, Trophy } from 'lucide-react';
+import { ChevronDown, Download, ShieldCheck, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account, Trade } from '../store/types.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -14,7 +14,7 @@ import {
 } from '../utils/evaluationCoach.js';
 import './EvaluationCoach.css';
 
-const money = (value: number) => value.toLocaleString('en-US', {
+const money = (value: number) => (Number.isFinite(value) ? value : 0).toLocaleString('en-US', {
   style: 'currency', currency: 'USD', maximumFractionDigits: 0,
 });
 
@@ -124,6 +124,28 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 // (computeDayVerdict imported from evaluationCoach.ts)
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+// The whole evaluation in one picture: the balance line running between the
+// drawdown floor (dashed, below) and the profit target (dashed, above).
+function EquitySpark({ points, target, floor }: { points: number[]; target: number; floor: number }) {
+  if (points.length < 2 || !Number.isFinite(target) || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
+  const W = 340, H = 84, PAD = 6;
+  const lo = Math.min(...points, floor);
+  const hi = Math.max(...points, target);
+  const span = hi - lo || 1;
+  const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
+  const y = (v: number) => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
+  const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+  const last = points[points.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
+      <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
+      <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
+      <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(points.length - 1)} cy={y(last)} r="2.6" fill="var(--amber)" />
+    </svg>
+  );
+}
 
 function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
   account: Account; progress: EvaluationProgress; onDismiss: () => void; onMarkFunded: () => void;
@@ -350,16 +372,29 @@ export default function EvaluationCoach() {
   const targetProgressPct = Math.min(100, Math.round(progress.targetProgressPct));
   const drawdownRemainingPct = maxDrawdown > 0 ? Math.min(100, Math.round((progress.drawdownRemaining / maxDrawdown) * 100)) : 0;
   const drawdownUsedPct = 100 - drawdownRemainingPct;
-  const drawdownBufferColor = drawdownRemainingPct > 50 ? 'var(--green)' : drawdownRemainingPct >= 20 ? 'var(--amber)' : 'var(--red)';
   const dailyRemaining = dailyLimit > 0 ? Math.max(0, progress.dailyLossRemaining) : null;
   const dailyRemainingPct = dailyLimit > 0 ? Math.min(100, Math.round((Math.max(0, progress.dailyLossRemaining) / dailyLimit) * 100)) : 0;
   const dailyUsedPct = 100 - dailyRemainingPct;
-  const dailyBudgetColor = dailyRemainingPct >= 70 ? 'var(--green)' : dailyRemainingPct >= 35 ? 'var(--amber)' : 'var(--red)';
   const daysMet = progress.tradingDays >= progress.minimumTradingDays;
 
-  // ── Pass probability ring ───────────────────────────────────────
-  const probColor = progress.passProbability >= 65 ? 'var(--green)' : progress.passProbability >= 40 ? 'var(--amber)' : 'var(--red)';
+  // ── Pass probability ────────────────────────────────────────────
   const probLabel = progress.passProbability >= 65 ? 'Strong path' : progress.passProbability >= 40 ? 'Recoverable' : 'High risk';
+  const probColor = progress.passProbability >= 65 ? 'var(--green)' : progress.passProbability >= 40 ? 'var(--amber)' : 'var(--red)';
+
+  // ── Equity path (hero chart) ────────────────────────────────────
+  // Account fields can arrive as strings from form inputs — coerce before math,
+  // otherwise `+` concatenates and the sparkline silently refuses to render.
+  const startBalance = Number(selected.size) > 0
+    ? Number(selected.size)
+    : progress.currentBalance - progress.netPnl;
+  const equityPoints = (() => {
+    const asc = [...byDayMap.keys()].sort();
+    let bal = startBalance;
+    const pts = [bal];
+    for (const d of asc) { bal += Number(byDayMap.get(d) ?? 0); pts.push(bal); }
+    return pts;
+  })();
+  const targetBalance = startBalance + Number(target);
 
   // ── Pace ────────────────────────────────────────────────────────
   const avgDailyPnl = progress.tradingDays > 0 ? progress.netPnl / progress.tradingDays : 0;
@@ -594,10 +629,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               )}
             </div>
           </div>
-          {allAlerts.length > 0 && (
-            <button type="button" className="ec-btn-reduce">Reduce Risk</button>
-          )}
-<button type="button" className="ec-btn-export" onClick={exportReport}>
+          <button type="button" className="ec-btn-export" onClick={exportReport}>
             <Download size={12} /> Export
           </button>
         </div>
@@ -607,6 +639,42 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
       {/* ── Body ────────────────────────────────────────────────────── */}
       <div className="ec-body">
 
+        {/* ── Hero: pass probability + equity path ──────────────────── */}
+        <div className="ec-hero">
+          <div className="ec-hero-stat">
+            <span className="ec-metric-lbl">Pass probability</span>
+            <strong className="ec-hero-num" style={{ color: probColor }}>
+              {progress.passProbability}<span className="ec-hero-pct">%</span>
+            </strong>
+            <span className="ec-hero-status" style={{ color: probColor }}>{probLabel}</span>
+            <span className="ec-hero-weak">Weakest driver: {weakestDriver?.label ?? '—'}</span>
+          </div>
+          <div className="ec-hero-chart">
+            <div className="ec-hero-chart-head">
+              <span className="ec-metric-lbl">Equity path</span>
+              <span className="ec-hero-chart-meta">
+                <span style={{ color: 'var(--red)' }}>floor {money(progress.drawdownFloor)}</span>
+                {' · '}balance {money(progress.currentBalance)}{' · '}
+                <span style={{ color: 'var(--green)' }}>target {money(targetBalance)}</span>
+              </span>
+            </div>
+            {equityPoints.length >= 2
+              ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} />
+              : <p className="ec-no-data">No sessions recorded yet — the balance line starts with your first trade.</p>}
+          </div>
+          {dayDates.length > 0 && (
+            <div className="ec-hero-days">
+              <span className="ec-metric-lbl" style={{ marginBottom: 0 }}>Recent sessions</span>
+              <div className="ec-hero-days-dots">
+                {[...dayDates].slice(0, 15).reverse().map(d => {
+                  const pnl = byDayMap.get(d) ?? 0;
+                  return <span key={d} className={`ec-day-dot${pnl >= 0 ? ' pos' : ' neg'}`} title={`${d} · ${money(pnl)}`} />;
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Top zone: evaluation health metrics */}
         <div className="ec-top-zone">
           <div className="ec-metric-grid">
@@ -614,22 +682,18 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             {/* Profit needed */}
             <div className="ec-metric-card">
               <span className="ec-metric-lbl">Profit needed</span>
-              <strong className="ec-metric-val" style={{ color: 'var(--amber)' }}>{money(progress.targetRemaining)}</strong>
-              <div className="ec-metric-track">
-                <div className="ec-metric-fill" style={{ width: `${targetProgressPct}%`, background: 'var(--amber)' }} />
-              </div>
+              <strong className="ec-metric-val">{money(progress.targetRemaining)}</strong>
+              <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>
               <span className="ec-metric-sub">
                 {targetProgressPct}% of {money(target)} target · balance {money(progress.currentBalance)}
               </span>
             </div>
 
-            {/* Drawdown buffer */}
+            {/* Drawdown buffer — red only when the buffer is actually thin */}
             <div className="ec-metric-card">
               <span className="ec-metric-lbl">Drawdown buffer</span>
-              <strong className="ec-metric-val" style={{ color: drawdownBufferColor }}>{money(progress.drawdownRemaining)}</strong>
-              <div className="ec-metric-track">
-                <div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%`, background: drawdownBufferColor }} />
-              </div>
+              <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(progress.drawdownRemaining)}</strong>
+              <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%` }} /></div>
               <span className="ec-metric-sub">
                 {drawdownUsedPct}% of {money(maxDrawdown)} used · floor {money(progress.drawdownFloor)}
               </span>
@@ -639,10 +703,8 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             {dailyLimit > 0 ? (
               <div className="ec-metric-card">
                 <span className="ec-metric-lbl">Daily budget left</span>
-                <strong className="ec-metric-val" style={{ color: dailyBudgetColor }}>{money(dailyRemaining ?? 0)}</strong>
-                <div className="ec-metric-track">
-                  <div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%`, background: dailyBudgetColor }} />
-                </div>
+                <strong className="ec-metric-val" style={dailyRemainingPct < 35 ? { color: 'var(--red)' } : undefined}>{money(dailyRemaining ?? 0)}</strong>
+                <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%` }} /></div>
                 <span className="ec-metric-sub">
                   {dailyUsedPct}% used · {money(progress.dailyPnl)} today
                 </span>
@@ -650,13 +712,13 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             ) : (
               <div className="ec-metric-card">
                 <span className="ec-metric-lbl">Trading days</span>
-                <strong className="ec-metric-val" style={{ color: progress.minimumTradingDays > 0 && daysMet ? 'var(--green)' : undefined }}>
+                <strong className="ec-metric-val">
                   {progress.tradingDays}
                   {progress.minimumTradingDays > 0 && <span className="ec-metric-denom">/{progress.minimumTradingDays}</span>}
                 </strong>
                 <div className="ec-metric-track">
                   {progress.minimumTradingDays > 0 && (
-                    <div className="ec-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%`, background: daysMet ? 'var(--green)' : 'var(--amber)' }} />
+                    <div className="ec-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%` }} />
                   )}
                 </div>
                 <span className="ec-metric-sub">
@@ -666,57 +728,18 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
                 </span>
               </div>
             )}
-            <div className="ec-metric-card ec-metric-card-probability">
-              <span className="ec-metric-lbl">Pass probability</span>
-              <strong className="ec-metric-val" style={{ color: probColor }}>{progress.passProbability}%</strong>
-              <div className="ec-metric-track">
-                <div className="ec-metric-fill" style={{ width: `${progress.passProbability}%`, background: probColor }} />
-              </div>
-              <span className="ec-metric-sub">
-                {probLabel} · weakest: {weakestDriver?.label ?? 'n/a'}
-              </span>
-            </div>
           </div>
 
-          {/* Legacy side card kept disabled while the strategy panel replaces it */}
-          {false && (
-          <div className="ec-side-card" style={{ background: 'transparent', borderColor: 'transparent' }}>
-            <span className="ec-side-eyebrow">Evaluation status</span>
-            <span className="ec-verdict-badge" style={{ color: probColor }}>{probLabel}</span>
-            <p className="ec-verdict-reason">{processHealth}</p>
-            <div className="ec-side-divider" />
-            <div className="ec-prob-row">
-              <span className="ec-prob-label">Pass probability</span>
-              <span className="ec-prob-val" style={{ color: probColor }}>{progress.passProbability}%</span>
-            </div>
-            {progress.minimumTradingDays > 0 && (
-              <div className="ec-prob-row">
-                <span className="ec-prob-label">Min days</span>
-                <span className="ec-prob-val" style={{ color: daysMet ? 'var(--green)' : 'var(--amber)' }}>
-                  {progress.tradingDays}/{progress.minimumTradingDays}
-                </span>
-              </div>
-            )}
-            <div className="ec-prob-row">
-              <span className="ec-prob-label">Sessions left</span>
-              <span className="ec-prob-val">{sessionsLeft !== null ? `~${sessionsLeft}` : '—'}</span>
-            </div>
-            <div className="ec-prob-row">
-              <span className="ec-prob-label">Target pace</span>
-              <span className="ec-prob-val" style={{ color: avgDailyPnl > 0 ? 'var(--green)' : 'var(--red)' }}>{avgDailyPnl > 0 ? 'On track' : 'Behind'}</span>
-            </div>
-          </div>
-          )}
         </div>
 
-        {/* Path to pass */}
+        {/* Path to pass — the AI directive IS the headline; the stats below
+            are the evidence for it */}
         <section className="ec-strategy-card">
           <div className="ec-strategy-head">
             <div>
-              <span className="ec-strategy-kicker">Path to pass</span>
-              <h2>Protect the account, then earn the target.</h2>
+              <span className="ec-strategy-kicker">Path to pass · next session strategy</span>
+              <h2 className={missionLoading ? 'loading' : undefined}>{missionDisplay}</h2>
             </div>
-            <span className="ec-strategy-status" style={{ color: probColor }}>{probLabel}</span>
           </div>
 
           <div className="ec-strategy-grid">
@@ -735,82 +758,80 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               </small>
             </div>
             <div className="ec-strategy-item">
-              <span>Process edge</span>
-              <strong>{planAdherencePct !== null ? `${planAdherencePct}%` : processHealth}</strong>
+              <span>Plan adherence</span>
+              <strong>{planAdherencePct !== null ? `${planAdherencePct}%` : '—'}</strong>
               <small>
                 {planAdherencePct !== null
-                  ? `${violationCount} rule break${s(violationCount)} · ${behavioralFlagCount} behavior flag${s(behavioralFlagCount)}.`
+                  ? `${processHealth}. ${violationCount} rule break${s(violationCount)} · ${behavioralFlagCount} behavior flag${s(behavioralFlagCount)}.`
                   : 'Tag rule checks to tighten the pass model.'}
               </small>
             </div>
             <div className="ec-strategy-item">
               <span>Average trade</span>
-              <strong>{avgWin > 0 ? `${money(avgWin)} avg win` : 'Not enough wins'}</strong>
+              <strong>{avgWin > 0 ? `${money(avgWin)} win` : '—'}</strong>
               <small>{avgLossAbs > 0 ? `${money(avgLossAbs)} avg loss` : 'No average loss yet'} · Main leak: {primaryLeak ?? 'none detected'}.</small>
             </div>
           </div>
 
-          <div className="ec-directive">
-            <div className="ec-directive-label">
-              <Sparkles size={10} />
-              Next session strategy
-            </div>
-            <p className={`ec-mission-body${missionLoading ? ' loading' : ''}`}>
-              {missionDisplay}
-            </p>
-          </div>
         </section>
 
-        {/* Coaching alerts — only shown when there are alerts */}
-        {allAlerts.length > 0 && (
-          <div className="ec-alerts-card" ref={alertsRef}>
-            <div className="ec-card-hdr">
-              <span className="ec-card-hdr-title">Risk leaks to fix</span>
-              <span className="ec-card-badge">{allAlerts.length}</span>
-            </div>
-            {allAlerts.map((alert, i) => (
-              <div
-                key={alert.id}
-                className={`ec-alert-item${i === allAlerts.length - 1 ? ' last' : ''}`}
-                style={{ borderLeftColor: alert.severity === 'critical' ? 'var(--red)' : alert.severity === 'warning' ? 'var(--amber)' : 'var(--border)' }}
-              >
-                <p className="ec-alert-item-title">{alert.title}</p>
-                <p className="ec-alert-item-body">{alert.message}</p>
-                <p className="ec-alert-item-fix">→ {alert.action}</p>
+        {/* Bottom two-up: risk leaks beside the debrief */}
+        <div className="ec-bottom-two">
+          {allAlerts.length > 0 && (
+            <div className="ec-alerts-card" ref={alertsRef}>
+              <div className="ec-card-hdr">
+                <span className="ec-card-hdr-title">Risk leaks to fix</span>
+                <span className="ec-card-badge">{allAlerts.length}</span>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Session debrief — auto-saves */}
-        <div className="ec-debrief-card">
-          <div className="ec-card-hdr">
-            <span className="ec-card-hdr-title">Session Debrief</span>
-            {debriefStatus !== 'idle' && (
-              <span className={`ec-debrief-status${debriefStatus === 'saved' ? ' saved' : ''}`}>
-                {debriefStatus === 'saving' ? 'Saving…' : 'Saved'}
-              </span>
-            )}
-          </div>
-          <div className="ec-debrief-body">
-            {recentJournalReflections.length > 0 && (
-              <div className="ec-debrief-journal">
-                <span className="ec-debrief-journal-label">From your journal</span>
-                {recentJournalReflections.map(r => (
-                  <div key={r.date} className="ec-debrief-journal-entry">
-                    <span className="ec-debrief-journal-date">{new Date(r.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                    <p className="ec-debrief-journal-text">{r.post}</p>
+              {allAlerts.map((alert, i) => (
+                <div key={alert.id} className={`ec-alert-item${i === allAlerts.length - 1 ? ' last' : ''}`}>
+                  <span className="ec-alert-idx">{String(i + 1).padStart(2, '0')}</span>
+                  <div className="ec-alert-content">
+                    <p className="ec-alert-item-title">
+                      {alert.severity === 'critical' && <span className="ec-alert-severity critical">Critical · </span>}
+                      {alert.title}
+                    </p>
+                    <p className="ec-alert-item-body">{alert.message}</p>
+                    <p className="ec-alert-item-fix">→ {alert.action}</p>
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Session debrief — auto-saves */}
+          <div className="ec-debrief-card">
+            <div className="ec-card-hdr">
+              <div>
+                <span className="ec-card-hdr-title">Session debrief</span>
+                <p className="ec-debrief-sub">Auto-saves and feeds tomorrow&apos;s coaching directive.</p>
               </div>
-            )}
-            <textarea
-              className="ec-debrief-textarea"
-              placeholder={recentJournalReflections.length > 0 ? 'Anything to flag for tomorrow\'s coaching…' : 'What happened in today\'s session? What will you do differently?'}
-              value={debriefWhat}
-              onChange={e => { setDebriefWhat(e.target.value); debriefEditedRef.current = true; }}
-              rows={3}
-            />
+              {debriefStatus !== 'idle' && (
+                <span className={`ec-debrief-status${debriefStatus === 'saved' ? ' saved' : ''}`}>
+                  {debriefStatus === 'saving' ? 'Saving…' : 'Saved'}
+                </span>
+              )}
+            </div>
+            <div className="ec-debrief-body">
+              {recentJournalReflections.length > 0 && (
+                <div className="ec-debrief-journal">
+                  <span className="ec-debrief-journal-label">From your journal</span>
+                  {recentJournalReflections.map(r => (
+                    <div key={r.date} className="ec-debrief-journal-entry">
+                      <span className="ec-debrief-journal-date">{new Date(r.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      <p className="ec-debrief-journal-text">{r.post}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <textarea
+                className="ec-debrief-textarea"
+                placeholder={recentJournalReflections.length > 0 ? 'Anything to flag for tomorrow\'s coaching…' : 'What happened in today\'s session? What will you do differently?'}
+                value={debriefWhat}
+                onChange={e => { setDebriefWhat(e.target.value); debriefEditedRef.current = true; }}
+                rows={5}
+              />
+            </div>
           </div>
         </div>
 
