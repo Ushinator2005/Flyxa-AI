@@ -756,7 +756,7 @@ FORBIDDEN INFERENCES — these are NEVER evidence of a touch:
 • What price did AFTERWARD (reversing, continuing, closing beyond). Only the wick extreme vs ${price} matters.
 The ONLY question you answer: does a wick extreme physically reach or cross the horizontal line at exactly ${price}? Trace that exact line across the chart and compare wick tips against it.
 
-CONSERVATIVE STANDARD: Only return touched=true when you are highly confident the wick unambiguously reaches or exceeds ${price}. If the wick looks close but you are uncertain whether it reaches exactly ${price}, return touched=false. False negatives (missing a touch) are far less damaging than false positives (calling a touch that did not happen).
+BORDERLINE CALLS: if the deepest wick tip reaches, grazes, or crosses the ${price} line, return touched=true — use confidence to express doubt ("high" for a clear cross, "low" for a graze you are unsure about). Return touched=false only when the deepest wick visibly stops short of the line.
 Your evidence string MUST state where the decisive wick tip sits relative to the ${price} line (e.g. "candle 4 high wick crosses the ${price} line by ~2 points" or "deepest wick stops visibly short of the line"). If you cannot describe the wick-vs-line relationship, return touched=false.
 
 Scan strictly left-to-right and stop at the earliest candle touching this boundary.
@@ -919,12 +919,11 @@ export async function analyzeChartImage(
       verifyTradeExit(base64Image, mimeType, exitImages, tradeForVerification, boxBounds),
     ]);
 
-    // A boundary counts as a confirmed touch only when the conservative scan is NOT
-    // low-confidence. A shaky "the wick looked close to the zone edge" read must never
-    // flip Win/Loss on its own — a wick that merely enters the colored zone without
-    // clearly crossing the outer price line is exactly what produces phantom TP/SL hits.
-    const stopConfirmed = stopTouch.touched && stopTouch.first_touch_candle_index !== null && stopTouch.confidence !== 'low';
-    const targetConfirmed = targetTouch.touched && targetTouch.first_touch_candle_index !== null && targetTouch.confidence !== 'low';
+    // The exit IS whichever boundary a candle wick touches first. A touch counts
+    // whenever a scan names a concrete first-touch candle — confidence tiers the
+    // warning attached to the verdict, it does not suppress the verdict.
+    const stopConfirmed = stopTouch.touched && stopTouch.first_touch_candle_index !== null;
+    const targetConfirmed = targetTouch.touched && targetTouch.first_touch_candle_index !== null;
     const stopIndex = stopConfirmed ? stopTouch.first_touch_candle_index : null;
     const targetIndex = targetConfirmed ? targetTouch.first_touch_candle_index : null;
 
@@ -950,26 +949,40 @@ export async function analyzeChartImage(
       );
     }
 
-    // Cross-check the boundary verdict against an independent first-touch pass. The two
-    // methods must not contradict; when they name different outcomes the read is untrustworthy,
-    // so drop to unconfirmed rather than risk a phantom Win/Loss. An uncorroborated verdict is
-    // accepted only when the boundary scan is high-confidence — a lone medium-confidence touch
-    // with no second opinion is flagged for manual review instead of auto-scored.
-    const contradicted = independentExit.exit_reason !== null && independentExit.exit_reason !== boundaryExit;
-    const corroborated = independentExit.exit_reason === boundaryExit;
+    // First touch decides the exit. The independent first-touch pass no longer
+    // vetoes the boundary scans — it upgrades confidence when it agrees, and
+    // attaches a verify-manually warning when it disagrees. When the boundary
+    // scans see no touch at all, the independent verdict fills in as a fallback
+    // so a readable exit never comes back blank.
+    const contradicted = independentExit.exit_reason !== null && boundaryExit !== null && independentExit.exit_reason !== boundaryExit;
+    const corroborated = independentExit.exit_reason !== null && independentExit.exit_reason === boundaryExit;
 
-    if (boundaryExit && contradicted) {
-      verificationWarnings.push(
-        `Exit unconfirmed: boundary scan reads ${boundaryExit} but the independent verifier reads ${independentExit.exit_reason}. Verify Win/Loss manually.`
-      );
-    } else if (boundaryExit && (corroborated || boundaryConfidence === 'high')) {
+    if (boundaryExit) {
       verifiedExitReason = boundaryExit;
       verifiedFirstTouchIndex = boundaryIndex;
-      verifiedConfidence = boundaryConfidence;
       verifiedEvidence = boundaryEvidence;
-    } else if (boundaryExit) {
+      if (corroborated) {
+        verifiedConfidence = boundaryConfidence === 'low' ? 'medium' : boundaryConfidence;
+      } else if (contradicted) {
+        verifiedConfidence = 'low';
+        verificationWarnings.push(
+          `Exit set to ${boundaryExit}, but the independent verifier read ${independentExit.exit_reason}. Verify Win/Loss manually.`
+        );
+      } else {
+        verifiedConfidence = boundaryConfidence;
+        if (boundaryConfidence !== 'high') {
+          verificationWarnings.push(
+            `Exit set to ${boundaryExit} from a ${boundaryConfidence}-confidence touch. Verify Win/Loss manually.`
+          );
+        }
+      }
+    } else if (independentExit.exit_reason !== null && independentExit.first_touch_candle_index !== null) {
+      verifiedExitReason = independentExit.exit_reason;
+      verifiedFirstTouchIndex = independentExit.first_touch_candle_index;
+      verifiedConfidence = independentExit.confidence === 'high' ? 'medium' : independentExit.confidence;
+      verifiedEvidence = independentExit.evidence;
       verificationWarnings.push(
-        `Exit unconfirmed: boundary scan reads ${boundaryExit} at medium confidence with no independent corroboration. Verify Win/Loss manually.`
+        `Exit set to ${independentExit.exit_reason} from the independent verifier — the boundary scans saw no touch. Verify Win/Loss manually.`
       );
     }
 
@@ -981,7 +994,7 @@ export async function analyzeChartImage(
 
     if (!verifiedExitReason) {
       verificationWarnings.push(
-        'Exit remains unconfirmed because no agreed, high-confidence first-touch was established.'
+        'No touch of SL or TP was detected inside the trade window — the trade may still be open or the exit is outside the screenshot. Set the exit manually.'
       );
     }
   }
