@@ -30,41 +30,9 @@ type ChecklistItem = {
 
 type SessionPlanRow = {
   id: string;
-  source: 'Primary focus' | 'Avoid today' | 'Hard stop' | 'If–then';
+  source: 'Primary focus' | 'Avoid today' | 'Hard stop';
   rule: string;
 };
-
-// If-then response plans (implementation intentions). Pre-deciding the exact
-// reaction to an emotional trigger is the most evidence-backed behavior-change
-// tool there is — suggestions adapt to today's reported emotion and the
-// trader's actual behavioral history.
-function buildIfThenSuggestions(
-  emotion: string,
-  recentBehavior: { planAdherence: number | null; revengeTagged: number },
-): string[] {
-  const suggestions: string[] = [];
-
-  if (emotion === 'Frustrated') {
-    suggestions.push('If I notice frustration after a loss, then I flatten, stand up, and walk away for 10 minutes.');
-  } else if (emotion === 'Anxious') {
-    suggestions.push('If I hesitate on a setup that meets my plan, then I take it at half size instead of skipping it.');
-  } else if (emotion === 'Confident') {
-    suggestions.push('If I am up early, then I stop adding risk and protect the green day.');
-  } else if (emotion === 'Focused') {
-    suggestions.push('If the market goes quiet and I feel the urge to force a trade, then I close the DOM until the next session window.');
-  }
-
-  if (recentBehavior.revengeTagged > 0) {
-    suggestions.push('If I feel the urge to win it back, then my session is over for the day.');
-  }
-  if (recentBehavior.planAdherence !== null && recentBehavior.planAdherence < 80) {
-    suggestions.push('If a setup is not written in my plan, then I do not take it — no exceptions.');
-  }
-
-  suggestions.push('If I take two losses in a row, then I step away for 15 minutes before the next entry.');
-
-  return Array.from(new Set(suggestions)).slice(0, 4);
-}
 
 const MARKET_OPEN_MINUTES = 9 * 60 + 30;
 const MARKET_CLOSE_MINUTES = 16 * 60;
@@ -290,8 +258,6 @@ export default function FlyxaAIPreSession() {
   const todayIso = useMemo(() => getTimeZoneParts(now, preferences.timezone).date, [now, preferences.timezone]);
   const [emotion, setEmotion] = useState<string>(() => (storedPreSession?.emotion ?? ''));
   const [note, setNote] = useState<string>(() => (storedPreSession?.note ?? ''));
-  const [ifThenPlans, setIfThenPlans] = useState<string[]>(() => (storedPreSession?.ifThenPlans ?? []));
-  const [customIfThenDraft, setCustomIfThenDraft] = useState('');
   const [premortem, setPremortem] = useState<string>(() => (storedPreSession?.premortem ?? ''));
   const [bias, setBias] = useState<BiasState>(() => (storedPreSession?.bias as BiasState ?? { ES: 'Neutral', NQ: 'Neutral' }));
   const [checklistState, setChecklistState] = useState<ChecklistState>(() => (storedPreSession?.checklistState as ChecklistState ?? {}));
@@ -582,12 +548,7 @@ export default function FlyxaAIPreSession() {
     ].slice(0, 4);
   }, [activeRiskPatterns, confirmedEdgePatterns, prescriptions, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
 
-  // Armed if-then contracts lead the session plan — they're the trader's own
-  // pre-decided reactions, so they cycle first on the live session ticker.
-  const sessionPlan = useMemo<SessionPlanRow[]>(() => [
-    ...ifThenPlans.map((rule, index) => ({ id: `ifthen-${index}`, source: 'If–then' as const, rule })),
-    ...baseSessionPlan,
-  ].slice(0, 6), [baseSessionPlan, ifThenPlans]);
+  const sessionPlan = baseSessionPlan;
 
   const rthTiming = useMemo(() => getRthTiming(now), [now]);
   const emotionLogged = emotion.trim().length > 0;
@@ -671,13 +632,12 @@ export default function FlyxaAIPreSession() {
     if (active) setPreSessionAction({ ...active, readiness });
   }, [readiness, todayIso, setPreSessionForDate, setPreSessionAction]);
 
-  const persistPreSession = (updates: Partial<{ emotion: string; note: string; ifThenPlans: string[]; premortem: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null; sessionMaxLoss: number | null; dailyTarget: number | null }>) => {
+  const persistPreSession = (updates: Partial<{ emotion: string; note: string; premortem: string; bias: BiasState; checklistState: ChecklistState; startedAt: string | null; sessionMaxLoss: number | null; dailyTarget: number | null }>) => {
     const parsedLoss = parseFloat(sessionMaxLoss);
     const parsedTarget = parseFloat(sessionTarget);
     const data = {
       emotion: updates.emotion ?? emotion,
       note: updates.note ?? note,
-      ifThenPlans: updates.ifThenPlans ?? ifThenPlans,
       premortem: updates.premortem ?? premortem,
       bias: updates.bias ?? bias,
       checklistState: updates.checklistState ?? checklistState,
@@ -701,14 +661,6 @@ export default function FlyxaAIPreSession() {
   const setPremortemAndPersist = (next: string) => {
     setPremortem(next);
     persistPreSession({ premortem: next });
-  };
-
-  const toggleIfThenPlan = (plan: string) => {
-    const next = ifThenPlans.includes(plan)
-      ? ifThenPlans.filter(existing => existing !== plan)
-      : [...ifThenPlans, plan];
-    setIfThenPlans(next);
-    persistPreSession({ ifThenPlans: next });
   };
 
   const setNoteAndPersist = (nextNote: string) => {
@@ -755,7 +707,6 @@ export default function FlyxaAIPreSession() {
     const sessionData = {
       emotion,
       note,
-      ifThenPlans,
       premortem,
       bias,
       checklistState,
@@ -995,21 +946,21 @@ export default function FlyxaAIPreSession() {
                     read; a sentence would get skimmed. ── */}
               {varianceCheck && (
                 <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
-                  <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRight: `1px solid ${C.b0}`, flexShrink: 0, minWidth: 110 }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 700, color: C.t0, lineHeight: 1 }}>
+                  <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, borderRight: `1px solid ${C.b0}`, flexShrink: 0, minWidth: 118 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 30, fontWeight: 700, color: C.acc, lineHeight: 1 }}>
                       ~{varianceCheck.expectedEvery.toLocaleString()}
                     </span>
-                    <span style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2, textAlign: 'center', lineHeight: 1.4 }}>
+                    <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.t1, textAlign: 'center', lineHeight: 1.5 }}>
                       trades between<br />{varianceCheck.streak}-loss streaks
                     </span>
                   </div>
-                  <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.45 }}>
-                      Losing streaks are inevitable — yours is due about every {varianceCheck.expectedEvery.toLocaleString()} trades.
+                  <div style={{ padding: '13px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5, maxWidth: 520 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.5 }}>
+                      A {varianceCheck.streak}-loss streak is normal for you about every {varianceCheck.expectedEvery.toLocaleString()} trades.
                     </p>
-                    <p style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}>
-                      That's your real {varianceCheck.winRatePct}% win rate over the last {varianceCheck.sample} trades. If it hits today, it's the math working — not your edge failing.
-                      {ifThenPlans.length > 0 && ' Your response plan already covers it.'}
+                    <p style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.6 }}>
+                      Based on your {varianceCheck.winRatePct}% win rate over the last {varianceCheck.sample} trades.
+                      When it happens, it's the math working — not your edge failing.
                     </p>
                   </div>
                 </div>
@@ -1150,23 +1101,44 @@ export default function FlyxaAIPreSession() {
                 })()}
 
                 {/* Which limits actually get broken — the rap sheet from the
-                    last 10 traded sessions, same engine as journal verification */}
+                    last 10 traded sessions, same engine as journal verification.
+                    One row per broken rule: label, per-session breach bar, count. */}
                 {limitBreaches && (
-                  <div style={{ padding: '9px 16px', borderBottom: `1px solid ${C.b0}` }}>
+                  <div style={{ padding: '10px 16px 11px', borderBottom: `1px solid ${C.b0}` }}>
+                    <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.t2, marginBottom: limitBreaches.breached.length > 0 ? 8 : 0 }}>
+                      Broken in your last {limitBreaches.sessions} sessions
+                    </p>
                     {limitBreaches.breached.length === 0 ? (
-                      <span style={{ fontSize: 11, color: C.t2 }}>
-                        No limit breaches detected in your last {limitBreaches.sessions} sessions.
-                      </span>
+                      <p style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>
+                        No limit breaches detected. Keep it that way.
+                      </p>
                     ) : (
-                      <span style={{ fontSize: 11, color: C.t1, lineHeight: 1.55 }}>
-                        Last {limitBreaches.sessions} sessions:{' '}
-                        {limitBreaches.breached.map((item, i) => (
-                          <span key={item.label}>
-                            {i > 0 && ' · '}
-                            {item.label} broken <span style={{ fontFamily: 'monospace', fontWeight: 700, color: C.red }}>{item.fails}×</span>
-                          </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {limitBreaches.breached.map(item => (
+                          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={{
+                              width: 180, flexShrink: 0, fontSize: 11, color: C.t1,
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>
+                              {item.label}
+                            </span>
+                            <div style={{ flex: 1, display: 'flex', gap: 2 }}>
+                              {Array.from({ length: limitBreaches.sessions }).map((_, i) => (
+                                <span key={i} style={{
+                                  flex: 1, height: 4, borderRadius: 1,
+                                  backgroundColor: i < item.fails ? `${C.red}c0` : 'rgba(255,255,255,0.07)',
+                                }} />
+                              ))}
+                            </div>
+                            <span style={{
+                              flexShrink: 0, width: 38, textAlign: 'right',
+                              fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: C.red,
+                            }}>
+                              {item.fails}/{limitBreaches.sessions}
+                            </span>
+                          </div>
                         ))}
-                      </span>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1293,92 +1265,6 @@ export default function FlyxaAIPreSession() {
                   )}
                   </>
                 )}
-              </div>
-
-              {/* ── Response plan — if-then contracts. Pre-decide the exact
-                    reaction to the exact trigger; armed contracts lead the
-                    session plan and cycle on the live session view. ── */}
-              <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, overflow: 'hidden' }}>
-                <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                    <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Response plan</h2>
-                    {ifThenPlans.length > 0 && (
-                      <span style={{ fontSize: 10, fontFamily: 'monospace', color: C.grn }}>{ifThenPlans.length} armed</span>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 11, color: C.t2 }}>
-                    Decide your reaction before the trigger hits — not during it. Suggestions adapt to your state and history.
-                  </p>
-                </div>
-                <div>
-                  {buildIfThenSuggestions(emotion, recentBehavior).map((plan, i) => {
-                    const armed = ifThenPlans.includes(plan);
-                    const thenIndex = plan.toLowerCase().indexOf(', then ');
-                    const ifPart = thenIndex > 0 ? plan.slice(0, thenIndex) : plan;
-                    const thenPart = thenIndex > 0 ? plan.slice(thenIndex + 2) : '';
-                    return (
-                      <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10,
-                        width: '100%', textAlign: 'left', padding: '10px 16px',
-                        border: 'none', borderTop: i === 0 ? 'none' : `1px solid ${C.b0}`,
-                        backgroundColor: armed ? `${C.grn}08` : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.15s ease',
-                      }}>
-                        <span style={{
-                          width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
-                          border: `1px solid ${armed ? `${C.grn}70` : C.b1}`,
-                          backgroundColor: armed ? `${C.grn}20` : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 9, color: C.grn,
-                          transition: 'background-color 0.15s ease, border-color 0.15s ease',
-                        }}>
-                          {armed ? '✓' : ''}
-                        </span>
-                        <span style={{ fontSize: 12, lineHeight: 1.55, color: armed ? C.t0 : C.t1 }}>
-                          <span style={{ fontWeight: 600 }}>{ifPart}</span>{thenPart}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {/* Custom armed contracts that aren't in today's suggestions */}
-                  {ifThenPlans.filter(plan => !buildIfThenSuggestions(emotion, recentBehavior).includes(plan)).map(plan => (
-                    <button key={plan} type="button" onClick={() => toggleIfThenPlan(plan)} style={{
-                      display: 'flex', alignItems: 'flex-start', gap: 10,
-                      width: '100%', textAlign: 'left', padding: '10px 16px',
-                      border: 'none', borderTop: `1px solid ${C.b0}`,
-                      backgroundColor: `${C.grn}08`,
-                      cursor: 'pointer',
-                    }}>
-                      <span style={{
-                        width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 1,
-                        border: `1px solid ${C.grn}70`, backgroundColor: `${C.grn}20`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, color: C.grn,
-                      }}>✓</span>
-                      <span style={{ fontSize: 12, lineHeight: 1.55, color: C.t0 }}>{plan}</span>
-                    </button>
-                  ))}
-                  <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.b0}` }}>
-                    <input
-                      value={customIfThenDraft}
-                      onChange={e => setCustomIfThenDraft(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && customIfThenDraft.trim()) {
-                          toggleIfThenPlan(customIfThenDraft.trim());
-                          setCustomIfThenDraft('');
-                        }
-                      }}
-                      placeholder="If [trigger], then [my response]... press Enter to arm"
-                      style={{
-                        width: '100%', boxSizing: 'border-box',
-                        borderRadius: 5, border: `1px solid ${C.b0}`,
-                        backgroundColor: C.d2, color: C.t0,
-                        fontSize: 12, padding: '8px 11px', outline: 'none', fontFamily: 'inherit',
-                      }}
-                    />
-                  </div>
-                </div>
               </div>
 
               {/* Readiness checks */}

@@ -512,6 +512,17 @@ export default function FlyxaAIPostSession() {
                     <div style={{ padding: '12px 14px' }}>
                       <p style={{ fontSize: 12, color: C.t1 }}>No pre-session data recorded for this day.</p>
                       <p style={{ fontSize: 11, color: C.t2, marginTop: 3 }}>Use the pre-session brief before the market opens to capture your plan.</p>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/pre-session')}
+                        style={{
+                          marginTop: 10, padding: '7px 14px', borderRadius: 6,
+                          border: `1px solid ${C.b0}`, backgroundColor: C.d2,
+                          color: C.t0, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        Open pre-session brief →
+                      </button>
                     </div>
                   ) : (
                     <>

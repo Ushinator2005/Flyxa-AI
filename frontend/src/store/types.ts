@@ -272,10 +272,6 @@ export interface OnboardingState {
 export interface PreSessionData {
   emotion: string;
   note: string;
-  // Armed if-then response plans (implementation intentions) — pre-decided
-  // reactions to emotional triggers, set in pre-session, held on the live
-  // session view, and compared against behavior in post-session.
-  ifThenPlans?: string[];
   // Pre-mortem: the trader's own prediction of how today could go wrong,
   // written before the session; post-session compares it to what happened.
   premortem?: string;

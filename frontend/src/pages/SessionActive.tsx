@@ -41,7 +41,6 @@ function readinessColor(status: string): string {
 
 function planLabel(source: string): { tag: string; color: string } {
   const s = source.toLowerCase();
-  if (s.startsWith('if'))                             return { tag: 'IF–THEN',   color: AMBER };
   if (s.includes('focus') || s.includes('primary')) return { tag: 'FOCUS',     color: AMBER };
   if (s.includes('avoid'))                            return { tag: 'AVOID',     color: '#f87171' };
   if (s.includes('hard') || s.includes('stop'))       return { tag: 'HARD STOP', color: RED };
