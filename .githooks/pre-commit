@@ -1,0 +1,23 @@
+#!/bin/sh
+# Block commits that break the type-check. The zero-error baseline was
+# established 2026-07-13 — any tsc output after that is a real regression.
+# Only the side (frontend/backend) with staged .ts/.tsx changes is checked.
+#
+# New clone setup: git config core.hooksPath .githooks
+
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+staged="$(git diff --cached --name-only)"
+
+if echo "$staged" | grep -q '^frontend/.*\.tsx\?$'; then
+  echo "pre-commit: type-checking frontend..."
+  (cd "$root/frontend" && npx tsc --noEmit)
+fi
+
+if echo "$staged" | grep -q '^backend/.*\.tsx\?$'; then
+  echo "pre-commit: type-checking backend..."
+  (cd "$root/backend" && npx tsc --noEmit)
+fi
+
+echo "pre-commit: type-check clean."
