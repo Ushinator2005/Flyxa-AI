@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle,
   BarChart3,
-  CheckCircle2,
-  ChevronDown,
-  ClipboardList,
-  Clock3,
-  FileText,
   LockKeyhole,
   Plus,
   RefreshCw,
   Save,
-  Sparkles,
   Trash2,
 } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
@@ -23,72 +16,11 @@ import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import './TradingPlan.css';
 
-type TradingPlanTab = 'trading-plan' | 'risk-rules';
-type ColorTone = 'amber' | 'cobalt' | 'green' | 'red' | 'neutral';
+type TradingPlanTab = 'rule-adherence' | 'risk-rules';
 
-interface PlanBlock {
-  id: string;
-  name: string;
-  iconColor: ColorTone;
-  content: string;
-  placeholder: string;
-  isOpen: boolean;
-}
-
-const TAB_ITEMS: Array<{ id: TradingPlanTab; label: string; icon: typeof FileText }> = [
+const TAB_ITEMS: Array<{ id: TradingPlanTab; label: string; icon: typeof LockKeyhole }> = [
   { id: 'risk-rules', label: 'Risk Rules', icon: LockKeyhole },
-  { id: 'trading-plan', label: 'Strategy Notes', icon: FileText },
-];
-
-const PLAN_BLOCK_ICONS = {
-  market: Clock3,
-  edge: BarChart3,
-  entry: CheckCircle2,
-  avoid: AlertCircle,
-  windows: ClipboardList,
-} as const;
-
-const INITIAL_PLAN_BLOCKS: PlanBlock[] = [
-  {
-    id: 'market',
-    name: 'What markets I trade and why',
-    iconColor: 'amber',
-    content: '',
-    placeholder: 'Which instruments, why these and not others, and what behavior you understand best...',
-    isOpen: true,
-  },
-  {
-    id: 'edge',
-    name: 'My edge and why it works',
-    iconColor: 'cobalt',
-    content: '',
-    placeholder: 'The repeatable market conditions that give you probability...',
-    isOpen: true,
-  },
-  {
-    id: 'entry',
-    name: 'What a valid entry looks like',
-    iconColor: 'green',
-    content: '',
-    placeholder: 'List every condition that must be true before execution...',
-    isOpen: true,
-  },
-  {
-    id: 'avoid',
-    name: 'What I do NOT trade',
-    iconColor: 'red',
-    content: '',
-    placeholder: 'No-trade filters: volatility, timing, structure, news windows...',
-    isOpen: true,
-  },
-  {
-    id: 'windows',
-    name: 'Time windows I trade',
-    iconColor: 'neutral',
-    content: '',
-    placeholder: 'Sessions, kill-zones, and when you are flat by rule...',
-    isOpen: true,
-  },
+  { id: 'rule-adherence', label: 'Rule Adherence', icon: BarChart3 },
 ];
 
 function formatLastSaved(lastSaved: Date | null, now: number): string {
@@ -104,38 +36,9 @@ function formatLastSaved(lastSaved: Date | null, now: number): string {
 }
 
 
-function ruleColorClass(color: RiskRule['color']): string {
-  if (color === 'red') return 'tp-rule-value-red';
-  if (color === 'amber') return 'tp-rule-value-amber';
-  if (color === 'green') return 'tp-rule-value-green';
-  return '';
-}
-
-function toneClass(tone: ColorTone): string {
-  if (tone === 'amber') return 'tp-tone-amber';
-  if (tone === 'cobalt') return 'tp-tone-cobalt';
-  if (tone === 'green') return 'tp-tone-green';
-  if (tone === 'red') return 'tp-tone-red';
-  return 'tp-tone-neutral';
-}
 
 export default function TradingPlan() {
-  const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
-
   const [activeTab, setActiveTab] = useState<TradingPlanTab>('risk-rules');
-  const [planBlocks, setPlanBlocks] = useState<PlanBlock[]>(() => {
-    const stored = useFlyxaStore.getState().planBlocks;
-    const storedMap = new Map(stored.map(block => [block.id, block]));
-    return INITIAL_PLAN_BLOCKS.map(block => {
-      const persisted = storedMap.get(block.id);
-      if (!persisted) return block;
-      return {
-        ...block,
-        content: typeof persisted.content === 'string' ? persisted.content : block.content,
-        isOpen: typeof persisted.isOpen === 'boolean' ? persisted.isOpen : block.isOpen,
-      };
-    });
-  });
 
   const storeRiskRules = useFlyxaStore(state => state.riskRules);
   const riskRules = useMemo(() => storeRiskRules.map(normalizeRiskRule), [storeRiskRules]);
@@ -157,11 +60,20 @@ export default function TradingPlan() {
   }, [journalEntries]);
 
   const [pendingContracts, setPendingContracts] = useState<Record<string, { symbol: string; max: string }>>({});
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [hoveredRuleId, setHoveredRuleId] = useState<string | null>(null);
+
+  // The signature line: has today's pre-session "hold to accept" been done?
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
+  const riskAcceptedToday = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const checklist = preSessionHistory?.[today]?.checklistState as Record<string, unknown> | undefined;
+    return Boolean(checklist?.['risk-accepted']);
+  }, [preSessionHistory]);
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const firstMountRef = useRef(true);
   const firstRulesMountRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -182,12 +94,8 @@ export default function TradingPlan() {
     const currentState = useFlyxaStore.getState();
     try {
       await saveStoreStatePatchNow({
-        planBlocks,
         riskRules: currentState.riskRules,
         riskRulesUpdatedAt: currentState.riskRulesUpdatedAt,
-      });
-      hydrateSharedData({
-        planBlocks: planBlocks as any,
       });
       const savedAt = new Date();
       setLastSaved(savedAt);
@@ -196,22 +104,10 @@ export default function TradingPlan() {
       pushToast({
         tone: 'red',
         durationMs: 4000,
-        message: 'Trading plan could not sync. Your local changes are still preserved.',
+        message: 'Risk rules could not sync. Your local changes are still preserved.',
       });
     }
-  }, [hydrateSharedData, planBlocks]);
-
-  // Plan block changes - debounced save
-  useEffect(() => {
-    if (firstMountRef.current) {
-      firstMountRef.current = false;
-      return;
-    }
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      void persistState();
-    }, 650);
-  }, [persistState, planBlocks]);
+  }, []);
 
   // Risk rules changes — separate debounced save that does NOT call hydrateSharedData,
   // breaking the infinite-loop where hydrateSharedData creates a new riskRules reference
@@ -272,16 +168,28 @@ export default function TradingPlan() {
     [planReport],
   );
 
-  const togglePlanBlock = (id: string) => {
-    setPlanBlocks(current => current.map(block => (block.id === id ? { ...block, isOpen: !block.isOpen } : block)));
-  };
+  const checkedDays = useMemo(
+    () => planReport.daily.filter(day => day.evaluations.some(ev => ev.state !== 'unchecked')),
+    [planReport],
+  );
 
-  const updatePlanBlockContent = (id: string, content: string) => {
-    setPlanBlocks(current => current.map(block => (block.id === id ? { ...block, content } : block)));
-  };
+  const adherenceColor = planReport.pct === null ? 'var(--txt-3)'
+    : planReport.pct >= 80 ? 'var(--green)'
+    : planReport.pct >= 60 ? 'var(--amber)'
+    : 'var(--red)';
+
+  const worstRule = useMemo(() => {
+    let worst: { label: string; pct: number } | null = null;
+    for (const rule of riskRules) {
+      if (rule.enabled === false || (rule.kind ?? 'manual') === 'manual') continue;
+      const stats = ruleStatsMap.get(rule.id);
+      if (!stats || stats.checked === 0 || stats.pct === null) continue;
+      if (!worst || stats.pct < worst.pct) worst = { label: rule.label, pct: stats.pct };
+    }
+    return worst;
+  }, [riskRules, ruleStatsMap]);
 
   const resetPlan = () => {
-    setPlanBlocks(INITIAL_PLAN_BLOCKS);
     useFlyxaStore.getState().updateRiskRules(DEFAULT_STRUCTURED_RULES);
   };
 
@@ -318,9 +226,10 @@ export default function TradingPlan() {
   };
 
   const addRiskRule = () => {
+    const id = `rule-${crypto.randomUUID()}`;
     const current = useFlyxaStore.getState().riskRules;
     const updated = [...current, {
-      id: `rule-${crypto.randomUUID()}`,
+      id,
       label: 'New custom rule',
       value: '',
       unit: '',
@@ -329,6 +238,7 @@ export default function TradingPlan() {
       enabled: true,
     }];
     useFlyxaStore.getState().updateRiskRules(updated as RiskRule[]);
+    setEditingRuleId(id);
   };
 
   const deleteRiskRule = (id: string) => {
@@ -408,140 +318,157 @@ export default function TradingPlan() {
       </header>
 
       <main className="tp-content trading-plan-scroll">
-        {activeTab === 'trading-plan' && (
-          <section className="tp-main-grid" data-tour-id="trading-plan-core">
-            <div className="tp-panel">
-              <div className="tp-section-head">
-                <h2>Core Strategy Blocks</h2>
-                <p>Build your process from market selection through execution filters.</p>
-              </div>
+        {activeTab === 'rule-adherence' && (
+          <section data-tour-id="trading-plan-core" style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1080 }}>
 
-              <div className="tp-stack">
-                {planBlocks.map(block => {
-                  const Icon = PLAN_BLOCK_ICONS[block.id as keyof typeof PLAN_BLOCK_ICONS];
-                  return (
-                    <article key={block.id} className="tp-card">
-                      <button type="button" className="tp-card-head" onClick={() => togglePlanBlock(block.id)}>
-                        <span className="tp-card-title-wrap">
-                          <span className={`tp-tone ${toneClass(block.iconColor)}`}>
-                            {Icon ? <Icon size={13} /> : <FileText size={13} />}
-                          </span>
-                          <span className="tp-card-title">{block.name}</span>
-                        </span>
-                        <ChevronDown size={14} className={block.isOpen ? 'tp-chevron open' : 'tp-chevron'} />
-                      </button>
-                      {block.isOpen && (
-                        <div className="tp-card-body">
-                          <textarea
-                            value={block.content}
-                            onChange={event => updatePlanBlockContent(block.id, event.target.value)}
-                            placeholder={block.placeholder}
-                          />
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
+            {/* Hero — the verdict number beside the day-by-day record */}
+            <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0, 1fr)', border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+              <div style={{ padding: '18px 20px', borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
+                  Adherence · last 30 days
+                </p>
+                <p style={{ margin: '8px 0 7px', fontFamily: 'var(--font-mono)', fontSize: 44, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', color: adherenceColor }}>
+                  {planReport.pct !== null ? `${planReport.pct}%` : '—'}
+                </p>
+                <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: 'var(--txt-2)' }}>
+                  {totalBreaks} break{totalBreaks !== 1 ? 's' : ''} across {checkedDays.length} rule-checked day{checkedDays.length !== 1 ? 's' : ''}
+                </p>
+                <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>
+                  {activeRuleCount} active rules · {automaticRuleCount} auto-checked
+                </p>
+              </div>
+              <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                  <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
+                    Day by day
+                  </p>
+                  <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
+                    <span style={{ color: 'var(--green)' }}>■</span> ≥80% · <span style={{ color: 'var(--amber)' }}>■</span> ≥60% · <span style={{ color: 'var(--red)' }}>■</span> below
+                  </p>
+                </div>
+                {checkedDays.length === 0 ? (
+                  <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--txt-3)' }}>
+                    No rule-checked sessions in the last 30 days.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
+                    {checkedDays.map(day => {
+                      const checked = day.evaluations.filter(ev => ev.state !== 'unchecked');
+                      const passed = checked.filter(ev => ev.state === 'ok').length;
+                      const dayPct = checked.length > 0 ? Math.round((passed / checked.length) * 100) : null;
+                      const color = dayPct === null ? 'rgba(255,255,255,0.08)'
+                        : dayPct >= 80 ? 'var(--green)'
+                        : dayPct >= 60 ? 'var(--amber)'
+                        : 'var(--red)';
+                      return (
+                        <span
+                          key={day.date}
+                          title={`${day.date} · ${dayPct}% adherence · ${day.failed} break${day.failed !== 1 ? 's' : ''}`}
+                          style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: color, opacity: 0.85 }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+                {worstRule && (
+                  <p style={{ margin: '14px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--txt-2)' }}>
+                    Most broken: <span style={{ fontWeight: 600, color: 'var(--txt)' }}>{worstRule.label}</span>
+                    {' — '}
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--red)' }}>{worstRule.pct}%</span> adherence
+                  </p>
+                )}
               </div>
             </div>
 
-            <aside className="tp-side" data-tour-id="trading-plan-side">
-              <article className="tp-quote">
-                <Sparkles size={14} />
-                <p>The plan is written by your best self. Follow it when emotions get loud.</p>
-              </article>
+            {/* Per-rule cells, worst offender first */}
+            <div className="tp-panel">
+              <div className="tp-section-head">
+                <h2>Adherence by rule</h2>
+                <p>Checked against your logged trades by the same engine that verifies each journal day.</p>
+              </div>
+              {(() => {
+                const rows = riskRules
+                  .filter(rule => rule.enabled !== false && (rule.kind ?? 'manual') !== 'manual')
+                  .map(rule => ({ rule, stats: ruleStatsMap.get(rule.id) }))
+                  .sort((a, b) => (a.stats?.pct ?? 101) - (b.stats?.pct ?? 101));
+                if (rows.length === 0) {
+                  return (
+                    <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--txt-3)' }}>
+                      No auto-checked rules are enabled — turn rules on in the Risk Rules tab and stats appear here.
+                    </p>
+                  );
+                }
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginTop: 14 }}>
+                    {rows.map(({ rule, stats }) => {
+                      const pct = stats && stats.checked > 0 ? (stats.pct ?? 0) : null;
+                      const color = pct === null ? 'var(--txt-3)'
+                        : pct >= 80 ? 'var(--green)'
+                        : pct >= 60 ? 'var(--amber)'
+                        : 'var(--red)';
+                      return (
+                        <div key={rule.id} style={{ border: '1px solid var(--app-border)', borderRadius: 8, padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                            <span style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {rule.label}
+                            </span>
+                            <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color }}>
+                              {pct !== null ? `${pct}%` : '—'}
+                            </span>
+                          </div>
+                          <div style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginTop: 9 }}>
+                            {pct !== null && (
+                              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, backgroundColor: color, opacity: 0.85 }} />
+                            )}
+                          </div>
+                          <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--txt-3)' }}>
+                            {stats && stats.checked > 0
+                              ? `${stats.failed} break${stats.failed !== 1 ? 's' : ''} · ${stats.checked} checks`
+                              : 'No data yet — trades haven\'t exercised this rule.'}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
 
-              <article className="tp-card">
-                <div className="tp-side-head">
-                  <h3>Hard Stops</h3>
-                </div>
-                <div className="tp-side-list">
-                  {riskRules.slice(0, 3).map(rule => (
-                    <div key={rule.id} className="tp-mini-rule">
-                      <span className="tp-mini-rule-label">{rule.label}</span>
-                      <span className="tp-mini-rule-value-wrap">
-                        <span className={`num ${ruleColorClass(rule.color)}`}>{rule.value}</span>
-                        {rule.unit ? <span className="tp-mini-rule-unit">{rule.unit}</span> : null}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            </aside>
+            <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)', lineHeight: 1.5 }}>
+              Stats evaluate past sessions against your current rule values — tightening a rule today changes how old sessions score.
+            </p>
           </section>
         )}
 
         {activeTab === 'risk-rules' && (
           <section data-tour-id="risk-rules-framework" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* Health Bar — uniform 4-cell strip */}
-            <div className="tp-health-bar">
-              <div className="tp-hs">
-                <span className="tp-hs-label">Active Rules</span>
-                <span className="tp-hs-value">{activeRuleCount}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 16, alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+            {/* Rulebook — financial-statement rows: name bold, statement quiet,
+                the limit itself as the big right-aligned value. Editing
+                collapses behind each row. */}
+            <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+              {/* Masthead — this is a document, not a settings list */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '15px 18px', borderBottom: '1px solid var(--app-border)' }}>
+                <div>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--txt)' }}>
+                    The rulebook
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>
+                    {activeRuleCount} rule{activeRuleCount !== 1 ? 's' : ''} in force
+                    {planReport.pct !== null && (
+                      <> · held to <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: adherenceColor }}>{planReport.pct}%</span> over the last 30 days</>
+                    )}
+                  </p>
+                </div>
+                <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule} style={{ flexShrink: 0 }}>
+                  <Plus size={12} /> Add Rule
+                </button>
               </div>
-              <div className="tp-hs-divider" />
-              <div className="tp-hs">
-                <span className="tp-hs-label">Auto-checked</span>
-                <span className="tp-hs-value tp-hs-green">{automaticRuleCount}</span>
-              </div>
-              <div className="tp-hs-divider" />
-              <div className="tp-hs">
-                <span className="tp-hs-label">Adherence 30d</span>
-                <span
-                  className="tp-hs-value"
-                  style={{
-                    color: planReport.pct === null ? 'var(--txt-3)'
-                      : planReport.pct >= 80 ? 'var(--green)'
-                      : planReport.pct >= 60 ? 'var(--amber)'
-                      : 'var(--red)',
-                  }}
-                >
-                  {planReport.pct !== null ? `${planReport.pct}%` : '—'}
-                </span>
-              </div>
-              <div className="tp-hs-divider" />
-              <div className="tp-hs">
-                <span className="tp-hs-label">Total Breaks 30d</span>
-                <span className="tp-hs-value" style={{ color: totalBreaks > 0 ? 'var(--red)' : 'var(--txt-3)' }}>
-                  {totalBreaks}
-                </span>
-              </div>
-            </div>
-
-            {/* Section Header */}
-            <div className="tp-section-head tp-section-head-actions">
-              <h2 style={{ margin: 0 }}>Rule Framework</h2>
-              <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule}>
-                <Plus size={12} /> Add Rule
-              </button>
-            </div>
-
-            {/* Rule Grid */}
-            <div className="tp-rule-grid">
-              {riskRules.map(rule => {
+              {riskRules.map((rule, ruleIndex) => {
                 const kind = rule.kind ?? 'manual';
-                const isAuto = kind !== 'manual';
-                const stats = ruleStatsMap.get(rule.id);
-                const breachCount = stats?.failed ?? 0;
-                // breach rate = 100 - compliance%; drives accent color
-                const breachRatePct = stats ? 100 - (stats.pct ?? 0) : 0;
-
-                const severity =
-                  kind === 'manual' ? 'cobalt' :
-                  !stats || stats.checked === 0 ? 'none' :
-                  breachRatePct >= 50 ? 'red' :
-                  breachRatePct >= 20 ? 'amber' :
-                  'green';
-
-                const SEV = {
-                  red:    { bar: 'linear-gradient(90deg, var(--red), var(--red-dim))',     bg: 'rgba(239,68,68,0.06)',    bdr: 'var(--red-border)',    txt: 'var(--red)' },
-                  amber:  { bar: 'linear-gradient(90deg, var(--amber), var(--amber-dim))', bg: 'rgba(245,166,35,0.06)',   bdr: 'var(--amber-border)',  txt: 'var(--amber)' },
-                  green:  { bar: 'linear-gradient(90deg, var(--green), var(--green-dim))', bg: 'rgba(34,197,94,0.06)',    bdr: 'var(--green-border)',  txt: 'var(--green)' },
-                  cobalt: { bar: 'linear-gradient(90deg, var(--cobalt), var(--cobalt-dim))', bg: 'rgba(30,111,255,0.06)', bdr: 'var(--cobalt-border)', txt: 'var(--cobalt)' },
-                  none:   { bar: 'var(--app-border)', bg: 'transparent', bdr: 'transparent', txt: 'var(--txt-3)' },
-                } as const;
-                const sev = SEV[severity];
+                const editing = editingRuleId === rule.id;
 
                 const typeLabel =
                   kind === 'manual' ? 'Journal-confirmed · Subjective' :
@@ -551,46 +478,78 @@ export default function TradingPlan() {
                   kind === 'cooldown_after_loss' ? 'Auto-verified · Cooldown' :
                   'Auto-verified · Amount';
 
+                const limits = Object.entries(rule.contractLimits ?? {});
+                const name = kind === 'manual'
+                  ? (rule.label || 'New custom rule')
+                  : RULE_KIND_LABELS[kind];
+                const statement =
+                  kind === 'max_daily_loss' ? 'I stop trading for the day the moment this is hit.' :
+                  kind === 'max_trades' ? 'Once the count is reached, the session is over.' :
+                  kind === 'max_contracts' ? (limits.length > 0 ? 'I never size above these caps, win or lose.' : 'No per-instrument caps set yet — add them in edit.') :
+                  kind === 'min_rr' ? 'Setups paying less than this are not trades, they are donations.' :
+                  kind === 'time_window' ? 'Outside this window I am flat, by rule.' :
+                  kind === 'cooldown_after_loss' ? 'After a loss I stand down before the next entry.' :
+                  (typeof rule.value === 'string' && rule.value.trim() ? rule.value : 'Confirmed pass/fail in each daily journal.');
+                const value =
+                  kind === 'max_daily_loss' ? { text: `−${!rule.unit || rule.unit === '$' ? '$' : ''}${rule.value || '—'}${rule.unit && rule.unit !== '$' ? ` ${rule.unit}` : ''}`, color: 'var(--red)' } :
+                  kind === 'max_trades' ? { text: `${rule.value || '—'} / day`, color: 'var(--txt)' } :
+                  kind === 'max_contracts' ? { text: limits.length > 0 ? limits.map(([sym, max]) => `${max} ${sym}`).join(' · ') : '—', color: 'var(--txt)' } :
+                  kind === 'min_rr' ? { text: `1:${rule.value || '—'}`, color: 'var(--txt)' } :
+                  kind === 'time_window' ? { text: `${rule.startTime ?? '09:30'}–${rule.endTime ?? '16:00'}`, color: 'var(--txt)' } :
+                  kind === 'cooldown_after_loss' ? { text: `${rule.value || '—'} min`, color: 'var(--txt)' } :
+                  null;
+
                 return (
-                  <article key={rule.id} className={[
-                    'tp-rcard',
-                    rule.enabled === false ? 'tp-rcard-off' : '',
-                    severity === 'red'   ? 'tp-rcard-high-breach' : '',
-                    severity === 'amber' ? 'tp-rcard-mid-breach'  : '',
-                  ].filter(Boolean).join(' ')}>
-
-                    {/* Top accent bar — colored by breach severity */}
-                    <div className="tp-rcard-topbar" style={{ background: sev.bar }} />
-
-                    {/* Card Header */}
-                    <div className="tp-rcard-hdr">
-                      <div className="tp-rcard-title-col">
-                        <select
-                          className="tp-rcard-kind"
-                          value={kind}
-                          onChange={e => changeRiskRuleKind(rule, e.target.value as NonNullable<RiskRule['kind']>)}
-                        >
-                          <option value="max_daily_loss">Max daily loss</option>
-                          <option value="max_trades">Max trades / day</option>
-                          <option value="max_contracts">Max contracts</option>
-                          <option value="min_rr">Min R:R</option>
-                          <option value="time_window">Time window</option>
-                          <option value="cooldown_after_loss">Cooldown after loss</option>
-                          <option value="manual">Manual check</option>
-                        </select>
-                        <div className="tp-rcard-type-row">
-                          <span className="tp-rcard-type-label">{typeLabel}</span>
-                          {isAuto && stats && stats.checked > 0 && (
-                            <>
-                              <span className="tp-rcard-type-dot">·</span>
-                              <span className="tp-rcard-breach-inline" style={{ color: sev.txt }}>
-                                {breachRatePct}% breach · {breachCount} break{breachCount !== 1 ? 's' : ''}
-                              </span>
-                            </>
-                          )}
-                        </div>
+                  <div key={rule.id} style={{
+                    borderTop: ruleIndex === 0 ? 'none' : '1px solid var(--app-border)',
+                    opacity: rule.enabled === false ? 0.45 : 1,
+                    transition: 'opacity 0.15s ease',
+                  }}>
+                    <div
+                      onMouseEnter={() => setHoveredRuleId(rule.id)}
+                      onMouseLeave={() => setHoveredRuleId(current => (current === rule.id ? null : current))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px',
+                        backgroundColor: hoveredRuleId === rule.id ? 'rgba(255,255,255,0.02)' : 'transparent',
+                        transition: 'background-color 0.13s ease',
+                      }}
+                    >
+                      <span style={{
+                        flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
+                        color: hoveredRuleId === rule.id ? 'var(--amber)' : 'var(--txt-3)',
+                        letterSpacing: '0.05em', transition: 'color 0.13s ease',
+                      }}>
+                        {String(ruleIndex + 1).padStart(2, '0')}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 650, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {name}
+                        </p>
+                        <p style={{ margin: '3px 0 0', fontSize: 11, lineHeight: 1.5, color: 'var(--txt-3)' }}>
+                          {statement}
+                        </p>
                       </div>
-                      <div className="tp-rcard-hdr-actions">
+                      {value ? (
+                        <span style={{
+                          flexShrink: 0, textAlign: 'right',
+                          fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 700,
+                          letterSpacing: '-0.01em', color: value.color, whiteSpace: 'nowrap',
+                        }}>
+                          {value.text}
+                        </span>
+                      ) : (
+                        <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)', border: '1px solid var(--app-border)', borderRadius: 3, padding: '3px 7px' }}>
+                          Journal check
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditingRuleId(editing ? null : rule.id)}
+                        style={{ flexShrink: 0, background: 'none', border: 'none', color: editing ? 'var(--amber)' : 'var(--txt-3)', fontSize: 11, cursor: 'pointer', padding: '4px 2px' }}
+                      >
+                        {editing ? 'done' : 'edit'}
+                      </button>
+                      <div className="tp-rcard-hdr-actions" style={{ flexShrink: 0 }}>
                         <label className="tp-rcard-toggle">
                           <input
                             type="checkbox"
@@ -607,7 +566,24 @@ export default function TradingPlan() {
                       </div>
                     </div>
 
-                    {/* Card Body */}
+                    {editing && (
+                    <div style={{ padding: '0 18px 16px 42px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <select
+                          className="tp-rcard-kind"
+                          value={kind}
+                          onChange={e => changeRiskRuleKind(rule, e.target.value as NonNullable<RiskRule['kind']>)}
+                        >
+                          <option value="max_daily_loss">Max daily loss</option>
+                          <option value="max_trades">Max trades / day</option>
+                          <option value="max_contracts">Max contracts</option>
+                          <option value="min_rr">Min R:R</option>
+                          <option value="time_window">Time window</option>
+                          <option value="cooldown_after_loss">Cooldown after loss</option>
+                          <option value="manual">Manual check</option>
+                        </select>
+                        <span className="tp-rcard-type-label">{typeLabel}</span>
+                      </div>
                     <div className="tp-rcard-body">
                       {kind === 'time_window' ? (
                         <div className="tp-rcard-fields">
@@ -721,16 +697,85 @@ export default function TradingPlan() {
                         </div>
                       )}
                     </div>
-
-                  </article>
+                    </div>
+                    )}
+                  </div>
                 );
               })}
+
+              {/* Signature line — a contract is either in force or it isn't */}
+              <div style={{ borderTop: '1px solid var(--app-border)', padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: riskAcceptedToday ? 'var(--green)' : 'var(--txt-3)' }}>
+                  {riskAcceptedToday ? '✓' : '·'}
+                </span>
+                <span style={{ fontSize: 11, fontStyle: 'italic', lineHeight: 1.5, color: riskAcceptedToday ? 'var(--txt-2)' : 'var(--txt-3)' }}>
+                  {riskAcceptedToday
+                    ? 'Accepted at pre-session — these rules are in force today.'
+                    : 'Not yet accepted today — you sign these at pre-session launch.'}
+                </span>
+              </div>
             </div>
 
             {/* Footnote */}
             <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)', lineHeight: 1.5 }}>
               Flyxa verifies only rules supported by logged trade data. Missing timestamps or values remain unverified.
             </p>
+            </div>
+
+            {/* Right rail — the rulebook's consequences, not decoration */}
+            <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--txt)' }}>Held to — last 30 days</p>
+                </div>
+                <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, lineHeight: 1, color: adherenceColor }}>
+                    {planReport.pct !== null ? `${planReport.pct}%` : '—'}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                    adherence · {totalBreaks} break{totalBreaks !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                {worstRule && (
+                  <div style={{ padding: '10px 16px', borderTop: '1px solid var(--app-border)' }}>
+                    <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Most broken</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--txt-2)' }}>
+                      {worstRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--red)' }}>{worstRule.pct}%</span>
+                    </p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('rule-adherence')}
+                  style={{
+                    width: '100%', textAlign: 'left', cursor: 'pointer',
+                    border: 'none', borderTop: '1px solid var(--app-border)',
+                    background: 'none', padding: '10px 16px',
+                    fontSize: 11, fontWeight: 600, color: 'var(--amber)',
+                  }}
+                >
+                  View full adherence →
+                </button>
+              </div>
+
+              <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', padding: '12px 16px' }}>
+                <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
+                  Where these rules act
+                </p>
+                <div style={{ marginTop: 9, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55, color: 'var(--txt-3)' }}>
+                    <span style={{ color: 'var(--txt-2)', fontWeight: 600 }}>Pre-session</span> — you accept these limits before every launch.
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55, color: 'var(--txt-3)' }}>
+                    <span style={{ color: 'var(--txt-2)', fontWeight: 600 }}>Live session</span> — warnings fire as a limit approaches.
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55, color: 'var(--txt-3)' }}>
+                    <span style={{ color: 'var(--txt-2)', fontWeight: 600 }}>Journal</span> — every day is verified against them.
+                  </p>
+                </div>
+              </div>
+            </aside>
+            </div>
 
           </section>
         )}

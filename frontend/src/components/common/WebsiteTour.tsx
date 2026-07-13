@@ -340,8 +340,8 @@ const STEPS: TourStep[] = [
     id: 'trading-plan-tabs',
     targetId: 'trading-plan-tabs',
     path: '/trading-plan',
-    title: 'Rules and notes',
-    body: 'Risk Rules is the main workspace. Strategy Notes stays available for written context around your process.',
+    title: 'Rules and adherence',
+    body: 'Risk Rules is the main workspace. Rule Adherence shows how consistently you actually follow them, day by day.',
     action: 'Next',
   },
   {
