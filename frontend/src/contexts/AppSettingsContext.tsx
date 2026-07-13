@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppPreferences, Trade, TradingAccount } from '../types/index.js';
+import { AppPreferences, TradingAccount } from '../types/index.js';
 import { useAuth } from './AuthContext.js';
-import { deriveTradeSessionLabel } from '../utils/sessionTimes.js';
+import { deriveTradeSessionLabel, type TradeSessionLabel } from '../utils/sessionTimes.js';
 import {
   ALL_ACCOUNTS_ID,
   DEFAULT_ACCOUNT_ID,
@@ -129,6 +129,30 @@ function normalizeSessionTimes(raw: unknown): AppPreferences['sessionTimes'] {
   };
 }
 
+/**
+ * Structural minimum the account/session resolvers actually read. Both Trade
+ * shapes in the app satisfy this: the API-shape Trade (types/index.ts,
+ * snake_case) and the journal-store Trade (store/types.ts, camelCase). Typing
+ * against these fields lets decorateTrades/filterTradesBySelectedAccount
+ * accept either shape and return it unchanged plus the decorations.
+ */
+export interface TradeAccountSource {
+  id?: string;
+  accountId?: string;
+  account_id?: string;
+  accountIds?: string[];
+  account_ids?: string[];
+  account?: string;
+  trade_time?: string;
+  session?: TradeSessionLabel;
+}
+
+export type DecoratedTrade<T> = T & {
+  accountIds: string[];
+  accountId: string;
+  session: TradeSessionLabel;
+};
+
 interface AppSettingsContextValue {
   accounts: TradingAccount[];
   preferences: AppPreferences;
@@ -145,11 +169,11 @@ interface AppSettingsContextValue {
   deleteConfluenceOption: (index: number) => void;
   updatePreferences: (updates: Partial<AppPreferences>) => void;
   getDefaultTradeAccountId: () => string;
-  resolveTradeAccountId: (trade: Partial<Trade>) => string;
-  resolveTradeAccountIds: (trade: Partial<Trade>) => string[];
+  resolveTradeAccountId: (trade: TradeAccountSource) => string;
+  resolveTradeAccountIds: (trade: TradeAccountSource) => string[];
   isTradeAccountAllocatable: (accountId: string) => boolean;
-  decorateTrades: (trades: Trade[]) => Trade[];
-  filterTradesBySelectedAccount: (trades: Trade[]) => Trade[];
+  decorateTrades: <T extends TradeAccountSource>(trades: T[]) => DecoratedTrade<T>[];
+  filterTradesBySelectedAccount: <T extends TradeAccountSource>(trades: T[]) => DecoratedTrade<T>[];
   persistTradeAccount: (tradeId: string, accountId?: string | string[]) => void;
   removeTradeAccount: (tradeId: string) => void;
 }
@@ -445,43 +469,42 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     return defaultTradeAccountId;
   }, [defaultTradeAccountId, isTradeAccountAllocatable, selectedAccountId, validAccountIds]);
 
-  const resolveTradeAccountIds = useCallback((trade: Partial<Trade>) => {
+  const resolveTradeAccountIds = useCallback((trade: TradeAccountSource) => {
     // Check all field names used across the codebase:
     // `accountId` / `account_id` are the API-layer fields set by toApiTrade();
     // `account` is the raw store field on StoreTrade / JournalTrade.
     const mappedAccounts = trade.id ? tradeAccounts[trade.id] : undefined;
-    const apiAccountIds = (trade as unknown as { account_ids?: string[] }).account_ids;
     const rawIds = [
       ...(Array.isArray(trade.accountIds) ? trade.accountIds : []),
-      ...(Array.isArray(apiAccountIds) ? apiAccountIds : []),
+      ...(Array.isArray(trade.account_ids) ? trade.account_ids : []),
       ...(Array.isArray(mappedAccounts) ? mappedAccounts : [mappedAccounts]),
       trade.accountId,
       trade.account_id,
-      (trade as unknown as { account?: string }).account,
+      trade.account,
     ];
     // DEFAULT_ACCOUNT_ID is a placeholder for "no account assigned" — treat it the same as
     // missing so these trades fall through to defaultTradeAccountId (the user's real primary account).
     return dedupeAccountIds(rawIds, validAccountIds, defaultTradeAccountId);
   }, [defaultTradeAccountId, tradeAccounts, validAccountIds]);
 
-  const resolveTradeAccountId = useCallback((trade: Partial<Trade>) => (
+  const resolveTradeAccountId = useCallback((trade: TradeAccountSource) => (
     resolveTradeAccountIds(trade)[0] ?? defaultTradeAccountId
   ), [defaultTradeAccountId, resolveTradeAccountIds]);
 
-  const decorateTrades = useCallback((trades: Trade[]) => trades.map(trade => ({
+  const decorateTrades = useCallback(<T extends TradeAccountSource>(trades: T[]): DecoratedTrade<T>[] => trades.map(trade => ({
     ...trade,
     accountIds: resolveTradeAccountIds(trade),
     accountId: resolveTradeAccountId(trade),
     session: deriveTradeSessionLabel(trade, preferences.sessionTimes),
   })), [preferences.sessionTimes, resolveTradeAccountId, resolveTradeAccountIds]);
 
-  const filterTradesBySelectedAccount = useCallback((trades: Trade[]) => {
+  const filterTradesBySelectedAccount = useCallback(<T extends TradeAccountSource>(trades: T[]): DecoratedTrade<T>[] => {
     const decorated = decorateTrades(trades);
     if (selectedAccountId === ALL_ACCOUNTS_ID) {
       return decorated;
     }
 
-    return decorated.filter(trade => trade.accountIds?.includes(selectedAccountId) || trade.accountId === selectedAccountId);
+    return decorated.filter(trade => trade.accountIds.includes(selectedAccountId) || trade.accountId === selectedAccountId);
   }, [decorateTrades, selectedAccountId]);
 
   const setSelectedAccountId = useCallback((accountId: string) => {

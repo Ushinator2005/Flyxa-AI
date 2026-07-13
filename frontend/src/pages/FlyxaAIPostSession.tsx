@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye } from 'lucide-react';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
-import { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { PreSessionData } from '../store/types.js';
 import { buildDailyFlowInsight } from '../utils/dailyFlow.js';
@@ -113,7 +112,7 @@ export default function FlyxaAIPostSession() {
   );
 
   const safeTrades = useMemo(
-    () => accountTrades.filter((t): t is Trade => Boolean(t)),
+    () => accountTrades.filter(t => Boolean(t)),
     [accountTrades]
   );
 

@@ -79,7 +79,9 @@ export function getSessionLabelForTime(
 }
 
 export function deriveTradeSessionLabel(
-  trade: Partial<Trade>,
+  // Structural minimum instead of Partial<Trade> so both the API-shape trade
+  // and the journal-store trade (which lacks trade_time/session) are accepted.
+  trade: { trade_time?: string; session?: unknown },
   sessionTimes: AppPreferences['sessionTimes']
 ): TradeSessionLabel {
   return getSessionLabelForTime(trade.trade_time, sessionTimes, trade.session);

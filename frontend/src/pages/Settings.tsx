@@ -176,7 +176,6 @@ const T1 = 'var(--app-text)';
 const T2 = 'var(--app-text-muted)';
 const T3 = 'var(--app-text-subtle)';
 const SANS = 'var(--font-sans)';
-const MONO = 'var(--font-mono)';
 
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = hex.replace('#', '');

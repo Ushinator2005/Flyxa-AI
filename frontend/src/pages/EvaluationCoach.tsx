@@ -520,21 +520,20 @@ export default function EvaluationCoach() {
     const accountId = selected.id;
     return entries
       .filter(e => {
-        const anyE = e as unknown as { accountIds?: string[]; account?: string; dailyReflection?: { post?: string } };
-        const accs = anyE.accountIds?.length ? anyE.accountIds : (anyE.account ? [anyE.account] : []);
-        return accs.includes(accountId) && !!(anyE.dailyReflection?.post?.trim());
+        const accs = e.accountIds?.length ? e.accountIds : (e.account ? [e.account] : []);
+        return accs.includes(accountId) && Boolean(e.dailyReflection?.post?.trim());
       })
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 3)
-      .map(e => {
-        const dr = (e as unknown as { dailyReflection: { post: string } }).dailyReflection;
-        return { date: e.date, post: dr.post.trim() };
-      });
+      .map(e => ({ date: e.date, post: (e.dailyReflection?.post ?? '').trim() }));
   }, [entries, selected.id]);
 
   // ── AI mission load ─────────────────────────────────────────────
   // Placed after early returns so it only fires when the page renders
   function loadMission() {
+    // The early return above guarantees progress, but TS cannot narrow a
+    // captured variable inside a nested function — re-check locally.
+    if (!progress) return;
     if (missionLoadedFor === missionCacheKey || missionLoading) return;
     if (progress.tradingDays === 0) {
       setMissionText('');

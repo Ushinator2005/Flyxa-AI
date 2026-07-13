@@ -66,7 +66,9 @@ export interface JournalEntry {
   };
   emotions: Array<{ label: string; state: EmotionState }>;
   grade: string;
+  /** Legacy single-account field; multi-account entries carry every allocation in accountIds. */
   account: string;
+  accountIds?: string[];
   scannedImageUrl?: string;
   dailyReflection?: {
     pre: string;

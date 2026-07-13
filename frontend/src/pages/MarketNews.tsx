@@ -10,7 +10,6 @@ import {
   Search,
   Settings2,
   X,
-  Zap,
 } from 'lucide-react';
 import { aiApi, marketDataApi, NewsFilterItem } from '../services/api.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -258,13 +257,6 @@ function impactColor(impact: ImpactLevel) {
   return T3;
 }
 
-function impactBorderColor(impact: ImpactLevel, breaking: boolean) {
-  if (breaking) return RED;
-  if (impact === 'high') return RED;
-  if (impact === 'medium') return AMBER;
-  return T3;
-}
-
 function impactRank(impact: ImpactLevel) {
   if (impact === 'high') return 0;
   if (impact === 'medium') return 1;
@@ -279,59 +271,6 @@ function combinedSentiment(es: string | undefined, nq: string | undefined): { la
   const color = isBull && !isBear ? GREEN : isBear && !isBull ? RED : T2;
   const label = eNorm === nNorm ? eNorm : 'mixed';
   return { label, color };
-}
-
-function sidebarCardStyle(): React.CSSProperties {
-  return {
-    background: S1,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 8,
-    padding: '12px 13px',
-    minWidth: 0,
-    overflow: 'hidden',
-    boxSizing: 'border-box',
-  };
-}
-
-function feedCardBaseStyle(item: NewsFilterItem): React.CSSProperties {
-  return {
-    background: S1,
-    border: `1px solid ${BORDER}`,
-    borderLeft: `3px solid ${impactBorderColor(item.impact, item.isBreaking)}`,
-    borderRadius: 8,
-    padding: '14px 14px 13px',
-    transition: 'background 0.15s ease, transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
-    cursor: item.url ? 'pointer' : 'default',
-  };
-}
-
-function feedCardHoverStyle(item: NewsFilterItem): React.CSSProperties {
-  return {
-    ...feedCardBaseStyle(item),
-    background: S2,
-    borderColor: BORDER,
-    transform: 'translateY(-1px)',
-    boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
-  };
-}
-
-function feedCardRestStyle(item: NewsFilterItem): React.CSSProperties {
-  return {
-    ...feedCardBaseStyle(item),
-    background: item.isBreaking ? RED_DIM : S1,
-    transform: 'none',
-    boxShadow: 'none',
-  };
-}
-
-function impactBadgeStyle(impact: ImpactLevel): React.CSSProperties {
-  if (impact === 'high') {
-    return { color: RED, background: RED_DIM, border: `1px solid ${RED_BORDER}` };
-  }
-  if (impact === 'medium') {
-    return { color: AMBER, background: AMBER_DIM, border: `1px solid ${AMBER_BORDER}` };
-  }
-  return { color: T2, background: S2, border: `1px solid ${BORDER}` };
 }
 
 async function fetchFinnhubNews(): Promise<RawHeadline[]> {
@@ -640,50 +579,6 @@ function rawToNewsItem(raw: RawHeadline): NewsFilterItem {
     timestamp: raw.timestamp,
     url: raw.url,
   };
-}
-
-function ImpactBadge({ impact }: { impact: ImpactLevel }) {
-  const style = impactBadgeStyle(impact);
-  return (
-    <span
-      style={{
-        fontSize: 9,
-        fontWeight: 800,
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        padding: '2px 6px',
-        borderRadius: 4,
-        ...style,
-      }}
-    >
-      {impact}
-    </span>
-  );
-}
-
-function BreakingBadge() {
-  return (
-    <span
-      style={{
-        fontSize: 9,
-        fontWeight: 800,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        padding: '2px 6px',
-        borderRadius: 4,
-        background: RED,
-        color: '#fff',
-        border: `1px solid ${RED_BORDER}`,
-        boxShadow: `0 0 0 1px ${RED_BORDER} inset`,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-      }}
-    >
-      <Zap size={8} strokeWidth={2.4} />
-      Breaking
-    </span>
-  );
 }
 
 function NewsCard({ item }: { item: NewsFilterItem }) {

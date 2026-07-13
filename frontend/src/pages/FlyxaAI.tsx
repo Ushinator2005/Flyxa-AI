@@ -90,6 +90,66 @@ const tinyMetaLabelStyle: CSSProperties = {
 
 const cardBorder = `1px solid ${colors.b0}`;
 
+// These two cards are extracted from the main component because FlyxaAI's
+// body exceeds TypeScript's control-flow-analysis budget — null narrowing
+// silently stops working there, so the null guards must live in small
+// functions like these.
+function DataCompletenessNotice({ completeness, onFillGaps }: {
+  completeness: { emotionPct: number; planPct: number } | null;
+  onFillGaps: () => void;
+}) {
+  if (!completeness || (completeness.emotionPct >= 80 && completeness.planPct >= 80)) return null;
+  const { emotionPct, planPct } = completeness;
+  return (
+    <div className="mt-3 flex items-start gap-2.5 rounded-[8px] border px-[14px] py-3" style={{ borderColor: 'rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.06)' }}>
+      <AlertTriangle size={13} color={colors.amb} style={{ flexShrink: 0, marginTop: 1 }} />
+      <p className="min-w-0 flex-1 text-[12px] leading-relaxed" style={{ color: colors.amb }}>
+        Debrief accuracy limited —{emotionPct < 80 && ` emotion tagged on ${emotionPct}% of trades`}{emotionPct < 80 && planPct < 80 && ','}{planPct < 80 && ` plan logged on ${planPct}%`}. Fill in the gaps for real AI insights.
+      </p>
+      <button
+        type="button"
+        className="shrink-0 text-[11px] whitespace-nowrap"
+        style={{ color: colors.amb }}
+        onClick={onFillGaps}
+      >
+        Fill gaps →
+      </button>
+    </div>
+  );
+}
+
+function BestTradeCard({ trade }: {
+  trade: {
+    symbol: string; direction: string; resultPnl: string; session: string;
+    time: string; date: string; note: string; journal: string;
+  } | null;
+}) {
+  if (!trade) return null;
+  return (
+    <section className="mt-4 rounded-[8px] px-[14px] py-3" style={{ backgroundColor: colors.d2, border: cardBorder }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="rounded-[4px] px-2 py-[2px] text-[10px] font-semibold" style={{ color: colors.amb, backgroundColor: 'rgba(245,166,35,0.12)' }}>
+          &#9733; Top performer
+        </span>
+        <span className="text-[10.5px]" style={{ color: colors.t2 }}>
+          {trade.date} &middot; {trade.session} &middot; {trade.time}
+        </span>
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div>
+          <p className="text-[15px] font-bold" style={{ color: colors.t0, fontFamily: colors.mono }}>{trade.symbol}</p>
+          <p className="text-[11px]" style={{ color: colors.t2 }}>{trade.direction}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[15px] font-bold" style={{ color: colors.grn, fontFamily: colors.mono }}>{trade.resultPnl}</p>
+          <p className="text-[11px]" style={{ color: colors.t2 }}>{trade.note}</p>
+        </div>
+      </div>
+      <p className="mt-1 text-[11.5px] italic leading-snug" style={{ color: colors.t1 }}>{trade.journal}</p>
+    </section>
+  );
+}
+
 function avg(values: number[]) {
   return values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
 }
@@ -1256,7 +1316,7 @@ export default function FlyxaAI() {
     [filterTradesBySelectedAccount, trades]
   );
   const safeAccountTrades = useMemo(
-    () => accountTrades.filter((trade): trade is Trade => Boolean(trade)),
+    () => accountTrades.filter(trade => Boolean(trade)),
     [accountTrades]
   );
   const weeklyDebriefData = useMemo(
@@ -2243,22 +2303,7 @@ export default function FlyxaAI() {
                 )}
               </section>
 
-              {dataCompleteness && (dataCompleteness.emotionPct < 80 || dataCompleteness.planPct < 80) && (
-                <div className="mt-3 flex items-start gap-2.5 rounded-[8px] border px-[14px] py-3" style={{ borderColor: 'rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.06)' }}>
-                  <AlertTriangle size={13} color={colors.amb} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <p className="min-w-0 flex-1 text-[12px] leading-relaxed" style={{ color: colors.amb }}>
-                    Debrief accuracy limited —{dataCompleteness.emotionPct < 80 && ` emotion tagged on ${dataCompleteness.emotionPct}% of trades`}{dataCompleteness.emotionPct < 80 && dataCompleteness.planPct < 80 && ','}{dataCompleteness.planPct < 80 && ` plan logged on ${dataCompleteness.planPct}%`}. Fill in the gaps for real AI insights.
-                  </p>
-                  <button
-                    type="button"
-                    className="shrink-0 text-[11px] whitespace-nowrap"
-                    style={{ color: colors.amb }}
-                    onClick={() => navigate('/journal')}
-                  >
-                    Fill gaps →
-                  </button>
-                </div>
-              )}
+              <DataCompletenessNotice completeness={dataCompleteness} onFillGaps={() => navigate('/journal')} />
 
               <section className="mt-4" data-tour-id="flyxa-ai-insights">
                 <p style={tinyMetaLabelStyle}>AI insights &middot; {displayedInsights.length} found &middot; {getPeriodWindow(timeframe).periodLabel}</p>
@@ -2325,29 +2370,7 @@ export default function FlyxaAI() {
                 </div>
               </section>
 
-              {bestTrade && (
-                <section className="mt-4 rounded-[8px] px-[14px] py-3" style={{ backgroundColor: colors.d2, border: cardBorder }}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="rounded-[4px] px-2 py-[2px] text-[10px] font-semibold" style={{ color: colors.amb, backgroundColor: 'rgba(245,166,35,0.12)' }}>
-                      &#9733; Top performer
-                    </span>
-                    <span className="text-[10.5px]" style={{ color: colors.t2 }}>
-                      {bestTrade.date} &middot; {bestTrade.session} &middot; {bestTrade.time}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-end justify-between gap-2">
-                    <div>
-                      <p className="text-[15px] font-bold" style={{ color: colors.t0, fontFamily: colors.mono }}>{bestTrade.symbol}</p>
-                      <p className="text-[11px]" style={{ color: colors.t2 }}>{bestTrade.direction}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[15px] font-bold" style={{ color: colors.grn, fontFamily: colors.mono }}>{bestTrade.resultPnl}</p>
-                      <p className="text-[11px]" style={{ color: colors.t2 }}>{bestTrade.note}</p>
-                    </div>
-                  </div>
-                  <p className="mt-1 text-[11.5px] italic leading-snug" style={{ color: colors.t1 }}>{bestTrade.journal}</p>
-                </section>
-              )}
+              <BestTradeCard trade={bestTrade} />
             </div>
           </div>
         </main>

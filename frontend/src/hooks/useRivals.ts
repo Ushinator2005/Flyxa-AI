@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
+import type { Rival } from '../types/rivals.js';
 import { getMascotStage } from '../lib/mascotProgression.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useActiveAccountEntries } from '../store/selectors.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { journalApi, rivalsApi, type RivalProfileResponse, type RivalRequestResponse } from '../services/api.js';
-import type { BacktestSession, JournalEntry as TradingJournalEntry, RivalXpEvent, Trade } from '../store/types.js';
+import type { BacktestSession } from '../store/types.js';
 import type { JournalEntry as DailyJournalEntry } from '../types/index.js';
 import type { MascotStats } from '../types/rivals.js';
 import {
@@ -221,7 +221,6 @@ export function useRivals() {
 
     const allTrades = entries.flatMap(entry => entry.trades).filter(t => t.result === 'win' || t.result === 'loss');
     const winTrades = allTrades.filter(t => t.result === 'win');
-    const lossTrades = allTrades.filter(t => t.result === 'loss');
     const winRate = allTrades.length > 0 ? Math.round((winTrades.length / allTrades.length) * 100) : null;
     const tradesWithRR = allTrades.filter(t => typeof t.rr === 'number' && isFinite(t.rr) && t.rr !== 0);
     const avgR = tradesWithRR.length > 0

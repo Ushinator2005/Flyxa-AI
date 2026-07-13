@@ -973,7 +973,7 @@ export default function FlyxaAIWeeklyReport() {
   const slideAreaRef                      = useRef<HTMLDivElement>(null);
 
   const accountTrades = useMemo(() => filterTradesBySelectedAccount(trades), [filterTradesBySelectedAccount, trades]);
-  const safeTrades    = useMemo(() => accountTrades.filter((t): t is Trade => Boolean(t)), [accountTrades]);
+  const safeTrades    = useMemo(() => accountTrades.filter(t => Boolean(t)), [accountTrades]);
   const stats         = useMemo(() => computeWeekStats(safeTrades, weekOffset, entries as StoreJournalEntry[], riskRules), [entries, riskRules, safeTrades, weekOffset]);
   const actionPlan    = useMemo(() => generateActionPlan(stats), [stats]);
 

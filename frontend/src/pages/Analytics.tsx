@@ -178,13 +178,6 @@ function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function formatHoldDuration(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return '--';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
-  return `${mins}m ${secs}s`;
-}
-
 function safeAverage(values: number[]): number {
   if (!values.length) return 0;
   return values.reduce((sum, current) => sum + current, 0) / values.length;
@@ -414,20 +407,6 @@ export default function Analytics() {
       if (current > dd) dd = current;
     }
     return dd;
-  }, [equityCurveData]);
-
-  const curveStats = useMemo(() => {
-    if (equityCurveData.length < 2) return null;
-    const values = equityCurveData.map(d => d.cumulative);
-    const peak = Math.max(...values);
-    const trough = Math.min(...values);
-    if (peak === trough) return null;
-    return {
-      peak,
-      trough,
-      peakIdx: values.lastIndexOf(peak),
-      troughIdx: values.lastIndexOf(trough),
-    };
   }, [equityCurveData]);
 
   const pnlDistribution = useMemo(() => {
@@ -959,46 +938,6 @@ export default function Analytics() {
                   }}
                 />
                 <ReferenceLine y={0} stroke="var(--accent)" strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.85} />
-                {false && curveStats && curveStats.peak !== 0 && (
-                  <ReferenceLine
-                    y={curveStats.peak}
-                    stroke={DASHBOARD_GREEN}
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.6}
-                    label={(props: any) => {
-                      const vb = props?.viewBox;
-                      if (!vb) return <g/>;
-                      // Near bottom (little room below) → label above; otherwise below
-                      const yOff = (vb.height ?? 100) < 50 ? -14 : 13;
-                      return (
-                        <text x={(vb.x ?? 0) + 6} y={(vb.y ?? 0) + yOff}
-                          fill={DASHBOARD_GREEN} fontSize={10} fontWeight={600}>
-                          {formatSignedCurrency(curveStats.peak)}
-                        </text>
-                      );
-                    }}
-                  />
-                )}
-                {false && curveStats && curveStats.trough !== 0 && (
-                  <ReferenceLine
-                    y={curveStats.trough}
-                    stroke={DASHBOARD_RED}
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.6}
-                    label={(props: any) => {
-                      const vb = props?.viewBox;
-                      if (!vb) return <g/>;
-                      // Near bottom (little room below) → label above; otherwise below
-                      const yOff = (vb.height ?? 100) < 50 ? -14 : 13;
-                      return (
-                        <text x={(vb.x ?? 0) + 6} y={(vb.y ?? 0) + yOff}
-                          fill={DASHBOARD_RED} fontSize={10} fontWeight={600}>
-                          {formatSignedCurrency(curveStats.trough)}
-                        </text>
-                      );
-                    }}
-                  />
-                )}
                 <Area
                   type="monotone"
                   dataKey="cumulative"
@@ -1268,26 +1207,6 @@ export default function Analytics() {
               <YAxis dataKey="y" type="number" hide domain={[0, 1]} />
               {/* dot area scales with |P&L|: ~2px to ~7px radius */}
               <ZAxis dataKey="size" range={[14, 160]} />
-              {/* Mean / expectancy line — gray, thinner, doesn't compete with $0 */}
-              {false && Math.abs(pnlDistribution.meanPnL) > pnlDistribution.domainMax * 0.01 && (
-                <ReferenceLine
-                  x={pnlDistribution.meanPnL}
-                  stroke="rgba(148,163,184,0.5)"
-                  strokeDasharray="3 3"
-                  strokeWidth={1.5}
-                  label={(props: any) => {
-                    const vb = props?.viewBox;
-                    if (!vb) return <g/>;
-                    return (
-                      <text x={vb.x} y={14}
-                        fill="rgba(148,163,184,0.9)" fontSize={9} fontWeight={600}
-                        textAnchor="middle">
-                        {formatSignedCurrency(pnlDistribution.meanPnL)}
-                      </text>
-                    );
-                  }}
-                />
-              )}
               <ReferenceLine
                 x={0}
                 stroke="var(--accent)"
@@ -1304,37 +1223,6 @@ export default function Analytics() {
                   );
                 }}
               />
-              {/* Zone count labels at the top of each side */}
-              {false && <ReferenceLine
-                x={pnlDistribution.domainMin / 2}
-                stroke="transparent"
-                label={(props: any) => {
-                  const vb = props?.viewBox;
-                  if (!vb) return <g/>;
-                  return (
-                    <text x={vb.x} y={14}
-                      fill={DASHBOARD_RED} fontSize={10} fontWeight={700}
-                      textAnchor="middle" opacity={0.85}>
-                      {pnlDistribution.losses.length} loss{pnlDistribution.losses.length !== 1 ? 'es' : ''}
-                    </text>
-                  );
-                }}
-              />}
-              {false && <ReferenceLine
-                x={pnlDistribution.domainMax / 2}
-                stroke="transparent"
-                label={(props: any) => {
-                  const vb = props?.viewBox;
-                  if (!vb) return <g/>;
-                  return (
-                    <text x={vb.x} y={14}
-                      fill={DASHBOARD_GREEN} fontSize={10} fontWeight={700}
-                      textAnchor="middle" opacity={0.85}>
-                      {pnlDistribution.wins.length} win{pnlDistribution.wins.length !== 1 ? 's' : ''}
-                    </text>
-                  );
-                }}
-              />}
               <Tooltip
                 cursor={false}
                 content={({ payload }) => {
@@ -1574,7 +1462,7 @@ export default function Analytics() {
               <div className="bg-[var(--app-panel-strong)] px-3 py-2">
                 <p className="text-[10px] text-[var(--app-text-subtle)]">Top leak</p>
                 <p className={`mt-0.5 truncate text-[12px] font-semibold ${mistakeCost.topLeak ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {mistakeCost.topLeak ? mistakeCost.topLeak.label : '—'}
+                  {mistakeCost.topLeak?.label ?? '—'}
                 </p>
               </div>
               <div className="bg-[var(--app-panel-strong)] px-3 py-2">
