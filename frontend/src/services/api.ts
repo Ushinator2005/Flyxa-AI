@@ -14,20 +14,21 @@ const API_URL = import.meta.env.VITE_API_URL as string || 'http://localhost:3001
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 class ApiService {
-  private async getFreshToken(): Promise<string> {
+  private async getFreshToken(forceRefresh = false): Promise<string> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return '';
     const now = Math.floor(Date.now() / 1000);
-    if (session.expires_at !== undefined && session.expires_at < now + 60) {
-      const { data: refreshed } = await supabase.auth.refreshSession();
+    if (forceRefresh || (session.expires_at !== undefined && session.expires_at < now + 60)) {
+      const { data: refreshed, error } = await supabase.auth.refreshSession();
+      if (error) return '';
       return refreshed.session?.access_token ?? '';
     }
     return session.access_token;
   }
 
-  private async getHeaders(): Promise<HeadersInit> {
-    const token = await this.getFreshToken();
-    const headers: HeadersInit = {
+  private async getHeaders(forceRefresh = false): Promise<Record<string, string>> {
+    const token = await this.getFreshToken(forceRefresh);
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (token) {
@@ -36,31 +37,50 @@ class ApiService {
     return headers;
   }
 
-  private async getAuthHeader(): Promise<string> {
-    const token = await this.getFreshToken();
+  private async getAuthHeader(forceRefresh = false): Promise<string> {
+    const token = await this.getFreshToken(forceRefresh);
     return token ? `Bearer ${token}` : '';
   }
 
+  private async parseError(response: Response): Promise<Error> {
+    const err = await response.json().catch(() => ({ error: 'Request failed' }));
+    return new Error(err.error || `Request failed: ${response.status}`);
+  }
+
   async get<T>(path: string): Promise<T> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_URL}${path}`, { headers });
+    let headers = await this.getHeaders();
+    let response = await fetch(`${API_URL}${path}`, { headers });
+    if (response.status === 401) {
+      headers = await this.getHeaders(true);
+      if (headers.Authorization) {
+        response = await fetch(`${API_URL}${path}`, { headers });
+      }
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || `Request failed: ${response.status}`);
+      throw await this.parseError(response);
     }
     return response.json() as Promise<T>;
   }
 
   async post<T>(path: string, body: unknown): Promise<T> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_URL}${path}`, {
+    let headers = await this.getHeaders();
+    let response = await fetch(`${API_URL}${path}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
     });
+    if (response.status === 401) {
+      headers = await this.getHeaders(true);
+      if (headers.Authorization) {
+        response = await fetch(`${API_URL}${path}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+      }
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || `Request failed: ${response.status}`);
+      throw await this.parseError(response);
     }
     return response.json() as Promise<T>;
   }
@@ -74,17 +94,29 @@ class ApiService {
       : undefined;
 
     try {
-      const response = await fetch(`${API_URL}${path}`, {
+      const buildHeaders = (authHeaderValue: string): HeadersInit => (
+        authHeaderValue ? { Authorization: authHeaderValue } : {}
+      );
+
+      let response = await fetch(`${API_URL}${path}`, {
         method: 'POST',
-        headers: {
-          Authorization: authHeader,
-        },
+        headers: buildHeaders(authHeader),
         body: formData,
         signal: controller?.signal,
       });
+      if (response.status === 401) {
+        const refreshedAuthHeader = await this.getAuthHeader(true);
+        if (refreshedAuthHeader) {
+          response = await fetch(`${API_URL}${path}`, {
+            method: 'POST',
+            headers: buildHeaders(refreshedAuthHeader),
+            body: formData,
+            signal: controller?.signal,
+          });
+        }
+      }
       if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(err.error || `Request failed: ${response.status}`);
+        throw await this.parseError(response);
       }
       return response.json() as Promise<T>;
     } catch (error) {
@@ -100,28 +132,45 @@ class ApiService {
   }
 
   async put<T>(path: string, body: unknown): Promise<T> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_URL}${path}`, {
+    let headers = await this.getHeaders();
+    let response = await fetch(`${API_URL}${path}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(body),
     });
+    if (response.status === 401) {
+      headers = await this.getHeaders(true);
+      if (headers.Authorization) {
+        response = await fetch(`${API_URL}${path}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(body),
+        });
+      }
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || `Request failed: ${response.status}`);
+      throw await this.parseError(response);
     }
     return response.json() as Promise<T>;
   }
 
   async delete(path: string): Promise<void> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_URL}${path}`, {
+    let headers = await this.getHeaders();
+    let response = await fetch(`${API_URL}${path}`, {
       method: 'DELETE',
       headers,
     });
+    if (response.status === 401) {
+      headers = await this.getHeaders(true);
+      if (headers.Authorization) {
+        response = await fetch(`${API_URL}${path}`, {
+          method: 'DELETE',
+          headers,
+        });
+      }
+    }
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || `Request failed: ${response.status}`);
+      throw await this.parseError(response);
     }
   }
 }
