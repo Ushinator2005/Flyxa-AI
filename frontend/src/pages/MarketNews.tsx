@@ -22,6 +22,7 @@ import {
   normalizeCalendarTimeZone,
   zonedWallTimeToDate,
 } from '../utils/calendarTime.js';
+import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
 
 const PAGE_BG = 'var(--app-panel)';
 const S1 = 'var(--app-panel)';
@@ -48,7 +49,6 @@ const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY as string | undefined;
 const POLYGON_KEY = import.meta.env.VITE_POLYGON_KEY as string | undefined;
 const FMP_KEY = import.meta.env.VITE_FMP_KEY as string | undefined;
 const CACHE_KEY = 'flyxa_news_cache_v2';
-const CALENDAR_CACHE_KEY = 'flyxa_calendar_cache_v5';
 const SOURCES_KEY = 'flyxa_news_sources';
 const CACHE_TTL = 15 * 60 * 1000;
 const CALENDAR_CACHE_TTL = 12 * 60 * 60 * 1000;

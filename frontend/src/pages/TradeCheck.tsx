@@ -14,6 +14,7 @@ import { riskApi } from '../services/api.js';
 import type { Trade } from '../types/index.js';
 import { getMostRecentDailyFlowBefore } from '../utils/dailyFlow.js';
 import { getTimeZoneParts } from '../utils/calendarTime.js';
+import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
 import {
   parsePreSessionSync,
   PRE_SESSION_SYNC_STORAGE_KEY,
@@ -59,7 +60,7 @@ function sessionConsecLosses(trades: GuardSessionTrade[]): number {
 
 function getCalRisk(timeZone: string): string | null {
   try {
-    const raw = window.localStorage.getItem('flyxa_calendar_cache_v4');
+    const raw = window.localStorage.getItem(CALENDAR_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { events?: Array<{ event?: string; date?: string; time?: string; impact?: string; actual?: string }> };
     if (!Array.isArray(parsed.events)) return null;

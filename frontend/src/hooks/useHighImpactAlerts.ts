@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { pushToast, dismissToast } from '../store/toastStore.js';
-
-const CALENDAR_CACHE_KEY = 'flyxa_calendar_cache_v4';
+import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
 /** Fire a notification when an event is within 30 minutes. */
 const LOOKAHEAD_MS = 30 * 60 * 1000;
 /** Also notify if the event just fired within the last 2 minutes. */

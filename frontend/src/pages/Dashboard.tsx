@@ -23,6 +23,7 @@ import MonthlyHeatmap from '../components/dashboard/MonthlyHeatmap.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
 import { getRthTiming } from '../utils/marketHours.js';
+import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
 import { useBreakingNewsAlert } from '../hooks/useBreakingNewsAlert.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
 
@@ -190,7 +191,7 @@ export default function Dashboard() {
   useEffect(() => {
     function load() {
       try {
-        const raw = localStorage.getItem('flyxa_calendar_cache_v4');
+        const raw = localStorage.getItem(CALENDAR_CACHE_KEY);
         if (!raw) { setTodayHighImpact([]); return; }
         const parsed = JSON.parse(raw) as { events?: unknown[]; timeZone?: string };
         if (!Array.isArray(parsed.events)) { setTodayHighImpact([]); return; }

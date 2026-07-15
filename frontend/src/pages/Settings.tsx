@@ -16,6 +16,7 @@ import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupE
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceKey, normalizeConfluenceTag } from '../utils/confluenceTags.js';
 import { getEvaluationTemplates } from '../utils/evaluationCoach.js';
+import { CALENDAR_CACHE_KEY, LEGACY_CALENDAR_CACHE_KEYS } from '../utils/calendarCache.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
@@ -1013,7 +1014,8 @@ export default function Settings() {
       'flyxa_payout_gallery_photos_v1',
       'flyxa_breaking_cache_v1',
       'flyxa_news_cache_v2',
-      'flyxa_calendar_cache_v4',
+      CALENDAR_CACHE_KEY,
+      ...LEGACY_CALENDAR_CACHE_KEYS,
       'flyxa_breaking_news_last_seen',
       'flyxa_news_sources',
       'flyxa-journal-sections',
