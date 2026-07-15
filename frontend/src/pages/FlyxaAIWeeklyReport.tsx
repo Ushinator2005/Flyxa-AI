@@ -43,9 +43,7 @@ function weekMonday(offset = 0): Date {
 function fmtShort(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
-function fmtCurrency(v: number): string {
-  return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { formatUsd as fmtCurrency } from '../utils/format.js';
 function fmtSigned(v: number): string {
   return `${v >= 0 ? '+' : '-'}${fmtCurrency(Math.abs(v))}`;
 }
@@ -960,6 +958,8 @@ export default function FlyxaAIWeeklyReport() {
   const { filterTradesBySelectedAccount } = useAppSettings();
   const entries                           = useFlyxaStore(state => state.entries);
   const riskRules                         = useFlyxaStore(state => state.riskRules);
+  const weeklyReflections                 = useFlyxaStore(state => state.weeklyReflections);
+  const setWeeklyReflection               = useFlyxaStore(state => state.setWeeklyReflection);
   const [weekOffset, setWeekOffset]       = useState(0);
   const [slideIndex, setSlideIndex]       = useState(0);
   const [direction, setDirection]         = useState<'fwd' | 'bwd'>('fwd');
@@ -979,14 +979,41 @@ export default function FlyxaAIWeeklyReport() {
 
   useEffect(() => { window.dispatchEvent(new CustomEvent('flyxa:collapse-sidebar')); }, []);
 
-  const storageKey = `flyxa.weekly-reflection.${stats.weekKey}`;
+  // Reflections live in the Zustand store (synced to Supabase). The local
+  // `reflection` state is only the keystroke buffer for the textarea; the
+  // store keeps the trimmed text.
+  const storeReflection = weeklyReflections[stats.weekKey];
+  const hydratedWeekRef = useRef<string | null>(null);
   useEffect(() => {
-    try { setReflection(localStorage.getItem(storageKey) ?? ''); } catch { /* ignore */ }
-  }, [storageKey]);
+    if (hydratedWeekRef.current === stats.weekKey) return;
+    if (storeReflection !== undefined) {
+      hydratedWeekRef.current = stats.weekKey;
+      setReflection(storeReflection);
+      return;
+    }
+    // One-time migration: older builds saved reflections to localStorage only.
+    // Hydrate the store from the legacy key so it syncs to Supabase, then drop it.
+    const legacyKey = `flyxa.weekly-reflection.${stats.weekKey}`;
+    try {
+      const legacy = localStorage.getItem(legacyKey);
+      if (legacy !== null) {
+        localStorage.removeItem(legacyKey);
+        if (legacy.trim()) {
+          hydratedWeekRef.current = stats.weekKey;
+          setReflection(legacy);
+          setWeeklyReflection(stats.weekKey, legacy);
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+    setReflection('');
+    // hydratedWeekRef stays unset so a late Supabase hydration can still fill this in.
+  }, [stats.weekKey, storeReflection, setWeeklyReflection]);
   const saveReflection = useCallback((v: string) => {
+    hydratedWeekRef.current = stats.weekKey;
     setReflection(v);
-    try { localStorage.setItem(storageKey, v); } catch { /* ignore */ }
-  }, [storageKey]);
+    setWeeklyReflection(stats.weekKey, v);
+  }, [stats.weekKey, setWeeklyReflection]);
 
   const captureSlide = useCallback(async (): Promise<{ blob: Blob; dataUrl: string } | null> => {
     const el = slideAreaRef.current;

@@ -23,6 +23,23 @@ const TAB_ITEMS: Array<{ id: TradingPlanTab; label: string; icon: typeof LockKey
   { id: 'rule-adherence', label: 'Rule Adherence', icon: BarChart3 },
 ];
 
+// Discipline chart palette — binary verdict per day: amber when every rule
+// held, red the moment a single one broke. No partial credit.
+const ADHERENCE_TARGET = 80;
+const BAR_ON = 'var(--amber)';
+const BAR_BREAK = 'var(--red)';
+const BAR_EMPTY = 'rgba(255,255,255,0.05)';
+
+interface DisciplineDay {
+  date: string;
+  label: string;
+  pct: number | null;
+  passed: number;
+  checkedCount: number;
+  failed: number;
+  isToday: boolean;
+}
+
 function formatLastSaved(lastSaved: Date | null, now: number): string {
   if (!lastSaved) return 'Not saved yet';
   const delta = Math.max(0, now - lastSaved.getTime());
@@ -130,10 +147,6 @@ export default function TradingPlan() {
     () => riskRules.filter(rule => rule.enabled !== false).length,
     [riskRules]
   );
-  const automaticRuleCount = useMemo(
-    () => riskRules.filter(rule => rule.enabled !== false && (rule.kind ?? 'manual') !== 'manual').length,
-    [riskRules]
-  );
 
   // Last-30-day adherence report for displaying per-rule breach stats.
   const planReport = useMemo(() => {
@@ -188,6 +201,67 @@ export default function TradingPlan() {
     }
     return worst;
   }, [riskRules, ruleStatsMap]);
+
+  // One entry per calendar day over the last 30 — the discipline chart renders
+  // every day, including unverified ones, so gaps in the habit stay visible.
+  const daySeries = useMemo(() => {
+    const byDate = new Map(planReport.daily.map(day => [day.date, day]));
+    const series: DisciplineDay[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const report = byDate.get(key);
+      const checked = report ? report.evaluations.filter(ev => ev.state !== 'unchecked') : [];
+      const passed = checked.filter(ev => ev.state === 'ok').length;
+      series.push({
+        date: key,
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        pct: checked.length > 0 ? Math.round((passed / checked.length) * 100) : null,
+        passed,
+        checkedCount: checked.length,
+        failed: checked.length - passed,
+        isToday: i === 0,
+      });
+    }
+    return series;
+  }, [planReport]);
+
+  const todayStats = daySeries[daySeries.length - 1];
+
+  // Chronological pass/fail history per rule, for the per-row verdict strips.
+  // planReport.daily arrives newest-first — sort so strips read left→right in time.
+  const ruleDayResults = useMemo(() => {
+    const map = new Map<string, Array<'ok' | 'fail'>>();
+    const daysAscending = [...planReport.daily].sort((a, b) => a.date.localeCompare(b.date));
+    for (const day of daysAscending) {
+      for (const ev of day.evaluations) {
+        if (ev.state === 'unchecked') continue;
+        const arr = map.get(ev.ruleId) ?? [];
+        arr.push(ev.state === 'ok' ? 'ok' : 'fail');
+        map.set(ev.ruleId, arr);
+      }
+    }
+    return map;
+  }, [planReport]);
+
+  // Clean-day streaks across verified days — the discipline scoreboard.
+  const cleanStreaks = useMemo(() => {
+    const checked = daySeries.filter(day => day.pct !== null);
+    let best = 0;
+    let run = 0;
+    for (const day of checked) {
+      if (day.failed === 0) { run += 1; best = Math.max(best, run); }
+      else run = 0;
+    }
+    let current = 0;
+    for (let i = checked.length - 1; i >= 0; i--) {
+      if (checked[i].failed === 0) current += 1;
+      else break;
+    }
+    return { current, best };
+  }, [daySeries]);
 
   const resetPlan = () => {
     useFlyxaStore.getState().updateRiskRules(DEFAULT_STRUCTURED_RULES);
@@ -319,72 +393,78 @@ export default function TradingPlan() {
 
       <main className="tp-content trading-plan-scroll">
         {activeTab === 'rule-adherence' && (
-          <section data-tour-id="trading-plan-core" style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1080 }}>
+          <section data-tour-id="trading-plan-core" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 16, alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
-            {/* Hero — the verdict number beside the day-by-day record */}
-            <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0, 1fr)', border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
-              <div style={{ padding: '18px 20px', borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
-                  Adherence · last 30 days
+            {/* Daily discipline — one bar per calendar day, binary verdict */}
+            <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '15px 18px 0' }}>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                  DAILY DISCIPLINE · 30D
                 </p>
-                <p style={{ margin: '8px 0 7px', fontFamily: 'var(--font-mono)', fontSize: 44, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', color: adherenceColor }}>
-                  {planReport.pct !== null ? `${planReport.pct}%` : '—'}
-                </p>
-                <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: 'var(--txt-2)' }}>
-                  {totalBreaks} break{totalBreaks !== 1 ? 's' : ''} across {checkedDays.length} rule-checked day{checkedDays.length !== 1 ? 's' : ''}
-                </p>
-                <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>
-                  {activeRuleCount} active rules · {automaticRuleCount} auto-checked
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: BAR_ON }} /> ALL RULES HELD
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: BAR_BREAK }} /> RULE BROKEN
+                  </span>
                 </p>
               </div>
-              <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                  <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
-                    Day by day
-                  </p>
-                  <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
-                    <span style={{ color: 'var(--green)' }}>■</span> ≥80% · <span style={{ color: 'var(--amber)' }}>■</span> ≥60% · <span style={{ color: 'var(--red)' }}>■</span> below
-                  </p>
+
+              <div style={{ position: 'relative', height: 148, margin: '18px 18px 0' }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 3 }}>
+                  {daySeries.map(day => {
+                    const hasData = day.pct !== null;
+                    return (
+                      <span
+                        key={day.date}
+                        title={hasData
+                          ? `${day.label} · ${day.failed === 0 ? 'all rules held' : `${day.failed} break${day.failed !== 1 ? 's' : ''}`}`
+                          : `${day.label} · no verified session`}
+                        style={{
+                          flex: 1,
+                          height: hasData ? `${Math.max(8, day.pct as number)}%` : day.isToday ? '100%' : 5,
+                          borderRadius: '2px 2px 0 0',
+                          backgroundColor: hasData
+                            ? (day.failed === 0 ? BAR_ON : BAR_BREAK)
+                            : day.isToday ? 'transparent' : BAR_EMPTY,
+                          border: day.isToday ? '1px solid var(--txt-2)' : 'none',
+                        }}
+                      />
+                    );
+                  })}
                 </div>
-                {checkedDays.length === 0 ? (
-                  <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--txt-3)' }}>
-                    No rule-checked sessions in the last 30 days.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
-                    {checkedDays.map(day => {
-                      const checked = day.evaluations.filter(ev => ev.state !== 'unchecked');
-                      const passed = checked.filter(ev => ev.state === 'ok').length;
-                      const dayPct = checked.length > 0 ? Math.round((passed / checked.length) * 100) : null;
-                      const color = dayPct === null ? 'rgba(255,255,255,0.08)'
-                        : dayPct >= 80 ? 'var(--green)'
-                        : dayPct >= 60 ? 'var(--amber)'
-                        : 'var(--red)';
-                      return (
-                        <span
-                          key={day.date}
-                          title={`${day.date} · ${dayPct}% adherence · ${day.failed} break${day.failed !== 1 ? 's' : ''}`}
-                          style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: color, opacity: 0.85 }}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-                {worstRule && (
-                  <p style={{ margin: '14px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--txt-2)' }}>
-                    Most broken: <span style={{ fontWeight: 600, color: 'var(--txt)' }}>{worstRule.label}</span>
-                    {' — '}
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--red)' }}>{worstRule.pct}%</span> adherence
-                  </p>
-                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', margin: '9px 18px 14px' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--txt-3)' }}>{daySeries[0].label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--txt-3)' }}>{daySeries[15].label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--txt-3)' }}>{daySeries[29].label}</span>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--app-border)', padding: '11px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: 'var(--txt-3)' }}>
+                  YOUR RULES · {todayStats.checkedCount > 0
+                    ? <span style={{ color: 'var(--amber)', fontWeight: 700 }}>{todayStats.passed} OF {todayStats.checkedCount} HELD TODAY</span>
+                    : <span>NOT YET VERIFIED TODAY</span>}
+                </p>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: 'var(--txt-3)' }}>
+                  30D ADHERENCE · <span style={{ color: adherenceColor, fontWeight: 700 }}>{planReport.pct !== null ? `${planReport.pct}%` : '—'}</span>
+                  {' '}· {totalBreaks} BREAK{totalBreaks !== 1 ? 'S' : ''} / {checkedDays.length} DAY{checkedDays.length !== 1 ? 'S' : ''}
+                </p>
               </div>
             </div>
 
-            {/* Per-rule cells, worst offender first */}
-            <div className="tp-panel">
-              <div className="tp-section-head">
-                <h2>Adherence by rule</h2>
-                <p>Checked against your logged trades by the same engine that verifies each journal day.</p>
+            {/* Per-rule ledger, worst offender first */}
+            <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--app-border)' }}>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                  BY RULE · WORST FIRST
+                </p>
+                <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
+                  Verified against logged trades by the journal engine
+                </p>
               </div>
               {(() => {
                 const rows = riskRules
@@ -393,50 +473,102 @@ export default function TradingPlan() {
                   .sort((a, b) => (a.stats?.pct ?? 101) - (b.stats?.pct ?? 101));
                 if (rows.length === 0) {
                   return (
-                    <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--txt-3)' }}>
+                    <p style={{ margin: 0, padding: '16px 18px', fontSize: 12, color: 'var(--txt-3)' }}>
                       No auto-checked rules are enabled — turn rules on in the Risk Rules tab and stats appear here.
                     </p>
                   );
                 }
-                return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginTop: 14 }}>
-                    {rows.map(({ rule, stats }) => {
-                      const pct = stats && stats.checked > 0 ? (stats.pct ?? 0) : null;
-                      const color = pct === null ? 'var(--txt-3)'
-                        : pct >= 80 ? 'var(--green)'
-                        : pct >= 60 ? 'var(--amber)'
-                        : 'var(--red)';
-                      return (
-                        <div key={rule.id} style={{ border: '1px solid var(--app-border)', borderRadius: 8, padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                            <span style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {rule.label}
-                            </span>
-                            <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color }}>
-                              {pct !== null ? `${pct}%` : '—'}
-                            </span>
-                          </div>
-                          <div style={{ height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginTop: 9 }}>
-                            {pct !== null && (
-                              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, backgroundColor: color, opacity: 0.85 }} />
-                            )}
-                          </div>
-                          <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--txt-3)' }}>
-                            {stats && stats.checked > 0
-                              ? `${stats.failed} break${stats.failed !== 1 ? 's' : ''} · ${stats.checked} checks`
-                              : 'No data yet — trades haven\'t exercised this rule.'}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
+                return rows.map(({ rule, stats }, rowIndex) => {
+                  const pct = stats && stats.checked > 0 ? (stats.pct ?? 0) : null;
+                  const pctTextColor = pct === null ? 'var(--txt-3)' : pct >= ADHERENCE_TARGET ? 'var(--amber)' : 'var(--red)';
+                  const results = ruleDayResults.get(rule.id) ?? [];
+                  return (
+                    <div
+                      key={rule.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(160px, 230px) minmax(0, 1fr) 58px 150px',
+                        gap: 18,
+                        alignItems: 'center',
+                        padding: '13px 18px',
+                        borderTop: rowIndex === 0 ? 'none' : '1px solid var(--app-border)',
+                      }}
+                    >
+                      <span style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {rule.label}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 16 }}>
+                        {results.length > 0 ? results.slice(-30).map((r, i) => (
+                          <span key={i} style={{ flex: 1, maxWidth: 14, height: '100%', borderRadius: 2, backgroundColor: r === 'ok' ? BAR_ON : BAR_BREAK, opacity: r === 'ok' ? 0.9 : 1 }} />
+                        )) : (
+                          <div style={{ width: '100%', height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+                        )}
+                      </div>
+                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: pctTextColor }}>
+                        {pct !== null ? `${pct}%` : '—'}
+                      </span>
+                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>
+                        {stats && stats.checked > 0
+                          ? <>{stats.failed} BRK · {stats.checked} CHK</>
+                          : 'NO DATA YET'}
+                      </span>
+                    </div>
+                  );
+                });
               })()}
             </div>
 
             <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)', lineHeight: 1.5 }}>
               Stats evaluate past sessions against your current rule values — tightening a rule today changes how old sessions score.
             </p>
+            </div>
+
+            {/* Readout rail — the scoreboard the chart earns */}
+            <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 16px 0' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                    CLEAN STREAK
+                  </p>
+                  <p style={{ margin: '11px 0 0', fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 700, lineHeight: 1, color: cleanStreaks.current > 0 ? 'var(--amber)' : 'var(--txt-3)' }}>
+                    {cleanStreaks.current}
+                  </p>
+                  <p style={{ margin: '7px 0 15px', fontSize: 11, lineHeight: 1.5, color: 'var(--txt-3)' }}>
+                    consecutive verified day{cleanStreaks.current !== 1 ? 's' : ''} with every rule held
+                  </p>
+                </div>
+                <div style={{ borderTop: '1px solid var(--app-border)', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', gap: 10, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--txt-3)' }}>
+                  <span>BEST · <b style={{ color: 'var(--txt)' }}>{cleanStreaks.best}</b> DAYS</span>
+                  <span><b style={{ color: 'var(--grn, #22d68a)' }}>{planReport.perfectDays}</b> PERFECT · <b style={{ color: 'var(--red)' }}>{planReport.brokenDays}</b> BROKEN</span>
+                </div>
+              </div>
+
+              <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                    THE DAMAGE · 30D
+                  </p>
+                </div>
+                <div style={{ padding: '12px 16px' }}>
+                  <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Most broken</p>
+                  <p style={{ margin: '5px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--txt-2)' }}>
+                    {planReport.mostBrokenRule
+                      ? <>{planReport.mostBrokenRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--red)' }}>{planReport.mostBrokenRule.failed}×</span></>
+                      : 'No rule breaks in the last 30 days.'}
+                  </p>
+                </div>
+                {planReport.mostExpensiveRule && planReport.mostExpensiveRule.lossWhenBroken > 0 && (
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--app-border)' }}>
+                    <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Costliest when broken</p>
+                    <p style={{ margin: '5px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--txt-2)' }}>
+                      {planReport.mostExpensiveRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--red)' }}>
+                        −${Math.round(planReport.mostExpensiveRule.lossWhenBroken).toLocaleString()}
+                      </span> lost on break days
+                    </p>
+                  </div>
+                )}
+              </div>
+            </aside>
           </section>
         )}
 
@@ -462,9 +594,16 @@ export default function TradingPlan() {
                     )}
                   </p>
                 </div>
-                <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule} style={{ flexShrink: 0 }}>
-                  <Plus size={12} /> Add Rule
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+                  {todayStats.checkedCount > 0 && (
+                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: 'var(--amber)', fontWeight: 700 }}>{todayStats.passed} OF {todayStats.checkedCount}</span> HELD TODAY
+                    </p>
+                  )}
+                  <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule}>
+                    <Plus size={12} /> Add Rule
+                  </button>
+                </div>
               </div>
               {riskRules.map((rule, ruleIndex) => {
                 const kind = rule.kind ?? 'manual';
@@ -735,6 +874,22 @@ export default function TradingPlan() {
                   <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
                     adherence · {totalBreaks} break{totalBreaks !== 1 ? 's' : ''}
                   </span>
+                </div>
+                <div style={{ padding: '0 16px 13px', display: 'flex', alignItems: 'flex-end', gap: 2, height: 46 }}>
+                  {daySeries.map(day => (
+                    <span
+                      key={day.date}
+                      title={day.pct !== null ? `${day.label} · ${day.pct}%` : `${day.label} · no verified session`}
+                      style={{
+                        flex: 1,
+                        height: day.pct !== null ? `${Math.max(12, day.pct)}%` : 4,
+                        borderRadius: 1,
+                        backgroundColor: day.pct !== null
+                          ? (day.failed === 0 ? BAR_ON : BAR_BREAK)
+                          : BAR_EMPTY,
+                      }}
+                    />
+                  ))}
                 </div>
                 {worstRule && (
                   <div style={{ padding: '10px 16px', borderTop: '1px solid var(--app-border)' }}>

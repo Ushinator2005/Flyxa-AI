@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -24,15 +24,13 @@ import { pushToast } from '../store/toastStore.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import { buildScannerAssets, inferSymbolFromFileName, inferTradeDateFromFileName, normalizeResolvedSymbol } from '../utils/tradeScannerPipeline.js';
-import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { scaleContractAmount } from '../utils/contractSizing.js';
-import { normalizeConfluenceKey, normalizeConfluenceTags } from '../utils/confluenceTags.js';
-import { normalizeBehavioralFlags } from '../utils/behavioralFlags.js';
+import { normalizeConfluenceKey } from '../utils/confluenceTags.js';
 import { pruneEmptyJournalEntries } from '../utils/journalEntryCleanup.js';
 import { scanChart } from '../utils/scanChart.js';
 import { maybeCaptureCorrection, maybeCaptureScanBundle } from '../utils/scannerEvalCapture.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
-import { evaluateEntryRules, manualRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
+import { evaluateEntryRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
 import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
 import { flushSupabaseStoreNow, saveStoreStatePatchNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
@@ -40,726 +38,7 @@ import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
 import DatePicker from '../components/common/DatePicker.js';
 import './TradeJournal.css';
 
-type RuleState = 'ok' | 'fail' | 'unchecked';
-type EmotionState = 'neutral' | 'green' | 'amber' | 'red';
-type TradeResult = 'win' | 'loss' | 'open' | 'be';
-type TradeDirection = 'LONG' | 'SHORT';
-type DayFilter = 'all' | 'win' | 'loss' | 'untagged';
-
-interface JournalTrade {
-  id: string;
-  date?: string;
-  symbol: string;
-  direction: TradeDirection;
-  entryTime: string;
-  exitTime: string;
-  durationMinutes?: number | null;
-  entryPrice: number;
-  exitPrice: number;
-  entry?: number;
-  exit?: number;
-  sl?: number;
-  tp?: number;
-  priceLevelsSource?: 'ai' | 'manual';
-  priceLevelsEdited?: boolean;
-  breakevenRestore?: {
-    exit?: number;
-    exitPrice: number;
-    pnlOverride?: number;
-  };
-  accountId?: string;
-  accountIds?: string[];
-  contracts: number;
-  rr: number;
-  pnl: number;
-  pnlOverride?: number;
-  commission?: number;
-  result: TradeResult;
-  screenshotUrl?: string;
-  supportingImages?: string[];
-  reflection?: {
-    thesis: string;
-    execution: string;
-    adjustment: string;
-    processGrade: number;
-    followedPlan: boolean | null;
-  };
-  preEntry?: {
-    confidenceAtEntry: number;
-    emotionalState: string;
-    hesitated: boolean | null;
-    hesitationReason: string;
-  };
-  thesis?: {
-    setup: string;
-    invalidation: string;
-    asymmetry: string;
-    setupType: string;
-  };
-  executionReview?: {
-    enteredAtLevel: boolean | null;
-    waitedForConfirmation: boolean | null;
-    correctSize: boolean | null;
-    exitedAtPlan: boolean | null;
-    movedStopCorrectly: boolean | null;
-    resistedEarlyExit: boolean | null;
-    note: string;
-  };
-  psychologyRatings?: {
-    setupQuality: number;
-    discipline: number;
-    execution: number;
-    patience: number;
-    riskManagement: number;
-    emotionalControl: number;
-    notes: Record<string, string>;
-  };
-  behavioralFlags?: string[];
-  stateOfMind?: Array<{ label: string; valence: 'positive' | 'caution' | 'negative' }>;
-  processScore?: number;
-  confluences?: string[];
-  timeframe?: string;
-}
-
-interface JournalEntry {
-  id: string;
-  date: string;
-  account?: string;
-  accountIds?: string[];
-  scannedImageUrl?: string;
-  trades: JournalTrade[];
-  screenshots: string[];
-  reflection: {
-    pre: string;
-    post: string;
-    lessons: string;
-  };
-  rules: Array<{ text: string; state: RuleState }>;
-  psychology: {
-    setupQuality: number;
-    discipline: number;
-    execution: number;
-  };
-  emotions: Array<{ label: string; state: EmotionState }>;
-  dailyReflection?: {
-    pre: string;
-    post: string;
-    lessons: string;
-    bias: 'bullish' | 'neutral' | 'bearish' | null;
-    newsRisk: 'clear' | 'caution' | 'avoid' | null;
-    sessionTarget: number | null;
-    sessionGrade: string | null;
-    marketRespectedBias: boolean | null;
-    lessonCategory: string | null;
-  };
-  physicalState?: {
-    sleep: number;
-    sleepHours: number;
-    stress: number;
-    energy: number;
-    distractions: string[];
-    environment: string;
-  };
-  isBlankDay?: boolean;
-}
-
-const DEFAULT_RULES = [
-  'Followed daily loss limit',
-  'Only took planned trades',
-  'Respected position sizing rules',
-  'No trading during lunch window',
-  'Stopped after 3 consecutive losses',
-];
-
-const STATE_OF_MIND_TAGS = {
-  positive: ['In the zone', 'Calm', 'Focused', 'Patient', 'Confident', 'Clear-headed', 'Decisive', 'Composed'],
-  caution: ['Slightly anxious', 'Slightly rushed', 'Mildly frustrated', 'Uncertain', 'Distracted', 'Tired', 'Impatient'],
-  negative: ['Revenge trading', 'FOMO', 'Overconfident', 'Fearful', 'Reckless', 'Frustrated', 'Desperate', 'Emotionally numb'],
-} as const;
-
-const TAGS = Array.from(new Set(Object.values(STATE_OF_MIND_TAGS).flat()));
-
-function getTodayIso(tz?: string) {
-  if (tz) return getTimeZoneParts(new Date(), tz).date;
-  return new Date().toISOString().split('T')[0];
-}
-
-function getNowTime() {
-  return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-function addSecondsToTime(time: string, seconds?: number | null): string | null {
-  if (!Number.isFinite(seconds ?? NaN) || (seconds ?? 0) < 0) return null;
-  const [hText, mText] = time.split(':');
-  const hours = Number(hText);
-  const minutes = Number(mText);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-  const totalMinutes = (hours * 60) + minutes + Math.round((seconds ?? 0) / 60);
-  const normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
-  const outHours = Math.floor(normalized / 60).toString().padStart(2, '0');
-  const outMinutes = (normalized % 60).toString().padStart(2, '0');
-  return `${outHours}:${outMinutes}`;
-}
-
-function minutesBetweenTimes(start: string, end: string): number | null {
-  const [startHours, startMinutes] = start.split(':').map(Number);
-  const [endHours, endMinutes] = end.split(':').map(Number);
-  if (!Number.isFinite(startHours) || !Number.isFinite(startMinutes) || !Number.isFinite(endHours) || !Number.isFinite(endMinutes)) {
-    return null;
-  }
-  const startTotal = (startHours * 60) + startMinutes;
-  const endTotal = (endHours * 60) + endMinutes;
-  let diff = endTotal - startTotal;
-  if (diff < 0) diff += 24 * 60;
-  if (diff <= 0) return null;
-  return diff;
-}
-
-function formatDurationLabel(minutes?: number | null): string {
-  if (!Number.isFinite(minutes ?? NaN) || (minutes ?? 0) <= 0) return '—';
-  const m = Math.round(minutes ?? 0);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
-}
-
-function resolveTradeDurationMinutes(trade?: Partial<JournalTrade> | null): number | null {
-  if (!trade) return null;
-  const record = trade as Partial<JournalTrade> & {
-    duration?: number | null;
-    trade_length_seconds?: number | null;
-  };
-  if (typeof record.durationMinutes === 'number' && Number.isFinite(record.durationMinutes)) {
-    return record.durationMinutes;
-  }
-  if (typeof record.duration === 'number' && Number.isFinite(record.duration)) {
-    return record.duration;
-  }
-  if (typeof record.trade_length_seconds === 'number' && Number.isFinite(record.trade_length_seconds)) {
-    return Math.max(1, Math.round(record.trade_length_seconds / 60));
-  }
-  return null;
-}
-
-function parseDate(value: string) {
-  const parsed = new Date(`${value}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-}
-
-function isValidIsoDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [yearText, monthText, dayText] = value.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
-  const parsed = new Date(year, month - 1, day);
-  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
-}
-
-function formatMonth(value: Date) {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(value);
-}
-
-function formatDateTitle(value: string) {
-  return new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(parseDate(value));
-}
-
-function formatWeekday(value: string) {
-  return new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(parseDate(value)).toUpperCase();
-}
-
-function formatCurrency(value: number) {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-  });
-}
-
-function formatSignedCurrency(value: number) {
-  const abs = formatCurrency(Math.abs(value));
-  if (value > 0) return `+${abs}`;
-  if (value < 0) return `-${abs}`;
-  return formatCurrency(0);
-}
-
-function toPercent(value: number) {
-  return `${value.toFixed(1)}%`;
-}
-
-function toR(value: number) {
-  return `${value.toFixed(2)}R`;
-}
-
-function formatCurrencyFixed(value: number) {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function parsePrice(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
-  return value;
-}
-
-function normalizeConfluences(value: unknown): string[] {
-  return normalizeConfluenceTags(value);
-}
-
-function getTradeEntry(trade: JournalTrade): number | undefined {
-  return parsePrice(trade.entry) ?? parsePrice(trade.entryPrice);
-}
-
-function getTradeExit(trade: JournalTrade): number | undefined {
-  return parsePrice(trade.exit) ?? parsePrice(trade.exitPrice);
-}
-
-function computeTradePnl(trade: JournalTrade, entry?: number, exit?: number): number {
-  if (entry === undefined || exit === undefined) return 0;
-  const pointValue = lookupContract(trade.symbol)?.point_value ?? 1;
-  const contracts = trade.contracts > 0 ? trade.contracts : 1;
-  return trade.direction === 'LONG'
-    ? (exit - entry) * contracts * pointValue
-    : (entry - exit) * contracts * pointValue;
-}
-
-function computeTradeRr(trade: JournalTrade, entry?: number): number {
-  if (entry === undefined || trade.sl === undefined || trade.tp === undefined) return 0;
-  const risk = trade.direction === 'LONG' ? entry - trade.sl : trade.sl - entry;
-  const reward = trade.direction === 'LONG' ? trade.tp - entry : entry - trade.tp;
-  if (risk <= 0 || reward <= 0) return 0;
-  return reward / risk;
-}
-
-function withTradeDerivedValues(trade: JournalTrade): JournalTrade {
-  const entry = getTradeEntry(trade);
-  const exit = getTradeExit(trade);
-  const calcPnl = computeTradePnl(trade, entry, exit);
-  const pnl = typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride)
-    ? trade.pnlOverride
-    : calcPnl;
-  const rr = computeTradeRr(trade, entry);
-  const result: TradeResult = exit === undefined ? 'open' : pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'be';
-  return {
-    ...trade,
-    pnl,
-    rr,
-    result,
-  };
-}
-
-function getTradeDateValue(trade: JournalTrade | null | undefined, fallbackDate: string): string {
-  if (!trade) return fallbackDate;
-  if (typeof trade.date === 'string' && isValidIsoDate(trade.date)) return trade.date;
-  return fallbackDate;
-}
-
-function shiftMonth(current: Date, delta: number) {
-  return new Date(current.getFullYear(), current.getMonth() + delta, 1);
-}
-
-function inMonth(dateValue: string, monthValue: Date) {
-  const parsed = parseDate(dateValue);
-  return parsed.getFullYear() === monthValue.getFullYear() && parsed.getMonth() === monthValue.getMonth();
-}
-
-
-function getRulesTemplate(rules: RiskRule[]) {
-  const configured = manualRules(rules).map(rule => rule.label.trim()).filter(Boolean);
-  return configured.length > 0 ? configured : DEFAULT_RULES;
-}
-
-function createEmptyEntry(date: string, rulesTemplate: string[], account?: string, isBlankDay = false): JournalEntry {
-  return {
-    id: crypto.randomUUID(),
-    date,
-    account,
-    trades: [],
-    screenshots: ['', '', ''],
-    reflection: {
-      pre: '',
-      post: '',
-      lessons: '',
-    },
-    rules: rulesTemplate.map(text => ({ text, state: 'unchecked' })),
-    psychology: {
-      setupQuality: 0,
-      discipline: 0,
-      execution: 0,
-    },
-    emotions: TAGS.map(label => ({ label, state: 'neutral' })),
-    ...(isBlankDay ? { isBlankDay: true } : {}),
-  };
-}
-
-/** Converts a 0-100 process score to a letter grade. Returns '—' when score is 0 (no data). */
-function scoreToGradeLetter(score: number): string {
-  if (score === 0) return '—';
-  if (score >= 90) return 'A+';
-  if (score >= 80) return 'A';
-  if (score >= 70) return 'B+';
-  if (score >= 60) return 'B';
-  if (score >= 50) return 'C+';
-  if (score >= 30) return 'C';
-  return 'D';
-}
-
-/** CSS class suffix for a grade letter (e.g. 'A+' → 'Aplus'). */
-function gradeCssKey(letter: string): string {
-  return letter.replace('+', 'plus').replace('—', 'dash');
-}
-
-function computeEntryStats(entry: JournalEntry, riskRules: RiskRule[] = []) {
-  const pnl = entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
-  const wins = entry.trades.filter(trade => trade.result === 'win').length;
-  const losses = entry.trades.filter(trade => trade.result === 'loss').length;
-  const tradeCount = entry.trades.length;
-  const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
-  const avgRR = tradeCount ? entry.trades.reduce((sum, trade) => sum + trade.rr, 0) / tradeCount : 0;
-  // Use full evaluation (auto + manual) when riskRules are provided so that
-  // automatic rule violations affect the grade, not just manual confirmations.
-  let okCount: number;
-  let failCount: number;
-  if (riskRules.length > 0) {
-    const evs = evaluateEntryRules(entry as unknown as StoreJournalEntry, riskRules);
-    const s = summarizeRuleEvaluations(evs);
-    okCount = s.passed;
-    failCount = s.failed;
-  } else {
-    okCount = entry.rules.filter(rule => rule.state === 'ok').length;
-    failCount = entry.rules.filter(rule => rule.state === 'fail').length;
-  }
-  const evaluatedRules = okCount + failCount;
-  const rulePassPct = evaluatedRules ? (okCount / evaluatedRules) * 100 : 0;
-  const discipline = entry.psychology.discipline;
-  const tradesWithGrade = entry.trades.filter(t => (t.reflection?.processGrade ?? 0) > 0);
-  const avgProcessGrade = tradesWithGrade.length > 0
-    ? tradesWithGrade.reduce((sum, t) => sum + t.reflection!.processGrade, 0) / tradesWithGrade.length
-    : null;
-  const effectiveDiscipline = avgProcessGrade !== null
-    ? discipline * 0.7 + avgProcessGrade * 0.3
-    : discipline;
-  let grade = 'C';
-  if (effectiveDiscipline >= 4 && rulePassPct >= 80) grade = 'A+';
-  else if (effectiveDiscipline >= 3.5 && rulePassPct >= 70) grade = 'A';
-  else if (effectiveDiscipline >= 3 && rulePassPct >= 60) grade = 'B+';
-  else if (effectiveDiscipline >= 2.5 && rulePassPct >= 50) grade = 'B';
-  else if (effectiveDiscipline >= 2) grade = 'C+';
-  return { pnl, wins, losses, tradeCount, winRate, avgRR, grade };
-}
-
-function findBestDay(entries: JournalEntry[]) {
-  if (!entries.length) return null;
-  let best = -Infinity;
-  entries.forEach(entry => {
-    const pnl = computeEntryStats(entry).pnl;
-    if (pnl > best) best = pnl;
-  });
-  return Number.isFinite(best) ? best : null;
-}
-
-function fromLegacyRecords(value: unknown[], rulesTemplate: string[]): JournalEntry[] {
-  const grouped = new Map<string, JournalEntry>();
-  value.forEach(item => {
-    if (!item || typeof item !== 'object') return;
-    const record = item as Record<string, unknown>;
-    if (typeof record.date !== 'string') return;
-    const date = record.date;
-    if (!grouped.has(date)) {
-      grouped.set(date, createEmptyEntry(date, rulesTemplate));
-    }
-    const entry = grouped.get(date);
-    if (!entry) return;
-
-    const symbol = typeof record.symbol === 'string' && record.symbol.trim() ? record.symbol.trim().toUpperCase() : 'NQ';
-    const direction: TradeDirection = record.direction === 'Short' ? 'SHORT' : 'LONG';
-    const entryPrice = typeof record.entry_price === 'number' ? record.entry_price : 0;
-    const exitPrice = typeof record.exit_price === 'number' ? record.exit_price : entryPrice;
-    const contracts = typeof record.contract_size === 'number' && record.contract_size > 0 ? record.contract_size : 1;
-    const pointValue = typeof record.point_value === 'number' && record.point_value > 0
-      ? record.point_value
-      : (lookupContract(symbol)?.point_value ?? 1);
-    const pnl = direction === 'LONG'
-      ? (exitPrice - entryPrice) * pointValue * contracts
-      : (entryPrice - exitPrice) * pointValue * contracts;
-    const result: TradeResult = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'open';
-    const rr = typeof record.sl_price === 'number' && Number.isFinite(record.sl_price) && record.sl_price !== entryPrice
-      ? Math.abs((direction === 'LONG' ? exitPrice - entryPrice : entryPrice - exitPrice) / Math.abs(entryPrice - record.sl_price))
-      : 0;
-
-    const trade: JournalTrade = {
-      id: typeof record.id === 'string' ? record.id : crypto.randomUUID(),
-      date,
-      symbol,
-      direction,
-      entryTime: typeof record.time === 'string' ? record.time.slice(0, 5) : '09:30',
-      exitTime: typeof record.time === 'string' ? record.time.slice(0, 5) : '09:45',
-      durationMinutes:
-        typeof record.trade_length_seconds === 'number' && Number.isFinite(record.trade_length_seconds)
-          ? Math.max(1, Math.round(record.trade_length_seconds / 60))
-          : null,
-      entryPrice,
-      exitPrice,
-      entry: entryPrice > 0 ? entryPrice : undefined,
-      exit: exitPrice > 0 ? exitPrice : undefined,
-      sl: typeof record.sl_price === 'number' && Number.isFinite(record.sl_price) ? record.sl_price : undefined,
-      tp: typeof record.tp_price === 'number' && Number.isFinite(record.tp_price) ? record.tp_price : undefined,
-      priceLevelsSource: 'manual',
-      priceLevelsEdited: true,
-      contracts,
-      rr,
-      pnl,
-      result,
-      screenshotUrl: typeof record.screenshot === 'string' ? record.screenshot : undefined,
-      confluences: normalizeConfluences(record.confluences),
-    };
-    entry.trades.push(withTradeDerivedValues(trade));
-    if (trade.screenshotUrl && !entry.scannedImageUrl) entry.scannedImageUrl = trade.screenshotUrl;
-  });
-  return Array.from(grouped.values()).sort((a, b) => b.date.localeCompare(a.date));
-}
-
-function normalizeEntries(value: unknown[], rulesTemplate: string[]): JournalEntry[] {
-  if (!Array.isArray(value)) return [];
-  const looksModern = value.every(item => {
-    if (!item || typeof item !== 'object') return false;
-    const record = item as Record<string, unknown>;
-    return typeof record.date === 'string' && Array.isArray(record.trades);
-  });
-  if (!looksModern) return fromLegacyRecords(value, rulesTemplate);
-
-  const seenTradeIds = new Set<string>();
-  const normalized = value
-    .map(item => {
-      const record = item as Record<string, unknown>;
-      const date = typeof record.date === 'string' ? record.date : getTodayIso();
-      const tradesRaw = Array.isArray(record.trades) ? record.trades : [];
-      const trades: JournalTrade[] = tradesRaw.map(tradeRaw => {
-        const trade = tradeRaw as Record<string, unknown>;
-        const symbol = typeof trade.symbol === 'string' ? trade.symbol : 'NQ';
-        const direction: TradeDirection = trade.direction === 'SHORT' ? 'SHORT' : 'LONG';
-        const entryPrice = typeof trade.entryPrice === 'number' && trade.entryPrice > 0 ? trade.entryPrice : typeof trade.entry === 'number' && trade.entry > 0 ? trade.entry : 0;
-        const exitPrice = typeof trade.exitPrice === 'number' && trade.exitPrice > 0 ? trade.exitPrice : typeof trade.exit === 'number' && trade.exit > 0 ? trade.exit : 0;
-        const contracts = typeof trade.contracts === 'number' && trade.contracts > 0 ? trade.contracts : 1;
-        const pnl = typeof trade.pnl === 'number' ? trade.pnl : 0;
-        const tradeCommission = typeof trade.commission === 'number' ? trade.commission : 0;
-        const netPnl = pnl - tradeCommission;
-        const result: TradeResult = trade.result === 'win' || trade.result === 'loss' || trade.result === 'open' || trade.result === 'be'
-          ? trade.result
-          : pnl === 0 ? 'be' : netPnl > 0 ? 'win' : netPnl < 0 ? 'loss' : 'open';
-        const tradeRef = (() => {
-          const r = trade.reflection as Record<string, unknown> | undefined;
-          if (!r || typeof r !== 'object') return undefined;
-          return {
-            thesis: typeof r.thesis === 'string' ? r.thesis : '',
-            execution: typeof r.execution === 'string' ? r.execution : '',
-            adjustment: typeof r.adjustment === 'string' ? r.adjustment : '',
-            processGrade: typeof r.processGrade === 'number' ? r.processGrade : 0,
-            followedPlan: r.followedPlan === true || r.followedPlan === false ? r.followedPlan : null,
-          };
-        })();
-        const normalizedTrade: JournalTrade = {
-          id: typeof trade.id === 'string' ? trade.id : crypto.randomUUID(),
-          date: typeof trade.date === 'string' && isValidIsoDate(trade.date) ? trade.date : date,
-          symbol,
-          direction,
-          entryTime: typeof trade.entryTime === 'string' ? trade.entryTime : typeof trade.time === 'string' ? trade.time : '09:30',
-          exitTime: typeof trade.exitTime === 'string' ? trade.exitTime : '09:45',
-          durationMinutes: resolveTradeDurationMinutes(trade),
-          entryPrice,
-          exitPrice,
-          entry: parsePrice(trade.entry) ?? parsePrice(entryPrice),
-          exit: parsePrice(trade.exit) ?? parsePrice(exitPrice),
-          sl: typeof trade.sl === 'number' && Number.isFinite(trade.sl) && trade.sl > 0 ? trade.sl : undefined,
-          tp: typeof trade.tp === 'number' && Number.isFinite(trade.tp) && trade.tp > 0 ? trade.tp : undefined,
-          priceLevelsSource: trade.priceLevelsSource === 'ai' ? 'ai' : 'manual',
-          priceLevelsEdited: trade.priceLevelsEdited === true,
-          breakevenRestore: (() => {
-            const restore = trade.breakevenRestore as Record<string, unknown> | undefined;
-            if (!restore || typeof restore !== 'object') return undefined;
-            const exit = typeof restore.exit === 'number' && Number.isFinite(restore.exit) ? restore.exit : undefined;
-            const exitPrice = typeof restore.exitPrice === 'number' && Number.isFinite(restore.exitPrice) ? restore.exitPrice : 0;
-            const pnlOverride = typeof restore.pnlOverride === 'number' && Number.isFinite(restore.pnlOverride) ? restore.pnlOverride : undefined;
-            return { exit, exitPrice, pnlOverride };
-          })(),
-          contracts,
-          rr: typeof trade.rr === 'number' ? trade.rr : 0,
-          pnl,
-          result,
-          screenshotUrl: typeof trade.screenshotUrl === 'string' ? trade.screenshotUrl : typeof trade.scannedImageUrl === 'string' ? trade.scannedImageUrl : undefined,
-          supportingImages: Array.isArray(trade.supportingImages)
-            ? (trade.supportingImages as unknown[]).filter((u): u is string => typeof u === 'string')
-            : undefined,
-          accountId: typeof trade.accountId === 'string' && trade.accountId ? trade.accountId : typeof trade.account === 'string' && trade.account ? trade.account : undefined,
-          accountIds: Array.from(new Set([
-            ...(Array.isArray(trade.accountIds) ? trade.accountIds.filter((id): id is string => typeof id === 'string' && id.length > 0) : []),
-            typeof trade.accountId === 'string' && trade.accountId ? trade.accountId : typeof trade.account === 'string' && trade.account ? trade.account : '',
-          ].filter(Boolean))),
-          reflection: tradeRef,
-          preEntry: trade.preEntry && typeof trade.preEntry === 'object' ? trade.preEntry as JournalTrade['preEntry'] : undefined,
-          thesis: trade.thesis && typeof trade.thesis === 'object' ? trade.thesis as JournalTrade['thesis'] : undefined,
-          executionReview: trade.executionReview && typeof trade.executionReview === 'object' ? trade.executionReview as JournalTrade['executionReview'] : undefined,
-          psychologyRatings: trade.psychologyRatings && typeof trade.psychologyRatings === 'object' ? trade.psychologyRatings as JournalTrade['psychologyRatings'] : undefined,
-          behavioralFlags: normalizeBehavioralFlags(trade.behavioralFlags),
-          stateOfMind: Array.isArray(trade.stateOfMind)
-            ? trade.stateOfMind
-              .map((item) => {
-                if (typeof item === 'string') return { label: item, valence: 'caution' as const };
-                if (!item || typeof item !== 'object') return null;
-                const value = item as Record<string, unknown>;
-                const label = typeof value.label === 'string' ? value.label : '';
-                const valence: 'positive' | 'negative' | 'caution' =
-                  value.valence === 'positive' || value.valence === 'negative' || value.valence === 'caution'
-                  ? value.valence as 'positive' | 'negative' | 'caution'
-                  : 'caution';
-                return label ? { label, valence } : null;
-              })
-              .filter((item): item is NonNullable<typeof item> => Boolean(item))
-            : undefined,
-          processScore: typeof trade.processScore === 'number' ? trade.processScore : undefined,
-          confluences: normalizeConfluences(trade.confluences),
-          timeframe: typeof trade.timeframe === 'string' && trade.timeframe ? trade.timeframe : undefined,
-          pnlOverride: typeof trade.pnlOverride === 'number' && Number.isFinite(trade.pnlOverride) ? trade.pnlOverride : undefined,
-          commission: typeof trade.commission === 'number' && Number.isFinite(trade.commission) && trade.commission >= 0 ? trade.commission : undefined,
-        };
-        return withTradeDerivedValues(normalizedTrade);
-      }).filter((trade) => {
-        if (seenTradeIds.has(trade.id)) return false;
-        seenTradeIds.add(trade.id);
-        return true;
-      });
-
-      const reflectionRaw = (record.reflection ?? {}) as Record<string, unknown>;
-      const reflection = {
-        pre: typeof reflectionRaw.pre === 'string' ? reflectionRaw.pre : '',
-        post: typeof reflectionRaw.post === 'string' ? reflectionRaw.post : '',
-        lessons: typeof reflectionRaw.lessons === 'string' ? reflectionRaw.lessons : '',
-      };
-
-      const rulesRaw = Array.isArray(record.rules) ? record.rules : [];
-      const savedRules = rulesRaw.length
-        ? rulesRaw.map(rule => {
-          const valueRule = rule as Record<string, unknown>;
-          const state: RuleState = valueRule.state === 'ok' || valueRule.state === 'fail' || valueRule.state === 'unchecked'
-            ? valueRule.state
-            : 'unchecked';
-          return {
-            text: typeof valueRule.text === 'string' ? valueRule.text : '',
-            state,
-          };
-        }).filter(rule => rule.text)
-        : [];
-      const savedRuleMap = new Map(savedRules.map(rule => [rule.text, rule.state]));
-      const rules = rulesTemplate.map(text => ({
-        text,
-        state: savedRuleMap.get(text) ?? 'unchecked' as RuleState,
-      }));
-
-      const psychologyRaw = (record.psychology ?? {}) as Record<string, unknown>;
-      const psychology = {
-        setupQuality: typeof psychologyRaw.setupQuality === 'number' ? psychologyRaw.setupQuality : 0,
-        discipline: typeof psychologyRaw.discipline === 'number' ? psychologyRaw.discipline : 0,
-        execution: typeof psychologyRaw.execution === 'number' ? psychologyRaw.execution : 0,
-      };
-
-      const emotionsRaw = Array.isArray(record.emotions) ? record.emotions : [];
-      const emotionMap = new Map<string, EmotionState>();
-      emotionsRaw.forEach(emotion => {
-        const valueEmotion = emotion as Record<string, unknown>;
-        if (typeof valueEmotion.label !== 'string') return;
-        const state = valueEmotion.state === 'green' || valueEmotion.state === 'amber' || valueEmotion.state === 'red' || valueEmotion.state === 'neutral'
-          ? valueEmotion.state
-          : 'neutral';
-        emotionMap.set(valueEmotion.label, state);
-      });
-      // Backward compatibility: recover day-level tags from older trade-level stateOfMind data.
-      trades.forEach((trade) => {
-        (trade.stateOfMind ?? []).forEach((tag) => {
-          const mappedState: EmotionState = tag.valence === 'positive'
-            ? 'green'
-            : tag.valence === 'negative'
-              ? 'red'
-              : 'amber';
-          if (!emotionMap.has(tag.label) || emotionMap.get(tag.label) === 'neutral') {
-            emotionMap.set(tag.label, mappedState);
-          }
-        });
-      });
-      const emotions = TAGS.map(label => ({
-        label,
-        state: emotionMap.get(label) ?? 'neutral',
-      }));
-
-      const screenshotsRaw = Array.isArray(record.screenshots) ? record.screenshots : [];
-      const screenshots = [0, 1, 2].map(index => typeof screenshotsRaw[index] === 'string' ? screenshotsRaw[index] : '');
-
-      return {
-        id: typeof record.id === 'string' ? record.id : crypto.randomUUID(),
-        date,
-        account: typeof record.account === 'string' && record.account ? record.account : undefined,
-        accountIds: Array.isArray(record.accountIds)
-          ? (record.accountIds as unknown[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
-          : undefined,
-        scannedImageUrl: typeof record.scannedImageUrl === 'string' ? record.scannedImageUrl : undefined,
-        trades,
-        screenshots,
-        reflection,
-        rules,
-        psychology,
-        emotions,
-        dailyReflection: record.dailyReflection && typeof record.dailyReflection === 'object' ? record.dailyReflection as JournalEntry['dailyReflection'] : undefined,
-        physicalState: record.physicalState && typeof record.physicalState === 'object' ? record.physicalState as JournalEntry['physicalState'] : undefined,
-        isBlankDay: record.isBlankDay === true ? true : undefined,
-      };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  // The journal is day-based: consolidate duplicate rows for the same calendar
-  // date and move trades whose internal date differs from their parent entry.
-  const byDate = new Map<string, JournalEntry>();
-  for (const entry of normalized) {
-    const existing = byDate.get(entry.date);
-    if (!existing) {
-      byDate.set(entry.date, { ...entry, trades: [] });
-    } else {
-      const richer = entry.trades.length > existing.trades.length ? entry : existing;
-      const fallback = richer === entry ? existing : entry;
-      byDate.set(entry.date, {
-        ...fallback,
-        ...richer,
-        date: entry.date,
-        accountIds: Array.from(new Set([
-          ...(existing.accountIds ?? []),
-          ...(entry.accountIds ?? []),
-        ])),
-        screenshots: [0, 1, 2].map(
-          index => richer.screenshots[index] || fallback.screenshots[index] || ''
-        ),
-        scannedImageUrl: richer.scannedImageUrl || fallback.scannedImageUrl,
-        isBlankDay: richer.isBlankDay || fallback.isBlankDay || undefined,
-        reflection: {
-          pre: richer.reflection.pre || fallback.reflection.pre,
-          post: richer.reflection.post || fallback.reflection.post,
-          lessons: richer.reflection.lessons || fallback.reflection.lessons,
-        },
-        trades: existing.trades,
-      });
-    }
-  }
-  for (const entry of normalized) {
-    for (const trade of entry.trades) {
-      const tradeDate = trade.date ?? entry.date;
-      if (!byDate.has(tradeDate)) byDate.set(tradeDate, createEmptyEntry(tradeDate, rulesTemplate));
-      byDate.get(tradeDate)!.trades.push({ ...trade, date: tradeDate });
-    }
-  }
-  return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
-}
+import { type RuleState, type EmotionState, type TradeResult, type TradeDirection, type DayFilter, type JournalTrade, type JournalEntry, STATE_OF_MIND_TAGS, getTodayIso, getNowTime, addSecondsToTime, minutesBetweenTimes, formatDurationLabel, resolveTradeDurationMinutes, parseDate, isValidIsoDate, formatMonth, formatDateTitle, formatWeekday, formatSignedCurrency, toPercent, toR, formatCurrencyFixed, parsePrice, normalizeConfluences, getTradeEntry, getTradeExit, withTradeDerivedValues, getTradeDateValue, shiftMonth, inMonth, getRulesTemplate, createEmptyEntry, scoreToGradeLetter, gradeCssKey, computeEntryStats, findBestDay, normalizeEntries, computeTradePatternFlags, computeProcessScore, ALL_BEHAVIORAL_FLAGS } from '../utils/tradeJournal.js';
 
 interface PriceLevelsBlockProps {
   trade: JournalTrade;
@@ -1256,114 +535,6 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
 
 
 // ── Behavioral flag penalty weights ──────────────────────────────────────────
-const FLAG_PENALTIES: Record<string, number> = {
-  // Critical — direct account risk / emotional breakdown
-  'sized-up':       20,
-  'revenge':        20,
-  'added-losing':   20,
-  // Serious — discipline failures that damage edge
-  'incorrect-stop-loss': 12,
-  'plan-deviation': 12,
-  'reentry-stop':   12,
-  'past-inval':     12,
-  'moved-stop':     12,
-  'boredom-trade':  12,
-  // Minor — execution imperfections
-  'chased-entry':    6,
-  'no-confirmation': 6,
-  'overtraded':      6,
-  'exit-early':      6,
-  'moved-target':    6,
-  // Minimal — conservative mistakes
-  'be-too-early':    4,
-};
-
-// ── Helper: trade pattern detection ──────────────────────────────────────────
-function parseTimeToMinutes(t: string | null | undefined): number {
-  if (!t || typeof t !== 'string') return -1;
-  const [h, m] = t.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
-}
-
-function computeTradePatternFlags(
-  trades: JournalTrade[],
-  contractLimitsBySymbol: Record<string, number> = {}
-): Map<string, string> {
-  const flags = new Map<string, string>();
-
-  // Rapid-fire cluster: flag the first trade of any window where 3+ trades
-  // occur within 10 minutes.
-  const rapidFireFlagged = new Set<string>();
-  for (let i = 0; i < trades.length; i++) {
-    const windowStart = parseTimeToMinutes(trades[i].entryTime);
-    if (windowStart < 0) continue;
-    let count = 1;
-    for (let j = i + 1; j < trades.length; j++) {
-      const t = parseTimeToMinutes(trades[j].entryTime);
-      if (t >= 0 && t - windowStart < 10) count++;
-      else break;
-    }
-    if (count >= 3 && !rapidFireFlagged.has(trades[i].id)) {
-      flags.set(trades[i].id, `${count} trades in 10min`);
-      rapidFireFlagged.add(trades[i].id);
-    }
-  }
-
-  for (let i = 0; i < trades.length; i++) {
-    const curr = trades[i];
-    if (i < trades.length - 1) {
-      const next = trades[i + 1];
-      if (curr.symbol === next.symbol) {
-        const tA = parseTimeToMinutes(curr.exitTime);
-        const tB = parseTimeToMinutes(next.entryTime);
-        const gap = tA >= 0 && tB >= 0 ? tB - tA : -1;
-        if (gap >= 0 && gap < 5) {
-          const n = Math.max(1, Math.round(gap));
-          if (curr.direction !== next.direction) {
-            if (!flags.has(curr.id)) flags.set(curr.id, `Reversed within ${n}min`);
-          } else if (curr.result === 'loss') {
-            if (!flags.has(next.id)) flags.set(next.id, `Re-entry after loss (${n}min)`);
-          }
-        }
-      }
-    }
-    const hasPriorLoss = trades.slice(0, i).some(t => t.result === 'loss');
-    if (hasPriorLoss) {
-      const symMax = contractLimitsBySymbol[curr.symbol];
-      if (symMax && curr.contracts > symMax && !flags.has(curr.id)) {
-        flags.set(curr.id, 'Sized up after loss');
-      }
-    }
-  }
-  return flags;
-}
-
-
-// ── Helper: computeProcessScore ──────────────────────────────────────────────
-function computeProcessScore(trade: JournalTrade): number {
-  const r = trade.psychologyRatings;
-  const flags = trade.behavioralFlags ?? [];
-
-  let baseScore: number;
-  if (r) {
-    const scores = [r.setupQuality, r.discipline, r.execution, r.patience, r.riskManagement, r.emotionalControl].filter(v => v > 0);
-    baseScore = scores.length > 0
-      ? (scores.reduce((a, b) => a + b, 0) / scores.length) * 20
-      : 75; // ratings object exists but empty — use neutral base
-  } else if (flags.length > 0 || trade.executionReview || (trade.preEntry?.confidenceAtEntry ?? 0) > 0) {
-    baseScore = 75; // no ratings but other process data present — use neutral base
-  } else {
-    return 0; // genuinely no data
-  }
-
-  let score = baseScore;
-  score -= flags.reduce((total, id) => total + (FLAG_PENALTIES[id] ?? 8), 0);
-  const er = trade.executionReview;
-  if (er && er.enteredAtLevel && er.waitedForConfirmation && er.correctSize && er.exitedAtPlan && er.movedStopCorrectly && er.resistedEarlyExit) score += 5;
-  if ((trade.preEntry?.confidenceAtEntry ?? 0) >= 4) score += 5;
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 // ── SectionHead collapsible header ───────────────────────────────────────────
 function SectionHead({ title, collapsed, onToggle }: {
   title: string;
@@ -1906,26 +1077,6 @@ function PsychologyRatingsBlock({ trade, onMutate }: { trade: JournalTrade; onMu
 }
 
 // ── F — BehavioralFlagsBlock ──────────────────────────────────────────────────
-const BEHAVIORAL_FLAGS_LEFT = [
-  { id:'chased-entry',    label:'Chased entry — outside the zone' },
-  { id:'no-confirmation', label:'Jumped in before confirmation' },
-  { id:'incorrect-stop-loss', label:'Incorrect stop loss' },
-  { id:'sized-up',        label:'Oversized position' },
-  { id:'added-losing',    label:'Added to a losing position' },
-  { id:'be-too-early',    label:'Moved to breakeven too early' },
-  { id:'overtraded',      label:'Overtraded — too many setups' },
-];
-const BEHAVIORAL_FLAGS_RIGHT = [
-  { id:'moved-stop',    label:'Widened stop loss after entry' },
-  { id:'exit-early',    label:'Exited too early (fear)' },
-  { id:'moved-target',  label:'Moved or ignored take profit' },
-  { id:'past-inval',    label:'Held past invalidation' },
-  { id:'boredom-trade', label:'Traded out of boredom' },
-  { id:'revenge',       label:'Revenge trade after a loss' },
-  { id:'reentry-stop',  label:'Re-entered immediately after stop out' },
-];
-
-
 // ── G — StateOfMindBlock ──────────────────────────────────────────────────────
 function StateOfMindBlock({ entry, activeTrade, onMutateEntry, onMutateTrade }: {
   entry: JournalEntry;
@@ -2058,7 +1209,6 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
   );
 }
 
-const ALL_BEHAVIORAL_FLAGS = [...BEHAVIORAL_FLAGS_LEFT, ...BEHAVIORAL_FLAGS_RIGHT];
 
 function TradeJournalCard({
   trade, entry, allEntries, onMutate, onMutateEntry,
@@ -2292,68 +1442,7 @@ export default function TradeJournal() {
   const rulesTemplate = useMemo(() => getRulesTemplate(riskRules), [riskRules]);
   const entries = useMemo(() => normalizeEntries(persistedEntries, rulesTemplate), [persistedEntries, rulesTemplate]);
 
-  const recentForm = useMemo(() => {
-    const allTrades = entries.flatMap(e =>
-      e.trades.filter(t => t.result !== 'open').map(t => ({ ...t, entryDate: e.date }))
-    );
-    const sorted = [...allTrades].sort((a, b) =>
-      a.entryDate.localeCompare(b.entryDate) || (a.entryTime ?? '').localeCompare(b.entryTime ?? '')
-    );
-    const last10 = sorted.slice(-10);
-
-    // Per-trade bar data — ratio in [-1, +1] relative to largest trade
-    const maxAbsPnl = Math.max(...last10.map(t => Math.abs(t.pnl - (t.commission ?? 0))), 1);
-    const tradeBars = last10.map(t => {
-      const net = t.pnl - (t.commission ?? 0);
-      return { result: t.result as TradeResult, net, ratio: net / maxAbsPnl };
-    });
-
-    // Current W/L streak (most-recent first)
-    let streak = 0;
-    let streakType: 'win' | 'loss' | null = null;
-    for (let i = last10.length - 1; i >= 0; i--) {
-      const r = last10[i].result;
-      if (i === last10.length - 1) {
-        streakType = r === 'win' ? 'win' : r === 'loss' ? 'loss' : null;
-        streak = streakType ? 1 : 0;
-      } else if (streakType && r === streakType) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-
-    const winsLast10 = last10.filter(t => t.result === 'win').length;
-    const lossesLast10 = last10.filter(t => t.result === 'loss').length;
-    const breakevenLast10 = last10.filter(t => t.result !== 'win' && t.result !== 'loss').length;
-    const decisiveLast10 = winsLast10 + lossesLast10;
-    const netLast10 = last10.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
-
-    // 7-day rolling stats
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setDate(now.getDate() - 6);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const last7d = allTrades.filter(t => t.entryDate >= cutoffStr);
-    const wins7d = last7d.filter(t => t.result === 'win').length;
-    const total7d = last7d.length;
-    const netPnl7d = last7d.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
-
-    return {
-      last10,
-      tradeBars,
-      winsLast10,
-      lossesLast10,
-      breakevenLast10,
-      netLast10,
-      winRateLast10: decisiveLast10 > 0 ? (winsLast10 / decisiveLast10) * 100 : null,
-      streak,
-      streakType,
-      total7d,
-      winRate7d: total7d > 0 ? (wins7d / total7d) * 100 : null,
-      netPnl7d: total7d > 0 ? netPnl7d : null,
-    };
-  }, [entries]);
+  const recentForm = useMemo(() => computeRecentForm(entries), [entries]);
 
   const [monthCursor, setMonthCursor] = useState(() => {
     const today = parseDate(getTodayIso(preferences.timezone));
@@ -2407,98 +1496,13 @@ export default function TradeJournal() {
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('right');
 
   const mutateEntries = useCallback((updater: (prev: JournalEntry[]) => JournalEntry[]) => {
-    const storeState = useFlyxaStore.getState();
-    const current = normalizeEntries(storeState.entries as unknown[], rulesTemplate);
-    // Scanner entries represent traded days. Moving or deleting the final trade
-    // must also remove its empty day instead of leaving a "No trades" shell.
-    // Pass preSessionHistory so no-trade days with a pre/post session are kept.
-    const next = pruneEmptyJournalEntries(
-      updater(current),
-      storeState.preSessionHistory as Record<string, unknown>,
-    );
-
-    // Safety guard: abort if a trade that wasn't explicitly deleted has gone
-    // missing. Catches bugs where logic errors or pruning would silently drop data.
-    const deletedIds = new Set<string>(
-      Array.isArray(storeState.deletedTradeIds)
-        ? (storeState.deletedTradeIds as unknown[]).filter((id): id is string => typeof id === 'string')
-        : []
-    );
-    const nextTradeIds = new Set<string>(
-      next.flatMap(e => e.trades.map(t => t.id).filter((id): id is string => typeof id === 'string'))
-    );
-    const lostTrades = current.flatMap(e => e.trades).filter(t => {
-      if (typeof t.id !== 'string') return false;
-      if (deletedIds.has(t.id)) return false;
-      if (nextTradeIds.has(t.id)) return false;
-      // Phantom trades (unfilled blanks: no price, no pnl, no screenshot) are
-      // legitimately cleaned up by the mount/leave cleanup without touching deletedTradeIds.
-      if (t.result === 'open' && t.pnl === 0 && (t.entryPrice ?? 0) === 0 && (t.exitPrice ?? 0) === 0 && !t.screenshotUrl) return false;
-      return true;
-    });
-    if (lostTrades.length > 0) {
-      pushToast({
-        tone: 'red',
-        durationMs: 10_000,
-        message: `⚠️ Save aborted: ${lostTrades.length} trade(s) would have been lost unexpectedly. No data was changed.`,
-      });
-      return;
-    }
-
-    setEntriesInStore(next as unknown as StoreJournalEntry[]);
-    const updatedState = useFlyxaStore.getState();
-    void saveStoreStatePatchNow({
-      entries: updatedState.entries,
-      deletedTradeIds: updatedState.deletedTradeIds,
-      deletedEntryDates: updatedState.deletedEntryDates,
-      restoredEntryDates: updatedState.restoredEntryDates,
-    }).catch(() => {
-      pushToast({
-        tone: 'red',
-        durationMs: 8000,
-        message: '⚠️ Could not save to cloud — your changes are local only. Stay on this device or try again.',
-      });
-    });
+    applyEntriesMutation(updater, rulesTemplate, setEntriesInStore);
   }, [rulesTemplate, setEntriesInStore]);
 
-  const handleCSVImport = useCallback(async (trades: Array<{
-    symbol: string; direction: 'Long' | 'Short';
-    entry_price: number; exit_price: number; pnl: number; trade_date: string;
-    trade_time?: string; close_time?: string; contract_size?: number;
-    sl_price?: number; tp_price?: number; pre_trade_notes?: string;
-    followed_plan?: boolean; emotional_state?: string; confluences?: string[];
-  }>) => {
-    let ok = 0;
-    for (const t of trades) {
-      try {
-        await createTrade({
-          symbol: t.symbol,
-          direction: t.direction,
-          entry_price: t.entry_price,
-          exit_price: t.exit_price,
-          sl_price: t.sl_price ?? t.entry_price,
-          tp_price: t.tp_price ?? t.entry_price,
-          exit_reason: t.pnl > 0 ? 'TP' : t.pnl < 0 ? 'SL' : 'BE',
-          pnl: t.pnl,
-          pnlOverride: t.pnl,
-          contract_size: t.contract_size ?? 1,
-          trade_date: t.trade_date,
-          trade_time: t.trade_time ?? '09:30',
-          close_time: t.close_time ?? null,
-          pre_trade_notes: t.pre_trade_notes ?? '',
-          post_trade_notes: '',
-          followed_plan: t.followed_plan ?? null,
-          emotional_state: t.emotional_state ?? null,
-          confluences: t.confluences ?? [],
-        });
-        ok++;
-      } catch {
-        // skip individual failures, count successes
-      }
-    }
-    pushToast({ tone: 'green', durationMs: 4000, message: `Imported ${ok} trade${ok !== 1 ? 's' : ''} from CSV` });
-    void flushSupabaseStoreNow().catch(() => {});
-  }, [createTrade]);
+  const handleCSVImport = useCallback(
+    (trades: Parameters<typeof importTradesFromCsv>[0]) => importTradesFromCsv(trades, createTrade),
+    [createTrade],
+  );
 
   const mutateTradeFields = useCallback((tradeId: string, fields: Partial<JournalTrade>) => {
     if (!selectedEntryId) return;
@@ -2722,65 +1726,7 @@ export default function TradeJournal() {
   }, [entries, getDefaultTradeAccountId, mutateEntries, preferences.timezone, rulesTemplate, setMonthCursor]);
 
   const saveTradeDate = useCallback(() => {
-    if (!selectedEntry || !activeTrade) return;
-    const nextDate = tradeDateDraft.trim();
-    if (!isValidIsoDate(nextDate)) {
-      pushToast({ tone: 'red', durationMs: 3000, message: 'Enter a valid date (YYYY-MM-DD).' });
-      return;
-    }
-    if (nextDate > getTodayIso(preferences.timezone)) {
-      pushToast({ tone: 'red', durationMs: 3000, message: 'Trade date cannot be in the future.' });
-      return;
-    }
-
-    const currentTradeDate = getTradeDateValue(activeTrade, selectedEntry.date);
-    // Only skip the move if the date hasn't changed AND the trade is already in the right entry
-    if (nextDate === currentTradeDate && selectedEntry.date === nextDate) {
-      setIsTradeDateEditorOpen(false);
-      return;
-    }
-
-    let nextSelectedId: string | null = null;
-    mutateEntries((prev) => {
-      let movedTrade: JournalTrade | null = null;
-      const withoutTrade = prev.map((entry) => {
-        const tradeIdx = entry.trades.findIndex((trade) => trade.id === activeTrade.id);
-        if (tradeIdx < 0) return entry;
-        movedTrade = entry.trades[tradeIdx];
-        return {
-          ...entry,
-          trades: entry.trades.filter((trade) => trade.id !== activeTrade.id),
-        };
-      });
-
-      if (!movedTrade) return prev;
-      const tradeToMove = movedTrade as JournalTrade;
-      const movedWithDate = withTradeDerivedValues({ ...tradeToMove, date: nextDate });
-      const target = withoutTrade.find((entry) => entry.date === nextDate);
-
-      if (target) {
-        nextSelectedId = target.id;
-        return withoutTrade.map((entry) => (
-          entry.id === target.id
-            ? { ...entry, trades: [movedWithDate, ...entry.trades] }
-            : entry
-        ));
-      }
-
-      const created = createEmptyEntry(nextDate, rulesTemplate, tradeToMove.accountId ?? getDefaultTradeAccountId());
-      created.trades = [movedWithDate];
-      nextSelectedId = created.id;
-      return [created, ...withoutTrade];
-    });
-
-    if (nextSelectedId) {
-      setSelectedEntryId(nextSelectedId);
-      setActiveTradeId(activeTrade.id);
-    }
-    const parsed = parseDate(nextDate);
-    setMonthCursor(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
-    setIsTradeDateEditorOpen(false);
-    pushToast({ tone: 'green', durationMs: 3000, message: 'Trade moved to selected date.' });
+    performSaveTradeDate({ selectedEntry, activeTrade, tradeDateDraft, preferences, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setSelectedEntryId, setActiveTradeId, setMonthCursor, setIsTradeDateEditorOpen });
   }, [activeTrade, getDefaultTradeAccountId, mutateEntries, rulesTemplate, selectedEntry, tradeDateDraft]);
 
   const saveEntryDate = useCallback(() => {
@@ -2832,197 +1778,11 @@ export default function TradeJournal() {
   }, [accounts, mutateEntries, selectedEntry]);
 
   const applyScannedTrade = useCallback((fileDataUrl: string, trade: JournalTrade, date: string) => {
-    let nextSelectedId: string | null = null;
-    mutateEntries(prev => {
-      // Prefer the entry whose date matches the trade — if the user has a
-      // different day's entry selected, the scanned trade still lands on the
-      // correct date (and creates a new entry if that date doesn't exist yet).
-      const existing = prev.find(entry => entry.date === date) ?? prev.find(entry => entry.id === selectedEntryId);
-      if (existing) {
-        nextSelectedId = existing.id;
-        return prev.map(entry => {
-          if (entry.id !== existing.id) return entry;
-          const shots = [...entry.screenshots];
-          shots[0] = fileDataUrl;
-          return {
-            ...entry,
-            scannedImageUrl: fileDataUrl,
-            screenshots: shots,
-            trades: [trade, ...entry.trades],
-          };
-        });
-      }
-      const created = createEmptyEntry(date, rulesTemplate, trade.accountId ?? getDefaultTradeAccountId());
-      created.scannedImageUrl = fileDataUrl;
-      created.screenshots[0] = fileDataUrl;
-      created.trades = [trade];
-      nextSelectedId = created.id;
-      return [created, ...prev];
-    });
-    if (nextSelectedId) {
-      setSelectedEntryId(nextSelectedId);
-    }
-    const scannedMonth = parseDate(date);
-    setMonthCursor(new Date(scannedMonth.getFullYear(), scannedMonth.getMonth(), 1));
-    setActiveTradeId(trade.id);
+    performApplyScannedTrade(fileDataUrl, trade, date, { mutateEntries, selectedEntryId, rulesTemplate, getDefaultTradeAccountId, setSelectedEntryId, setMonthCursor, setActiveTradeId });
   }, [getDefaultTradeAccountId, mutateEntries, rulesTemplate, selectedEntryId, setMonthCursor]);
 
   const handleScanFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setScanError('Upload an image file.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setScanError('File is larger than 10MB.');
-      return;
-    }
-
-    setScanError('');
-    setIsScanning(true);
-    // Filename date takes priority; otherwise use today. Do NOT fall back to
-    // selectedEntry?.date — that causes trades scanned on day N to get stamped
-    // as day N-1 when the user still has the previous day's entry selected.
-    const tradeDate = inferTradeDateFromFileName(file.name) ?? getTodayIso(preferences.timezone);
-    const tradeTime = getNowTime();
-    let scanSucceeded = false;
-
-    try {
-      const fileDataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ''));
-        reader.onerror = () => reject(new Error('Could not read file.'));
-        reader.readAsDataURL(file);
-      });
-      setScanPreviewUrl(fileDataUrl);
-
-      const colors = preferences.scannerColors;
-      // buildScannerAssets resolves the colors and embeds scanner_colors in the context
-      const { focusImages, scannerContext, uploadImage } = await buildScannerAssets(file, {
-        entry: colors?.entry,
-        stopLoss: colors?.stopLoss,
-        takeProfit: colors?.takeProfit,
-      });
-      let extracted: Awaited<ReturnType<typeof scanChart>>;
-      try {
-        extracted = await scanChart(uploadImage, tradeDate, tradeTime, focusImages, scannerContext);
-      } catch (scanError) {
-        // Failed scans are the most valuable eval cases — capture before rethrowing.
-        void maybeCaptureScanBundle({
-          uploadImage, focusImages, scannerContext,
-          error: scanError instanceof Error ? scanError.message : String(scanError),
-          sourceFileName: file.name,
-        });
-        throw scanError;
-      }
-      void maybeCaptureScanBundle({ uploadImage, focusImages, scannerContext, result: extracted, sourceFileName: file.name });
-
-      const normalizedSymbol = normalizeResolvedSymbol(extracted.symbol) ?? inferSymbolFromFileName(file.name) ?? 'NQ';
-      const direction: TradeDirection = extracted.direction === 'Short' ? 'SHORT' : 'LONG';
-      const scannerEntry = parsePrice(extracted.entry_price ?? undefined);
-      const scannerTp = parsePrice(extracted.tp_price ?? undefined);
-      const scannerSl = parsePrice(extracted.sl_price ?? undefined);
-      if (scannerEntry === undefined || scannerTp === undefined || scannerSl === undefined) {
-        const warningSuffix = Array.isArray(extracted.warnings) && extracted.warnings.length > 0
-          ? ` ${extracted.warnings[0]}`
-          : '';
-        throw new Error(`Scanner could not read entry/stop/target from this chart.${warningSuffix}`);
-      }
-      // The backend's dedicated first-touch readers are authoritative. Once
-      // they resolve SL/TP and a concrete candle, that level is the exit price.
-      const exitIsReliable = extracted.exit_reason !== null
-        && typeof extracted.first_touch_candle_index === 'number'
-        && Number.isFinite(extracted.first_touch_candle_index)
-        && extracted.first_touch_candle_index >= 0;
-      const scannerExit = exitIsReliable
-        ? extracted.exit_reason === 'SL'
-          ? scannerSl
-          : extracted.exit_reason === 'TP'
-            ? scannerTp
-            : undefined
-        : undefined;
-      const entryPrice = scannerEntry ?? 0;
-      const exitPrice = scannerExit ?? 0;
-      const entryTime = typeof extracted.entry_time === 'string' ? extracted.entry_time.slice(0, 5) : tradeTime;
-      const closeTime = typeof extracted.close_time === 'string'
-        ? extracted.close_time.slice(0, 5)
-        : addSecondsToTime(entryTime, extracted.trade_length_seconds ?? null) ?? entryTime;
-      const durationFromSeconds = typeof extracted.trade_length_seconds === 'number'
-        ? Math.max(1, Math.round(extracted.trade_length_seconds / 60))
-        : null;
-      const durationFromTimeRange = minutesBetweenTimes(entryTime, closeTime);
-      const durationMinutes = durationFromSeconds ?? durationFromTimeRange;
-
-      const screenshotUrl = user
-        ? await uploadScreenshot(fileDataUrl, user.id)
-        : fileDataUrl;
-
-      const trade: JournalTrade = {
-        id: crypto.randomUUID(),
-        date: tradeDate,
-        accountId: getDefaultTradeAccountId(),
-        accountIds: [getDefaultTradeAccountId()],
-        symbol: normalizedSymbol,
-        direction,
-        entryTime,
-        exitTime: closeTime,
-        durationMinutes,
-        entryPrice,
-        exitPrice,
-        entry: scannerEntry,
-        exit: scannerExit,
-        sl: scannerSl,
-        tp: scannerTp,
-        priceLevelsSource: 'ai',
-        priceLevelsEdited: false,
-        contracts: 1,
-        rr: 0,
-        pnl: 0,
-        result: 'open',
-        screenshotUrl,
-        confluences: [],
-      };
-
-      applyScannedTrade(screenshotUrl, withTradeDerivedValues(trade), tradeDate);
-      scanSucceeded = true;
-      // Surface scanner warnings — "verify Win/Loss manually" etc. matter to the
-      // user and were previously dropped on success.
-      const scanWarnings = (Array.isArray(extracted.warnings) ? extracted.warnings : [])
-        .filter(w => typeof w === 'string' && !w.startsWith('Boundary scan:'));
-      if (!exitIsReliable || scanWarnings.length > 0) {
-        const detail = scanWarnings.find(w => w.toLowerCase().includes('verify')) ?? scanWarnings[0];
-        pushToast({
-          tone: 'amber',
-          durationMs: 6000,
-          message: detail
-            ? `Trade saved — ${detail}`
-            : 'Trade saved — exit unconfirmed, set the exit price manually.',
-        });
-      } else {
-        pushToast({ tone: 'green', durationMs: 3000, message: 'Trade scanned and saved' });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Scan failed.';
-      const lowered = message.toLowerCase();
-      if (
-        lowered.includes('503') ||
-        lowered.includes('529') ||
-        lowered.includes('high demand') ||
-        lowered.includes('service unavailable') ||
-        lowered.includes('overloaded') ||
-        lowered.includes('temporarily busy')
-      ) {
-        setScanError('Scanner AI is temporarily busy. Please retry in 10-20 seconds.');
-      } else if (lowered.includes('failed to fetch')) {
-        setScanError('Could not reach the scanner service. Please try again in a moment.');
-      } else {
-        setScanError(message);
-      }
-    } finally {
-      setIsScanning(false);
-      if (scanSucceeded) {
-        setScanPreviewUrl('');
-      }
-    }
+    await performScanFile(file, { preferences, user, getDefaultTradeAccountId, applyScannedTrade, setScanError, setIsScanning, setScanPreviewUrl });
   }, [applyScannedTrade, getDefaultTradeAccountId, preferences.scannerColors, selectedEntry?.date]);
 
   // ── Browser extension bridge ─────────────────────────────────────────────────
@@ -3203,44 +1963,311 @@ export default function TradeJournal() {
         }}
       />
 
-      {/* Mobile overlay backdrop */}
-      {isMobile && dayPanelOpen && (
-        <div
-          onClick={() => setDayPanelOpen(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 9988, background: 'rgba(0,0,0,0.45)' }}
+      <MobileDayPanelChrome isMobile={isMobile} dayPanelOpen={dayPanelOpen} setDayPanelOpen={setDayPanelOpen} />
+
+      <DayPanelSection
+        isMobile={isMobile}
+        dayPanelOpen={dayPanelOpen}
+        setDayPanelOpen={setDayPanelOpen}
+        monthCursor={monthCursor}
+        setMonthCursor={setMonthCursor}
+        monthSummary={monthSummary}
+        recentForm={recentForm}
+        query={query}
+        setQuery={setQuery}
+        dayFilter={dayFilter}
+        setDayFilter={setDayFilter}
+        visibleEntries={visibleEntries}
+        selectedEntryId={selectedEntryId}
+        setSelectedEntryId={setSelectedEntryId}
+        setShowScanner={setShowScanner}
+        entryAdherenceMap={entryAdherenceMap}
+        setShowCSVImport={setShowCSVImport}
+        goToScanner={goToScanner}
+      />
+
+      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
+        {!showScanner && selectedEntry ? (
+          <>
+            {/* ── SECTION 1: HEADER ── */}
+            <EntryHeaderSection
+              selectedEntry={selectedEntry}
+              activeTrade={activeTrade}
+              riskRules={riskRules}
+              adherencePct={adherencePct}
+              deleteEntryConfirm={deleteEntryConfirm}
+              setDeleteEntryConfirm={setDeleteEntryConfirm}
+              isTradeDateEditorOpen={isTradeDateEditorOpen}
+              setIsTradeDateEditorOpen={setIsTradeDateEditorOpen}
+              tradeDateDraft={tradeDateDraft}
+              setTradeDateDraft={setTradeDateDraft}
+              isEntryDateEditorOpen={isEntryDateEditorOpen}
+              setIsEntryDateEditorOpen={setIsEntryDateEditorOpen}
+              entryDateDraft={entryDateDraft}
+              setEntryDateDraft={setEntryDateDraft}
+              saveTradeDate={saveTradeDate}
+              saveEntryDate={saveEntryDate}
+              deleteEntry={deleteEntry}
+              goToScanner={goToScanner}
+            />
+
+            <div className="tj-entry-body">
+
+              {/* ── SECTION 2: STAT BAR ── */}
+              <EntryStatBarSection
+                selectedEntry={selectedEntry}
+                activeTrade={activeTrade}
+                riskRules={riskRules}
+                adherencePct={adherencePct}
+              />
+
+              {/* ── SECTION 3: CONTRACT SIZING ── */}
+              {activeTrade && (
+                <>
+                  <div className="tj-section-head">
+                    <span className="tj-section-title">Contract Sizing</span>
+                  </div>
+                  <div className="tj-sizing-group">
+                    <AccountSelectorBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                    <ContractSizingBlock
+                      trade={activeTrade}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* ── SECTION 4: SCREENSHOT — hidden on blank days with no existing image ── */}
+              <ScreenshotSection
+                selectedEntry={selectedEntry}
+                activeTrade={activeTrade}
+                activeTradeId={activeTradeId}
+                hasExistingImages={hasExistingImages}
+                allTradeImages={allTradeImages}
+                clampedIndex={clampedIndex}
+                currentImage={currentImage}
+                slideDir={slideDir}
+                setSlideDir={setSlideDir}
+                screenshotInputRef={screenshotInputRef}
+                onShotPick={onShotPick}
+                setIsScreenshotFullscreen={setIsScreenshotFullscreen}
+                setViewingImageIndex={setViewingImageIndex}
+                navImage={navImage}
+                mutateTradeFields={mutateTradeFields}
+              />
+
+              {/* ── SECTION 5: TRADES — hidden on blank days ── */}
+              <TradeListSection
+                selectedEntry={selectedEntry}
+                entries={entries}
+                riskRules={riskRules}
+                activeTradeId={activeTradeId}
+                setActiveTradeId={setActiveTradeId}
+                setSelectedEntryId={setSelectedEntryId}
+                selectedTradeIds={selectedTradeIds}
+                setSelectedTradeIds={setSelectedTradeIds}
+                bulkDeleteConfirm={bulkDeleteConfirm}
+                setBulkDeleteConfirm={setBulkDeleteConfirm}
+                deleteTradeId={deleteTradeId}
+                setDeleteTradeId={setDeleteTradeId}
+                expandedTradeId={expandedTradeId}
+                setExpandedTradeId={setExpandedTradeId}
+                addManualTrade={addManualTrade}
+                deleteTradeEverywhere={deleteTradeEverywhere}
+                deleteEntryInStore={deleteEntryInStore}
+                mutateTradeFields={mutateTradeFields}
+              />
+
+              {/* ── SECTION 6B: RULE VERIFICATION — hidden on blank days ── */}
+              {selectedEntry.trades.length > 0 && (
+                <RuleComplianceBlock
+                  entry={selectedEntry}
+                  rules={riskRules}
+                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                />
+              )}
+
+              {/* ── SECTION 8: DAILY REFLECTION ── */}
+              <SectionHead title="Daily Reflection" sectionKey="dailyReflection" collapsed={!!collapsed['dailyReflection']} onToggle={() => toggleSection('dailyReflection')} />
+              {!collapsed['dailyReflection'] && (
+                <DailyReflectionBlock
+                  entry={selectedEntry}
+                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                />
+              )}
+
+              {/* ── SECTION 9: TRADE JOURNAL CARD (thesis + flags + psychology) ── */}
+              {activeTrade && (
+                <>
+                  <SectionHead title="Trade Journal" sectionKey="tradeJournal" collapsed={!!collapsed['tradeJournal']} onToggle={() => toggleSection('tradeJournal')} />
+                  {!collapsed['tradeJournal'] && (
+                    <TradeJournalCard
+                      trade={activeTrade}
+                      entry={selectedEntry}
+                      allEntries={entries}
+                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
+                      onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
+                    />
+                  )}
+
+                  {/* ── SECTION 10: FLYXA PROCESS SCORE ── */}
+                  <SectionHead title="Flyxa Process Score" sectionKey="processScore" collapsed={!!collapsed['processScore']} onToggle={() => toggleSection('processScore')} />
+                  {!collapsed['processScore'] && (
+                    <ProcessScoreBlock
+                      trade={activeTrade}
+                      entries={entries}
+                      navigate={navigate}
+                      onSaveEntries={() => mutateEntries(p => p)}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <ScannerDropZone
+            isScanning={isScanning}
+            scanError={scanError}
+            scanPreviewUrl={scanPreviewUrl}
+            onScanFile={(file) => { void handleScanFile(file); }}
+            onAddBlankDay={addBlankDay}
+            isMobile={isMobile}
+          />
+        )}
+      </section>
+
+      <ScreenshotFullscreenModal
+        isScreenshotFullscreen={isScreenshotFullscreen}
+        currentImage={currentImage}
+        setIsScreenshotFullscreen={setIsScreenshotFullscreen}
+      />
+
+      {showCSVImport && (
+        <CSVImportModal
+          onClose={() => setShowCSVImport(false)}
+          onImport={async (trades) => {
+            await handleCSVImport(trades);
+            setShowCSVImport(false);
+          }}
         />
       )}
+    </div>
+  );
+}
 
-      {/* Persistent left-edge arrow tab (mobile only) */}
-      {isMobile && (
-        <button
-          type="button"
-          aria-label={dayPanelOpen ? 'Close day panel' : 'Open day panel'}
-          onClick={() => setDayPanelOpen(prev => !prev)}
-          style={{
-            position: 'fixed',
-            left: dayPanelOpen ? 260 : 0,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            zIndex: 9990,
-            width: 20,
-            height: 44,
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-            borderLeft: 'none',
-            borderRadius: '0 6px 6px 0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'left 0.22s ease',
-            padding: 0,
-          }}
-        >
-          {dayPanelOpen ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
-        </button>
-      )}
+// ─── Module-level helpers (moved out of the component body so TypeScript's
+//     control-flow analysis stays enabled inside TradeJournal) ────────────────
 
+function computeRecentForm(entries: JournalEntry[]) {
+  const allTrades = entries.flatMap(e =>
+    e.trades.filter(t => t.result !== 'open').map(t => ({ ...t, entryDate: e.date }))
+  );
+  const sorted = [...allTrades].sort((a, b) =>
+    a.entryDate.localeCompare(b.entryDate) || (a.entryTime ?? '').localeCompare(b.entryTime ?? '')
+  );
+  const last10 = sorted.slice(-10);
+
+  // Per-trade bar data — ratio in [-1, +1] relative to largest trade
+  const maxAbsPnl = Math.max(...last10.map(t => Math.abs(t.pnl - (t.commission ?? 0))), 1);
+  const tradeBars = last10.map(t => {
+    const net = t.pnl - (t.commission ?? 0);
+    return { result: t.result as TradeResult, net, ratio: net / maxAbsPnl };
+  });
+
+  // Current W/L streak (most-recent first)
+  let streak = 0;
+  let streakType: 'win' | 'loss' | null = null;
+  for (let i = last10.length - 1; i >= 0; i--) {
+    const r = last10[i].result;
+    if (i === last10.length - 1) {
+      streakType = r === 'win' ? 'win' : r === 'loss' ? 'loss' : null;
+      streak = streakType ? 1 : 0;
+    } else if (streakType && r === streakType) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  const winsLast10 = last10.filter(t => t.result === 'win').length;
+  const lossesLast10 = last10.filter(t => t.result === 'loss').length;
+  const breakevenLast10 = last10.filter(t => t.result !== 'win' && t.result !== 'loss').length;
+  const decisiveLast10 = winsLast10 + lossesLast10;
+  const netLast10 = last10.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
+
+  // 7-day rolling stats
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setDate(now.getDate() - 6);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const last7d = allTrades.filter(t => t.entryDate >= cutoffStr);
+  const wins7d = last7d.filter(t => t.result === 'win').length;
+  const total7d = last7d.length;
+  const netPnl7d = last7d.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
+
+  return {
+    last10,
+    tradeBars,
+    winsLast10,
+    lossesLast10,
+    breakevenLast10,
+    netLast10,
+    winRateLast10: decisiveLast10 > 0 ? (winsLast10 / decisiveLast10) * 100 : null,
+    streak,
+    streakType,
+    total7d,
+    winRate7d: total7d > 0 ? (wins7d / total7d) * 100 : null,
+    netPnl7d: total7d > 0 ? netPnl7d : null,
+  };
+}
+
+// ─── SECTION: Day panel (left sidebar — month summary, recent form, day list) ──
+
+interface DayPanelSectionProps {
+  isMobile: boolean;
+  dayPanelOpen: boolean;
+  setDayPanelOpen: Dispatch<SetStateAction<boolean>>;
+  monthCursor: Date;
+  setMonthCursor: Dispatch<SetStateAction<Date>>;
+  monthSummary: { monthPnl: number; daysTraded: number; winRate: number; bestDay: number | null };
+  recentForm: ReturnType<typeof computeRecentForm>;
+  query: string;
+  setQuery: Dispatch<SetStateAction<string>>;
+  dayFilter: DayFilter;
+  setDayFilter: Dispatch<SetStateAction<DayFilter>>;
+  visibleEntries: JournalEntry[];
+  selectedEntryId: string | null;
+  setSelectedEntryId: Dispatch<SetStateAction<string | null>>;
+  setShowScanner: Dispatch<SetStateAction<boolean>>;
+  entryAdherenceMap: Map<string, number | null>;
+  setShowCSVImport: Dispatch<SetStateAction<boolean>>;
+  goToScanner: () => void;
+}
+
+function DayPanelSection({
+  isMobile,
+  dayPanelOpen,
+  setDayPanelOpen,
+  monthCursor,
+  setMonthCursor,
+  monthSummary,
+  recentForm,
+  query,
+  setQuery,
+  dayFilter,
+  setDayFilter,
+  visibleEntries,
+  selectedEntryId,
+  setSelectedEntryId,
+  setShowScanner,
+  entryAdherenceMap,
+  setShowCSVImport,
+  goToScanner,
+}: DayPanelSectionProps) {
+  return (
       <aside
         className="tj-day-panel"
         data-tour-id="scanner-day-panel"
@@ -3459,11 +2486,104 @@ export default function TradeJournal() {
           )}
         </div>
       </aside>
+  );
+}
 
-      <section className="tj-entry-panel" data-tour-id="scanner-entry-panel">
-        {!showScanner && selectedEntry ? (
-          <>
-            {/* ── SECTION 1: HEADER ── */}
+// ─── SECTION: Mobile chrome (overlay backdrop + left-edge day-panel toggle) ──
+
+function MobileDayPanelChrome({ isMobile, dayPanelOpen, setDayPanelOpen }: {
+  isMobile: boolean;
+  dayPanelOpen: boolean;
+  setDayPanelOpen: Dispatch<SetStateAction<boolean>>;
+}) {
+  return (
+    <>
+      {/* Mobile overlay backdrop */}
+      {isMobile && dayPanelOpen && (
+        <div
+          onClick={() => setDayPanelOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 9988, background: 'rgba(0,0,0,0.45)' }}
+        />
+      )}
+
+      {/* Persistent left-edge arrow tab (mobile only) */}
+      {isMobile && (
+        <button
+          type="button"
+          aria-label={dayPanelOpen ? 'Close day panel' : 'Open day panel'}
+          onClick={() => setDayPanelOpen(prev => !prev)}
+          style={{
+            position: 'fixed',
+            left: dayPanelOpen ? 260 : 0,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            zIndex: 9990,
+            width: 20,
+            height: 44,
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderLeft: 'none',
+            borderRadius: '0 6px 6px 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'left 0.22s ease',
+            padding: 0,
+          }}
+        >
+          {dayPanelOpen ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+        </button>
+      )}
+    </>
+  );
+}
+
+// ─── SECTION: Entry header (date title, P&L strip, date editors, actions) ────
+
+interface EntryHeaderSectionProps {
+  selectedEntry: JournalEntry;
+  activeTrade: JournalTrade | null;
+  riskRules: RiskRule[];
+  adherencePct: number | null;
+  deleteEntryConfirm: boolean;
+  setDeleteEntryConfirm: Dispatch<SetStateAction<boolean>>;
+  isTradeDateEditorOpen: boolean;
+  setIsTradeDateEditorOpen: Dispatch<SetStateAction<boolean>>;
+  tradeDateDraft: string;
+  setTradeDateDraft: Dispatch<SetStateAction<string>>;
+  isEntryDateEditorOpen: boolean;
+  setIsEntryDateEditorOpen: Dispatch<SetStateAction<boolean>>;
+  entryDateDraft: string;
+  setEntryDateDraft: Dispatch<SetStateAction<string>>;
+  saveTradeDate: () => void;
+  saveEntryDate: () => void;
+  deleteEntry: () => Promise<void>;
+  goToScanner: () => void;
+}
+
+function EntryHeaderSection({
+  selectedEntry,
+  activeTrade,
+  riskRules,
+  adherencePct,
+  deleteEntryConfirm,
+  setDeleteEntryConfirm,
+  isTradeDateEditorOpen,
+  setIsTradeDateEditorOpen,
+  tradeDateDraft,
+  setTradeDateDraft,
+  isEntryDateEditorOpen,
+  setIsEntryDateEditorOpen,
+  entryDateDraft,
+  setEntryDateDraft,
+  saveTradeDate,
+  saveEntryDate,
+  deleteEntry,
+  goToScanner,
+}: EntryHeaderSectionProps) {
+  const { preferences, accounts } = useAppSettings();
+  return (
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               paddingBottom: 14, borderBottom: '1px solid var(--border)', padding: '16px 20px 14px',
@@ -3599,10 +2719,19 @@ export default function TradeJournal() {
                 )}
               </div>
             </div>
+  );
+}
 
-            <div className="tj-entry-body">
+// ─── SECTION: Entry stat bar (net P&L, win rate, avg R:R, process, adherence) ─
 
-              {/* ── SECTION 2: STAT BAR ── */}
+function EntryStatBarSection({ selectedEntry, activeTrade, riskRules, adherencePct }: {
+  selectedEntry: JournalEntry;
+  activeTrade: JournalTrade | null;
+  riskRules: RiskRule[];
+  adherencePct: number | null;
+}) {
+  return (
+    <>
               {(() => {
                 const stats = computeEntryStats(selectedEntry, riskRules);
                 const pnlColor = stats.pnl > 0 ? 'var(--green)' : stats.pnl < 0 ? 'var(--red)' : 'var(--txt)';
@@ -3628,27 +2757,49 @@ export default function TradeJournal() {
                   </div>
                 );
               })()}
+    </>
+  );
+}
 
-              {/* ── SECTION 3: CONTRACT SIZING ── */}
-              {activeTrade && (
-                <>
-                  <div className="tj-section-head">
-                    <span className="tj-section-title">Contract Sizing</span>
-                  </div>
-                  <div className="tj-sizing-group">
-                    <AccountSelectorBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                    <ContractSizingBlock
-                      trade={activeTrade}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                    />
-                  </div>
-                </>
-              )}
+// ─── SECTION: Screenshot viewer (carousel, add/remove, fullscreen trigger) ───
 
-              {/* ── SECTION 4: SCREENSHOT — hidden on blank days with no existing image ── */}
+interface ScreenshotSectionProps {
+  selectedEntry: JournalEntry;
+  activeTrade: JournalTrade | null;
+  activeTradeId: string | null;
+  hasExistingImages: boolean;
+  allTradeImages: string[];
+  clampedIndex: number;
+  currentImage: string;
+  slideDir: 'left' | 'right';
+  setSlideDir: Dispatch<SetStateAction<'left' | 'right'>>;
+  screenshotInputRef: RefObject<HTMLInputElement>;
+  onShotPick: (index: number) => void;
+  setIsScreenshotFullscreen: Dispatch<SetStateAction<boolean>>;
+  setViewingImageIndex: Dispatch<SetStateAction<number>>;
+  navImage: (dir: 'left' | 'right') => void;
+  mutateTradeFields: (tradeId: string, fields: Partial<JournalTrade>) => void;
+}
+
+function ScreenshotSection({
+  selectedEntry,
+  activeTrade,
+  activeTradeId,
+  hasExistingImages,
+  allTradeImages,
+  clampedIndex,
+  currentImage,
+  slideDir,
+  setSlideDir,
+  screenshotInputRef,
+  onShotPick,
+  setIsScreenshotFullscreen,
+  setViewingImageIndex,
+  navImage,
+  mutateTradeFields,
+}: ScreenshotSectionProps) {
+  return (
+    <>
               {(selectedEntry.trades.length > 0 || hasExistingImages) && (<>
               <div className="tj-section-head first">
                 <span className="tj-section-title">Screenshot</span>
@@ -3741,8 +2892,55 @@ export default function TradeJournal() {
                 )}
               </div>
               </>)}
+    </>
+  );
+}
 
-              {/* ── SECTION 5: TRADES — hidden on blank days ── */}
+// ─── SECTION: Trade list (per-trade cards, bulk select/delete, price levels) ──
+
+interface TradeListSectionProps {
+  selectedEntry: JournalEntry;
+  entries: JournalEntry[];
+  riskRules: RiskRule[];
+  activeTradeId: string | null;
+  setActiveTradeId: Dispatch<SetStateAction<string | null>>;
+  setSelectedEntryId: Dispatch<SetStateAction<string | null>>;
+  selectedTradeIds: Set<string>;
+  setSelectedTradeIds: Dispatch<SetStateAction<Set<string>>>;
+  bulkDeleteConfirm: boolean;
+  setBulkDeleteConfirm: Dispatch<SetStateAction<boolean>>;
+  deleteTradeId: string | null;
+  setDeleteTradeId: Dispatch<SetStateAction<string | null>>;
+  expandedTradeId: string | null;
+  setExpandedTradeId: Dispatch<SetStateAction<string | null>>;
+  addManualTrade: () => void;
+  deleteTradeEverywhere: (id: string) => Promise<void>;
+  deleteEntryInStore: (id: string) => void;
+  mutateTradeFields: (tradeId: string, fields: Partial<JournalTrade>) => void;
+}
+
+function TradeListSection({
+  selectedEntry,
+  entries,
+  riskRules,
+  activeTradeId,
+  setActiveTradeId,
+  setSelectedEntryId,
+  selectedTradeIds,
+  setSelectedTradeIds,
+  bulkDeleteConfirm,
+  setBulkDeleteConfirm,
+  deleteTradeId,
+  setDeleteTradeId,
+  expandedTradeId,
+  setExpandedTradeId,
+  addManualTrade,
+  deleteTradeEverywhere,
+  deleteEntryInStore,
+  mutateTradeFields,
+}: TradeListSectionProps) {
+  return (
+    <>
               {selectedEntry.trades.length > 0 && (<><div className="tj-section-head">
                 <span className="tj-section-title">
                   Trades
@@ -3966,65 +3164,19 @@ export default function TradeJournal() {
                   ))
                 ;})()}
               </div></>)}
+    </>
+  );
+}
 
-              {/* ── SECTION 6B: RULE VERIFICATION — hidden on blank days ── */}
-              {selectedEntry.trades.length > 0 && (
-                <RuleComplianceBlock
-                  entry={selectedEntry}
-                  rules={riskRules}
-                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                />
-              )}
+// ─── SECTION: Fullscreen screenshot modal ─────────────────────────────────────
 
-              {/* ── SECTION 8: DAILY REFLECTION ── */}
-              <SectionHead title="Daily Reflection" sectionKey="dailyReflection" collapsed={!!collapsed['dailyReflection']} onToggle={() => toggleSection('dailyReflection')} />
-              {!collapsed['dailyReflection'] && (
-                <DailyReflectionBlock
-                  entry={selectedEntry}
-                  onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                />
-              )}
-
-              {/* ── SECTION 9: TRADE JOURNAL CARD (thesis + flags + psychology) ── */}
-              {activeTrade && (
-                <>
-                  <SectionHead title="Trade Journal" sectionKey="tradeJournal" collapsed={!!collapsed['tradeJournal']} onToggle={() => toggleSection('tradeJournal')} />
-                  {!collapsed['tradeJournal'] && (
-                    <TradeJournalCard
-                      trade={activeTrade}
-                      entry={selectedEntry}
-                      allEntries={entries}
-                      onMutate={fields => mutateTradeFields(activeTrade.id, fields)}
-                      onMutateEntry={fields => mutateEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...fields } : e))}
-                    />
-                  )}
-
-                  {/* ── SECTION 10: FLYXA PROCESS SCORE ── */}
-                  <SectionHead title="Flyxa Process Score" sectionKey="processScore" collapsed={!!collapsed['processScore']} onToggle={() => toggleSection('processScore')} />
-                  {!collapsed['processScore'] && (
-                    <ProcessScoreBlock
-                      trade={activeTrade}
-                      entries={entries}
-                      navigate={navigate}
-                      onSaveEntries={() => mutateEntries(p => p)}
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          </>
-        ) : (
-          <ScannerDropZone
-            isScanning={isScanning}
-            scanError={scanError}
-            scanPreviewUrl={scanPreviewUrl}
-            onScanFile={(file) => { void handleScanFile(file); }}
-            onAddBlankDay={addBlankDay}
-            isMobile={isMobile}
-          />
-        )}
-      </section>
-
+function ScreenshotFullscreenModal({ isScreenshotFullscreen, currentImage, setIsScreenshotFullscreen }: {
+  isScreenshotFullscreen: boolean;
+  currentImage: string;
+  setIsScreenshotFullscreen: Dispatch<SetStateAction<boolean>>;
+}) {
+  return (
+    <>
       {isScreenshotFullscreen && currentImage && (
         <div
           className="tj-shot-modal"
@@ -4049,16 +3201,407 @@ export default function TradeJournal() {
           />
         </div>
       )}
-
-      {showCSVImport && (
-        <CSVImportModal
-          onClose={() => setShowCSVImport(false)}
-          onImport={async (trades) => {
-            await handleCSVImport(trades);
-            setShowCSVImport(false);
-          }}
-        />
-      )}
-    </div>
+    </>
   );
+}
+
+// ─── Scan pipeline (moved verbatim out of TradeJournal's handleScanFile) ─────
+
+interface PerformScanFileCtx {
+  preferences: ReturnType<typeof useAppSettings>['preferences'];
+  user: ReturnType<typeof useAuth>['user'];
+  getDefaultTradeAccountId: ReturnType<typeof useAppSettings>['getDefaultTradeAccountId'];
+  applyScannedTrade: (fileDataUrl: string, trade: JournalTrade, date: string) => void;
+  setScanError: Dispatch<SetStateAction<string>>;
+  setIsScanning: Dispatch<SetStateAction<boolean>>;
+  setScanPreviewUrl: Dispatch<SetStateAction<string>>;
+}
+
+async function performScanFile(file: File, ctx: PerformScanFileCtx) {
+  const { preferences, user, getDefaultTradeAccountId, applyScannedTrade, setScanError, setIsScanning, setScanPreviewUrl } = ctx;
+    if (!file.type.startsWith('image/')) {
+      setScanError('Upload an image file.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setScanError('File is larger than 10MB.');
+      return;
+    }
+
+    setScanError('');
+    setIsScanning(true);
+    // Filename date takes priority; otherwise use today. Do NOT fall back to
+    // selectedEntry?.date — that causes trades scanned on day N to get stamped
+    // as day N-1 when the user still has the previous day's entry selected.
+    const tradeDate = inferTradeDateFromFileName(file.name) ?? getTodayIso(preferences.timezone);
+    const tradeTime = getNowTime();
+    let scanSucceeded = false;
+
+    try {
+      const fileDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(new Error('Could not read file.'));
+        reader.readAsDataURL(file);
+      });
+      setScanPreviewUrl(fileDataUrl);
+
+      const colors = preferences.scannerColors;
+      // buildScannerAssets resolves the colors and embeds scanner_colors in the context
+      const { focusImages, scannerContext, uploadImage } = await buildScannerAssets(file, {
+        entry: colors?.entry,
+        stopLoss: colors?.stopLoss,
+        takeProfit: colors?.takeProfit,
+      });
+      let extracted: Awaited<ReturnType<typeof scanChart>>;
+      try {
+        extracted = await scanChart(uploadImage, tradeDate, tradeTime, focusImages, scannerContext);
+      } catch (scanError) {
+        // Failed scans are the most valuable eval cases — capture before rethrowing.
+        void maybeCaptureScanBundle({
+          uploadImage, focusImages, scannerContext,
+          error: scanError instanceof Error ? scanError.message : String(scanError),
+          sourceFileName: file.name,
+        });
+        throw scanError;
+      }
+      void maybeCaptureScanBundle({ uploadImage, focusImages, scannerContext, result: extracted, sourceFileName: file.name });
+
+      const normalizedSymbol = normalizeResolvedSymbol(extracted.symbol) ?? inferSymbolFromFileName(file.name) ?? 'NQ';
+      const direction: TradeDirection = extracted.direction === 'Short' ? 'SHORT' : 'LONG';
+      const scannerEntry = parsePrice(extracted.entry_price ?? undefined);
+      const scannerTp = parsePrice(extracted.tp_price ?? undefined);
+      const scannerSl = parsePrice(extracted.sl_price ?? undefined);
+      if (scannerEntry === undefined || scannerTp === undefined || scannerSl === undefined) {
+        const warningSuffix = Array.isArray(extracted.warnings) && extracted.warnings.length > 0
+          ? ` ${extracted.warnings[0]}`
+          : '';
+        throw new Error(`Scanner could not read entry/stop/target from this chart.${warningSuffix}`);
+      }
+      // The backend's dedicated first-touch readers are authoritative. Once
+      // they resolve SL/TP and a concrete candle, that level is the exit price.
+      const exitIsReliable = extracted.exit_reason !== null
+        && typeof extracted.first_touch_candle_index === 'number'
+        && Number.isFinite(extracted.first_touch_candle_index)
+        && extracted.first_touch_candle_index >= 0;
+      const scannerExit = exitIsReliable
+        ? extracted.exit_reason === 'SL'
+          ? scannerSl
+          : extracted.exit_reason === 'TP'
+            ? scannerTp
+            : undefined
+        : undefined;
+      const entryPrice = scannerEntry ?? 0;
+      const exitPrice = scannerExit ?? 0;
+      const entryTime = typeof extracted.entry_time === 'string' ? extracted.entry_time.slice(0, 5) : tradeTime;
+      const closeTime = typeof extracted.close_time === 'string'
+        ? extracted.close_time.slice(0, 5)
+        : addSecondsToTime(entryTime, extracted.trade_length_seconds ?? null) ?? entryTime;
+      const durationFromSeconds = typeof extracted.trade_length_seconds === 'number'
+        ? Math.max(1, Math.round(extracted.trade_length_seconds / 60))
+        : null;
+      const durationFromTimeRange = minutesBetweenTimes(entryTime, closeTime);
+      const durationMinutes = durationFromSeconds ?? durationFromTimeRange;
+
+      const screenshotUrl = user
+        ? await uploadScreenshot(fileDataUrl, user.id)
+        : fileDataUrl;
+
+      const trade: JournalTrade = {
+        id: crypto.randomUUID(),
+        date: tradeDate,
+        accountId: getDefaultTradeAccountId(),
+        accountIds: [getDefaultTradeAccountId()],
+        symbol: normalizedSymbol,
+        direction,
+        entryTime,
+        exitTime: closeTime,
+        durationMinutes,
+        entryPrice,
+        exitPrice,
+        entry: scannerEntry,
+        exit: scannerExit,
+        sl: scannerSl,
+        tp: scannerTp,
+        priceLevelsSource: 'ai',
+        priceLevelsEdited: false,
+        contracts: 1,
+        rr: 0,
+        pnl: 0,
+        result: 'open',
+        screenshotUrl,
+        confluences: [],
+      };
+
+      applyScannedTrade(screenshotUrl, withTradeDerivedValues(trade), tradeDate);
+      scanSucceeded = true;
+      // Surface scanner warnings — "verify Win/Loss manually" etc. matter to the
+      // user and were previously dropped on success.
+      const scanWarnings = (Array.isArray(extracted.warnings) ? extracted.warnings : [])
+        .filter(w => typeof w === 'string' && !w.startsWith('Boundary scan:'));
+      if (!exitIsReliable || scanWarnings.length > 0) {
+        const detail = scanWarnings.find(w => w.toLowerCase().includes('verify')) ?? scanWarnings[0];
+        pushToast({
+          tone: 'amber',
+          durationMs: 6000,
+          message: detail
+            ? `Trade saved — ${detail}`
+            : 'Trade saved — exit unconfirmed, set the exit price manually.',
+        });
+      } else {
+        pushToast({ tone: 'green', durationMs: 3000, message: 'Trade scanned and saved' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Scan failed.';
+      const lowered = message.toLowerCase();
+      if (
+        lowered.includes('503') ||
+        lowered.includes('529') ||
+        lowered.includes('high demand') ||
+        lowered.includes('service unavailable') ||
+        lowered.includes('overloaded') ||
+        lowered.includes('temporarily busy')
+      ) {
+        setScanError('Scanner AI is temporarily busy. Please retry in 10-20 seconds.');
+      } else if (lowered.includes('failed to fetch')) {
+        setScanError('Could not reach the scanner service. Please try again in a moment.');
+      } else {
+        setScanError(message);
+      }
+    } finally {
+      setIsScanning(false);
+      if (scanSucceeded) {
+        setScanPreviewUrl('');
+      }
+    }
+}
+
+// ─── CSV import (moved verbatim out of TradeJournal's handleCSVImport) ───────
+
+async function importTradesFromCsv(trades: Array<{
+    symbol: string; direction: 'Long' | 'Short';
+    entry_price: number; exit_price: number; pnl: number; trade_date: string;
+    trade_time?: string; close_time?: string; contract_size?: number;
+    sl_price?: number; tp_price?: number; pre_trade_notes?: string;
+    followed_plan?: boolean; emotional_state?: string; confluences?: string[];
+  }>, createTrade: ReturnType<typeof useTrades>['createTrade']) {
+    let ok = 0;
+    for (const t of trades) {
+      try {
+        await createTrade({
+          symbol: t.symbol,
+          direction: t.direction,
+          entry_price: t.entry_price,
+          exit_price: t.exit_price,
+          sl_price: t.sl_price ?? t.entry_price,
+          tp_price: t.tp_price ?? t.entry_price,
+          exit_reason: t.pnl > 0 ? 'TP' : t.pnl < 0 ? 'SL' : 'BE',
+          pnl: t.pnl,
+          pnlOverride: t.pnl,
+          contract_size: t.contract_size ?? 1,
+          trade_date: t.trade_date,
+          trade_time: t.trade_time ?? '09:30',
+          close_time: t.close_time ?? null,
+          pre_trade_notes: t.pre_trade_notes ?? '',
+          post_trade_notes: '',
+          followed_plan: t.followed_plan ?? null,
+          emotional_state: t.emotional_state ?? null,
+          confluences: t.confluences ?? [],
+        });
+        ok++;
+      } catch {
+        // skip individual failures, count successes
+      }
+    }
+    pushToast({ tone: 'green', durationMs: 4000, message: `Imported ${ok} trade${ok !== 1 ? 's' : ''} from CSV` });
+    void flushSupabaseStoreNow().catch(() => {});
+}
+
+// ─── Entries mutation + safety guard (moved verbatim out of mutateEntries) ───
+
+function applyEntriesMutation(
+  updater: (prev: JournalEntry[]) => JournalEntry[],
+  rulesTemplate: string[],
+  setEntriesInStore: (entries: StoreJournalEntry[]) => void,
+) {
+    const storeState = useFlyxaStore.getState();
+    const current = normalizeEntries(storeState.entries as unknown[], rulesTemplate);
+    // Scanner entries represent traded days. Moving or deleting the final trade
+    // must also remove its empty day instead of leaving a "No trades" shell.
+    // Pass preSessionHistory so no-trade days with a pre/post session are kept.
+    const next = pruneEmptyJournalEntries(
+      updater(current),
+      storeState.preSessionHistory as Record<string, unknown>,
+    );
+
+    // Safety guard: abort if a trade that wasn't explicitly deleted has gone
+    // missing. Catches bugs where logic errors or pruning would silently drop data.
+    const deletedIds = new Set<string>(
+      Array.isArray(storeState.deletedTradeIds)
+        ? (storeState.deletedTradeIds as unknown[]).filter((id): id is string => typeof id === 'string')
+        : []
+    );
+    const nextTradeIds = new Set<string>(
+      next.flatMap(e => e.trades.map(t => t.id).filter((id): id is string => typeof id === 'string'))
+    );
+    const lostTrades = current.flatMap(e => e.trades).filter(t => {
+      if (typeof t.id !== 'string') return false;
+      if (deletedIds.has(t.id)) return false;
+      if (nextTradeIds.has(t.id)) return false;
+      // Phantom trades (unfilled blanks: no price, no pnl, no screenshot) are
+      // legitimately cleaned up by the mount/leave cleanup without touching deletedTradeIds.
+      if (t.result === 'open' && t.pnl === 0 && (t.entryPrice ?? 0) === 0 && (t.exitPrice ?? 0) === 0 && !t.screenshotUrl) return false;
+      return true;
+    });
+    if (lostTrades.length > 0) {
+      pushToast({
+        tone: 'red',
+        durationMs: 10_000,
+        message: `⚠️ Save aborted: ${lostTrades.length} trade(s) would have been lost unexpectedly. No data was changed.`,
+      });
+      return;
+    }
+
+    setEntriesInStore(next as unknown as StoreJournalEntry[]);
+    const updatedState = useFlyxaStore.getState();
+    void saveStoreStatePatchNow({
+      entries: updatedState.entries,
+      deletedTradeIds: updatedState.deletedTradeIds,
+      deletedEntryDates: updatedState.deletedEntryDates,
+      restoredEntryDates: updatedState.restoredEntryDates,
+    }).catch(() => {
+      pushToast({
+        tone: 'red',
+        durationMs: 8000,
+        message: '⚠️ Could not save to cloud — your changes are local only. Stay on this device or try again.',
+      });
+    });
+}
+
+// ─── Trade date move (moved verbatim out of TradeJournal's saveTradeDate) ────
+
+interface SaveTradeDateCtx {
+  selectedEntry: JournalEntry | null;
+  activeTrade: JournalTrade | null;
+  tradeDateDraft: string;
+  preferences: ReturnType<typeof useAppSettings>['preferences'];
+  rulesTemplate: string[];
+  getDefaultTradeAccountId: ReturnType<typeof useAppSettings>['getDefaultTradeAccountId'];
+  mutateEntries: (updater: (prev: JournalEntry[]) => JournalEntry[]) => void;
+  setSelectedEntryId: Dispatch<SetStateAction<string | null>>;
+  setActiveTradeId: Dispatch<SetStateAction<string | null>>;
+  setMonthCursor: Dispatch<SetStateAction<Date>>;
+  setIsTradeDateEditorOpen: Dispatch<SetStateAction<boolean>>;
+}
+
+function performSaveTradeDate(ctx: SaveTradeDateCtx) {
+  const { selectedEntry, activeTrade, tradeDateDraft, preferences, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setSelectedEntryId, setActiveTradeId, setMonthCursor, setIsTradeDateEditorOpen } = ctx;
+    if (!selectedEntry || !activeTrade) return;
+    const nextDate = tradeDateDraft.trim();
+    if (!isValidIsoDate(nextDate)) {
+      pushToast({ tone: 'red', durationMs: 3000, message: 'Enter a valid date (YYYY-MM-DD).' });
+      return;
+    }
+    if (nextDate > getTodayIso(preferences.timezone)) {
+      pushToast({ tone: 'red', durationMs: 3000, message: 'Trade date cannot be in the future.' });
+      return;
+    }
+
+    const currentTradeDate = getTradeDateValue(activeTrade, selectedEntry.date);
+    // Only skip the move if the date hasn't changed AND the trade is already in the right entry
+    if (nextDate === currentTradeDate && selectedEntry.date === nextDate) {
+      setIsTradeDateEditorOpen(false);
+      return;
+    }
+
+    let nextSelectedId: string | null = null;
+    mutateEntries((prev) => {
+      let movedTrade: JournalTrade | null = null;
+      const withoutTrade = prev.map((entry) => {
+        const tradeIdx = entry.trades.findIndex((trade) => trade.id === activeTrade.id);
+        if (tradeIdx < 0) return entry;
+        movedTrade = entry.trades[tradeIdx];
+        return {
+          ...entry,
+          trades: entry.trades.filter((trade) => trade.id !== activeTrade.id),
+        };
+      });
+
+      if (!movedTrade) return prev;
+      const tradeToMove = movedTrade as JournalTrade;
+      const movedWithDate = withTradeDerivedValues({ ...tradeToMove, date: nextDate });
+      const target = withoutTrade.find((entry) => entry.date === nextDate);
+
+      if (target) {
+        nextSelectedId = target.id;
+        return withoutTrade.map((entry) => (
+          entry.id === target.id
+            ? { ...entry, trades: [movedWithDate, ...entry.trades] }
+            : entry
+        ));
+      }
+
+      const created = createEmptyEntry(nextDate, rulesTemplate, tradeToMove.accountId ?? getDefaultTradeAccountId());
+      created.trades = [movedWithDate];
+      nextSelectedId = created.id;
+      return [created, ...withoutTrade];
+    });
+
+    if (nextSelectedId) {
+      setSelectedEntryId(nextSelectedId);
+      setActiveTradeId(activeTrade.id);
+    }
+    const parsed = parseDate(nextDate);
+    setMonthCursor(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+    setIsTradeDateEditorOpen(false);
+    pushToast({ tone: 'green', durationMs: 3000, message: 'Trade moved to selected date.' });
+}
+
+// ─── Scanned-trade insertion (moved verbatim out of applyScannedTrade) ───────
+
+interface ApplyScannedTradeCtx {
+  mutateEntries: (updater: (prev: JournalEntry[]) => JournalEntry[]) => void;
+  selectedEntryId: string | null;
+  rulesTemplate: string[];
+  getDefaultTradeAccountId: ReturnType<typeof useAppSettings>['getDefaultTradeAccountId'];
+  setSelectedEntryId: Dispatch<SetStateAction<string | null>>;
+  setMonthCursor: Dispatch<SetStateAction<Date>>;
+  setActiveTradeId: Dispatch<SetStateAction<string | null>>;
+}
+
+function performApplyScannedTrade(fileDataUrl: string, trade: JournalTrade, date: string, ctx: ApplyScannedTradeCtx) {
+  const { mutateEntries, selectedEntryId, rulesTemplate, getDefaultTradeAccountId, setSelectedEntryId, setMonthCursor, setActiveTradeId } = ctx;
+    let nextSelectedId: string | null = null;
+    mutateEntries(prev => {
+      // Prefer the entry whose date matches the trade — if the user has a
+      // different day's entry selected, the scanned trade still lands on the
+      // correct date (and creates a new entry if that date doesn't exist yet).
+      const existing = prev.find(entry => entry.date === date) ?? prev.find(entry => entry.id === selectedEntryId);
+      if (existing) {
+        nextSelectedId = existing.id;
+        return prev.map(entry => {
+          if (entry.id !== existing.id) return entry;
+          const shots = [...entry.screenshots];
+          shots[0] = fileDataUrl;
+          return {
+            ...entry,
+            scannedImageUrl: fileDataUrl,
+            screenshots: shots,
+            trades: [trade, ...entry.trades],
+          };
+        });
+      }
+      const created = createEmptyEntry(date, rulesTemplate, trade.accountId ?? getDefaultTradeAccountId());
+      created.scannedImageUrl = fileDataUrl;
+      created.screenshots[0] = fileDataUrl;
+      created.trades = [trade];
+      nextSelectedId = created.id;
+      return [created, ...prev];
+    });
+    if (nextSelectedId) {
+      setSelectedEntryId(nextSelectedId);
+    }
+    const scannedMonth = parseDate(date);
+    setMonthCursor(new Date(scannedMonth.getFullYear(), scannedMonth.getMonth(), 1));
+    setActiveTradeId(trade.id);
 }

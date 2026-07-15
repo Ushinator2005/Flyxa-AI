@@ -428,6 +428,7 @@ ${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `3. Use time-axis-focus f
 6. Do not estimate close_time or trade duration. Dedicated exit verifiers handle the exit after this extraction pass.`;
 }
 
+// Exported for the eval harness (scripts/run-scanner-evals.ts prompt checks).
 export function buildMainExtractionPrompt(
   userColors?: ScannerUserColors,
   boxBounds?: ScannerBoxBounds,

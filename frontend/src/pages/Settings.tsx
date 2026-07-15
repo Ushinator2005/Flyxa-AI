@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, GripVertical, Monitor, Palette, Pencil, Plus, RotateCcw, Scan, Search, ShieldCheck, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRivals } from '../hooks/useRivals.js';
+import { useSubscription } from '../hooks/useSubscription.js';
 import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
@@ -176,6 +177,7 @@ const T1 = 'var(--app-text)';
 const T2 = 'var(--app-text-muted)';
 const T3 = 'var(--app-text-subtle)';
 const SANS = 'var(--font-sans)';
+const MONO = "'DM Mono', monospace";
 
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = hex.replace('#', '');
@@ -270,7 +272,7 @@ function getSessionTimelineSegments(start: string, end: string): Array<{ left: n
   ];
 }
 
-// â”€â”€â”€ sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── sub-components ──────────────────────────────────────────────────────────
 
 function SectionDivider({ label }: { label: string }) {
   return (
@@ -604,7 +606,7 @@ function StatusSelect({
   );
 }
 
-// â”€â”€â”€ main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── main page ────────────────────────────────────────────────────────────────
 
 export default function Settings() {
   const location = useLocation();
@@ -653,6 +655,22 @@ export default function Settings() {
   });
   const [draftTargetBalances, setDraftTargetBalances] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<string>('profile');
+  const subscription = useSubscription();
+  // Dev-only scanner eval capture — localStorage is the sanctioned home for
+  // this flag (ephemeral tooling state, read synchronously by the scan path).
+  const [evalCaptureOn, setEvalCaptureOn] = useState(() => {
+    try { return localStorage.getItem('flyxa-eval-capture') === '1'; } catch { return false; }
+  });
+  const toggleEvalCapture = () => {
+    setEvalCaptureOn(prev => {
+      const next = !prev;
+      try {
+        if (next) localStorage.setItem('flyxa-eval-capture', '1');
+        else localStorage.removeItem('flyxa-eval-capture');
+      } catch { /* flag is best-effort */ }
+      return next;
+    });
+  };
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showResetPanel, setShowResetPanel] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
@@ -672,7 +690,17 @@ export default function Settings() {
   const [newConfluenceDraft, setNewConfluenceDraft] = useState('');
   const [editingConfluenceIndex, setEditingConfluenceIndex] = useState<number | null>(null);
   const [editingConfluenceDraft, setEditingConfluenceDraft] = useState('');
-  const [confluenceCategoryOverrides, setConfluenceCategoryOverrides] = useState<Record<string, ConfluenceGroupKey>>({});
+  // Overrides live in the Zustand store (synced to Supabase). The wrapper keeps
+  // the functional-update call sites below working unchanged.
+  const confluenceCategoryOverrides = useFlyxaStore(state => state.confluenceCategoryOverrides);
+  const setStoreConfluenceOverrides = useFlyxaStore(state => state.setConfluenceCategoryOverrides);
+  const setConfluenceCategoryOverrides = useCallback((
+    update: Record<string, string> | ((current: Record<string, string>) => Record<string, string>)
+  ) => {
+    const current = useFlyxaStore.getState().confluenceCategoryOverrides;
+    const next = typeof update === 'function' ? update(current) : update;
+    if (next !== current) setStoreConfluenceOverrides(next);
+  }, [setStoreConfluenceOverrides]);
   const [draggingConfluenceIndex, setDraggingConfluenceIndex] = useState<number | null>(null);
   const [dragOverConfluenceGroup, setDragOverConfluenceGroup] = useState<ConfluenceGroupKey | null>(null);
   const [hoveredConfluenceRow, setHoveredConfluenceRow] = useState<number | null>(null);
@@ -682,7 +710,6 @@ export default function Settings() {
   const saveHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveToastReadyRef = useRef(false);
   const confluenceSyncedRef = useRef(false);
-  const skipConfluenceOverrideSaveRef = useRef(false);
   const newTagInputRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importFeedback, setImportFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -798,12 +825,12 @@ export default function Settings() {
       const existing = currentById.get(safeEntry.id);
 
       if (!existing) {
-        // Whole day is missing — add it
+        // Whole day is missing � add it
         merged.push(safeEntry);
         daysRecovered++;
         tradesRecovered += Array.isArray(safeEntry.trades) ? safeEntry.trades.length : 0;
       } else {
-        // Day exists but may have fewer trades — merge trade-level
+        // Day exists but may have fewer trades � merge trade-level
         const existingTradeIds = new Set(existing.trades.map((t: { id: string }) => t.id));
         const newTrades = (Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
           .filter((t: { id: string }) => !existingTradeIds.has(t.id));
@@ -818,7 +845,7 @@ export default function Settings() {
     }
 
     if (tradesRecovered === 0 && daysRecovered === 0) {
-      setImportFeedback({ ok: true, msg: 'Already up to date — no missing trades found.' });
+      setImportFeedback({ ok: true, msg: 'Already up to date � no missing trades found.' });
       setTimeout(() => setImportFeedback(null), 4000);
       return;
     }
@@ -1018,7 +1045,7 @@ export default function Settings() {
     setResetError('');
     try {
       // Server-side wipe: deletes user_store AND store_entries_backup from Supabase.
-      // Both tables must be cleared — otherwise store_entries_backup acts as a
+      // Both tables must be cleared � otherwise store_entries_backup acts as a
       // recovery source and brings all data back on the next page load.
       await accountApi.reset();
 
@@ -1234,50 +1261,41 @@ export default function Settings() {
     }
   ), []);
 
-  useEffect(() => {
-    if (!user?.id) {
-      skipConfluenceOverrideSaveRef.current = true;
-      setConfluenceCategoryOverrides({});
-      return;
-    }
-
-    try {
-      const raw = localStorage.getItem(getConfluenceCategoryOverridesKey(user.id));
-      const parsed = raw ? JSON.parse(raw) : {};
-      const next = typeof parsed === 'object' && parsed !== null ? parsed as Record<string, ConfluenceGroupKey> : {};
-      skipConfluenceOverrideSaveRef.current = true;
-      setConfluenceCategoryOverrides(next);
-    } catch {
-      skipConfluenceOverrideSaveRef.current = true;
-      setConfluenceCategoryOverrides({});
-    }
-  }, [user?.id]);
-
+  // One-time migration: overrides used to live in a per-user localStorage key.
+  // If the store has none yet but the legacy key does, hydrate the store from it
+  // (it will sync to Supabase automatically), then drop the legacy key.
   useEffect(() => {
     if (!user?.id) return;
-    if (skipConfluenceOverrideSaveRef.current) {
-      skipConfluenceOverrideSaveRef.current = false;
-      return;
-    }
+    if (Object.keys(useFlyxaStore.getState().confluenceCategoryOverrides).length > 0) return;
 
-    localStorage.setItem(
-      getConfluenceCategoryOverridesKey(user.id),
-      JSON.stringify(confluenceCategoryOverrides),
-    );
-  }, [user?.id, confluenceCategoryOverrides]);
+    const legacyKey = getConfluenceCategoryOverridesKey(user.id);
+    try {
+      const raw = localStorage.getItem(legacyKey);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      localStorage.removeItem(legacyKey);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const next: Record<string, string> = {};
+        Object.entries(parsed as Record<string, unknown>).forEach(([tagKey, groupKey]) => {
+          if (typeof groupKey === 'string') next[tagKey] = groupKey;
+        });
+        if (Object.keys(next).length > 0) setStoreConfluenceOverrides(next);
+      }
+    } catch { /* ignore malformed legacy data */ }
+  }, [user?.id, setStoreConfluenceOverrides]);
 
   // Seed confluenceOptions with tags used in journal trades, normalising aliases to canonical names
   useEffect(() => {
     if (confluenceSyncedRef.current || journalEntries.length === 0) return;
     confluenceSyncedRef.current = true;
 
-    // Step 1 – normalise any existing options that are currently abbreviations/aliases
+    // Step 1 � normalise any existing options that are currently abbreviations/aliases
     confluenceOptions.forEach((option, idx) => {
       const canonical = normalizeConfluenceTag(option);
       if (canonical !== option) updateConfluenceOption(idx, canonical);
     });
 
-    // Step 2 – collect canonicalised tags from every trade; skip ones already present
+    // Step 2 � collect canonicalised tags from every trade; skip ones already present
     const existing = new Set(
       confluenceOptions.map(c => normalizeConfluenceKey(normalizeConfluenceTag(c))),
     );
@@ -1296,10 +1314,10 @@ export default function Settings() {
 
   useEffect(() => {
     const validTagKeys = new Set(confluenceOptions.map(getConfluenceStorageKey));
-    const validGroupKeys = new Set(CONFLUENCE_GROUPS.map(group => group.key));
+    const validGroupKeys = new Set<string>(CONFLUENCE_GROUPS.map(group => group.key));
 
     setConfluenceCategoryOverrides(current => {
-      const next: Record<string, ConfluenceGroupKey> = {};
+      const next: Record<string, string> = {};
       let changed = false;
 
       Object.entries(current).forEach(([tagKey, groupKey]) => {
@@ -1568,6 +1586,41 @@ export default function Settings() {
           </SectionPanel>
         </div>
         <SectionPanel
+          title="Membership"
+          subtitle="Your Flyxa subscription — plan status, checkout, and billing portal."
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: '12px', color: T3, lineHeight: 1.6, maxWidth: 520 }}>
+              {subscription.loading
+                ? 'Checking membership status…'
+                : !subscription.configured
+                  ? 'Billing is not switched on in this environment — all features are open.'
+                  : subscription.active
+                    ? subscription.currentPeriodEnd
+                      ? `Membership active — renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
+                      : 'Membership active.'
+                    : 'No active membership on this account.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/upgrade')}
+              style={{
+                flexShrink: 0,
+                padding: '9px 16px',
+                borderRadius: 7,
+                border: subscription.configured && !subscription.active ? 'none' : `1px solid ${BORDER}`,
+                background: subscription.configured && !subscription.active ? AMBER : S2,
+                color: subscription.configured && !subscription.active ? '#000' : T1,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {subscription.configured && !subscription.active ? 'Start membership' : 'Manage membership'}
+            </button>
+          </div>
+        </SectionPanel>
+        <SectionPanel
           title="Your profile"
           subtitle="Set the username other traders use to find you and send rival requests."
         >
@@ -1777,8 +1830,8 @@ export default function Settings() {
                 onChange={v => updatePreferences({ currencySymbol: v as typeof preferences.currencySymbol })}
               >
                 <option value="$">$ USD</option>
-                <option value="€">€ EUR</option>
-                <option value="£">£ GBP</option>
+                <option value="�">� EUR</option>
+                <option value="�">� GBP</option>
                 <option value="A$">A$ AUD</option>
               </WorkspaceSelect>
             </label>
@@ -2026,6 +2079,56 @@ export default function Settings() {
             Click a swatch to open the color picker and match it to the zone color on your TradingView chart.
           </p>
         </SectionPanel>
+        <div style={{ marginTop: 12 }}>
+          <SectionPanel
+            title="Eval capture"
+            subtitle="Records every scan as a regression case for the scanner test suite. Leave this off for normal trading."
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <p style={{ fontSize: '12px', color: T3, lineHeight: 1.6, maxWidth: 520 }}>
+                While on, each chart you scan downloads a <span style={{ color: T1, fontFamily: MONO }}>bundle.json</span> — drop
+                it into <span style={{ color: T1, fontFamily: MONO }}>scanner-evals/cases/</span>, correct any wrong fields, and
+                it becomes ground truth for <span style={{ color: T1, fontFamily: MONO }}>npm run evals</span>.
+              </p>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={evalCaptureOn}
+                aria-label="Toggle scanner eval capture"
+                onClick={toggleEvalCapture}
+                style={{
+                  flexShrink: 0,
+                  width: 40,
+                  height: 22,
+                  borderRadius: 11,
+                  border: `1px solid ${evalCaptureOn ? AMBER : BORDER}`,
+                  background: evalCaptureOn ? 'rgba(245,158,11,0.18)' : 'rgba(255,255,255,0.04)',
+                  position: 'relative',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 2,
+                    left: evalCaptureOn ? 20 : 2,
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    background: evalCaptureOn ? AMBER : T3,
+                    transition: 'left 0.15s, background 0.15s',
+                  }}
+                />
+              </button>
+            </div>
+            {evalCaptureOn && (
+              <p style={{ marginTop: '10px', fontSize: '11px', color: AMBER, lineHeight: 1.6 }}>
+                Capture is on — the next scans will each download a JSON bundle.
+              </p>
+            )}
+          </SectionPanel>
+        </div>
       </section>
 
       {/* Accounts section */}
@@ -2229,7 +2332,7 @@ export default function Settings() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {/* Set as default — icon-only star, active non-default accounts only */}
+                    {/* Set as default � icon-only star, active non-default accounts only */}
                     {account.id !== DEFAULT_ACCOUNT_ID && account.id !== defaultTradeAccountId && account.status !== 'Blown' && account.status !== 'Passed' && (
                       <button
                         type="button"
@@ -2263,7 +2366,7 @@ export default function Settings() {
                         <Star size={12} />
                       </button>
                     )}
-                    {/* Evaluation link — eval/passed/blown accounts */}
+                    {/* Evaluation link � eval/passed/blown accounts */}
                     {(account.status === 'Eval' || account.status === 'Passed' || account.status === 'Blown') && (
                       <button
                         type="button"
@@ -2299,7 +2402,7 @@ export default function Settings() {
                         Evaluation
                       </button>
                     )}
-                    {/* Payouts button — live/funded accounts only */}
+                    {/* Payouts button � live/funded accounts only */}
                     {(account.status === 'Funded' || account.status === 'Live') && (
                       <button
                         type="button"
@@ -2678,7 +2781,7 @@ export default function Settings() {
           <div style={{ position: 'relative', marginBottom: '12px' }}>
             <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: T3, pointerEvents: 'none' }} />
             <input
-              placeholder="Search tags…"
+              placeholder="Search tags�"
               value={confluenceSearch}
               onChange={e => setConfluenceSearch(e.target.value)}
               style={{
@@ -2698,7 +2801,7 @@ export default function Settings() {
             />
           </div>
 
-          {/* Category grid — alignItems:start so each column is only as tall as its content */}
+          {/* Category grid � alignItems:start so each column is only as tall as its content */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
@@ -2760,7 +2863,7 @@ export default function Settings() {
                   }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: T1 }}>{group.title}</div>
-                      {/* description is a caption — smaller and dimmer than surrounding text */}
+                      {/* description is a caption � smaller and dimmer than surrounding text */}
                       <div style={{ marginTop: '2px', fontSize: '9px', color: T3, opacity: 0.65, letterSpacing: '0.02em' }}>{group.description}</div>
                     </div>
                     <span style={{ flexShrink: 0, fontSize: '11px', color: T3, fontVariantNumeric: 'tabular-nums' }}>
@@ -2807,7 +2910,7 @@ export default function Settings() {
                             gridTemplateColumns: '14px minmax(0,1fr) 52px 28px',
                             alignItems: 'center',
                             gap: '6px',
-                            // unused archive rows are slightly more compact — they're not actively used
+                            // unused archive rows are slightly more compact � they're not actively used
                             minHeight: isUnused ? '30px' : '36px',
                             padding: isUnused ? '3px 8px 3px 10px' : '4px 8px 4px 10px',
                             borderTop: `1px solid ${BSUB}`,
@@ -2816,7 +2919,7 @@ export default function Settings() {
                             transition: 'opacity 0.12s',
                           }}
                         >
-                          {/* Grip — visible on hover only */}
+                          {/* Grip � visible on hover only */}
                           <GripVertical size={12} style={{ color: T3, visibility: showControls ? 'visible' : 'hidden' }} />
 
                           {/* Tag name or edit input */}
@@ -2856,7 +2959,7 @@ export default function Settings() {
                             </button>
                           )}
 
-                          {/* Edit + Delete — visible on hover only */}
+                          {/* Edit + Delete � visible on hover only */}
                           <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end', visibility: showControls ? 'visible' : 'hidden' }}>
                             <button
                               type="button"
@@ -2900,7 +3003,7 @@ export default function Settings() {
                             </button>
                           </div>
 
-                          {/* Usage count — plain text, green only when high */}
+                          {/* Usage count � plain text, green only when high */}
                           <span
                             title={`${usageCount} trade${usageCount === 1 ? '' : 's'} tagged`}
                             style={{
@@ -2910,13 +3013,13 @@ export default function Settings() {
                               fontWeight: usageCount >= 5 ? 600 : 400,
                             }}
                           >
-                            {usageCount > 0 ? `${usageCount}x` : '—'}
+                            {usageCount > 0 ? `${usageCount}x` : '�'}
                           </span>
                         </div>
                       );
                     })}
 
-                    {/* Ghost "add" row — empty space becomes an affordance */}
+                    {/* Ghost "add" row � empty space becomes an affordance */}
                     {!isSearching && confluenceOptions.length < 64 && (
                       <button
                         type="button"
@@ -2960,7 +3063,7 @@ export default function Settings() {
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T2; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T3; }}
                       >
-                        {showUnused ? '↑ Hide unused' : `↓ Show unused (${unusedItems.length})`}
+                        {showUnused ? '? Hide unused' : `? Show unused (${unusedItems.length})`}
                       </button>
                     )}
                   </div>
@@ -2973,7 +3076,7 @@ export default function Settings() {
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '8px', alignItems: 'center' }}>
             <input
               ref={newTagInputRef}
-              placeholder={confluenceOptions.length >= 64 ? 'Max 64 tags reached' : 'New confluence tag…'}
+              placeholder={confluenceOptions.length >= 64 ? 'Max 64 tags reached' : 'New confluence tag�'}
               value={newConfluenceDraft}
               maxLength={64}
               disabled={confluenceOptions.length >= 64}
@@ -3040,7 +3143,7 @@ export default function Settings() {
         </SectionPanel>
       </section>
 
-      {/* ── Danger Zone ── */}
+      {/* -- Danger Zone -- */}
       <section style={{ scrollMarginTop: '140px', marginTop: 8 }}>
         <SectionDivider label="Danger Zone" />
         <SectionPanel
@@ -3059,7 +3162,7 @@ export default function Settings() {
                 cursor: 'pointer', fontFamily: SANS,
               }}
             >
-              Reset all data…
+              Reset all data�
             </button>
           ) : (
             <div style={{ border: '1px solid rgba(239,68,68,0.35)', borderRadius: 8, padding: '16px', background: 'rgba(239,68,68,0.05)' }}>
@@ -3260,7 +3363,7 @@ export default function Settings() {
                   <label>
                     <FieldLabel>Pricing path</FieldLabel>
                     <StyledSelect value={newAccount.evaluationPath} onChange={value => setNewAccount(current => ({ ...current, evaluationPath: value as 'standard' | 'no_activation_fee' }))}>
-                      <option value="standard">Standard · $149 activation</option>
+                      <option value="standard">Standard � $149 activation</option>
                       <option value="no_activation_fee">No Activation Fee</option>
                     </StyledSelect>
                   </label>
@@ -3338,8 +3441,8 @@ export default function Settings() {
                     <span style={{ fontSize: 9, color: '#34d399' }}>Verified {template.verifiedAt ? new Date(template.verifiedAt).toLocaleDateString() : ''}</span>
                   </div>
                   <p style={{ margin: '8px 0 0', fontSize: 10, color: T3, lineHeight: 1.6 }}>
-                    {moneyValue(template.profitTarget)} target · {moneyValue(template.maxDrawdown)} trailing MLL · {template.maxContracts} contracts · {template.maxMicros} micros · {template.consistencyLimitPct}% consistency · minimum {template.minimumTradingDays} days
-                    {configuredDailyLoss ? ` · ${moneyValue(configuredDailyLoss)} fixed daily loss limit` : ''}
+                    {moneyValue(template.profitTarget)} target � {moneyValue(template.maxDrawdown)} trailing MLL � {template.maxContracts} contracts � {template.maxMicros} micros � {template.consistencyLimitPct}% consistency � minimum {template.minimumTradingDays} days
+                    {configuredDailyLoss ? ` � ${moneyValue(configuredDailyLoss)} fixed daily loss limit` : ''}
                   </p>
                   {template.sourceUrl && <a href={template.sourceUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 7, color: '#60a5fa', fontSize: 9 }}>Check official Topstep source</a>}
                 </div>

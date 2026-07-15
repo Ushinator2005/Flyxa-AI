@@ -20,6 +20,7 @@ import type { TradingAccount } from '../types/index.js';
 import DatePicker from '../components/common/DatePicker.js';
 import PayoutGallery from '../components/billing/PayoutGallery.js';
 import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
+import { formatUsd } from '../utils/format.js';
 import * as XLSX from 'xlsx';
 
 type AccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
@@ -352,14 +353,7 @@ function computeActualPrice(listPrice: number, discountPct: number): number {
   return Number(actual.toFixed(2));
 }
 
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+const formatCurrency = formatUsd;
 
 function formatSignedCurrency(value: number): string {
   const abs = formatCurrency(Math.abs(value));

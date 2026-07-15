@@ -34,6 +34,8 @@ const Goals = lazy(() => import('./pages/Goals.js'));
 const Rivals = lazy(() => import('./pages/Rivals.js'));
 const Settings = lazy(() => import('./pages/Settings.js'));
 const TradeCheck = lazy(() => import('./pages/TradeCheck.js'));
+const Legal = lazy(() => import('./pages/Legal.js'));
+const Upgrade = lazy(() => import('./pages/Upgrade.js'));
 
 function RouteFallback() {
   return (
@@ -394,6 +396,8 @@ export default function App() {
         <Routes>
           <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
           <Route path="/landing" element={<Navigate to={user ? '/' : '/auth'} replace />} />
+          <Route path="/terms" element={<Legal />} />
+          <Route path="/privacy" element={<Legal />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/trade-check" element={<TradeCheck />} />
@@ -422,6 +426,7 @@ export default function App() {
               <Route path="/goals" element={<Goals />} />
               <Route path="/rivals" element={<Rivals />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/upgrade" element={<Upgrade />} />
               <Route path="/risk" element={<Navigate to="/" replace />} />
               <Route path="/playbook" element={<Navigate to="/" replace />} />
               <Route path="/chart-analyzer" element={<Navigate to="/" replace />} />

@@ -1,4 +1,5 @@
 import type { Trade } from '../types/index.js';
+import { formatUsd0 as formatMoney } from './format.js';
 
 export interface DailyFlowInsight {
   date: string;
@@ -22,11 +23,6 @@ export interface DailyFlowInsight {
   } | null;
   tomorrowRule: string;
   summary: string;
-}
-
-function formatMoney(value: number) {
-  const sign = value < 0 ? '-' : '';
-  return `${sign}$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
 function tradeDate(trade: Trade): string {

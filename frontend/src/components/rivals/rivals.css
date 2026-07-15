@@ -1,5 +1,5 @@
 ﻿.rivals-page {
-  --rv-bg: var(--app-panel);
+  --rv-bg: var(--app-bg);
   --rv-layer: var(--app-panel-strong);
   --rv-layer-2: var(--app-panel-strong);
   --rv-layer-3: var(--surface-3);
@@ -132,10 +132,7 @@
   align-items: end;
   gap: 10px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% -20%, rgba(245,158,11,.26), transparent 48%),
-    linear-gradient(145deg, rgba(245,158,11,.13), rgba(59,130,246,.09) 55%, rgba(167,139,250,.11)),
-    var(--rv-layer-2);
+  background: var(--rv-layer-2);
 }
 
 .rv-podium::before {
@@ -150,14 +147,7 @@
 }
 
 .rv-podium-glow {
-  position: absolute;
-  left: 20%;
-  right: 20%;
-  bottom: -60px;
-  height: 150px;
-  background: var(--rv-amber);
-  filter: blur(90px);
-  opacity: .12;
+  display: none;
 }
 
 .rv-podium-person {
@@ -200,13 +190,12 @@
   justify-content: center;
   gap: 7px;
   color: var(--rv-amber);
-  background: linear-gradient(180deg, rgba(245,158,11,.18), rgba(245,158,11,.035));
-  box-shadow: inset 0 1px rgba(255,255,255,.06);
+  background: rgba(245,158,11,.07);
 }
 
 .place-1 .rv-podium-block {
   height: 92px;
-  background: linear-gradient(180deg, rgba(245,158,11,.27), rgba(245,158,11,.05));
+  background: rgba(245,158,11,.12);
 }
 
 .place-3 .rv-podium-block {
@@ -362,7 +351,6 @@
   gap: 13px;
   align-items: center;
   border-bottom: 1px solid var(--rv-border);
-  background: linear-gradient(145deg, rgba(245,158,11,.08), transparent 58%);
 }
 
 .rv-profile-hero h2 {
@@ -1136,11 +1124,9 @@
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border: 1px solid rgba(245,158,11,0.14);
+  border: 1px solid var(--rv-border);
   border-radius: 10px;
-  background:
-    linear-gradient(90deg, rgba(245,158,11,0.06), rgba(255,255,255,0.02) 50%, transparent),
-    var(--rv-layer-2);
+  background: var(--rv-layer-2);
 }
 
 .rivals-request-avatar {
@@ -3742,8 +3728,6 @@
   font: 800 13px var(--rv-mono);
   letter-spacing: -.02em;
   line-height: 1;
-  text-shadow: 0 0 10px var(--rv-card-tier-color, transparent),
-               0 0 22px var(--rv-card-tier-color, transparent);
 }
 
 .rv-card-tier-label {
@@ -4030,7 +4014,7 @@
 }
 
 .rv-live-indicator i {
-  animation: rv-live-pulse 2s ease-in-out infinite;
+  opacity: .9;
 }
 
 .rv-sparkline-path {
@@ -4229,17 +4213,6 @@
   animation: rv-rank-flash .42s ease-out;
 }
 
-@keyframes rv-live-pulse {
-  0%, 100% {
-    opacity: .65;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--rv-green) 32%, transparent);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--rv-green) 0%, transparent);
-  }
-}
-
 @keyframes rv-line-draw {
   to { stroke-dashoffset: 0; }
 }
@@ -4279,10 +4252,6 @@
    "me") make the top of the table read at a glance. ── */
 .rv-card-grid .rv-rival-card .rv-card-pos {
   color: var(--rv-card-tier-color, var(--rv-text-2));
-}
-
-.rv-card-grid .rv-rival-card:nth-child(-n+3) .rv-card-pos {
-  text-shadow: 0 0 14px color-mix(in srgb, var(--rv-card-tier-color, transparent) 45%, transparent);
 }
 
 /* Inspector meta — rank line + gap context side by side */

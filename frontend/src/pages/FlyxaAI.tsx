@@ -1,5 +1,4 @@
 import { CSSProperties, Dispatch, SetStateAction, useMemo, useState } from 'react';
-import { Clock3, AlertTriangle } from 'lucide-react';
 import { NavLink, useNavigate, type NavigateFunction } from 'react-router-dom';
 import FlyxaNav from '../components/flyxa/FlyxaNav.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
@@ -426,8 +425,10 @@ export default function FlyxaAI() {
             {safeAccountTrades.length === 0 ? (
               <LockedEmptyState navigate={navigate} />
             ) : (
-              <>
-                <CoachHeroSection
+              /* One continuous report sheet — sections divided by hairlines,
+                 not boxes. The document is the design. */
+              <section className="mt-6 overflow-hidden rounded-[18px] border" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+                <SummarySection
                   gradeSoftBackground={gradeSoftBackground}
                   weekGrade={weekGrade}
                   boundedScore={boundedScore}
@@ -436,12 +437,7 @@ export default function FlyxaAI() {
                   instruments={weeklyDebriefData.instruments}
                   coachHeadline={coachHeadline}
                   coachSubcopy={coachSubcopy}
-                  question={weeklyDebriefData.question}
-                  respondOpen={respondOpen}
-                  setRespondOpen={setRespondOpen}
-                  respondText={respondText}
-                  setRespondText={setRespondText}
-                  saveReflection={saveReflection}
+                  actionItems={actionItems}
                   netRValue={weeklyDebriefData.stats.netR.value}
                   netRNumeric={netRNumeric}
                   timeframe={timeframe}
@@ -449,27 +445,35 @@ export default function FlyxaAI() {
                   prevLabel={periodWindow.prevLabel}
                   weeklyTradesCount={weeklyWindow.weeklyTrades.length}
                   sparkline={sparkline}
+                  completeness={dataCompleteness}
+                  navigate={navigate}
                 />
-
-                <CompletenessBanner completeness={dataCompleteness} navigate={navigate} />
 
                 <KeyMetricsSection metrics={keyMetrics} />
 
-                <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="grid lg:grid-cols-[minmax(0,1fr)_320px]">
                   <InsightsListSection topInsights={topInsights} navigate={navigate} />
 
                   <DebriefAsideSection
-                    actionItems={actionItems}
                     weakestProcess={weakestProcess}
                     boundedScore={boundedScore}
                     weekGrade={weekGrade}
                     processBreakdown={weeklyDebriefData.processBreakdown}
                     sessionBreakdownRows={sessionBreakdownRows}
                     bestTrade={bestTrade}
-                    recentReflections={recentReflections}
                   />
                 </div>
-              </>
+
+                <ReflectionSection
+                  question={weeklyDebriefData.question}
+                  respondOpen={respondOpen}
+                  setRespondOpen={setRespondOpen}
+                  respondText={respondText}
+                  setRespondText={setRespondText}
+                  saveReflection={saveReflection}
+                  recentReflections={recentReflections}
+                />
+              </section>
             )}
           </div>
         </main>
@@ -511,13 +515,12 @@ function HeaderSection({ weekRange, timeframe, setTimeframe, weekOffset, setWeek
   return (
             <section data-tour-id="flyxa-ai-header" className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.16em]" style={{ color: colors.t2 }}>AI debrief</p>
-                <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.04em] lg:text-[36px]" style={{ color: colors.t0 }}>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: colors.t2, fontFamily: colors.mono }}>
+                  Flyxa Intelligence · Weekly debrief
+                </p>
+                <h1 className="mt-2 text-[28px] font-bold tracking-[-0.02em] lg:text-[36px]" style={{ color: colors.t0, fontFamily: 'var(--font-display)' }}>
                   {weekRange}
                 </h1>
-                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed" style={{ color: colors.t1 }}>
-                  A simplified read on what mattered, what changed, and what to do next.
-                </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -601,11 +604,10 @@ function LockedEmptyState({ navigate }: { navigate: NavigateFunction }) {
   );
 }
 
-function CoachHeroSection({
+function SummarySection({
   gradeSoftBackground, weekGrade, boundedScore, sessionCount, tradeCount, instruments,
-  coachHeadline, coachSubcopy, question, respondOpen, setRespondOpen, respondText,
-  setRespondText, saveReflection, netRValue, netRNumeric, timeframe, previousWeekPnl,
-  prevLabel, weeklyTradesCount, sparkline,
+  coachHeadline, coachSubcopy, actionItems, netRValue, netRNumeric, timeframe,
+  previousWeekPnl, prevLabel, weeklyTradesCount, sparkline, completeness, navigate,
 }: {
   gradeSoftBackground: string;
   weekGrade: string;
@@ -615,12 +617,7 @@ function CoachHeroSection({
   instruments: string[];
   coachHeadline: string;
   coachSubcopy: string;
-  question: string;
-  respondOpen: boolean;
-  setRespondOpen: Dispatch<SetStateAction<boolean>>;
-  respondText: string;
-  setRespondText: Dispatch<SetStateAction<string>>;
-  saveReflection: () => void;
+  actionItems: string[];
   netRValue: string;
   netRNumeric: number;
   timeframe: TimeFrame;
@@ -628,153 +625,133 @@ function CoachHeroSection({
   prevLabel: string;
   weeklyTradesCount: number;
   sparkline: SparklineData;
-}) {
-  return (
-                <section className="mt-6 grid gap-4 rounded-[18px] border p-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:p-5" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.12em]" style={{ borderColor: colors.b0, color: colors.t2 }}>
-                        Coach read
-                      </span>
-                      <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ backgroundColor: gradeSoftBackground, color: gradeColor(weekGrade) }}>
-                        Process {boundedScore}/100
-                      </span>
-                      <span className="text-[11px]" style={{ color: colors.t2 }}>
-                        {sessionCount} sessions · {tradeCount} trades · {instruments[0] ?? 'All markets'}
-                      </span>
-                    </div>
-
-                    <h2 className="mt-4 max-w-3xl text-[24px] font-semibold leading-tight tracking-[-0.035em] lg:text-[30px]" style={{ color: colors.t0 }}>
-                      {coachHeadline}
-                    </h2>
-                    <p className="mt-3 max-w-3xl text-[13px] leading-7" style={{ color: colors.t1 }}>
-                      {coachSubcopy}
-                    </p>
-
-                    <div data-tour-id="flyxa-ai-reflection" className="mt-5 rounded-[12px] border p-3.5" style={{ borderColor: colors.b0, backgroundColor: colors.d0 }}>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border" style={{ borderColor: 'rgba(245,158,11,0.22)', backgroundColor: 'rgba(245,158,11,0.08)' }}>
-                          <Clock3 size={15} color={colors.acc} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Reflection prompt</p>
-                          <p className="mt-1 text-[13px] leading-relaxed" style={{ color: colors.t1 }}>{question}</p>
-                        </div>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-[7px] border px-3 py-1.5 text-[12px] font-semibold"
-                          style={{ borderColor: colors.b0, color: respondOpen ? colors.t1 : colors.acc, backgroundColor: colors.d1 }}
-                          onClick={() => setRespondOpen(prev => !prev)}
-                        >
-                          {respondOpen ? 'Cancel' : 'Respond'}
-                        </button>
-                      </div>
-
-                      {respondOpen && (
-                        <div className="mt-3">
-                          <textarea
-                            className="w-full resize-none rounded-[10px] text-[13px] leading-relaxed"
-                            style={{
-                              backgroundColor: colors.d2,
-                              border: `1px solid ${colors.b1}`,
-                              color: colors.t0,
-                              padding: '12px 13px',
-                              fontFamily: 'var(--font-sans)',
-                              outline: 'none',
-                              minHeight: 92,
-                            }}
-                            placeholder="Write the one thing you need to remember before your next session..."
-                            value={respondText}
-                            onChange={e => setRespondText(e.target.value)}
-                          />
-                          <div className="mt-2 flex justify-end">
-                            <button
-                              type="button"
-                              disabled={!respondText.trim()}
-                              className="rounded-[8px] px-3.5 py-2 text-[12px] font-semibold disabled:opacity-40"
-                              style={{ backgroundColor: colors.acc, color: colors.d0 }}
-                              onClick={saveReflection}
-                            >
-                              Save reflection
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[14px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d0 }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>Net P&L</p>
-                        <p className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.06em]" style={{ color: netRNumeric >= 0 ? colors.grn : colors.red, fontFamily: colors.mono }}>
-                          {netRValue}
-                        </p>
-                        <p className="mt-2 text-[11px]" style={{ color: colors.t2 }}>
-                          {timeframe !== 'All' ? `vs ${formatSignedCurrency(previousWeekPnl)} ${prevLabel}` : `${weeklyTradesCount} trades total`}
-                        </p>
-                      </div>
-                      <p className="rounded-[10px] px-3 py-2 text-[26px] font-semibold leading-none" style={{ color: gradeColor(weekGrade), backgroundColor: gradeSoftBackground, fontFamily: colors.mono }}>
-                        {weekGrade}
-                      </p>
-                    </div>
-
-                    <svg width="100%" height={78} viewBox={`0 0 ${sparkline.width} ${sparkline.height}`} preserveAspectRatio="none" className="mt-5 block">
-                      <line x1={6} y1={sparkline.baselineY} x2={sparkline.width - 6} y2={sparkline.baselineY} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
-                      <path d={sparkline.areaPath} fill={netRNumeric >= 0 ? 'rgba(34,214,138,0.08)' : 'rgba(240,82,82,0.09)'} />
-                      <path d={sparkline.linePath} fill="none" stroke={netRNumeric >= 0 ? colors.grn : colors.red} strokeWidth="1.8" />
-                    </svg>
-                  </div>
-                </section>
-  );
-}
-
-function CompletenessBanner({ completeness, navigate }: {
   completeness: { emotionPct: number; planPct: number } | null;
   navigate: NavigateFunction;
 }) {
-  if (!completeness || (completeness.emotionPct >= 80 && completeness.planPct >= 80)) return null;
+  const directives = actionItems.slice(1);
+  const thinCoverage = completeness && (completeness.emotionPct < 80 || completeness.planPct < 80);
   return (
-                  <div className="mt-4 flex flex-col gap-3 rounded-[12px] border px-4 py-3 sm:flex-row sm:items-center" style={{ borderColor: 'rgba(245,158,11,0.22)', backgroundColor: 'rgba(245,158,11,0.055)' }}>
-                    <AlertTriangle size={15} color={colors.amb} style={{ flexShrink: 0 }} />
-                    <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed" style={{ color: colors.t1 }}>
-                      Some context is missing: emotion tagged on {completeness.emotionPct}% and plan logged on {completeness.planPct}% of trades.
-                    </p>
-                    <button
-                      type="button"
-                      className="self-start rounded-[7px] border px-3 py-1.5 text-[12px] font-semibold sm:self-auto"
-                      style={{ color: colors.acc, borderColor: 'rgba(245,158,11,0.25)', backgroundColor: 'rgba(245,158,11,0.06)' }}
-                      onClick={() => navigate('/journal')}
-                    >
-                      Fill journal gaps
-                    </button>
-                  </div>
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 p-5 lg:p-7">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.acc, fontFamily: colors.mono }}>
+            01 · Executive summary
+          </p>
+          <p className="text-[11px]" style={{ color: colors.t2, fontFamily: colors.mono }}>
+            {sessionCount} sessions · {tradeCount} trades · {instruments[0] ?? 'All markets'}
+          </p>
+        </div>
+
+        <h2 className="mt-4 max-w-3xl text-[23px] font-bold leading-[1.18] tracking-[-0.02em] lg:text-[29px]" style={{ color: colors.t0, fontFamily: 'var(--font-display)' }}>
+          {coachHeadline}
+        </h2>
+        <p className="mt-4 max-w-3xl text-[13px] leading-7" style={{ color: colors.t1 }}>
+          {coachSubcopy}
+        </p>
+
+        {directives.length > 0 && (
+          <div className="mt-6 max-w-3xl">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>
+              Directives for next week
+            </p>
+            <div className="mt-3 space-y-3">
+              {directives.map((item, index) => (
+                <div key={item} className="flex gap-3">
+                  <span className="mt-0.5 shrink-0 text-[11px] font-semibold" style={{ color: colors.acc, fontFamily: colors.mono }}>
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <p className="text-[12.5px] leading-6" style={{ color: colors.t1 }}>{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {thinCoverage && completeness && (
+          <p className="mt-6 text-[11px] leading-relaxed" style={{ color: colors.t2 }}>
+            Data coverage: emotion tagged {completeness.emotionPct}% · plan logged {completeness.planPct}% — thin coverage limits this report's accuracy.{' '}
+            <button type="button" className="font-semibold" style={{ color: colors.acc }} onClick={() => navigate('/journal')}>
+              Fill journal gaps →
+            </button>
+          </p>
+        )}
+      </div>
+
+      {/* Figures column — ruled off, not boxed */}
+      <div className="flex flex-col justify-between gap-5 border-t p-5 lg:border-l lg:border-t-0 lg:p-6" style={{ borderColor: colors.b0 }}>
+        <div>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Net P&L</p>
+            <span className="rounded-[8px] px-2.5 py-1.5 text-[18px] font-bold leading-none" style={{ color: gradeColor(weekGrade), backgroundColor: gradeSoftBackground, fontFamily: colors.mono }}>
+              {weekGrade}
+            </span>
+          </div>
+          <p className="mt-2 text-[34px] font-semibold leading-none tracking-[-0.04em]" style={{ color: netRNumeric >= 0 ? colors.grn : colors.red, fontFamily: colors.mono }}>
+            {netRValue}
+          </p>
+          <p className="mt-2 text-[11px]" style={{ color: colors.t2, fontFamily: colors.mono }}>
+            {timeframe !== 'All' ? `vs ${formatSignedCurrency(previousWeekPnl)} ${prevLabel}` : `${weeklyTradesCount} trades total`}
+          </p>
+        </div>
+
+        <svg width="100%" height={72} viewBox={`0 0 ${sparkline.width} ${sparkline.height}`} preserveAspectRatio="none" className="block">
+          <line x1={6} y1={sparkline.baselineY} x2={sparkline.width - 6} y2={sparkline.baselineY} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
+          <path d={sparkline.areaPath} fill={netRNumeric >= 0 ? 'rgba(34,214,138,0.08)' : 'rgba(240,82,82,0.09)'} />
+          <path d={sparkline.linePath} fill="none" stroke={netRNumeric >= 0 ? colors.grn : colors.red} strokeWidth="1.8" />
+        </svg>
+
+        <div className="flex items-center justify-between border-t pt-3" style={{ borderColor: colors.b0 }}>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Process score</span>
+          <span className="text-[13px] font-semibold" style={{ color: gradeColor(weekGrade), fontFamily: colors.mono }}>
+            {boundedScore}/100
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function KeyMetricsSection({ metrics }: { metrics: WeeklyStat[] }) {
   return (
-                <section data-tour-id="flyxa-ai-stats" className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {metrics.map(metric => (
-                    <div key={metric.label} className="rounded-[13px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                      <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>{metric.label}</p>
-                      <p className="mt-2 text-[22px] font-semibold tracking-[-0.04em]" style={{ color: statToneColor(metric.tone), fontFamily: colors.mono }}>
-                        {metric.value}
-                      </p>
-                      <p className="mt-1 text-[11px]" style={{ color: colors.t2 }}>{metric.subLabel}</p>
-                    </div>
-                  ))}
-                </section>
+    <section data-tour-id="flyxa-ai-stats" className="grid grid-cols-2 border-t lg:grid-cols-4" style={{ borderColor: colors.b0 }}>
+      {metrics.map((metric, index) => (
+        <div
+          key={metric.label}
+          className="px-5 py-4 lg:px-7 lg:py-5"
+          style={{
+            borderColor: colors.b0,
+            borderLeftWidth: index % 2 === 1 ? 1 : 0,
+            borderLeftStyle: 'solid',
+            borderTopWidth: index >= 2 ? 1 : 0,
+            borderTopStyle: 'solid',
+          }}
+        >
+          <p className="text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>{metric.label}</p>
+          <p className="mt-2 text-[21px] font-semibold leading-none tracking-[-0.03em]" style={{ color: statToneColor(metric.tone), fontFamily: colors.mono }}>
+            {metric.value}
+          </p>
+          <p className="mt-2 text-[11px]" style={{ color: colors.t2 }}>{metric.subLabel}</p>
+        </div>
+      ))}
+      <style>{`
+        @media (min-width: 1024px) {
+          [data-tour-id="flyxa-ai-stats"] > div { border-top-width: 0 !important; }
+          [data-tour-id="flyxa-ai-stats"] > div:not(:first-child) { border-left-width: 1px !important; }
+        }
+      `}</style>
+    </section>
   );
 }
 
 function InsightsListSection({ topInsights, navigate }: { topInsights: WeeklyInsight[]; navigate: NavigateFunction }) {
   return (
-                  <section data-tour-id="flyxa-ai-insights" className="rounded-[16px] border" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                    <div className="border-b px-4 py-4" style={{ borderColor: colors.b0 }}>
-                      <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>What Flyxa noticed</p>
-                      <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.02em]" style={{ color: colors.t0 }}>
-                        {topInsights.length} priority insight{topInsights.length === 1 ? '' : 's'}
+                  <section data-tour-id="flyxa-ai-insights" className="min-w-0 border-t" style={{ borderColor: colors.b0 }}>
+                    <div className="px-5 pb-1 pt-5 lg:px-7 lg:pt-6">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.acc, fontFamily: colors.mono }}>
+                        02 · Findings
+                      </p>
+                      <h2 className="mt-2 text-[19px] font-bold tracking-[-0.01em]" style={{ color: colors.t0, fontFamily: 'var(--font-display)' }}>
+                        What the data argues
                       </h2>
                     </div>
 
@@ -782,7 +759,7 @@ function InsightsListSection({ topInsights, navigate }: { topInsights: WeeklyIns
                       {topInsights.map((insight, index) => {
                         const style = insightTypeStyles[insight.type];
                         return (
-                          <article key={insight.title} className="px-4 py-4">
+                          <article key={insight.title} className="px-5 py-5 lg:px-7">
                             <div className="flex items-start gap-3">
                               <span className="mt-0.5 w-6 shrink-0 text-[11px] font-semibold" style={{ color: colors.t2, fontFamily: colors.mono }}>
                                 {String(index + 1).padStart(2, '0')}
@@ -830,111 +807,165 @@ function InsightsListSection({ topInsights, navigate }: { topInsights: WeeklyIns
 }
 
 function DebriefAsideSection({
-  actionItems, weakestProcess, boundedScore, weekGrade, processBreakdown,
-  sessionBreakdownRows, bestTrade, recentReflections,
+  weakestProcess, boundedScore, weekGrade, processBreakdown,
+  sessionBreakdownRows, bestTrade,
 }: {
-  actionItems: string[];
   weakestProcess: ProcessBreakdownItem | undefined;
   boundedScore: number;
   weekGrade: string;
   processBreakdown: ProcessBreakdownItem[];
   sessionBreakdownRows: SessionBreakdownRow[];
   bestTrade: BestTradeSummary | null;
+}) {
+  return (
+    <aside className="border-t lg:border-l" style={{ borderColor: colors.b0 }}>
+      <div className="px-5 pt-5 lg:px-6 lg:pt-6">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.acc, fontFamily: colors.mono }}>
+          03 · Appendix
+        </p>
+      </div>
+
+      <div className="space-y-6 px-5 py-5 lg:px-6">
+        <div>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-[12px] font-semibold" style={{ color: colors.t0 }}>Process breakdown</p>
+            <p className="text-[13px] font-semibold" style={{ color: gradeColor(weekGrade), fontFamily: colors.mono }}>{boundedScore}/100</p>
+          </div>
+          <p className="mt-1 text-[10.5px]" style={{ color: colors.t2 }}>
+            Weakest: {weakestProcess?.label ?? 'Execution quality'}
+          </p>
+          <div className="mt-3 space-y-3">
+            {processBreakdown.map(item => {
+              const color = item.noData ? colors.t2 : breakdownColor(item.value);
+              return (
+                <div key={item.label}>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <span className="text-[11.5px]" style={{ color: colors.t1 }}>{item.label}</span>
+                    <span className="text-[11.5px] font-semibold" style={{ color, fontFamily: colors.mono }}>{item.noData ? 'N/A' : `${item.value}%`}</span>
+                  </div>
+                  <div className="h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: colors.d4 }}>
+                    {!item.noData && <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: color }} />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t pt-5" style={{ borderColor: colors.b0 }}>
+          <p className="text-[12px] font-semibold" style={{ color: colors.t0 }}>Session split</p>
+          <div className="mt-3 space-y-3">
+            {sessionBreakdownRows.map(row => (
+              <div key={row.label}>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <span className="text-[11.5px]" style={{ color: colors.t1 }}>{row.label}</span>
+                  <span className="text-[11.5px] font-semibold" style={{ color: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2, fontFamily: colors.mono }}>
+                    {row.trades ? formatSignedCompactCurrency(row.netPnl) : '--'}
+                  </span>
+                </div>
+                <div className="h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: colors.d4 }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${row.barWidth}%`, backgroundColor: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2 }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {bestTrade && (
+          <div className="border-t pt-5" style={{ borderColor: colors.b0 }}>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-[12px] font-semibold" style={{ color: colors.t0 }}>Best execution</p>
+              <span className="text-[10.5px]" style={{ color: colors.t2, fontFamily: colors.mono }}>{bestTrade.date}</span>
+            </div>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[15px] font-semibold" style={{ color: colors.t0, fontFamily: colors.mono }}>{bestTrade.symbol}</p>
+                <p className="mt-1 text-[11px]" style={{ color: colors.t2 }}>{bestTrade.session} · {bestTrade.direction}</p>
+              </div>
+              <p className="text-[15px] font-semibold" style={{ color: colors.grn, fontFamily: colors.mono }}>{bestTrade.resultPnl}</p>
+            </div>
+            <p className="mt-3 text-[11.5px] leading-6" style={{ color: colors.t1 }}>{bestTrade.journal}</p>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function ReflectionSection({
+  question, respondOpen, setRespondOpen, respondText, setRespondText, saveReflection, recentReflections,
+}: {
+  question: string;
+  respondOpen: boolean;
+  setRespondOpen: Dispatch<SetStateAction<boolean>>;
+  respondText: string;
+  setRespondText: Dispatch<SetStateAction<string>>;
+  saveReflection: () => void;
   recentReflections: AiReflection[];
 }) {
   return (
-                  <aside className="space-y-4">
-                    <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                      <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Next action</p>
-                      <h2 className="mt-2 text-[17px] font-semibold tracking-[-0.02em]" style={{ color: colors.t0 }}>Do this before adding more trades</h2>
-                      <div className="mt-3 space-y-3">
-                        {actionItems.map((item, index) => (
-                          <div key={`${index}-${item}`} className="rounded-[12px] border p-3" style={{ borderColor: colors.b0, backgroundColor: colors.d0 }}>
-                            <p className="text-[10px] font-semibold" style={{ color: colors.acc, fontFamily: colors.mono }}>{String(index + 1).padStart(2, '0')}</p>
-                            <p className="mt-1 text-[12.5px] leading-6" style={{ color: colors.t1 }}>{item}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
+    <section data-tour-id="flyxa-ai-reflection" className="border-t px-5 py-5 lg:px-7 lg:py-6" style={{ borderColor: colors.b0 }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 max-w-2xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.acc, fontFamily: colors.mono }}>
+            04 · Reflection
+          </p>
+          <p className="mt-2 text-[14px] font-semibold leading-relaxed" style={{ color: colors.t0 }}>{question}</p>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-[7px] border px-3.5 py-2 text-[12px] font-semibold"
+          style={{ borderColor: colors.b0, color: respondOpen ? colors.t1 : colors.acc, backgroundColor: colors.d2 }}
+          onClick={() => setRespondOpen(prev => !prev)}
+        >
+          {respondOpen ? 'Cancel' : 'Respond'}
+        </button>
+      </div>
 
-                    <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Process</p>
-                          <p className="mt-1 text-[14px] font-semibold" style={{ color: colors.t0 }}>{weakestProcess?.label ?? 'Execution quality'}</p>
-                        </div>
-                        <p className="text-[22px] font-semibold" style={{ color: gradeColor(weekGrade), fontFamily: colors.mono }}>{boundedScore}</p>
-                      </div>
-                      <div className="mt-4 space-y-3">
-                        {processBreakdown.map(item => {
-                          const color = item.noData ? colors.t2 : breakdownColor(item.value);
-                          return (
-                            <div key={item.label}>
-                              <div className="mb-1.5 flex items-center justify-between gap-2">
-                                <span className="text-[12px]" style={{ color: colors.t1 }}>{item.label}</span>
-                                <span className="text-[12px] font-semibold" style={{ color, fontFamily: colors.mono }}>{item.noData ? 'N/A' : `${item.value}%`}</span>
-                              </div>
-                              <div className="h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: colors.d4 }}>
-                                {!item.noData && <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: color }} />}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
+      {respondOpen && (
+        <div className="mt-4 max-w-2xl">
+          <textarea
+            className="w-full resize-none rounded-[10px] text-[13px] leading-relaxed"
+            style={{
+              backgroundColor: colors.d2,
+              border: `1px solid ${colors.b1}`,
+              color: colors.t0,
+              padding: '12px 13px',
+              fontFamily: 'var(--font-sans)',
+              outline: 'none',
+              minHeight: 92,
+            }}
+            placeholder="Write the one thing you need to remember before your next session..."
+            value={respondText}
+            onChange={e => setRespondText(e.target.value)}
+          />
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              disabled={!respondText.trim()}
+              className="rounded-[8px] px-3.5 py-2 text-[12px] font-semibold disabled:opacity-40"
+              style={{ backgroundColor: colors.acc, color: colors.d0 }}
+              onClick={saveReflection}
+            >
+              Save reflection
+            </button>
+          </div>
+        </div>
+      )}
 
-                    <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                      <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Session split</p>
-                      <div className="mt-3 space-y-3">
-                        {sessionBreakdownRows.map(row => (
-                          <div key={row.label}>
-                            <div className="mb-1.5 flex items-center justify-between gap-3">
-                              <span className="text-[12px]" style={{ color: colors.t1 }}>{row.label}</span>
-                              <span className="text-[12px] font-semibold" style={{ color: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2, fontFamily: colors.mono }}>
-                                {row.trades ? formatSignedCompactCurrency(row.netPnl) : '--'}
-                              </span>
-                            </div>
-                            <div className="h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: colors.d4 }}>
-                              <div
-                                className="h-full rounded-full"
-                                style={{ width: `${row.barWidth}%`, backgroundColor: row.netPnl > 0 ? colors.grn : row.netPnl < 0 ? colors.red : colors.t2 }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    {bestTrade && (
-                      <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Best execution</p>
-                          <span className="text-[11px]" style={{ color: colors.t2 }}>{bestTrade.date}</span>
-                        </div>
-                        <div className="mt-3 flex items-end justify-between gap-3">
-                          <div>
-                            <p className="text-[16px] font-semibold" style={{ color: colors.t0, fontFamily: colors.mono }}>{bestTrade.symbol}</p>
-                            <p className="mt-1 text-[11px]" style={{ color: colors.t2 }}>{bestTrade.session} · {bestTrade.direction}</p>
-                          </div>
-                          <p className="text-[16px] font-semibold" style={{ color: colors.grn, fontFamily: colors.mono }}>{bestTrade.resultPnl}</p>
-                        </div>
-                        <p className="mt-3 text-[12px] leading-6" style={{ color: colors.t1 }}>{bestTrade.journal}</p>
-                      </section>
-                    )}
-
-                    {recentReflections.length > 0 && (
-                      <section className="rounded-[16px] border p-4" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
-                        <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: colors.t2 }}>Recent reflections</p>
-                        <div className="mt-3 space-y-3">
-                          {recentReflections.slice(0, 2).map(reflection => (
-                            <div key={reflection.id} className="border-l-2 pl-3" style={{ borderLeftColor: colors.acc }}>
-                              <p className="truncate text-[11px]" style={{ color: colors.t2 }}>{reflection.periodLabel}</p>
-                              <p className="mt-1 text-[12px] leading-6" style={{ color: colors.t1 }}>{reflection.answer}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    )}
-                  </aside>
+      {recentReflections.length > 0 && (
+        <div className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+          {recentReflections.slice(0, 2).map(reflection => (
+            <div key={reflection.id} className="border-t pt-3" style={{ borderColor: colors.b0 }}>
+              <p className="text-[10px]" style={{ color: colors.t2, fontFamily: colors.mono }}>{reflection.periodLabel}</p>
+              <p className="mt-1.5 text-[12px] leading-6" style={{ color: colors.t1 }}>{reflection.answer}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

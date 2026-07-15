@@ -369,6 +369,12 @@ export interface ChartHistoryRecord {
   lastOpenedAt: string;
 }
 
+export interface PrivateLeague {
+  id: string;
+  name: string;
+  memberIds: string[];
+}
+
 export interface StoredRival {
   id: string;
   username: string;

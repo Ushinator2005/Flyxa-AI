@@ -11,23 +11,13 @@ import { getTimeZoneParts } from '../utils/calendarTime.js';
 import { limitsFromPreSession, summarizePerformanceOutcome } from '../utils/performanceLoop.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
-
-const C = {
-  d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
-  b0: 'rgba(255,255,255,0.07)', b1: 'rgba(255,255,255,0.12)',
-  t0: '#e8e3dc', t1: '#8a8178', t2: '#5c5751',
-  acc: '#f59e0b', grn: '#22d68a', red: '#f05252', amb: '#f59e0b',
-  mono: "'DM Mono', ui-monospace, monospace",
-};
+import { useAuth } from '../contexts/AuthContext.js';
+import SessionShareCard from '../components/share/SessionShareCard.js';
+import { C } from '../utils/theme.js';
 
 const CARD_BORDER = `1px solid ${C.b0}`;
 
-function fmtCurrency(v: number) {
-  return v.toLocaleString('en-US', {
-    style: 'currency', currency: 'USD',
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  });
-}
+import { formatUsd as fmtCurrency } from '../utils/format.js';
 
 function fmtSigned(v: number) {
   return `${v >= 0 ? '+' : '-'}${fmtCurrency(Math.abs(v))}`;
@@ -88,7 +78,6 @@ export default function FlyxaAIPostSession() {
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const activePreSession = useFlyxaStore(state => state.preSession);
-  const riskRules = useFlyxaStore(state => state.riskRules);
   const requestedDate = searchParams.get('date');
   // Use timezone-aware date so it matches how pre-session saves its history key
   const [selectedDate, setSelectedDate] = useState(() =>
@@ -216,6 +205,35 @@ export default function FlyxaAIPostSession() {
   // textarea mid-typing and cleared the Saved indicator right after saving.
   const [postNote, setPostNote] = useState(() => ps?.postSessionNote ?? '');
   const [noteSaved, setNoteSaved] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const { user } = useAuth();
+  const shareUsername = (user?.user_metadata?.display_name as string | undefined)
+    ?? user?.email?.split('@')[0]
+    ?? 'trader';
+
+  // Third share-card stat by social currency: a green streak beats everything,
+  // then the day's best trade, then the instrument.
+  const shareExtraStat = useMemo(() => {
+    const byDate = new Map<string, number>();
+    for (const t of safeTrades) {
+      const d = t.trade_date || (t as unknown as { date?: string }).date;
+      if (!d) continue;
+      byDate.set(d, (byDate.get(d) ?? 0) + (Number(t.pnl ?? 0) - Number(t.commission ?? 0)));
+    }
+    const dates = [...byDate.keys()].filter(d => d <= selectedDate).sort().reverse();
+    let streak = 0;
+    for (const d of dates) {
+      if ((byDate.get(d) ?? 0) > 0) streak += 1;
+      else break;
+    }
+    if (streak >= 2) return { label: 'Green streak', value: `${streak} days`, color: C.grn };
+    if (dayTrades.length > 1) {
+      const best = Math.max(...dayTrades.map(t => Number(t.pnl ?? 0) - Number(t.commission ?? 0)));
+      return { label: 'Best trade', value: fmtSigned(best), color: best >= 0 ? C.grn : C.red, sensitive: true };
+    }
+    const sym = dayTrades[0]?.symbol;
+    return sym ? { label: 'Instrument', value: sym } : null;
+  }, [safeTrades, dayTrades, selectedDate]);
   useEffect(() => {
     setPostNote(preSessionHistory[selectedDate]?.postSessionNote ?? '');
     setNoteSaved(false);
@@ -240,34 +258,34 @@ export default function FlyxaAIPostSession() {
     // P&L vs target
     if (dailyTarget && dailyTarget > 0) {
       if (netPnl >= dailyTarget)
-        insights.push({ type: 'good', text: `Profit target of ${fmtCurrency(dailyTarget)} was reached — session closed at ${fmtSigned(netPnl)}.` });
+        insights.push({ type: 'good', text: `Hit the ${fmtCurrency(dailyTarget)} target. Session closed at ${fmtSigned(netPnl)}.` });
       else if (netPnl > 0)
         insights.push({ type: 'neutral', text: `Profitable but fell $${Math.round(dailyTarget - netPnl)} short of the ${fmtCurrency(dailyTarget)} target.` });
       else
-        insights.push({ type: 'bad', text: `Target was ${fmtCurrency(dailyTarget)} but session ended at ${fmtSigned(netPnl)} — a ${fmtCurrency(Math.abs(dailyTarget - netPnl))} miss.` });
+        insights.push({ type: 'bad', text: `Missed the ${fmtCurrency(dailyTarget)} target by ${fmtCurrency(Math.abs(dailyTarget - netPnl))}. Session closed at ${fmtSigned(netPnl)}.` });
     }
 
     // Loss limit
     if (sessionMaxLoss && sessionMaxLoss > 0 && netPnl < 0) {
       const pct = Math.round((Math.abs(netPnl) / sessionMaxLoss) * 100);
       if (pct >= 100)
-        insights.push({ type: 'bad', text: `Session max loss of ${fmtCurrency(sessionMaxLoss)} was breached — final loss ${fmtSigned(netPnl)}.` });
+        insights.push({ type: 'bad', text: `The ${fmtCurrency(sessionMaxLoss)} max loss was breached. Final loss ${fmtSigned(netPnl)}.` });
       else if (pct >= 80)
-        insights.push({ type: 'warn', text: `Came close to the ${fmtCurrency(sessionMaxLoss)} loss limit — used ${pct}% of allowed risk.` });
+        insights.push({ type: 'warn', text: `Used ${pct}% of the ${fmtCurrency(sessionMaxLoss)} loss limit. That was close.` });
     }
 
     // Plan adherence
     if (planAdherence !== null) {
       if (planAdherence === 100)
-        insights.push({ type: 'good', text: 'Every trade followed the plan — clean, disciplined execution.' });
+        insights.push({ type: 'good', text: 'Every trade followed the plan. Clean execution.' });
       else if (planAdherence >= 80)
-        insights.push({ type: 'good', text: `${planAdherence}% plan adherence — minor deviations but execution was largely disciplined.` });
+        insights.push({ type: 'good', text: `${planAdherence}% plan adherence. Minor deviations, but execution held.` });
       else if (planAdherence >= 65)
-        insights.push({ type: 'warn', text: `${planAdherence}% plan adherence — some behavioral flags or execution misses pulled the score down.` });
+        insights.push({ type: 'warn', text: `${planAdherence}% plan adherence. Behavioral flags or execution misses pulled the score down.` });
       else if (planAdherence >= 40)
-        insights.push({ type: 'bad', text: `${planAdherence}% plan adherence — significant deviations from the plan detected.` });
+        insights.push({ type: 'bad', text: `${planAdherence}% plan adherence. Significant deviations from the plan.` });
       else
-        insights.push({ type: 'bad', text: `${planAdherence}% plan adherence — trades showed major rule violations or repeated behavioral flags.` });
+        insights.push({ type: 'bad', text: `${planAdherence}% plan adherence. Major rule violations or repeated behavioral flags.` });
     }
 
     // Off-plan P&L vs on-plan
@@ -277,9 +295,9 @@ export default function FlyxaAIPostSession() {
       const offPnl = offPlanTrades.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
       const onPnl  = onPlanTrades.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
       if (offPnl < 0 && onPnl >= 0)
-        insights.push({ type: 'bad', text: `On-plan trades: ${fmtSigned(onPnl)}. Off-plan trades: ${fmtSigned(offPnl)} — the deviations were the only losing trades.` });
+        insights.push({ type: 'bad', text: `On-plan trades made ${fmtSigned(onPnl)}. Off-plan trades lost ${fmtSigned(offPnl)}. The deviations were the only losers.` });
       else if (offPnl < onPnl / Math.max(onPlanTrades.length, 1) * offPlanTrades.length)
-        insights.push({ type: 'warn', text: `Off-plan trades underperformed planned trades — ${fmtSigned(onPnl)} vs ${fmtSigned(offPnl)}.` });
+        insights.push({ type: 'warn', text: `Off-plan trades underperformed planned ones: ${fmtSigned(offPnl)} vs ${fmtSigned(onPnl)}.` });
     }
 
     // Bias alignment
@@ -296,40 +314,33 @@ export default function FlyxaAIPostSession() {
     if (ps?.emotion) {
       const isTilt = /frustrated|anxious/i.test(ps.emotion);
       if (isTilt && netPnl < 0)
-        insights.push({ type: 'warn', text: `Session started ${ps.emotion} and ended with a loss — ${ps.emotion.toLowerCase()} days may warrant reduced size or skipping altogether.` });
+        insights.push({ type: 'warn', text: `Session started ${ps.emotion} and ended red. Days like this may warrant reduced size or sitting out.` });
       else if (isTilt && netPnl > 0)
-        insights.push({ type: 'good', text: `Despite starting ${ps.emotion.toLowerCase()}, the session was profitable — strong execution discipline.` });
+        insights.push({ type: 'good', text: `Started ${ps.emotion.toLowerCase()}, still finished green. That takes discipline.` });
     }
 
     // Pre-session readiness vs result
     if (ps?.readiness) {
       if (ps.readiness.status === 'Stand Down' && netPnl > 0)
-        insights.push({ type: 'neutral', text: `Pre-session was Stand Down but the session was profitable — consider whether the rules still applied.` });
+        insights.push({ type: 'neutral', text: `Readiness said Stand Down, yet the session was profitable. Worth asking if the launch was earned or lucky.` });
       else if (ps.readiness.status === 'Ready' && netPnl < 0)
-        insights.push({ type: 'neutral', text: `High readiness score but still a losing session — review whether the plan held or external conditions changed.` });
+        insights.push({ type: 'neutral', text: `High readiness score, losing session. Check whether the plan held or conditions changed.` });
     }
 
     // Session plan rule review
     if (ps?.sessionPlan) {
       const hardStop = ps.sessionPlan.find(r => r.source === 'Hard stop');
       if (hardStop && netPnl < 0)
-        insights.push({ type: 'neutral', text: `Hard stop rule was: "${hardStop.rule}" — verify this was respected.` });
+        insights.push({ type: 'neutral', text: `Hard stop for the day: "${hardStop.rule}". Verify it was respected.` });
       const avoidRule = ps.sessionPlan.find(r => r.source === 'Avoid today');
       if (avoidRule)
-        insights.push({ type: 'neutral', text: `Rule to avoid: "${avoidRule.rule}" — did the session stay clear of this pattern?` });
+        insights.push({ type: 'neutral', text: `Avoid-today rule: "${avoidRule.rule}". Did the session stay clear of it?` });
     }
 
     return insights;
   }, [ps, dayTrades, netPnl, planAdherence, biasAdherence]);
 
   // Intraday cumulative P&L for the hero sparkline
-  const sparkValues = useMemo(() => {
-    const sorted = [...dayTrades].sort((a, b) => String(a.trade_time ?? '').localeCompare(String(b.trade_time ?? '')));
-    const points = [0];
-    let cum = 0;
-    for (const t of sorted) { cum += Number(t.pnl ?? 0); points.push(cum); }
-    return points;
-  }, [dayTrades]);
 
   const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -342,11 +353,11 @@ export default function FlyxaAIPostSession() {
     : gradeScore >= 90 ? 'A+' : gradeScore >= 80 ? 'A' : gradeScore >= 70 ? 'B' : gradeScore >= 55 ? 'C' : 'D';
   const heroColor = grade === null ? C.t2 : gradeScore >= 80 ? C.grn : gradeScore >= 60 ? C.amb : C.red;
   const heroHeadline = dayTrades.length === 0
-    ? (ps ? "No trades logged — planned but didn't execute, or a deliberate sit-out?" : 'No trades logged for this day.')
-    : netPnl >= 0 && loopPct >= 90 ? 'Disciplined and green — the process paid today.'
-    : netPnl >= 0 && loopPct < 70 ? "Green day, but the rules didn't hold — profit despite process."
-    : netPnl < 0 && loopPct >= 90 ? 'Red day with rules intact — variance, not indiscipline.'
-    : netPnl < 0 && loopPct < 70 ? 'Rules broke and the day went red — start with the violations.'
+    ? (ps ? 'No trades today. Planned but never pulled the trigger, or a deliberate sit-out?' : 'No trades logged for this day.')
+    : netPnl >= 0 && loopPct >= 90 ? 'You followed the plan and got paid.'
+    : netPnl >= 0 && loopPct < 70 ? 'You got paid, but not for following the plan.'
+    : netPnl < 0 && loopPct >= 90 ? 'The plan held. The market just didn\'t pay today.'
+    : netPnl < 0 && loopPct < 70 ? 'The rules broke first. The money followed.'
     : `Session closed ${fmtSigned(netPnl)} at ${loopPct}% rule adherence.`;
 
   if (loading) {
@@ -385,6 +396,19 @@ export default function FlyxaAIPostSession() {
                 </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                {dayTrades.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShareOpen(true)}
+                    style={{
+                      fontSize: 11, fontWeight: 700, color: '#000',
+                      backgroundColor: C.acc, border: 'none',
+                      borderRadius: 4, padding: '6px 13px', cursor: 'pointer',
+                    }}
+                  >
+                    Share card
+                  </button>
+                )}
                 <div style={{ display: 'flex', borderRadius: 4, border: `1px solid ${C.b0}`, overflow: 'hidden' }}>
                   {([
                     { label: 'Pre-session',  to: '/pre-session'  },
@@ -425,14 +449,14 @@ export default function FlyxaAIPostSession() {
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: 14 }}>
             <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-              {/* ── Verdict hero ─────────────────────────── */}
+              {/* ── Verdict hero — flat card; the grade letter and figures
+                    carry the color, the surface stays neutral ── */}
               <div style={{
                 position: 'relative', overflow: 'hidden',
-                borderRadius: 10, border: `1px solid ${grade ? `${heroColor}30` : C.b0}`, backgroundColor: C.d1,
+                borderRadius: 10, border: `1px solid ${C.b0}`, backgroundColor: C.d1,
                 padding: '18px 22px',
                 display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap',
               }}>
-                <div style={{ position: 'absolute', inset: 0, background: grade ? `linear-gradient(120deg, ${heroColor}0e 0%, transparent 55%)` : 'none', pointerEvents: 'none' }} />
                 {grade && (
                   <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, paddingRight: 22, borderRight: `1px solid ${C.b0}`, flexShrink: 0 }}>
                     <span style={{ fontSize: 50, fontWeight: 700, fontFamily: C.mono, color: heroColor, lineHeight: 1, letterSpacing: '-0.02em' }}>{grade}</span>
@@ -455,12 +479,26 @@ export default function FlyxaAIPostSession() {
                     {dayTrades.length === 0 && ps && (<><span>·</span><span>Pre-session recorded</span></>)}
                   </div>
                 </div>
-                {dayTrades.length > 0 && (
-                  <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                    <span style={{ fontSize: 28, fontWeight: 700, fontFamily: C.mono, color: netPnl >= 0 ? C.grn : C.red, lineHeight: 1 }}>{fmtSigned(netPnl)}</span>
-                    <DaySparkline values={sparkValues} color={netPnl >= 0 ? C.grn : C.red} />
-                  </div>
-                )}
+                {dayTrades.length > 0 && (() => {
+                  const dailyTarget = (ps as PreSessionData & { dailyTarget?: number | null })?.dailyTarget ?? null;
+                  const targetPct = dailyTarget && dailyTarget > 0 && netPnl > 0 ? Math.round((netPnl / dailyTarget) * 100) : null;
+                  return (
+                    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 28, fontWeight: 700, fontFamily: C.mono, color: netPnl >= 0 ? C.grn : C.red, lineHeight: 1 }}>{fmtSigned(netPnl)}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontFamily: C.mono }}>
+                        <span style={{ color: wins > 0 ? C.grn : C.t2 }}>{wins}W</span>
+                        <span style={{ color: C.t2 }}>·</span>
+                        <span style={{ color: losses > 0 ? C.red : C.t2 }}>{losses}L</span>
+                        {targetPct !== null && (
+                          <>
+                            <span style={{ color: C.t2 }}>·</span>
+                            <span style={{ color: targetPct >= 100 ? C.grn : C.t1 }}>{targetPct}% of target</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(300px, 0.75fr)', gap: 12, alignItems: 'start' }}>
@@ -468,28 +506,10 @@ export default function FlyxaAIPostSession() {
               {/* ── LEFT COLUMN ─────────────────────────── */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-                {/* Carry-forward rule */}
-                {dayTrades.length > 0 && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                    padding: '9px 14px', borderRadius: 8,
-                    border: `1px solid ${dailyFlow.biggestLeak ? `${C.red}30` : `${C.grn}28`}`,
-                    borderLeft: `3px solid ${dailyFlow.biggestLeak ? C.red : C.grn}`,
-                    backgroundColor: dailyFlow.biggestLeak ? `${C.red}0a` : `${C.grn}08`,
-                  }}>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: 9, fontWeight: 700, color: dailyFlow.biggestLeak ? C.red : C.grn, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 3 }}>Carry-forward rule</p>
-                      <p style={{ fontSize: 12, color: C.t0, fontWeight: 600, lineHeight: 1.4 }}>{dailyFlow.tomorrowRule}</p>
-                    </div>
-                    <span style={{ fontSize: 11, color: C.t2, flexShrink: 0 }}>{ps ? 'Plan compared' : 'No pre-session'}</span>
-                  </div>
-                )}
-
                 {/* ── Pre-session plan card ── */}
                 <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
                   <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ width: 3, height: 12, borderRadius: 2, background: C.acc, flexShrink: 0 }} />
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Pre-session plan</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Pre-session plan</span>
                     <span style={{ flex: 1 }} />
                     {ps?.emotion && (
                       <span style={{ fontSize: 10, fontWeight: 600, color: emotionColor(ps.emotion), padding: '2px 9px', borderRadius: 999, background: `${emotionColor(ps.emotion)}12`, border: `1px solid ${emotionColor(ps.emotion)}30` }}>
@@ -569,8 +589,7 @@ export default function FlyxaAIPostSession() {
                 {dayTrades.length > 0 && ps?.prescriptions && ps.prescriptions.length > 0 && (
                   <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
                     <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 3, height: 12, borderRadius: 2, background: adherenceColor(performanceOutcome.adherencePct), flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Performance loop</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Performance loop</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
                       {[
@@ -595,23 +614,15 @@ export default function FlyxaAIPostSession() {
 
                 {/* ── Actual execution card ── */}
                 <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
+                  {/* The hero above already owns the day's totals — this header
+                      just names the section and counts the rows below it. */}
                   <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ width: 3, height: 12, borderRadius: 2, background: dayTrades.length === 0 ? C.t2 : netPnl >= 0 ? C.grn : C.red, flexShrink: 0 }} />
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Actual execution</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Actual execution</span>
                     <span style={{ flex: 1 }} />
                     {dayTrades.length > 0 && (
-                      <>
-                        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: C.mono, color: netPnl >= 0 ? C.grn : C.red }}>{fmtSigned(netPnl)}</span>
-                        <span style={{ fontSize: 10, color: C.t2 }}>·</span>
-                        <span style={{ fontSize: 11, fontFamily: C.mono, color: winRate >= 50 ? C.grn : C.red, fontWeight: 600 }}>{winRate}%</span>
-                        <span style={{ fontSize: 10, color: C.t2 }}>{wins}W / {losses}L</span>
-                        {planAdherence !== null && (
-                          <>
-                            <span style={{ fontSize: 10, color: C.t2 }}>·</span>
-                            <span style={{ fontSize: 11, fontFamily: C.mono, color: adherenceColor(planAdherence), fontWeight: 600 }}>{planAdherence}% plan</span>
-                          </>
-                        )}
-                      </>
+                      <span style={{ fontSize: 11, color: C.t2 }}>
+                        {dayTrades.length} trade{dayTrades.length !== 1 ? 's' : ''}
+                      </span>
                     )}
                   </div>
 
@@ -698,50 +709,46 @@ export default function FlyxaAIPostSession() {
               {/* ── RIGHT RAIL ──────────────────────────── */}
               <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 0 }}>
 
-                {/* Your reflection */}
+                {/* Your reflection — the question is the card; write under it */}
                 <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
-                  <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 3, height: 12, borderRadius: 2, background: C.acc, flexShrink: 0 }} />
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Your reflection</span>
+                  <div style={{ padding: '11px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Your reflection</span>
                     <span style={{ flex: 1 }} />
-                    {noteSaved && <span style={{ fontSize: 10, color: C.grn, fontWeight: 600 }}>Saved</span>}
+                    {noteSaved && <span style={{ fontSize: 10, color: C.grn, fontWeight: 600 }}>Saved ✓</span>}
                   </div>
                   <div style={{ padding: '12px 14px' }}>
-                    {riskRules.filter(r => r.enabled !== false).length > 0 && (
-                      <div style={{ marginBottom: 10 }}>
-                        <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t2, marginBottom: 5 }}>Your rules</p>
-                        {riskRules.filter(r => r.enabled !== false).slice(0, 4).map(rule => (
-                          <p key={rule.id} style={{ fontSize: 11, lineHeight: 1.55, color: C.t2 }}>
-                            <span style={{ color: rule.color === 'red' ? C.red : rule.color === 'green' ? C.grn : C.amb, fontWeight: 600 }}>– </span>
-                            {rule.label}{rule.value ? `: ${rule.value}${rule.unit ? ' ' + rule.unit : ''}` : ''}
-                          </p>
-                        ))}
-                      </div>
-                    )}
+                    <p style={{ fontSize: 12, lineHeight: 1.6, color: C.t1, marginBottom: 10 }}>
+                      How close was the actual session to what you planned? What matched, what deviated,
+                      and what's the one thing to carry forward?
+                    </p>
                     <textarea
                       value={postNote}
                       onChange={e => { setPostNote(e.target.value); setNoteSaved(false); }}
-                      placeholder="How close was the actual session to what you planned? What matched, what deviated, and what's the one thing to carry forward?"
+                      placeholder="Write it while it's fresh. One honest paragraph."
                       style={{
                         width: '100%', boxSizing: 'border-box',
-                        minHeight: 110, resize: 'vertical',
+                        minHeight: 120, resize: 'vertical',
                         background: C.d3, border: `1px solid ${C.b0}`,
                         borderRadius: 6, color: C.t0, fontSize: 12.5,
                         lineHeight: 1.65, padding: '10px 12px',
                         outline: 'none', fontFamily: 'inherit',
                       }}
                     />
-                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <span style={{ fontSize: 10, fontFamily: C.mono, color: C.t2 }}>
+                        {postNote.trim() ? `${postNote.trim().split(/\s+/).length} words` : ''}
+                      </span>
                       <button
                         type="button"
                         onClick={saveNote}
                         disabled={!postNote.trim()}
                         style={{
-                          height: 30, padding: '0 14px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-                          border: `1px solid ${C.acc}44`,
-                          background: postNote.trim() ? `${C.acc}12` : 'transparent',
-                          color: postNote.trim() ? C.acc : C.t2,
+                          height: 31, padding: '0 16px', borderRadius: 6, fontSize: 11.5, fontWeight: 700,
+                          border: 'none',
+                          background: postNote.trim() ? C.acc : C.d3,
+                          color: postNote.trim() ? '#000' : C.t2,
                           cursor: postNote.trim() ? 'pointer' : 'default',
+                          transition: 'background 0.15s ease, color 0.15s ease',
                         }}
                       >
                         Save reflection
@@ -753,14 +760,13 @@ export default function FlyxaAIPostSession() {
                 {/* AI debrief */}
                 {dayTrades.length > 0 && (
                   <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
-                    <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 3, height: 12, borderRadius: 2, background: C.grn, flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>AI debrief</span>
+                    <div style={{ padding: '11px 14px', borderBottom: `1px solid ${C.b0}` }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>AI debrief</span>
                     </div>
                     {aiInsights.length === 0 ? (
                       <div style={{ padding: '12px 14px' }}>
                         <p style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>
-                          Not enough data to generate observations — tag trades with plan adherence to unlock deeper analysis.
+                          Not enough data to generate observations. Tag trades with plan adherence to unlock deeper analysis.
                         </p>
                       </div>
                     ) : (
@@ -784,8 +790,7 @@ export default function FlyxaAIPostSession() {
                 {ps && dayTrades.length > 0 && (
                   <div style={{ borderRadius: 8, border: CARD_BORDER, backgroundColor: C.d1, overflow: 'hidden' }}>
                     <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.b0}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 3, height: 12, borderRadius: 2, background: C.t2, flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.t1 }}>Debrief summary</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.t0 }}>Debrief summary</span>
                     </div>
                     <div style={{ padding: '4px 0' }}>
                       {typeof ps.premortem === 'string' && ps.premortem.trim() && (
@@ -853,31 +858,21 @@ export default function FlyxaAIPostSession() {
             </div>
           </div>
         </main>
+
+        <SessionShareCard
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          data={{
+            dateLabel: new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+            netPnl,
+            trades: dayTrades.length,
+            winRate,
+            grade,
+            extraStat: shareExtraStat,
+            username: shareUsername,
+          }}
+        />
     </div>
   );
 }
 
-function DaySparkline({ values, color }: { values: number[]; color: string }) {
-  const pts = values.length > 1 ? values : [0, values[0] ?? 0];
-  const min = Math.min(...pts, 0);
-  const max = Math.max(...pts, 0);
-  const range = Math.max(1, max - min);
-  const W = 170, H = 44, PAD = 3;
-  const xOf = (i: number) => (i / Math.max(1, pts.length - 1)) * (W - PAD * 2) + PAD;
-  const yOf = (v: number) => H - PAD - ((v - min) / range) * (H - PAD * 2);
-  const line = pts.map((v, i) => `${xOf(i)},${yOf(v)}`).join(' ');
-  const area = [`${PAD},${yOf(0)}`, ...pts.map((v, i) => `${xOf(i)},${yOf(v)}`), `${W - PAD},${yOf(0)}`].join(' ');
-  return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} aria-hidden="true">
-      <defs>
-        <linearGradient id="ps-day-spark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <line x1={PAD} x2={W - PAD} y1={yOf(0)} y2={yOf(0)} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 3" strokeWidth="1" />
-      <polygon points={area} fill="url(#ps-day-spark)" />
-      <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" />
-    </svg>
-  );
-}

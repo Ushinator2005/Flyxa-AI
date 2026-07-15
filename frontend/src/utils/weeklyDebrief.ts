@@ -2,6 +2,7 @@ import { Trade } from '../types/index.js';
 import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { normalizeConfluenceKey, normalizeConfluenceTags } from './confluenceTags.js';
 import { buildPlanAdherenceReport, type PlanAdherenceReport } from './planAdherence.js';
+import { formatUsd } from './format.js';
 
 export type InsightType = 'risk' | 'pattern' | 'psychology' | 'edge';
 export type TagTone = 'positive' | 'negative' | 'neutral';
@@ -188,14 +189,7 @@ export function tradeSessionKey(trade?: Partial<Trade> | null) {
   return date ? date.toISOString().slice(0, 10) : '';
 }
 
-export function formatCurrency(value: number) {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+export const formatCurrency = formatUsd;
 
 export function formatSignedCurrency(value: number) {
   return `${value >= 0 ? '+' : '-'}${formatCurrency(Math.abs(value))}`;

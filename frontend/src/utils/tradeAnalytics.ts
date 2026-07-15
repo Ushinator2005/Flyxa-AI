@@ -1,5 +1,4 @@
-import { format } from 'date-fns';
-import { AnalyticsSummary, EquityCurvePoint, Trade } from '../types/index.js';
+import { AnalyticsSummary, Trade } from '../types/index.js';
 
 export function getTradeRiskReward(trade: Trade): number | null {
   if (!trade.entry_price || !trade.sl_price || !trade.tp_price) return null;
@@ -72,22 +71,6 @@ export function buildAnalyticsSummary(trades: Trade[]): AnalyticsSummary {
   };
 }
 
-export function buildEquityCurve(trades: Trade[]): EquityCurvePoint[] {
-  const grouped = new Map<string, number>();
-
-  [...trades]
-    .sort((a, b) => `${a.trade_date} ${a.trade_time}`.localeCompare(`${b.trade_date} ${b.trade_time}`))
-    .forEach(trade => {
-      grouped.set(trade.trade_date, (grouped.get(trade.trade_date) ?? 0) + (trade.pnl - (trade.commission ?? 0)));
-    });
-
-  let cumulative = 0;
-  return Array.from(grouped.entries()).map(([date, pnl]) => {
-    cumulative += pnl;
-    return { date, pnl, cumulative };
-  });
-}
-
 export function buildMonthlyHeatmapData(trades: Trade[], year: number, month: number) {
   const days: Record<number, number> = {};
   const counts: Record<number, number> = {};
@@ -119,7 +102,3 @@ export function buildRecentTrades(trades: Trade[], limit = 10) {
     .slice(0, limit);
 }
 
-export function formatTradeDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? date : format(parsed, 'MMM d, yyyy');
-}

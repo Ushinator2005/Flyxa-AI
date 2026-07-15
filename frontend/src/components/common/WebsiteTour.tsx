@@ -26,7 +26,7 @@ interface TourStep {
 const STEPS: TourStep[] = [
   {
     id: 'dashboard-tab',
-    targetId: 'dashboard',
+    targetId: 'dashboard-overview',
     path: '/',
     title: 'Dashboard tab',
     body: 'Start here when you want the quick read on your trading day. It pulls your account, P&L, calendar, recent trades, and risk signals into one command center.',
@@ -74,7 +74,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'pre-session-tab',
-    targetId: 'session',
+    targetId: 'pre-session-header',
     path: '/pre-session',
     title: 'Session tab',
     body: 'This tab is your before-trading checkpoint. It helps you slow down, check your mental state, confirm risk, and commit to the session plan.',
@@ -122,7 +122,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'scanner-tab',
-    targetId: 'trade-scanner',
+    targetId: 'scanner-day-panel',
     path: '/scanner',
     title: 'Trade Scanner tab',
     body: 'This is where trades enter the system. The scanner can read chart screenshots or you can start a blank day and add details manually.',
@@ -162,7 +162,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'journal-tab',
-    targetId: 'daily-journal',
+    targetId: 'journal-header',
     path: '/journal',
     title: 'Daily Journal tab',
     body: 'This is your private writing space. Use it after the session to capture what happened, what you learned, and how you felt.',
@@ -202,7 +202,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'analytics-tab',
-    targetId: 'analytics',
+    targetId: 'analytics-header',
     path: '/analytics',
     title: 'Analytics tab',
     body: 'Analytics turns your logged trades into patterns. Use it once you have enough trades to compare sessions, symbols, conditions, and behavior.',
@@ -242,7 +242,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'flyxa-ai-tab',
-    targetId: 'flyxa-ai',
+    targetId: 'flyxa-ai-header',
     path: '/flyxa-ai',
     title: 'Flyxa AI tab',
     body: 'Flyxa AI explains your trading data in plain English. It is where you go when you want patterns, debriefs, and coaching from your journal.',
@@ -274,7 +274,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'evaluation-tab',
-    targetId: 'evaluation',
+    targetId: 'evaluation-overview',
     path: '/evaluation-coach',
     title: 'Evaluation',
     body: 'Evaluation tracks prop-firm progress, rule pressure, drawdown buffer, and the remaining work needed to pass without violating the account.',
@@ -290,7 +290,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'backtest-tab',
-    targetId: 'backtest',
+    targetId: 'backtest-header',
     path: '/backtest',
     title: 'Backtest tab',
     body: 'Backtest is where you test a strategy before risking real money. It keeps replay sessions and results separate from live trades.',
@@ -322,19 +322,11 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'risk-rules-tab',
-    targetId: 'risk-rules',
+    targetId: 'risk-rules-framework',
     path: '/trading-plan',
     title: 'Risk Rules',
     body: 'Your risk rules are the locked operating system Flyxa uses to score plan adherence and flag process drift.',
     action: 'Open Rules',
-  },
-  {
-    id: 'trading-plan-kpis',
-    targetId: 'trading-plan-kpis',
-    path: '/trading-plan',
-    title: 'Rule coverage',
-    body: 'These KPIs show how many rules are active and how many can be verified automatically from logged trades.',
-    action: 'Next',
   },
   {
     id: 'trading-plan-tabs',
@@ -354,7 +346,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'rivals-tab',
-    targetId: 'rivals',
+    targetId: 'rivals-header',
     path: '/rivals',
     title: 'Rivals',
     body: 'Rivals turns trading into a private league. Compare verified P&L, process, risk-adjusted performance, and weekly trade volume with your circle.',
@@ -370,7 +362,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'rivals-summary',
-    targetId: 'rivals-summary',
+    targetId: 'rivals-standings',
     path: '/rivals',
     title: 'Your standing',
     body: 'This strip shows your rank, season progress, selected metric, and how far you are from the next trader above you.',
@@ -394,7 +386,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'billing-tab',
-    targetId: 'billing',
+    targetId: 'billing-header',
     path: '/billing',
     title: 'Billing',
     body: 'Billing tracks prop-firm spend, account purchases, resets, activation fees, discounts, payouts, and account ROI.',
@@ -434,7 +426,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'goals-tab',
-    targetId: 'goals',
+    targetId: 'goals-hero',
     path: '/goals',
     title: 'Goals tab',
     body: 'Goals keep the long-term reason visible. Use this for targets that should influence discipline, not just motivation.',
@@ -458,7 +450,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: 'settings-tab',
-    targetId: 'settings',
+    targetId: 'settings-header',
     path: '/settings',
     title: 'Settings tab',
     body: 'Settings controls the account and app data that the rest of Flyxa depends on. Set this up early so calculations are accurate.',

@@ -1,4 +1,4 @@
-import type { JournalEntry, RiskRule, RuleState } from '../store/types.js';
+import type { JournalEntry, RiskRule } from '../store/types.js';
 import {
   evaluateEntryRules,
   summarizeRuleEvaluations,
@@ -170,6 +170,3 @@ export function buildPlanAdherenceReport(
   };
 }
 
-export function ruleStateLabel(state: RuleState): string {
-  return state === 'ok' ? 'Pass' : state === 'fail' ? 'Break' : 'Unverified';
-}

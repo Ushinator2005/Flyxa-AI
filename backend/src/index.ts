@@ -17,6 +17,7 @@ import billingRouter from './routes/billing';
 import rivalsRouter from './routes/rivals';
 import accountRouter from './routes/account';
 import propFirmRulesRouter from './routes/propFirmRules';
+import subscriptionRouter, { stripeWebhookHandler } from './routes/subscription';
 
 dotenv.config({ override: true });
 
@@ -105,6 +106,10 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Stripe webhook must see the RAW body for signature verification, so it is
+// mounted before the JSON parser.
+app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
 // Body parser — 2mb for JSON. Image uploads use multipart/form-data (handled by
 // multer in the AI route) so they are not affected by this limit.
 app.use(express.json({ limit: '10mb' }));
@@ -128,6 +133,7 @@ app.use('/api/billing', billingRouter);
 app.use('/api/rivals', rivalsRouter);
 app.use('/api/account', accountRouter);
 app.use('/api/prop-firm-rules', propFirmRulesRouter);
+app.use('/api/subscription', subscriptionRouter);
 
 // Error handler
 app.use(errorHandler);

@@ -155,7 +155,10 @@ function shouldHydrateFastFromLocal(value: string): boolean {
     const accounts = state.accounts as Array<Record<string, unknown>> | undefined;
     const moods = state.journalMoods;
     const titles = state.journalTitles;
+    const weeklyReflections = state.weeklyReflections;
+    const confluenceCategoryOverrides = state.confluenceCategoryOverrides;
     const rivals = state.rivals as unknown[] | undefined;
+    const privateLeagues = state.privateLeagues as unknown[] | undefined;
     const goals = state.goals as unknown[] | undefined;
     const billingAccounts = state.billingAccounts as unknown[] | undefined;
     const fundingAccounts = state.fundingAccounts as unknown[] | undefined;
@@ -167,9 +170,12 @@ function shouldHydrateFastFromLocal(value: string): boolean {
       typeof state.riskRulesUpdatedAt === 'string' ||
       (moods != null && typeof moods === 'object' && Object.keys(moods).length > 0) ||
       (titles != null && typeof titles === 'object' && Object.keys(titles).length > 0) ||
+      (weeklyReflections != null && typeof weeklyReflections === 'object' && Object.keys(weeklyReflections).length > 0) ||
+      (confluenceCategoryOverrides != null && typeof confluenceCategoryOverrides === 'object' && Object.keys(confluenceCategoryOverrides).length > 0) ||
       (preSessionHistory != null && typeof preSessionHistory === 'object' && Object.keys(preSessionHistory).length > 0) ||
       (Array.isArray(accounts) && accounts.some(account => account.id !== 'default-account')) ||
       (Array.isArray(rivals) && rivals.length > 0) ||
+      (Array.isArray(privateLeagues) && privateLeagues.length > 0) ||
       (Array.isArray(goals) && goals.length > 0) ||
       (Array.isArray(billingAccounts) && billingAccounts.length > 0) ||
       (Array.isArray(fundingAccounts) && fundingAccounts.length > 0)
@@ -437,7 +443,7 @@ function recoverMissingStateFromRemote(
   }
 
   // Arrays: recover when local is empty but remote is not
-  for (const key of ['tradingPlanRules', 'rivals', 'goals']) {
+  for (const key of ['tradingPlanRules', 'rivals', 'privateLeagues', 'goals']) {
     const mArr = mergedState[key];
     const rArr = remoteState[key];
     if (Array.isArray(rArr) && rArr.length > 0 && !(Array.isArray(mArr) && mArr.length > 0)) {
@@ -493,8 +499,8 @@ function recoverMissingStateFromRemote(
     patch.planBlocks = rPlanBlocks;
   }
 
-  // Objects (moods, titles): recover when local has no keys but remote does
-  for (const key of ['journalMoods', 'journalTitles']) {
+  // Objects (moods, titles, reflections, overrides): recover when local has no keys but remote does
+  for (const key of ['journalMoods', 'journalTitles', 'weeklyReflections', 'confluenceCategoryOverrides']) {
     const mObj = mergedState[key];
     const rObj = remoteState[key];
     if (rObj && typeof rObj === 'object' && Object.keys(rObj as object).length > 0 &&
@@ -1610,19 +1616,25 @@ export const supabaseZustandStorage: StateStorage = {
         const st = parsed?.state ?? {};
         const moods = st.journalMoods;
         const titles = st.journalTitles;
+        const weeklyReflections = st.weeklyReflections;
+        const confluenceCategoryOverrides = st.confluenceCategoryOverrides;
         const accounts = st.accounts as Array<Record<string, unknown>> | undefined;
         const rivals = st.rivals as unknown[] | undefined;
+        const privateLeagues = st.privateLeagues as unknown[] | undefined;
         const goals = st.goals as unknown[] | undefined;
         return (
           (moods != null && typeof moods === 'object' && Object.keys(moods).length > 0) ||
           (titles != null && typeof titles === 'object' && Object.keys(titles).length > 0) ||
+          (weeklyReflections != null && typeof weeklyReflections === 'object' && Object.keys(weeklyReflections).length > 0) ||
+          (confluenceCategoryOverrides != null && typeof confluenceCategoryOverrides === 'object' && Object.keys(confluenceCategoryOverrides).length > 0) ||
           hasMeaningfulRiskRules(st) ||
           typeof st.riskRulesUpdatedAt === 'string' ||
           hasMeaningfulPlanBlocks(st) ||
           // User has created accounts beyond the built-in default
           (Array.isArray(accounts) && accounts.some(a => a.id !== 'default-account')) ||
-          // User has rivals or goals
+          // User has rivals, leagues or goals
           (Array.isArray(rivals) && rivals.length > 0) ||
+          (Array.isArray(privateLeagues) && privateLeagues.length > 0) ||
           (Array.isArray(goals) && goals.length > 0)
         );
       } catch { return false; }

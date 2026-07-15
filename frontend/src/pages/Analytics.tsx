@@ -1,12 +1,9 @@
-import { useMemo, useState, useRef } from 'react';
-import { Btn, MetricCard, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
+import { useMemo, useState, useRef, type ReactNode, type CSSProperties } from 'react';
+import { Btn, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
 import {
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -57,6 +54,21 @@ const TIME_WINDOW_OPTIONS: Array<{ value: TimeWindowMins; label: string }> = [
 ];
 const DASHBOARD_GREEN = '#34d399';
 const DASHBOARD_RED = '#f87171';
+
+// Discipline bar palette — matches the Trading Plan adherence chart.
+// A day is amber only if every rule held; a single break marks the day red.
+const BAR_ON = '#f59e0b';
+
+// Mono uppercase section labels — the report/terminal voice used across Flyxa.
+const KICKER: CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'var(--app-text-muted)',
+};
 
 function parseTradeDateTime(trade: Trade): Date | null {
   const datePart = trade.trade_date || trade.created_at?.slice(0, 10);
@@ -202,14 +214,18 @@ function normalizeConfluences(value: unknown): string[] {
 
 
 function InfoTooltip({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
+  // Viewport-fixed so panels with overflow clipping (the KPI rail) can't hide it.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
   return (
     <span
       ref={ref}
       style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle' }}
-      onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
+      onMouseEnter={() => {
+        const rect = ref.current?.getBoundingClientRect();
+        if (rect) setPos({ x: rect.left + rect.width / 2, y: rect.top });
+      }}
+      onMouseLeave={() => setPos(null)}
     >
       <span style={{
         width: 13, height: 13, borderRadius: '50%',
@@ -219,22 +235,97 @@ function InfoTooltip({ text }: { text: string }) {
         color: 'var(--color-text-subtle)',
         lineHeight: 1, userSelect: 'none', flexShrink: 0,
       }}>?</span>
-      {visible && (
+      {pos && (
         <div style={{
-          position: 'absolute', bottom: 'calc(100% + 7px)', left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'var(--color-panel)',
-          border: '1px solid var(--color-border)',
+          position: 'fixed',
+          left: Math.min(Math.max(pos.x, 130), window.innerWidth - 130),
+          top: pos.y - 7,
+          transform: 'translate(-50%, -100%)',
+          background: 'var(--color-panel, var(--app-panel))',
+          border: '1px solid var(--color-border, var(--app-border))',
           borderRadius: 7, padding: '9px 11px',
-          width: 230, zIndex: 50, pointerEvents: 'none',
+          width: 230, zIndex: 80, pointerEvents: 'none',
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-          fontSize: 11, color: 'var(--color-text-muted)',
+          fontSize: 11, color: 'var(--color-text-muted, var(--app-text-muted))',
           lineHeight: 1.6,
         }}>
           {text}
         </div>
       )}
     </span>
+  );
+}
+
+// Diverging skyline — columns rise (green) or fall (red) from a shared zero
+// baseline whose position is proportional to the data's positive/negative range.
+function DivergingColumns({ rows }: { rows: Array<{ label: string; pnl: number; count: number }> }) {
+  const maxPos = Math.max(0, ...rows.map(r => r.pnl));
+  const maxNeg = Math.max(0, ...rows.map(r => -r.pnl));
+  const total = maxPos + maxNeg;
+
+  if (total <= 0 || rows.every(r => r.count === 0)) {
+    return <p style={{ margin: '18px 0 6px', fontSize: 12, color: 'var(--app-text-subtle)' }}>No trades in this period.</p>;
+  }
+
+  const baselinePct = (maxPos / total) * 100;
+
+  return (
+    <>
+      <div style={{ position: 'relative', height: 170, marginTop: 18 }}>
+        <span style={{ position: 'absolute', left: 0, right: 0, top: `${baselinePct}%`, height: 1, backgroundColor: 'var(--app-border)' }} />
+        <div style={{
+          position: 'absolute', inset: 0, display: 'grid', columnGap: 14,
+          gridTemplateColumns: `repeat(${rows.length}, 1fr)`,
+          gridTemplateRows: `${maxPos}fr ${maxNeg}fr`,
+        }}>
+          {rows.map((row, i) => {
+            if (row.count === 0) return null;
+            const positive = row.pnl >= 0;
+            const rowMax = positive ? maxPos : maxNeg;
+            const heightPct = rowMax > 0 ? Math.max(3, (Math.abs(row.pnl) / rowMax) * 76) : 0;
+            return (
+              <div
+                key={row.label}
+                title={`${row.label} · ${row.count} trade${row.count !== 1 ? 's' : ''} · ${formatSignedCurrency(row.pnl)}`}
+                style={{
+                  gridColumn: i + 1, gridRow: positive ? 1 : 2, minWidth: 0,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: positive ? 'flex-end' : 'flex-start',
+                }}
+              >
+                {positive && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap', color: DASHBOARD_GREEN, marginBottom: 6 }}>
+                    {formatSignedCurrency(row.pnl)}
+                  </span>
+                )}
+                <div style={{
+                  width: '100%', maxWidth: 46, height: `${heightPct}%`,
+                  backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9,
+                  borderRadius: positive ? '3px 3px 0 0' : '0 0 3px 3px',
+                }} />
+                {!positive && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap', color: DASHBOARD_RED, marginTop: 6 }}>
+                    {formatSignedCurrency(row.pnl)}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rows.length}, 1fr)`, columnGap: 14, marginTop: 12, borderTop: '1px solid var(--app-border)', paddingTop: 9 }}>
+        {rows.map(row => (
+          <div key={row.label} style={{ textAlign: 'center', minWidth: 0 }}>
+            <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: row.count > 0 ? 'var(--app-text-muted)' : 'var(--app-text-subtle)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {row.label}
+            </p>
+            <p style={{ margin: '3px 0 0', fontSize: 9.5, color: 'var(--app-text-subtle)' }}>
+              {row.count > 0 ? `${row.count} trade${row.count !== 1 ? 's' : ''}` : '--'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -458,25 +549,27 @@ export default function Analytics() {
     };
   }, [filteredTrades]);
 
-  const winLossData = useMemo(() => {
-    const scoredTrades = metrics.wins.length + metrics.losses.length;
-    if (scoredTrades === 0) {
-      return [{ name: 'No trades', value: 1, color: 'var(--app-panel-strong)' }];
+  // One bar per rule-checked day in the period (capped for bar width sanity).
+  const adherenceBars = useMemo(() => {
+    const bars: Array<{ date: string; pct: number; failed: number }> = [];
+    for (const day of planReport.daily) {
+      const checked = day.evaluations.filter(ev => ev.state !== 'unchecked');
+      if (checked.length === 0) continue;
+      const passed = checked.filter(ev => ev.state === 'ok').length;
+      bars.push({ date: day.date, pct: Math.round((passed / checked.length) * 100), failed: checked.length - passed });
     }
-
-    return [
-      { name: 'Wins', value: metrics.wins.length, color: DASHBOARD_GREEN },
-      { name: 'Losses', value: metrics.losses.length, color: DASHBOARD_RED },
-    ];
-  }, [metrics.losses.length, metrics.wins.length]);
+    // planReport.daily arrives newest-first — the chart reads left→right in time.
+    bars.sort((a, b) => a.date.localeCompare(b.date));
+    return bars.slice(-42);
+  }, [planReport]);
 
   const dayOfWeekRows = useMemo(() => {
-    const values: Record<string, number> = {
-      Mon: 0,
-      Tue: 0,
-      Wed: 0,
-      Thu: 0,
-      Fri: 0,
+    const values: Record<string, { pnl: number; count: number }> = {
+      Mon: { pnl: 0, count: 0 },
+      Tue: { pnl: 0, count: 0 },
+      Wed: { pnl: 0, count: 0 },
+      Thu: { pnl: 0, count: 0 },
+      Fri: { pnl: 0, count: 0 },
     };
 
     filteredTrades.forEach(trade => {
@@ -484,34 +577,41 @@ export default function Analytics() {
       if (!tradeDate) return;
       const dayLabel = DAY_LABELS[tradeDate.getDay()];
       if (dayLabel in values) {
-        values[dayLabel] += trade.pnl - (trade.commission ?? 0);
+        values[dayLabel].pnl += trade.pnl - (trade.commission ?? 0);
+        values[dayLabel].count += 1;
       }
     });
 
-    const maxAbs = Math.max(1, ...BUSINESS_DAY_LABELS.map(label => Math.abs(values[label])));
+    const maxAbs = Math.max(1, ...BUSINESS_DAY_LABELS.map(label => Math.abs(values[label].pnl)));
     return BUSINESS_DAY_LABELS.map(label => ({
       label,
-      pnl: values[label],
-      ratio: Math.abs(values[label]) / maxAbs,
+      pnl: values[label].pnl,
+      count: values[label].count,
+      ratio: Math.abs(values[label].pnl) / maxAbs,
     }));
   }, [filteredTrades]);
 
   const sessionRows = useMemo(() => {
-    const totals = new Map<string, number>(SESSION_BUCKETS.map(bucket => [bucket.key, 0]));
+    const totals = new Map<string, { pnl: number; count: number }>(
+      SESSION_BUCKETS.map(bucket => [bucket.key, { pnl: 0, count: 0 }])
+    );
 
     filteredTrades.forEach(trade => {
       const sessionKey = getSessionKeyForTime(trade.trade_time, preferences.sessionTimes);
-      if (!totals.has(sessionKey)) return;
-      totals.set(sessionKey, (totals.get(sessionKey) ?? 0) + (trade.pnl - (trade.commission ?? 0)));
+      const bucket = totals.get(sessionKey);
+      if (!bucket) return;
+      bucket.pnl += trade.pnl - (trade.commission ?? 0);
+      bucket.count += 1;
     });
 
-    const maxAbs = Math.max(1, ...SESSION_BUCKETS.map(item => Math.abs(totals.get(item.key) ?? 0)));
+    const maxAbs = Math.max(1, ...SESSION_BUCKETS.map(item => Math.abs(totals.get(item.key)?.pnl ?? 0)));
     return SESSION_BUCKETS.map(bucket => {
-      const pnl = totals.get(bucket.key) ?? 0;
+      const { pnl, count } = totals.get(bucket.key) ?? { pnl: 0, count: 0 };
       return {
         key: bucket.key,
         label: bucket.label,
         pnl,
+        count,
         ratio: Math.abs(pnl) / maxAbs,
       };
     });
@@ -720,6 +820,17 @@ export default function Analytics() {
     };
   }, [behavioralFlagRows, metrics.netPnL]);
 
+  // Hooks must run unconditionally — these lived below the loading early-return
+  // before, which breaks React's hook ordering on the loading→loaded flip.
+  const strongestConfluences = useMemo(
+    () => confluenceRows.filter(row => row.netPnL > 0).slice(0, 3),
+    [confluenceRows],
+  );
+  const weakestConfluences = useMemo(
+    () => confluenceRows.filter(row => row.netPnL < 0).sort((a, b) => a.netPnL - b.netPnL).slice(0, 3),
+    [confluenceRows],
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -730,14 +841,52 @@ export default function Analytics() {
 
   const periodSubtitle = getPeriodLabel(period, periodOffset, today);
   const winLossTotal = metrics.wins.length + metrics.losses.length;
-  const strongestConfluences = useMemo(
-    () => confluenceRows.filter(row => row.netPnL > 0).slice(0, 3),
-    [confluenceRows],
-  );
-  const weakestConfluences = useMemo(
-    () => confluenceRows.filter(row => row.netPnL < 0).sort((a, b) => a.netPnL - b.netPnL).slice(0, 3),
-    [confluenceRows],
-  );
+
+  // The KPI rail under the equity curve — one ruled strip, no floating boxes.
+  const kpiCells: Array<{ label: string; value: ReactNode; color?: string; sub?: string; tip?: string }> = [
+    {
+      label: 'Expectancy',
+      value: metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--',
+      color: metrics.expectedValue >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
+      sub: 'per trade',
+      tip: 'Average dollar profit per trade, factoring in both win rate and win/loss size. Positive expectancy means the strategy has an edge over time.',
+    },
+    {
+      label: 'Profit factor',
+      value: metrics.profitFactor >= 999 ? '∞' : metrics.profitFactor.toFixed(2),
+      color: metrics.profitFactor >= 1 ? DASHBOARD_GREEN : DASHBOARD_RED,
+      sub: metrics.profitFactor >= 1 ? 'above breakeven' : 'below breakeven',
+      tip: 'Gross profit ÷ gross loss. A value above 1.0 means you make more on winners than you lose on losers. 1.5+ is solid; 2.0+ is strong.',
+    },
+    {
+      label: 'Max drawdown',
+      value: maxDrawdown > 0 ? `−${formatCurrency(maxDrawdown)}` : '$0',
+      color: maxDrawdown > 0 ? DASHBOARD_RED : 'var(--app-text)',
+      sub: 'peak to trough',
+      tip: 'The largest peak-to-trough decline in cumulative P&L during the selected period. Measures the worst losing run you experienced.',
+    },
+    {
+      label: 'Avg win / loss',
+      value: (
+        <>
+          <span style={{ color: DASHBOARD_GREEN }}>{metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'}</span>
+          <span style={{ color: 'var(--app-text-subtle)' }}> / </span>
+          <span style={{ color: DASHBOARD_RED }}>{metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'}</span>
+        </>
+      ),
+      sub: 'per scored trade',
+    },
+    {
+      label: 'Avg RR',
+      value: metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--',
+      sub: 'planned reward : risk',
+    },
+    {
+      label: 'Trades',
+      value: String(metrics.totalTrades),
+      sub: `${metrics.tradesPerDay.toFixed(1)}/day avg`,
+    },
+  ];
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -821,92 +970,29 @@ export default function Analytics() {
         </SectionPanel>
       ) : null}
 
-      {/* Row 1 — headline metrics */}
-      <div data-tour-id="analytics-metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard
-          label="Net P&L"
-          value={formatSignedCurrency(metrics.netPnL)}
-          sub={netPnLChange === null ? `Live for ${periodSubtitle}` : `${netPnLChange >= 0 ? '+' : ''}${netPnLChange.toFixed(1)}% vs previous period`}
-          valueTone={metrics.netPnL >= 0 ? 'positive' : 'negative'}
-        />
-        <MetricCard
-          label={
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              Expectancy
-              <InfoTooltip text="Average dollar profit per trade, factoring in both win rate and win/loss size. Positive expectancy means the strategy has an edge over time." />
-            </span>
-          }
-          value={metrics.totalTrades > 0 ? formatSignedCurrency(metrics.expectedValue) : '--'}
-          sub="avg edge per trade"
-          valueTone={metrics.expectedValue >= 0 ? 'positive' : 'negative'}
-        />
-        <MetricCard
-          label={
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              Max Drawdown
-              <InfoTooltip text="The largest peak-to-trough decline in cumulative P&L during the selected period. Measures the worst losing run you experienced." />
-            </span>
-          }
-          value={maxDrawdown > 0 ? `-${formatCurrency(maxDrawdown)}` : '$0'}
-          sub="peak-to-trough loss"
-          valueTone={maxDrawdown > 0 ? 'negative' : 'neutral'}
-        />
-        <MetricCard
-          label={
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              Profit Factor
-              <InfoTooltip text="Gross profit ÷ gross loss. A value above 1.0 means you make more on winners than you lose on losers. 1.5+ is solid; 2.0+ is strong." />
-            </span>
-          }
-          value={metrics.profitFactor >= 999 ? '∞' : metrics.profitFactor.toFixed(2)}
-          sub={metrics.profitFactor >= 1 ? 'Above breakeven' : 'Below breakeven'}
-          valueTone={metrics.profitFactor >= 1 ? 'positive' : 'negative'}
-        />
-        <MetricCard
-          label="Total Trades"
-          value={String(metrics.totalTrades)}
-          sub={`${metrics.tradesPerDay.toFixed(1)}/day avg`}
-        />
-      </div>
-
-      {/* Row 2 — supporting detail (compact tier) */}
-      {filteredTrades.length > 0 && (
-        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3">
-          <div className="grid grid-cols-2 gap-4 text-xs sm:grid-cols-4">
-            <div>
-              <p className="text-[var(--app-text-muted)]">Avg P/L</p>
-              <p className={`mt-1 text-sm font-semibold tabular-nums ${metrics.avgPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSignedCurrency(metrics.avgPnL)}</p>
-            </div>
-            <div>
-              <p className="text-[var(--app-text-muted)]">Avg Win</p>
-              <p className="mt-1 text-sm font-semibold tabular-nums text-emerald-400">{metrics.wins.length > 0 ? formatSignedCurrency(metrics.avgWin) : '--'}</p>
-            </div>
-            <div>
-              <p className="text-[var(--app-text-muted)]">Avg Loss</p>
-              <p className="mt-1 text-sm font-semibold tabular-nums text-red-400">{metrics.losses.length > 0 ? formatSignedCurrency(metrics.avgLoss) : '--'}</p>
-            </div>
-            <div>
-              <p className="text-[var(--app-text-muted)]">Avg RR</p>
-              <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--app-text)]">{metrics.avgRR !== null ? formatRiskRewardRatio(metrics.avgRR, { decimals: 2 }) : '--'}</p>
-            </div>
+      {/* Performance terminal — net result, curve, and the KPI rail in one sheet */}
+      <section data-tour-id="analytics-equity-curve" className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
+        <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-4">
+          <div>
+            <p style={KICKER}>Net P&amp;L · {periodSubtitle}</p>
+            <p style={{
+              margin: '9px 0 0', fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 700,
+              lineHeight: 1, letterSpacing: '-0.02em',
+              color: metrics.netPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
+            }}>
+              {formatSignedCurrency(metrics.netPnL)}
+            </p>
+            <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--app-text-muted)' }}>
+              {netPnLChange === null
+                ? `${metrics.totalTrades} trade${metrics.totalTrades !== 1 ? 's' : ''} · ${metrics.winRate.toFixed(0)}% win rate`
+                : `${netPnLChange >= 0 ? '+' : ''}${netPnLChange.toFixed(1)}% vs previous period · ${metrics.winRate.toFixed(0)}% win rate`}
+            </p>
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
-        <section data-tour-id="analytics-equity-curve" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-[var(--app-text)]">Cumulative P&amp;L</h2>
-              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Net result over {periodSubtitle}</p>
-            </div>
-            <div className={`text-right text-sm font-semibold tabular-nums ${metrics.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatSignedCurrency(metrics.netPnL)}
-            </div>
-          </div>
-
+        <div className="px-3 pt-2">
           {equityCurveData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={252}>
               <AreaChart data={equityCurveData} margin={{ top: 8, right: 10, left: 2, bottom: 2 }}>
                 <defs>
                   <linearGradient id="pnl-fill" x1="0" y1="0" x2="0" y2="1">
@@ -957,208 +1043,179 @@ export default function Analytics() {
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-[240px] items-center justify-center text-sm text-[var(--app-text-muted)]">
+            <div className="flex h-[252px] items-center justify-center text-sm text-[var(--app-text-muted)]">
               No trades in this period.
             </div>
           )}
-        </section>
+        </div>
 
-        <section data-tour-id="analytics-win-loss" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h2 className="text-sm font-semibold text-[var(--app-text)] mb-4">Win Rate</h2>
+        {/* KPI rail — ruled cells, no floating boxes */}
+        <div data-tour-id="analytics-metrics" className="flex overflow-x-auto border-t border-[var(--app-border)]">
+          {kpiCells.map((cell, i) => (
+            <div key={cell.label} style={{ flex: '1 1 0', minWidth: 128, padding: '12px 18px', borderLeft: i === 0 ? 'none' : '1px solid var(--app-border)' }}>
+              <p style={{ ...KICKER, fontSize: 9, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--app-text-subtle)' }}>
+                {cell.label}{cell.tip && <InfoTooltip text={cell.tip} />}
+              </p>
+              <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', color: cell.color ?? 'var(--app-text)' }}>
+                {cell.value}
+              </p>
+              {cell.sub && <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--app-text-subtle)', whiteSpace: 'nowrap' }}>{cell.sub}</p>}
+            </div>
+          ))}
+        </div>
+      </section>
 
-          {/* Donut with % overlaid in center */}
-          <div style={{ position: 'relative', height: 190 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={winLossData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={58}
-                  outerRadius={84}
-                  stroke="none"
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        {/* Win rate + last-20 record in one card */}
+        <section data-tour-id="analytics-win-loss" className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
+          <div style={{ padding: '15px 18px 16px' }}>
+            <p style={KICKER}>Win rate · {winLossTotal} scored</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 9 }}>
+              <p style={{
+                margin: 0, fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 700, lineHeight: 1,
+                color: winLossTotal === 0 ? 'var(--app-text-subtle)' : metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED,
+              }}>
+                {winLossTotal === 0 ? '--' : `${metrics.winRate.toFixed(0)}%`}
+              </p>
+              {winLossTotal > 0 && (
+                <div
+                  title={`${metrics.wins.length} wins · ${metrics.losses.length} losses`}
+                  style={{
+                    width: 58, height: 58, borderRadius: '50%', flexShrink: 0,
+                    background: `conic-gradient(${DASHBOARD_GREEN} 0% ${metrics.winRate}%, ${DASHBOARD_RED} ${metrics.winRate}% 100%)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
                 >
-                  {winLossData.map(segment => (
-                    <Cell key={segment.name} fill={segment.color} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <span style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, fontVariantNumeric: 'tabular-nums', WebkitFontSmoothing: 'antialiased', color: metrics.winRate >= 50 ? '#34d399' : '#f87171' }}>
-                {metrics.winRate.toFixed(0)}%
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--app-text-subtle)', marginTop: 5, letterSpacing: '.04em' }}>
-                {metrics.wins.length}W · {metrics.losses.length}L
-              </span>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: 'var(--app-panel)' }} />
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', height: 10, borderRadius: 3, overflow: 'hidden', marginTop: 15, backgroundColor: 'var(--app-panel-strong)' }}>
+              {winLossTotal > 0 && (
+                <>
+                  <span style={{ width: `${(metrics.wins.length / winLossTotal) * 100}%`, backgroundColor: DASHBOARD_GREEN }} />
+                  <span style={{ width: `${(metrics.losses.length / winLossTotal) * 100}%`, backgroundColor: DASHBOARD_RED }} />
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: DASHBOARD_GREEN }}>{metrics.wins.length} WINS</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: DASHBOARD_RED }}>{metrics.losses.length} LOSSES</span>
             </div>
           </div>
 
-          {/* Horizontal wins / losses legend */}
-          <div style={{ display: 'flex', borderTop: '1px solid var(--app-border)', marginTop: 12 }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Wins</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#34d399', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{metrics.wins.length}</span>
+          <div style={{ borderTop: '1px solid var(--app-border)', padding: '13px 18px 16px' }}>
+            <p style={KICKER}>Last 20 trades</p>
+            <div style={{ display: 'flex', gap: 3, marginTop: 11, height: 22 }}>
+              {filteredTrades.slice(-20).map(trade => {
+                const net = trade.pnl - (trade.commission ?? 0);
+                return (
+                  <span
+                    key={trade.id}
+                    title={formatSignedCurrency(net)}
+                    style={{
+                      flex: 1, maxWidth: 9, borderRadius: 2,
+                      backgroundColor: net > 0 ? DASHBOARD_GREEN : net < 0 ? DASHBOARD_RED : 'var(--app-panel-strong)',
+                    }}
+                  />
+                );
+              })}
+              {filteredTrades.length === 0 && (
+                <span style={{ fontSize: 11, color: 'var(--app-text-subtle)' }}>No trades yet.</span>
+              )}
             </div>
-            <div style={{ width: 1, background: 'var(--app-border)' }} />
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f87171', flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>Losses</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#f87171', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{metrics.losses.length}</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 14px', marginTop: 13, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--app-text-subtle)' }}>
+              <span>CURRENT <b style={{ color: streakStats.currentType >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED }}>{streakStats.currentLength}{streakStats.currentType >= 0 ? 'W' : 'L'}</b></span>
+              <span>BEST <b style={{ color: DASHBOARD_GREEN }}>{streakStats.bestWin}W</b></span>
+              <span>WORST <b style={{ color: DASHBOARD_RED }}>{streakStats.worstLoss}L</b></span>
+              <span>MAX LOSS <b style={{ color: DASHBOARD_RED }}>{metrics.largestLoss < 0 ? formatCurrency(metrics.largestLoss) : '$0'}</b></span>
             </div>
           </div>
-
-          {winLossTotal === 0 && (
-            <p style={{ fontSize: 11, color: 'var(--app-text-muted)', textAlign: 'center', marginTop: 8 }}>No scored trades yet.</p>
-          )}
         </section>
 
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4 xl:col-span-2">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--app-text)]">Trading Plan adherence</h3>
-              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Configured risk rules for this period</p>
-            </div>
-            <span
-              className={`font-mono text-2xl tabular-nums ${
-                (planReport.pct ?? 0) >= 80 ? 'text-emerald-400' : (planReport.pct ?? 0) >= 60 ? 'text-amber-400' : 'text-red-400'
-              }`}
-            >
+        {/* Plan adherence — same discipline bars as the Trading Plan page */}
+        <section className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '15px 18px 0' }}>
+            <p style={KICKER}>Plan adherence · {periodSubtitle}</p>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, lineHeight: 1, flexShrink: 0,
+              color: planReport.pct === null ? 'var(--app-text-subtle)'
+                : planReport.pct >= 80 ? DASHBOARD_GREEN
+                : planReport.pct >= 60 ? BAR_ON
+                : DASHBOARD_RED,
+            }}>
               {planReport.pct === null ? '--' : `${planReport.pct}%`}
             </span>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-[var(--app-border)] py-3 text-xs">
-            <span className="text-[var(--app-text-muted)]">Checked <b className="ml-1 font-mono text-[var(--app-text)]">{planReport.checked}</b></span>
-            <span className="text-[var(--app-text-muted)]">Broken days <b className="ml-1 font-mono text-red-400">{planReport.brokenDays}</b></span>
-            <span className="text-[var(--app-text-muted)]">Perfect days <b className="ml-1 font-mono text-emerald-400">{planReport.perfectDays}</b></span>
-          </div>
-
-          <div className="mt-3 text-xs">
-            {planReport.mostBrokenRule ? (
-              <>
-                <p className="text-[var(--app-text-muted)]">Most repeated break</p>
-                <p className="mt-1 text-[var(--app-text)]">{planReport.mostBrokenRule.label}</p>
-                <p className="mt-1 text-[var(--app-text-muted)]">
-                  {planReport.mostBrokenRule.failed} break{planReport.mostBrokenRule.failed !== 1 ? 's' : ''}
-                  {planReport.mostExpensiveRule ? ` · ${formatCurrency(planReport.mostExpensiveRule.lossWhenBroken)} loss on ${planReport.mostExpensiveRule.label}` : ''}
-                </p>
-              </>
-            ) : (
-              <p className="text-[var(--app-text-muted)]">
-                {planReport.checked > 0 ? 'No rule breaks in this period.' : 'No configured rule checks yet.'}
+          {adherenceBars.length > 0 ? (
+            <>
+              <div style={{ position: 'relative', height: 96, margin: '18px 18px 0' }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 3 }}>
+                  {adherenceBars.map(bar => (
+                    <span
+                      key={bar.date}
+                      title={`${formatDateLabel(bar.date)} · ${bar.failed === 0 ? 'all rules held' : `${bar.failed} break${bar.failed !== 1 ? 's' : ''}`} · ${bar.pct}% of checks passed`}
+                      style={{
+                        flex: 1, maxWidth: 18,
+                        height: `${Math.max(8, bar.pct)}%`,
+                        borderRadius: '2px 2px 0 0',
+                        backgroundColor: bar.failed === 0 ? BAR_ON : DASHBOARD_RED,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', margin: '8px 18px 0' }}>
+                {Array.from(
+                  new Set(
+                    Array.from({ length: Math.min(5, adherenceBars.length) }, (_, i) =>
+                      Math.round((i * (adherenceBars.length - 1)) / Math.max(1, Math.min(5, adherenceBars.length) - 1))
+                    )
+                  )
+                ).map(barIndex => (
+                  <span key={barIndex} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.05em', color: 'var(--app-text-subtle)' }}>
+                    {formatDateLabel(adherenceBars[barIndex].date)}
+                  </span>
+                ))}
+              </div>
+              <p style={{ margin: '9px 18px 13px', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>
+                One bar per trading day — <span style={{ color: BAR_ON }}>amber</span> held every rule,{' '}
+                <span style={{ color: DASHBOARD_RED }}>red</span> broke at least one. Hover for the exact day.
               </p>
-            )}
+            </>
+          ) : (
+            <p style={{ margin: '16px 18px 14px', fontSize: 12, color: 'var(--app-text-subtle)' }}>
+              {planReport.checked > 0 ? 'No day-level rule checks in this period.' : 'No configured rule checks yet — set rules in the Trading Plan.'}
+            </p>
+          )}
+
+          <div style={{ borderTop: '1px solid var(--app-border)', padding: '11px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '5px 16px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--app-text-subtle)' }}>
+            <span>
+              CHECKED <b style={{ color: 'var(--app-text)' }}>{planReport.checked}</b>
+              {' '}· BROKEN DAYS <b style={{ color: DASHBOARD_RED }}>{planReport.brokenDays}</b>
+              {' '}· PERFECT DAYS <b style={{ color: DASHBOARD_GREEN }}>{planReport.perfectDays}</b>
+            </span>
+            <span>
+              {planReport.mostBrokenRule
+                ? <>MOST BROKEN · <b style={{ color: 'var(--app-text)' }}>{planReport.mostBrokenRule.label.toUpperCase()}</b> ({planReport.mostBrokenRule.failed}×)</>
+                : planReport.checked > 0 ? 'NO RULE BREAKS THIS PERIOD' : null}
+            </span>
           </div>
         </section>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L by day of week</h3>
-          <div className="mt-5 space-y-2.5">
-            {dayOfWeekRows.map(row => (
-              <div key={row.label} className="grid grid-cols-[46px_minmax(0,1fr)_92px] items-center gap-2.5">
-                <span className="w-[46px] text-xs leading-none text-[var(--app-text-muted)]">{row.label}</span>
-                <div className="min-w-0 h-2.5 rounded-full bg-[var(--app-panel-strong)]">
-                  <div
-                    className="h-2.5 rounded-full"
-                    style={{
-                      width: `${row.ratio * 90}%`,
-                      backgroundColor: row.pnl >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
-                    }}
-                  />
-                </div>
-                <span className={`text-right text-xs tabular-nums whitespace-nowrap ${row.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {formatSignedCurrency(row.pnl)}
-                </span>
-              </div>
-            ))}
-          </div>
+          <h3 style={KICKER}>P&amp;L by day of week</h3>
+          <DivergingColumns rows={dayOfWeekRows} />
         </section>
 
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L by session</h3>
-          <div className="mt-5 space-y-3">
-            {sessionRows.map(row => (
-              <div key={row.key} className="grid grid-cols-[92px_minmax(0,1fr)_92px] items-center gap-2.5">
-                <span className="w-[92px] text-xs leading-[1.05] text-[var(--app-text-muted)]">{row.label}</span>
-                <div className="min-w-0 h-2.5 rounded-full bg-[var(--app-panel-strong)]">
-                  <div
-                    className="h-2.5 rounded-full"
-                    style={{
-                      width: `${row.ratio * 90}%`,
-                      backgroundColor: row.pnl >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
-                    }}
-                  />
-                </div>
-                <span className={`text-right text-xs tabular-nums whitespace-nowrap ${row.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {formatSignedCurrency(row.pnl)}
-                </span>
-              </div>
-            ))}
-          </div>
+          <h3 style={KICKER}>P&amp;L by session</h3>
+          <DivergingColumns rows={sessionRows} />
         </section>
 
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-sm font-semibold text-[var(--app-text)]">Win/loss streak</h3>
-            <span className="flex items-center gap-2.5 text-[10px] text-[var(--app-text-subtle)]">
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-2.5 w-1.5 rounded-full" style={{ backgroundColor: DASHBOARD_GREEN }} />
-                Win
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-2.5 w-1.5 rounded-full" style={{ backgroundColor: DASHBOARD_RED }} />
-                Loss
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-2.5 w-1.5 rounded-full bg-slate-600" />
-                Breakeven
-              </span>
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-[var(--app-text-muted)]">Last 20 trades</p>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {filteredTrades.slice(-20).map((trade) => {
-              const outcome = trade.pnl > 0 ? 1 : trade.pnl < 0 ? -1 : 0;
-              return (
-                <span
-                  key={trade.id}
-                  className="h-6 w-2 rounded-full"
-                  style={{
-                    backgroundColor: outcome > 0 ? DASHBOARD_GREEN : outcome < 0 ? DASHBOARD_RED : '#334155',
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <p className="text-[var(--app-text-muted)]">CURRENT</p>
-              <p className={streakStats.currentType >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                {streakStats.currentLength}{streakStats.currentType >= 0 ? 'W' : 'L'} streak
-              </p>
-            </div>
-            <div>
-              <p className="text-[var(--app-text-muted)]">BEST</p>
-              <p className="text-emerald-400">{streakStats.bestWin}W streak</p>
-            </div>
-            <div>
-              <p className="text-[var(--app-text-muted)]">WORST LOSS</p>
-              <p className="text-red-400">{streakStats.worstLoss}L streak</p>
-            </div>
-            <div>
-              <p className="text-[var(--app-text-muted)]">LARGEST LOSS</p>
-              <p className="text-red-400">{metrics.largestLoss < 0 ? formatCurrency(metrics.largestLoss) : '$0.00'}</p>
-            </div>
-          </div>
-        </section>
       </div>
 
       {/* P&L Distribution — dot plot */}
@@ -1166,8 +1223,8 @@ export default function Analytics() {
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L Distribution</h3>
-              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Trade outcomes by dollar result</p>
+              <h3 style={KICKER}>P&amp;L distribution</h3>
+              <p className="mt-1.5 text-xs text-[var(--app-text-muted)]">Trade outcomes by dollar result</p>
               <div className="hidden">
                 <span style={{ color: metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 700, fontSize: 13 }}>
                   {metrics.winRate.toFixed(0)}%
@@ -1253,8 +1310,8 @@ export default function Analytics() {
       <section data-tour-id="analytics-time-of-day" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
         <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--app-text)]">P&amp;L by time of day</h3>
-            <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+            <h3 style={KICKER}>P&amp;L by time of day</h3>
+            <p className="text-xs text-[var(--app-text-muted)] mt-1.5">
               Avg P&amp;L in your most traded {timeWindow === 60 ? '1-hr' : `${timeWindow}-min`} windows
             </p>
           </div>
@@ -1315,117 +1372,93 @@ export default function Analytics() {
       </section>
 
       <section data-tour-id="analytics-confluence" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-        <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="mb-1 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--app-text)]">Confluence Performance</h3>
-            <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Which conditions are helping vs. hurting your P&amp;L</p>
+            <h3 style={KICKER}>Confluence performance</h3>
+            <p className="mt-1.5 text-xs text-[var(--app-text-muted)]">Which conditions are helping vs. hurting your P&amp;L</p>
           </div>
-          <span className="shrink-0 rounded-md bg-[var(--app-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--app-text-muted)]">
-            {confluenceRows.length} confluence{confluenceRows.length !== 1 ? 's' : ''}
+          <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--app-text-subtle)' }}>
+            {confluenceRows.length} TRACKED
           </span>
         </div>
 
         {confluenceRows.length === 0 ? (
-          <p className="text-sm text-[var(--app-text-muted)]">Add confluences on trades to unlock this breakdown.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {/* Most Profitable */}
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-400">Most Profitable</p>
+          <p className="mt-4 text-sm text-[var(--app-text-muted)]">Add confluences on trades to unlock this breakdown.</p>
+        ) : (() => {
+          const shown = [...strongestConfluences, ...weakestConfluences];
+          const maxAbs = Math.max(1, ...shown.map(row => Math.abs(row.netPnL)));
+          const ledgerRow = (row: typeof shown[0], rank: number, positive: boolean) => (
+            <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) minmax(90px, 220px) 100px', gap: 16, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--app-border)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--app-text-subtle)' }}>
+                {String(rank).padStart(2, '0')}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--app-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</p>
+                <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
               </div>
-              {strongestConfluences.length > 0 ? (
-                <div className="space-y-1">
-                  {strongestConfluences.map((row, i) => {
-                    const maxPnL = strongestConfluences[0]?.netPnL ?? 1;
-                    const fillPct = Math.max(6, (row.netPnL / maxPnL) * 100);
-                    return (
-                      <div key={row.label} className="group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2.5">
-                        <div
-                          className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-500"
-                          style={{ width: `${fillPct}%`, background: 'rgba(52,211,153,0.08)' }}
-                        />
-                        <span className="relative z-10 w-4 shrink-0 text-center text-[10px] font-mono font-semibold text-emerald-500/50">{i + 1}</span>
-                        <div className="relative z-10 flex-1 min-w-0">
-                          <p className="truncate text-sm text-[var(--app-text)]">{row.label}</p>
-                          <p className="text-[11px] text-[var(--app-text-muted)]">{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
-                        </div>
-                        <p className="relative z-10 shrink-0 text-sm font-semibold tabular-nums text-emerald-400">{formatSignedCurrency(row.netPnL)}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="py-4 text-center text-xs text-[var(--app-text-muted)]">No profitable confluences this period.</p>
-              )}
-            </div>
-
-            {/* Most Costly */}
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-400">Most Costly</p>
+              <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden', display: 'flex', justifyContent: positive ? 'flex-start' : 'flex-end' }}>
+                <div style={{ width: `${Math.max(2, (Math.abs(row.netPnL) / maxAbs) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9 }} />
               </div>
-              {weakestConfluences.length > 0 ? (
-                <div className="space-y-1">
-                  {weakestConfluences.map((row, i) => {
-                    const maxLoss = Math.abs(weakestConfluences[0]?.netPnL ?? 1);
-                    const fillPct = Math.max(6, (Math.abs(row.netPnL) / maxLoss) * 100);
-                    return (
-                      <div key={row.label} className="group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2.5">
-                        <div
-                          className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-500"
-                          style={{ width: `${fillPct}%`, background: 'rgba(248,113,113,0.08)' }}
-                        />
-                        <span className="relative z-10 w-4 shrink-0 text-center text-[10px] font-mono font-semibold text-red-500/50">{i + 1}</span>
-                        <div className="relative z-10 flex-1 min-w-0">
-                          <p className="truncate text-sm text-[var(--app-text)]">{row.label}</p>
-                          <p className="text-[11px] text-[var(--app-text-muted)]">{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
-                        </div>
-                        <p className="relative z-10 shrink-0 text-sm font-semibold tabular-nums text-red-400">{formatSignedCurrency(row.netPnL)}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="py-4 text-center text-xs text-[var(--app-text-muted)]">No losing confluences this period.</p>
-              )}
+              <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', color: positive ? DASHBOARD_GREEN : DASHBOARD_RED }}>
+                {formatSignedCurrency(row.netPnL)}
+              </span>
             </div>
-          </div>
-        )}
+          );
+          return (
+            <div className="mt-4">
+              <p style={{ margin: '0 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: DASHBOARD_GREEN }}>MOST PROFITABLE</p>
+              {strongestConfluences.length > 0
+                ? strongestConfluences.map((row, i) => ledgerRow(row, i + 1, true))
+                : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
+              <p style={{ margin: '16px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: DASHBOARD_RED }}>MOST COSTLY</p>
+              {weakestConfluences.length > 0
+                ? weakestConfluences.map((row, i) => ledgerRow(row, i + 1, false))
+                : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
+            </div>
+          );
+        })()}
       </section>
 
       {mistakeCost.topRows.length > 0 && (
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="mb-2 flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-sm font-semibold text-[var(--app-text)]">Mistake Cost</h3>
-              <p className="mt-1 text-xs text-[var(--app-text-muted)]">Top recurring leaks this period</p>
+              <h3 style={KICKER}>Mistake cost</h3>
+              <p className="mt-1.5 text-xs text-[var(--app-text-muted)]">Top recurring leaks this period</p>
             </div>
-            <div className="text-right">
-              <p className="text-[11px] text-[var(--app-text-muted)]">Avoidable loss</p>
-              <p className="mt-1 text-base font-semibold tabular-nums text-red-400">-{formatCurrency(mistakeCost.avoidableCost)}</p>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <p style={{ ...KICKER, fontSize: 9, color: 'var(--app-text-subtle)' }}>Avoidable loss</p>
+              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, lineHeight: 1, color: DASHBOARD_RED }}>
+                −{formatCurrency(mistakeCost.avoidableCost)}
+              </p>
             </div>
           </div>
 
-          <div className="divide-y divide-[var(--app-border)]">
-            {mistakeCost.topRows.map((row, index) => (
-              <div key={row.label} className="grid grid-cols-[24px_minmax(0,1fr)_70px_110px] items-center gap-3 py-2.5 text-sm">
-                <span className="font-mono text-[11px] text-[var(--app-text-subtle)]">{index + 1}</span>
-                <span className="truncate text-[var(--app-text)]">{row.label}</span>
-                <span className="text-right font-mono text-[11px] text-[var(--app-text-muted)]">{row.count}x</span>
-                <span className="text-right font-mono text-xs font-semibold tabular-nums text-red-400">-{formatCurrency(row.cost)}</span>
-              </div>
-            ))}
-            {mistakeCost.otherCost > 0 && (
-              <div className="grid grid-cols-[24px_minmax(0,1fr)_70px_110px] items-center gap-3 py-2.5 text-sm">
-                <span className="font-mono text-[11px] text-[var(--app-text-subtle)]">+</span>
-                <span className="truncate text-[var(--app-text-muted)]">Other flags</span>
-                <span className="text-right font-mono text-[11px] text-[var(--app-text-muted)]">{mistakeCost.otherCount}x</span>
-                <span className="text-right font-mono text-xs font-semibold tabular-nums text-red-400">-{formatCurrency(mistakeCost.otherCost)}</span>
-              </div>
-            )}
+          <div>
+            {(() => {
+              const maxCost = Math.max(1, mistakeCost.topRows[0]?.cost ?? 0, mistakeCost.otherCost);
+              const leakRow = (rank: string, label: string, count: number, cost: number, dim = false) => (
+                <div key={label} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) minmax(90px, 220px) 52px 110px', gap: 16, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--app-border)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--app-text-subtle)' }}>{rank}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: dim ? 400 : 600, color: dim ? 'var(--app-text-muted)' : 'var(--app-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {label}
+                  </span>
+                  <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.max(2, (cost / maxCost) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: DASHBOARD_RED, opacity: dim ? 0.5 : 0.9 }} />
+                  </div>
+                  <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{count}×</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', color: DASHBOARD_RED }}>
+                    −{formatCurrency(cost)}
+                  </span>
+                </div>
+              );
+              return (
+                <>
+                  {mistakeCost.topRows.map((row, index) => leakRow(String(index + 1).padStart(2, '0'), row.label, row.count, row.cost))}
+                  {mistakeCost.otherCost > 0 && leakRow('+', 'Other flags', mistakeCost.otherCount, mistakeCost.otherCost, true)}
+                </>
+              );
+            })()}
           </div>
 
           <p className="mt-3 text-xs text-[var(--app-text-muted)]">
@@ -1434,122 +1467,6 @@ export default function Analytics() {
         </section>
       )}
 
-      {false && mistakeCost.rows.length > 0 && (() => {
-        const totalOccurrences = mistakeCost.rows.reduce((s, r) => s + r.count, 0);
-        const maxCost = Math.max(1, ...mistakeCost.rows.map(row => row.cost));
-        return (
-          <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-            {/* Header */}
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-[var(--app-text)]">Mistake Cost</h3>
-                <p className="mt-0.5 text-[11px] text-[var(--app-text-muted)]">Repeat behaviors costing you this period</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="rounded bg-[var(--app-panel-strong)] px-2 py-0.5 text-[10px] text-[var(--app-text-muted)]">{totalOccurrences}x</span>
-                <span className="rounded bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-red-400">
-                  -{formatCurrency(mistakeCost.avoidableCost)}
-                </span>
-              </div>
-            </div>
-
-            {/* Compact stat strip */}
-            <div className="mb-3 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-border)]">
-              <div className="bg-[var(--app-panel-strong)] px-3 py-2">
-                <p className="text-[10px] text-[var(--app-text-subtle)]">Avoidable loss</p>
-                <p className="mt-0.5 text-sm font-bold tabular-nums text-red-400">-{formatCurrency(mistakeCost.avoidableCost)}</p>
-              </div>
-              <div className="bg-[var(--app-panel-strong)] px-3 py-2">
-                <p className="text-[10px] text-[var(--app-text-subtle)]">Top leak</p>
-                <p className={`mt-0.5 truncate text-[12px] font-semibold ${mistakeCost.topLeak ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {mistakeCost.topLeak?.label ?? '—'}
-                </p>
-              </div>
-              <div className="bg-[var(--app-panel-strong)] px-3 py-2">
-                <p className="text-[10px] text-[var(--app-text-subtle)]">Net if fixed</p>
-                <p className={`mt-0.5 text-sm font-bold tabular-nums ${mistakeCost.netIfFixed >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {formatSignedCurrency(mistakeCost.netIfFixed)}
-                </p>
-              </div>
-            </div>
-
-            {/* Rows */}
-            <div className="space-y-1.5">
-              {mistakeCost.rows.map((row, index) => {
-                const width = Math.max(6, (row.cost / maxCost) * 100);
-                const hasCost = row.cost > 0;
-                const recoveredWidth = Math.max(8, Math.min(100, (row.recovered / Math.max(1, mistakeCost.profitableFlags)) * 100));
-                return (
-                  <div key={row.label} className="flex items-center gap-3">
-                    <span className={`w-4 shrink-0 text-right font-mono text-[10px] ${hasCost ? 'text-red-400/50' : 'text-emerald-400/50'}`}>
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-[12px] text-[var(--app-text)]">{row.label}</p>
-                        <div className="flex shrink-0 items-center gap-2.5">
-                          <span className="font-mono text-[10px] text-[var(--app-text-subtle)]">{row.count}x</span>
-                          <span className={`w-[72px] text-right font-mono text-[11px] font-semibold tabular-nums ${hasCost ? 'text-red-400' : 'text-emerald-400'}`}>
-                            {hasCost ? `-${formatCurrency(row.cost)}` : formatSignedCurrency(row.recovered)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--app-panel-strong)]">
-                        <div
-                          className={`h-full rounded-full ${hasCost ? 'bg-red-400/70' : 'bg-emerald-400/70'}`}
-                          style={{ width: `${hasCost ? width : recoveredWidth}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })()}
-
-      {false && behavioralFlagRows.length > 0 && (() => {
-        const totalCost = behavioralFlagRows.reduce((s, r) => s + r.netPnL, 0);
-        const totalOccurrences = behavioralFlagRows.reduce((s, r) => s + r.count, 0);
-        return (
-          <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-[var(--app-text)]">Behavioral Flag Impact</h3>
-                <p className="text-xs text-[var(--app-text-muted)] mt-0.5">P&amp;L cost of discipline errors this period</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="rounded-md bg-[var(--app-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--app-text-muted)]">
-                  {totalOccurrences}×
-                </span>
-                <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold tabular-nums ${totalCost >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {formatSignedCurrency(totalCost)}
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {behavioralFlagRows.map(row => {
-                const isPos = row.netPnL >= 0;
-                return (
-                  <div key={row.label} className="relative overflow-hidden rounded-lg border border-red-500/15 bg-red-500/5 p-3">
-                    <div className="mb-2.5 flex items-start justify-between gap-1.5">
-                      <p className="text-xs leading-snug text-[var(--app-text)]">{row.label}</p>
-                      <span className="shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-400">
-                        {row.count}×
-                      </span>
-                    </div>
-                    <p className={`text-lg font-bold tabular-nums leading-none ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {formatSignedCurrency(row.netPnL)}
-                    </p>
-                    <p className="mt-1 text-[10px] text-[var(--app-text-muted)]">{formatSignedCurrency(row.avgPnL)} avg</p>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })()}
     </div>
   );
 }

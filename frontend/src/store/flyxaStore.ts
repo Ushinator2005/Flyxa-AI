@@ -22,6 +22,7 @@ import type {
   OnboardingState,
   PlanBlock,
   PreSessionData,
+  PrivateLeague,
   PropFirm,
   RivalXpEvent,
   RiskRule,
@@ -77,8 +78,11 @@ interface FlyxaStateData {
   newsSources: Record<string, boolean>;
   journalMoods: Record<string, string>;
   journalTitles: Record<string, string>;
+  weeklyReflections: Record<string, string>;
+  confluenceCategoryOverrides: Record<string, string>;
   rivals: StoredRival[];
   rivalXpEvents: Record<string, RivalXpEvent>;
+  privateLeagues: PrivateLeague[];
   deletedTradeIds: string[];
   deletedEntryDates: string[];
   restoredEntryDates: string[];
@@ -129,7 +133,10 @@ export interface FlyxaStore extends FlyxaStateData {
   hydrateSharedData: (payload: Partial<FlyxaStateData>) => void;
   setJournalMood: (entryId: string, mood: string) => void;
   setJournalTitle: (entryId: string, title: string) => void;
+  setWeeklyReflection: (weekKey: string, text: string) => void;
+  setConfluenceCategoryOverrides: (overrides: Record<string, string>) => void;
   setRivals: (rivals: StoredRival[]) => void;
+  setPrivateLeagues: (leagues: PrivateLeague[]) => void;
   mergeRivalXpEvents: (events: RivalXpEvent[]) => void;
   addDeletedTradeId: (id: string) => void;
   setBacktestSessions: (sessions: BacktestSession[]) => void;
@@ -480,8 +487,11 @@ export function getInitialState(): FlyxaStateData {
     newsSources: DEFAULT_NEWS_SOURCES,
     journalMoods: {},
     journalTitles: {},
+    weeklyReflections: {},
+    confluenceCategoryOverrides: {},
     rivals: [],
     rivalXpEvents: {},
+    privateLeagues: [],
     deletedTradeIds: [],
     deletedEntryDates: [],
     restoredEntryDates: [],
@@ -873,7 +883,19 @@ const useFlyxaStore = create<FlyxaStore>()(
         journalTitles: { ...state.journalTitles, [entryId]: title },
       })),
 
+      setWeeklyReflection: (weekKey, text) => set((state) => {
+        const trimmed = text.trim();
+        const next = { ...state.weeklyReflections };
+        if (trimmed) next[weekKey] = trimmed;
+        else delete next[weekKey];
+        return { weeklyReflections: next };
+      }),
+
+      setConfluenceCategoryOverrides: (overrides) => set(() => ({ confluenceCategoryOverrides: overrides })),
+
       setRivals: (rivals) => set(() => ({ rivals })),
+
+      setPrivateLeagues: (leagues) => set(() => ({ privateLeagues: leagues })),
 
       mergeRivalXpEvents: (events) => set((state) => {
         if (events.length === 0) return state;
@@ -1057,8 +1079,11 @@ const useFlyxaStore = create<FlyxaStore>()(
             newsSources: payload.newsSources ?? state.newsSources,
             journalMoods: payload.journalMoods ?? state.journalMoods,
             journalTitles: payload.journalTitles ?? state.journalTitles,
+            weeklyReflections: payload.weeklyReflections ?? state.weeklyReflections,
+            confluenceCategoryOverrides: payload.confluenceCategoryOverrides ?? state.confluenceCategoryOverrides,
             rivals: payload.rivals ?? state.rivals,
             rivalXpEvents: { ...state.rivalXpEvents, ...(payload.rivalXpEvents ?? {}) },
+            privateLeagues: payload.privateLeagues ?? state.privateLeagues,
             deletedTradeIds,
             deletedEntryDates,
             restoredEntryDates,
@@ -1150,6 +1175,17 @@ const useFlyxaStore = create<FlyxaStore>()(
           journalTitles: (persisted.journalTitles && Object.keys(persisted.journalTitles).length > 0)
             ? persisted.journalTitles
             : base.journalTitles,
+          weeklyReflections: (persisted.weeklyReflections && Object.keys(persisted.weeklyReflections).length > 0)
+            ? persisted.weeklyReflections
+            : base.weeklyReflections,
+          confluenceCategoryOverrides: (persisted.confluenceCategoryOverrides && Object.keys(persisted.confluenceCategoryOverrides).length > 0)
+            ? persisted.confluenceCategoryOverrides
+            : base.confluenceCategoryOverrides,
+          // Same non-empty preference for private leagues (array): an empty [] from an
+          // older Supabase save must not erase leagues just migrated from localStorage.
+          privateLeagues: (persisted.privateLeagues && persisted.privateLeagues.length > 0)
+            ? persisted.privateLeagues
+            : base.privateLeagues,
           deletedTradeIds,
           deletedEntryDates,
           restoredEntryDates,
@@ -1203,8 +1239,11 @@ const useFlyxaStore = create<FlyxaStore>()(
         newsSources: state.newsSources,
         journalMoods: state.journalMoods,
         journalTitles: state.journalTitles,
+        weeklyReflections: state.weeklyReflections,
+        confluenceCategoryOverrides: state.confluenceCategoryOverrides,
         rivals: state.rivals,
         rivalXpEvents: state.rivalXpEvents,
+        privateLeagues: state.privateLeagues,
         deletedTradeIds: state.deletedTradeIds,
         deletedEntryDates: state.deletedEntryDates,
         restoredEntryDates: state.restoredEntryDates,

@@ -22,6 +22,7 @@ import { formatRiskRewardRatio } from '../utils/riskReward.js';
 import MonthlyHeatmap from '../components/dashboard/MonthlyHeatmap.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
+import { getRthTiming } from '../utils/marketHours.js';
 import { useBreakingNewsAlert } from '../hooks/useBreakingNewsAlert.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
 
@@ -640,44 +641,72 @@ export default function Dashboard() {
           );
         })()}
 
-        {/* Pre-session brief prompt */}
-        {!preSessionDone && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 0,
-            borderRadius: 7, flexShrink: 0, overflow: 'hidden',
-            border: '1px solid rgba(245,158,11,0.18)',
-            background: 'rgba(245,158,11,0.04)',
-          }}>
-            {/* left accent */}
-            <span style={{ width: 3, alignSelf: 'stretch', background: AMBER, flexShrink: 0 }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flex: 1, minWidth: 0 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: AMBER, flexShrink: 0, boxShadow: `0 0 6px ${AMBER}` }} />
-              <p style={{ fontSize: 12, fontWeight: 500, color: AMBER, margin: 0 }}>
-                No pre-session brief today
-              </p>
-              <span style={{ fontSize: 11, color: T3, margin: 0 }}>·</span>
-              <p style={{ fontSize: 11, color: T3, margin: 0 }}>You haven't locked in your plan yet.</p>
+        {/* Pre-session brief prompt — the market clock is the argument.
+            Focal countdown cell + message + Begin; no alert styling. */}
+        {!preSessionDone && (() => {
+          const timing = getRthTiming(new Date());
+          const mins = timing.minutesUntilOpen;
+          // A 15-hour countdown the evening before is absurd — beyond 8h just
+          // state when the next open is.
+          const clock = timing.marketOpenNow
+            ? { value: 'OPEN', label: 'market is live', color: GREEN }
+            : mins > 480
+              ? { value: '9:30', label: 'next open · ET', color: T1 }
+              : mins >= 90
+                ? { value: `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`, label: 'to the open', color: T1 }
+                : { value: `${mins}m`, label: 'to the open', color: AMBER };
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'stretch', gap: 0,
+              borderRadius: 7, flexShrink: 0, overflow: 'hidden',
+              border: `1px solid ${BORDER}`, background: S1,
+            }}>
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 2, padding: '10px 18px', borderRight: `1px solid ${BORDER}`, flexShrink: 0, minWidth: 92,
+              }}>
+                <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, lineHeight: 1, color: clock.color, letterSpacing: '-0.01em' }}>
+                  {clock.value}
+                </span>
+                <span style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: T3 }}>
+                  {clock.label}
+                </span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 12.5, fontWeight: 600, color: T1, margin: 0 }}>
+                    {timing.marketOpenNow ? 'Trading without a brief' : 'Pre-session brief not done'}
+                  </p>
+                  {timing.marketOpenNow && (
+                    <p style={{ fontSize: 11, color: T3, margin: '2px 0 0' }}>
+                      The market opened and your plan was never locked in.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 12, flexShrink: 0 }}>
+                <button
+                  onClick={() => { dismissPreSession(); navigate('/pre-session'); }}
+                  style={{
+                    padding: '7px 16px', borderRadius: 6, border: 'none',
+                    background: AMBER, color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  Begin
+                </button>
+                <button
+                  onClick={dismissPreSession}
+                  style={{ background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer', color: T3, flexShrink: 0, display: 'flex', alignItems: 'center', opacity: 0.6 }}
+                  title="Dismiss for today"
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '0.6'; }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 10 }}>
-              <Btn
-                size="sm"
-                variant="outline"
-                onClick={() => { dismissPreSession(); navigate('/pre-session'); }}
-              >
-                Begin
-              </Btn>
-              <button
-                onClick={dismissPreSession}
-                style={{ background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer', color: T3, flexShrink: 0, display: 'flex', alignItems: 'center', opacity: 0.6 }}
-                title="Dismiss for today"
-                onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
-                onMouseLeave={e => { e.currentTarget.style.opacity = '0.6'; }}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* 2-column content grid */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 260px', gap: 16, flex: 1, minHeight: 0 }}>

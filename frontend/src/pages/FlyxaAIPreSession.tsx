@@ -16,6 +16,8 @@ import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
 import { evaluateEntryRules } from '../utils/tradingRules.js';
+import { getRthTiming } from '../utils/marketHours.js';
+import { C } from '../utils/theme.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<'ES' | 'NQ', BiasValue>;
@@ -34,16 +36,8 @@ type SessionPlanRow = {
   rule: string;
 };
 
-const MARKET_OPEN_MINUTES = 9 * 60 + 30;
-const MARKET_CLOSE_MINUTES = 16 * 60;
 const OATH_HOLD_MS = 900;
 
-const C = {
-  d0: '#0e0d0d', d1: '#141312', d2: '#1a1917', d3: '#201f1d', d4: '#27251f',
-  b0: 'rgba(255,255,255,0.07)', b1: 'rgba(255,255,255,0.12)',
-  t0: '#e8e3dc', t1: '#8a8178', t2: '#5c5751',
-  acc: '#f59e0b', grn: '#22d68a', red: '#f05252',
-};
 
 
 const emotions = ['Frustrated', 'Anxious', 'Neutral', 'Focused', 'Confident'] as const;
@@ -107,10 +101,7 @@ function tradeNetPnl(trade: Trade): number {
   return Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
 }
 
-function formatCurrency(value: number) {
-  const sign = value < 0 ? '-' : '';
-  return `${sign}$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-}
+import { formatUsd0 as formatCurrency } from '../utils/format.js';
 
 function formatSignedCurrency(value: number) {
   return `${value >= 0 ? '+' : '-'}${formatCurrency(Math.abs(value))}`;
@@ -156,67 +147,6 @@ function parseMaxWinFromStorage(): number | null {
   } catch { return null; }
 }
 
-function getEtParts(now: Date) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-
-  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return {
-    weekday: byType.weekday ?? 'Mon',
-    year: Number(byType.year),
-    month: Number(byType.month),
-    day: Number(byType.day),
-    hour: Number(byType.hour),
-    minute: Number(byType.minute),
-  };
-}
-
-function getRthTiming(now: Date) {
-  const et = getEtParts(now);
-  const weekdayIndexMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-  const dayIndex = weekdayIndexMap[et.weekday] ?? 1;
-  const isWeekday = dayIndex >= 1 && dayIndex <= 5;
-  const currentMinutes = (et.hour * 60) + et.minute;
-  const marketOpenNow = isWeekday && currentMinutes >= MARKET_OPEN_MINUTES && currentMinutes < MARKET_CLOSE_MINUTES;
-
-  let minutesUntilOpen = 0;
-  if (marketOpenNow) {
-    minutesUntilOpen = 0;
-  } else if (isWeekday && currentMinutes < MARKET_OPEN_MINUTES) {
-    minutesUntilOpen = MARKET_OPEN_MINUTES - currentMinutes;
-  } else {
-    let daysAhead = 1;
-    let nextDayIndex = (dayIndex + 1) % 7;
-    while (nextDayIndex === 0 || nextDayIndex === 6) {
-      daysAhead += 1;
-      nextDayIndex = (nextDayIndex + 1) % 7;
-    }
-    const minutesToMidnight = (24 * 60) - currentMinutes;
-    minutesUntilOpen = minutesToMidnight + ((daysAhead - 1) * 24 * 60) + MARKET_OPEN_MINUTES;
-  }
-
-  return {
-    marketOpenToday: isWeekday,
-    marketOpenNow,
-    minutesUntilOpen,
-  };
-}
 
 function etDateLabel(now: Date) {
   return now.toLocaleDateString('en-US', {

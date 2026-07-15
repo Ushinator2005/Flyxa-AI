@@ -283,6 +283,12 @@ export default function Auth() {
             </button>
 
             <p className="auth-privacy-note">Private by default · Email verification on signup</p>
+            <p className="auth-privacy-note" style={{ marginTop: 6 }}>
+              By continuing you agree to our{' '}
+              <a href="/terms" style={{ color: 'inherit', textDecoration: 'underline' }}>Terms</a>
+              {' '}and{' '}
+              <a href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>Privacy Policy</a>.
+            </p>
           </div>
         </section>
 

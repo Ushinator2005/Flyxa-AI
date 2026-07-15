@@ -440,6 +440,20 @@ export const billingApi = {
     api.get<BillingLivePricesResponse>(`/api/billing/live-prices?firm=${encodeURIComponent(firm)}`),
 };
 
+export interface SubscriptionStatusResponse {
+  configured: boolean;
+  active: boolean;
+  status: string;
+  currentPeriodEnd?: string | null;
+  hasCustomer?: boolean;
+}
+
+export const subscriptionApi = {
+  getStatus: () => api.get<SubscriptionStatusResponse>('/api/subscription/status'),
+  startCheckout: () => api.post<{ url: string }>('/api/subscription/checkout', {}),
+  openPortal: () => api.post<{ url: string }>('/api/subscription/portal', {}),
+};
+
 export interface PropFirmRuleRecordResponse {
   id: string;
   firm: string;

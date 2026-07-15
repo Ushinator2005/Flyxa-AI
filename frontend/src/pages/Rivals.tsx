@@ -9,12 +9,14 @@ import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } fr
 import type { RivalRequestResponse, SharedTradeRecord } from '../services/api.js';
 import { tradeSharesApi } from '../services/api.js';
 import { useTrades } from '../hooks/useTrades.js';
+import useFlyxaStore from '../store/flyxaStore.js';
+import type { PrivateLeague } from '../store/types.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
 import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
 import ScreenshotImportModal from '../components/scanner/ScreenshotImportModal.js';
 import '../components/rivals/rivals.css';
 
-type League = { id: string; name: string; memberIds: string[] };
+type League = PrivateLeague;
 type FormDot = { tone: 'win' | 'loss' | 'empty'; label: string };
 
 const PERIODS: Array<{ value: LeaderboardPeriod; label: string }> = [
@@ -178,9 +180,8 @@ export default function Rivals() {
   const [leagueBuilderOpen, setLeagueBuilderOpen] = useState(false);
   const [leagueName, setLeagueName] = useState('');
   const [leagueMembers, setLeagueMembers] = useState<string[]>([]);
-  const [leagues, setLeagues] = useState<League[]>(() => {
-    try { return JSON.parse(localStorage.getItem('flyxa-private-leagues') ?? '[]') as League[]; } catch { return []; }
-  });
+  const leagues = useFlyxaStore(state => state.privateLeagues);
+  const setPrivateLeagues = useFlyxaStore(state => state.setPrivateLeagues);
   const [activeLeagueId, setActiveLeagueId] = useState('all');
   const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'trades'>('overview');
   const [sharedTrades, setSharedTrades] = useState<SharedTradeRecord[]>([]);
@@ -191,9 +192,18 @@ export default function Rivals() {
   const [sharedSet, setSharedSet] = useState<Set<string>>(new Set());
   const prevRivalIdRef = useRef<string | null>(null);
 
+  // One-time migration: leagues used to live in localStorage only. Move them into
+  // the store (synced to Supabase) and drop the legacy key.
   useEffect(() => {
-    localStorage.setItem('flyxa-private-leagues', JSON.stringify(leagues));
-  }, [leagues]);
+    if (useFlyxaStore.getState().privateLeagues.length > 0) return;
+    try {
+      const raw = localStorage.getItem('flyxa-private-leagues');
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as League[];
+      localStorage.removeItem('flyxa-private-leagues');
+      if (Array.isArray(parsed) && parsed.length > 0) setPrivateLeagues(parsed);
+    } catch { /* ignore malformed legacy data */ }
+  }, [setPrivateLeagues]);
 
   const currentUser = rivals.find(rival => rival.isMe) ?? rivals[0];
   const activeLeague = leagues.find(league => league.id === activeLeagueId);
@@ -257,7 +267,7 @@ export default function Rivals() {
     const name = leagueName.trim();
     if (!name) return;
     const league: League = { id: `league-${Date.now()}`, name, memberIds: leagueMembers };
-    setLeagues(current => [...current, league]);
+    setPrivateLeagues([...leagues, league]);
     setActiveLeagueId(league.id);
     setLeagueName('');
     setLeagueMembers([]);
