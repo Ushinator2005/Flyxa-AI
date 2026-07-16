@@ -976,7 +976,7 @@ export default function Analytics() {
           <div>
             <p style={KICKER}>Net P&amp;L · {periodSubtitle}</p>
             <p style={{
-              margin: '9px 0 0', fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 700,
+              margin: '9px 0 0', fontFamily: 'var(--font-mono)', fontSize: 29, fontWeight: 600,
               lineHeight: 1, letterSpacing: '-0.02em',
               color: metrics.netPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
             }}>
@@ -1056,7 +1056,7 @@ export default function Analytics() {
               <p style={{ ...KICKER, fontSize: 9, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--app-text-subtle)' }}>
                 {cell.label}{cell.tip && <InfoTooltip text={cell.tip} />}
               </p>
-              <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', color: cell.color ?? 'var(--app-text)' }}>
+              <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', color: cell.color ?? 'var(--app-text)' }}>
                 {cell.value}
               </p>
               {cell.sub && <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--app-text-subtle)', whiteSpace: 'nowrap' }}>{cell.sub}</p>}
@@ -1072,7 +1072,7 @@ export default function Analytics() {
             <p style={KICKER}>Win rate · {winLossTotal} scored</p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 9 }}>
               <p style={{
-                margin: 0, fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 700, lineHeight: 1,
+                margin: 0, fontFamily: 'var(--font-mono)', fontSize: 29, fontWeight: 600, lineHeight: 1,
                 color: winLossTotal === 0 ? 'var(--app-text-subtle)' : metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED,
               }}>
                 {winLossTotal === 0 ? '--' : `${metrics.winRate.toFixed(0)}%`}
@@ -1138,7 +1138,7 @@ export default function Analytics() {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '15px 18px 0' }}>
             <p style={KICKER}>Plan adherence · {periodSubtitle}</p>
             <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, lineHeight: 1, flexShrink: 0,
+              fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600, lineHeight: 1, flexShrink: 0,
               color: planReport.pct === null ? 'var(--app-text-subtle)'
                 : planReport.pct >= 80 ? DASHBOARD_GREEN
                 : planReport.pct >= 60 ? BAR_ON

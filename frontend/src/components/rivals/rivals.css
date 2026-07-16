@@ -1,6 +1,8 @@
 ﻿.rivals-page {
+  /* Layering: page sits on the app background like every other page;
+     cards lift one step (panel), nested elements one more (raised). */
   --rv-bg: var(--app-bg);
-  --rv-layer: var(--app-panel-strong);
+  --rv-layer: var(--app-panel);
   --rv-layer-2: var(--app-panel-strong);
   --rv-layer-3: var(--surface-3);
   --rv-border: var(--app-border);
@@ -3074,6 +3076,8 @@
 .rv-achievements-pro {
   border-radius: 9px;
   box-shadow: none;
+  border: 1px solid var(--rv-border);
+  background: var(--rv-layer);
 }
 
 .rv-ranking-title {
