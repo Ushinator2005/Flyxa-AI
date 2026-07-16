@@ -503,6 +503,11 @@ export const subscriptionApi = {
   openPortal: () => api.post<{ url: string }>('/api/subscription/portal', {}),
 };
 
+export const waitlistApi = {
+  join: (email: string, source: string) =>
+    api.post<{ ok: boolean; already: boolean }>('/api/waitlist', { email, source }),
+};
+
 export interface PropFirmRuleRecordResponse {
   id: string;
   firm: string;

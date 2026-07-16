@@ -18,6 +18,7 @@ import rivalsRouter from './routes/rivals';
 import accountRouter from './routes/account';
 import propFirmRulesRouter from './routes/propFirmRules';
 import subscriptionRouter, { stripeWebhookHandler } from './routes/subscription';
+import waitlistRouter from './routes/waitlist';
 
 dotenv.config({ override: true });
 
@@ -134,6 +135,7 @@ app.use('/api/rivals', rivalsRouter);
 app.use('/api/account', accountRouter);
 app.use('/api/prop-firm-rules', propFirmRulesRouter);
 app.use('/api/subscription', subscriptionRouter);
+app.use('/api/waitlist', waitlistRouter);
 
 // Error handler
 app.use(errorHandler);
