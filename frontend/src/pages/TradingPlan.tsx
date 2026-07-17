@@ -592,18 +592,14 @@ export default function TradingPlan() {
                     {planReport.pct !== null && (
                       <> · held to <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: adherenceColor }}>{planReport.pct}%</span> over the last 30 days</>
                     )}
+                    {todayStats.checkedCount > 0 && (
+                      <> · <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--amber)' }}>{todayStats.passed} of {todayStats.checkedCount}</span> held today</>
+                    )}
                   </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-                  {todayStats.checkedCount > 0 && (
-                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>
-                      <span style={{ color: 'var(--amber)', fontWeight: 700 }}>{todayStats.passed} OF {todayStats.checkedCount}</span> HELD TODAY
-                    </p>
-                  )}
-                  <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule}>
-                    <Plus size={12} /> Add Rule
-                  </button>
-                </div>
+                <button type="button" className="tp-btn tp-btn-primary" onClick={addRiskRule} style={{ flexShrink: 0 }}>
+                  <Plus size={12} /> Add Rule
+                </button>
               </div>
               {riskRules.map((rule, ruleIndex) => {
                 const kind = rule.kind ?? 'manual';
@@ -875,18 +871,17 @@ export default function TradingPlan() {
                     adherence · {totalBreaks} break{totalBreaks !== 1 ? 's' : ''}
                   </span>
                 </div>
-                <div style={{ padding: '0 16px 13px', display: 'flex', alignItems: 'flex-end', gap: 2, height: 46 }}>
-                  {daySeries.map(day => (
+                <div style={{ padding: '0 16px 14px', display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                  {daySeries.filter(day => day.pct !== null).map(day => (
                     <span
                       key={day.date}
-                      title={day.pct !== null ? `${day.label} · ${day.pct}%` : `${day.label} · no verified session`}
+                      title={`${day.label} · ${day.failed === 0 ? 'all rules held' : `${day.failed} break${day.failed !== 1 ? 's' : ''}`}`}
                       style={{
-                        flex: 1,
-                        height: day.pct !== null ? `${Math.max(12, day.pct)}%` : 4,
-                        borderRadius: 1,
-                        backgroundColor: day.pct !== null
-                          ? (day.failed === 0 ? BAR_ON : BAR_BREAK)
-                          : BAR_EMPTY,
+                        width: 13,
+                        height: 13,
+                        borderRadius: 3,
+                        backgroundColor: day.failed === 0 ? BAR_ON : BAR_BREAK,
+                        opacity: day.failed === 0 ? 0.92 : 0.8,
                       }}
                     />
                   ))}

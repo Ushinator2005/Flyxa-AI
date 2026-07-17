@@ -1620,8 +1620,8 @@
 }
 
 .tp-rcard-toggle input:checked + .tp-toggle-track {
-  background: var(--green);
-  border-color: var(--green);
+  background: rgba(245, 158, 11, 0.20);
+  border-color: rgba(245, 158, 11, 0.55);
 }
 
 .tp-toggle-thumb {
@@ -1630,13 +1630,13 @@
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,.25);
-  transition: left .15s;
+  background: var(--txt-3);
+  transition: left .15s, background .15s;
 }
 
 .tp-rcard-toggle input:checked + .tp-toggle-track .tp-toggle-thumb {
   left: 17px;
+  background: var(--amber);
 }
 
 /* Inline breach info (inside header type row) */

@@ -94,233 +94,122 @@ export default function Auth() {
           <ThemeToggle compact />
         </div>
 
-        <div className="auth-layout">
+        {/* One centered column — the brand is the page */}
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', textAlign: 'center' }}>
+          <FlyxaLogo
+            size={92}
+            showWordmark
+            wordmarkClassName="text-[3.2rem] font-bold tracking-[-0.05em]"
+            subtitleClassName="text-[12px] tracking-[0.6em]"
+          />
 
-          {/* ── Left: the artifacts — scanner reading a chart, then the graded session card ── */}
-          <section className="auth-left">
-            <style>{`
-              @keyframes flyxa-scan-sweep { 0% { left: 3%; } 50% { left: 95%; } 100% { left: 3%; } }
-              .flyxa-scan-line { animation: flyxa-scan-sweep 4.5s ease-in-out infinite; }
-              @media (prefers-reduced-motion: reduce) { .flyxa-scan-line { animation: none; left: 60%; } }
-            `}</style>
-            <div className="auth-left-inner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <p style={{
+            margin: '52px 0 0',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: 'var(--accent)',
+          }}>
+            Private beta · invite only
+          </p>
 
-              {/* Scanner card — a chart mid-scan */}
-              <div style={{
-                width: 410, maxWidth: '100%',
-                border: '1px solid var(--app-border)',
-                borderRadius: 14,
-                backgroundColor: '#141211',
+          <h1 style={{
+            margin: '16px 0 12px',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(2rem, 4vw, 2.7rem)',
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.1,
+            color: 'var(--app-text)',
+          }}>
+            Join the waitlist.
+          </h1>
+
+          <p style={{ margin: '0 0 30px', fontSize: 14, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 400 }}>
+            A small group of traders has access today. Leave your email and
+            your invite arrives when a seat opens.
+          </p>
+
+          {success ? (
+            <div className="auth-alert auth-alert--success" style={{ width: '100%', maxWidth: 460, justifyContent: 'center' }}>
+              <CheckCircle2 size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{success}</span>
+            </div>
+          ) : (
+            <form
+              onSubmit={handleSubmit}
+              style={{
+                display: 'flex',
+                width: '100%',
+                maxWidth: 460,
+                height: 52,
+                border: `1px solid ${emailFocused ? 'var(--accent)' : 'var(--app-border)'}`,
+                borderRadius: 11,
                 overflow: 'hidden',
-                marginBottom: 24,
-                transform: 'rotate(-1.2deg)',
-                boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
-              }}>
-                <div style={{ height: 3, backgroundColor: 'var(--accent)' }} />
-                <div style={{ padding: '14px 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', color: 'var(--app-text-subtle)' }}>
-                    TRADE SCANNER
-                  </p>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--app-text-muted)', border: '1px solid var(--app-border)', borderRadius: 4, padding: '2px 7px' }}>
-                    MNQ · 5M
-                  </span>
-                </div>
+                backgroundColor: 'var(--app-panel-strong)',
+                transition: 'border-color 0.15s',
+              }}
+            >
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
+                placeholder="you@example.com"
+                required
+                autoComplete="email"
+                aria-label="Email"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
+                  padding: '0 18px',
+                  fontSize: 14,
+                  color: 'var(--app-text)',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  flexShrink: 0,
+                  border: 'none',
+                  backgroundColor: 'var(--accent)',
+                  color: '#0e0d0d',
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  padding: '0 28px',
+                  cursor: 'pointer',
+                }}
+              >
+                {loading ? '…' : 'Join waitlist'}
+              </button>
+            </form>
+          )}
 
-                {/* Mini chart with entry/stop/target levels and a sweeping scan line */}
-                <div style={{ position: 'relative', margin: '12px 18px 0', height: 128 }}>
-                  <svg viewBox="0 0 340 96" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-                    <line x1="0" y1="16" x2="340" y2="16" stroke="#22d68a" strokeOpacity="0.55" strokeWidth="1" strokeDasharray="5 4" />
-                    <line x1="0" y1="54" x2="340" y2="54" stroke="#f59e0b" strokeOpacity="0.6" strokeWidth="1" strokeDasharray="5 4" />
-                    <line x1="0" y1="80" x2="340" y2="80" stroke="#f05252" strokeOpacity="0.55" strokeWidth="1" strokeDasharray="5 4" />
-                    {[
-                      { x: 12,  wt: 40, wb: 62, bt: 44, bb: 58, bull: false },
-                      { x: 32,  wt: 46, wb: 66, bt: 50, bb: 62, bull: false },
-                      { x: 52,  wt: 46, wb: 64, bt: 50, bb: 58, bull: true },
-                      { x: 72,  wt: 50, wb: 76, bt: 54, bb: 70, bull: false },
-                      { x: 92,  wt: 60, wb: 79, bt: 66, bb: 78, bull: false },
-                      { x: 112, wt: 60, wb: 79, bt: 64, bb: 76, bull: true },
-                      { x: 132, wt: 50, wb: 70, bt: 54, bb: 66, bull: true },
-                      { x: 152, wt: 52, wb: 66, bt: 56, bb: 62, bull: false },
-                      { x: 172, wt: 42, wb: 64, bt: 46, bb: 60, bull: true },
-                      { x: 192, wt: 34, wb: 52, bt: 38, bb: 48, bull: true },
-                      { x: 212, wt: 36, wb: 52, bt: 40, bb: 48, bull: false },
-                      { x: 232, wt: 30, wb: 50, bt: 34, bb: 46, bull: true },
-                      { x: 252, wt: 22, wb: 40, bt: 26, bb: 36, bull: true },
-                      { x: 272, wt: 16, wb: 32, bt: 20, bb: 28, bull: true },
-                      { x: 292, wt: 15, wb: 24, bt: 18, bb: 22, bull: true },
-                      { x: 312, wt: 14, wb: 26, bt: 17, bb: 23, bull: true },
-                    ].map(c => (
-                      <g key={c.x}>
-                        <line x1={c.x + 5} y1={c.wt} x2={c.x + 5} y2={c.wb} stroke={c.bull ? '#22d68a' : '#f05252'} strokeWidth="1" />
-                        <rect x={c.x} y={c.bt} width="10" height={Math.max(2, c.bb - c.bt)} rx="1" fill={c.bull ? '#22d68a' : '#f05252'} fillOpacity="0.85" />
-                      </g>
-                    ))}
-                  </svg>
-                  {/* Level tags */}
-                  <span style={{ position: 'absolute', right: 2, top: 10, fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.08em', color: '#22d68a' }}>TP</span>
-                  <span style={{ position: 'absolute', left: 2, top: 60, fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.08em', color: 'var(--accent)' }}>ENTRY</span>
-                  <span style={{ position: 'absolute', right: 2, top: 94, fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.08em', color: '#f05252' }}>SL</span>
-                  {/* Scan line */}
-                  <span className="flyxa-scan-line" style={{ position: 'absolute', top: 0, bottom: 0, width: 1.5, backgroundColor: 'var(--accent)', opacity: 0.9 }} />
-                </div>
-
-                {/* Extracted readout */}
-                <div style={{ margin: '12px 18px 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                  {[
-                    ['DIR', 'LONG', '#22d68a'],
-                    ['ENTRY', '21,482', 'var(--app-text)'],
-                    ['STOP', '21,450', '#f05252'],
-                    ['TARGET', '21,540', '#22d68a'],
-                  ].map(([label, value, color]) => (
-                    <div key={label}>
-                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 7.5, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--app-text-subtle)' }}>{label}</p>
-                      <p style={{ margin: '3px 0 0', fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: color as string }}>{value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ margin: '12px 0 0', borderTop: '1px solid var(--app-border)', padding: '9px 18px 11px' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 600, letterSpacing: '0.1em', color: '#22d68a' }}>
-                    ✓ TP HIT FIRST · EXIT 21,540 · TRADE LOGGED
-                  </span>
-                </div>
-              </div>
-
-              <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: 1.6, color: 'var(--app-text-muted)', textAlign: 'center', maxWidth: 330 }}>
-                Screenshot in, verified trade out. The scanner reads the chart,
-                checks your levels, and logs the trade for you.
-              </p>
+          {error && (
+            <div className="auth-alert auth-alert--error" style={{ width: '100%', maxWidth: 460, marginTop: 10 }}>
+              <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
             </div>
-          </section>
+          )}
 
-          <div className="auth-vdivider" aria-hidden="true" />
+          <p style={{ margin: '16px 0 0', fontSize: 11, color: 'var(--app-text-subtle)' }}>
+            No spam. One email when your seat opens — that's it.
+          </p>
 
-          {/* ── Right: the pitch and the one field that matters ── */}
-          <section className="auth-right">
-            <div className="auth-card">
-              <div className="auth-card-mobile-logo">
-                <FlyxaLogo
-                  size={32}
-                  showWordmark
-                  wordmarkClassName="text-[1.3rem] font-bold tracking-[-0.04em]"
-                  subtitleClassName="text-[10px] tracking-[0.5em]"
-                />
-              </div>
-
-              <p style={{
-                margin: 0,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-                color: 'var(--accent)',
-              }}>
-                Private beta · invite only
-              </p>
-
-              <h1 style={{
-                margin: '14px 0 12px',
-                fontFamily: 'var(--font-display)',
-                fontSize: 'clamp(1.6rem, 2.6vw, 2rem)',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                lineHeight: 1.15,
-                color: 'var(--app-text)',
-              }}>
-                Join the waitlist.
-              </h1>
-
-              <p style={{ margin: '0 0 24px', fontSize: 13.5, lineHeight: 1.7, color: 'var(--app-text-muted)' }}>
-                A small group of traders has access today. Leave your email and
-                your invite arrives when a seat opens.
-              </p>
-
-              {success ? (
-                <div className="auth-alert auth-alert--success">
-                  <CheckCircle2 size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <span>{success}</span>
-                </div>
-              ) : (
-                <form
-                  onSubmit={handleSubmit}
-                  style={{
-                    display: 'flex',
-                    width: '100%',
-                    height: 50,
-                    border: `1px solid ${emailFocused ? 'var(--accent)' : 'var(--app-border)'}`,
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    backgroundColor: 'var(--app-panel-strong)',
-                    transition: 'border-color 0.15s',
-                  }}
-                >
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    onFocus={() => setEmailFocused(true)}
-                    onBlur={() => setEmailFocused(false)}
-                    placeholder="you@example.com"
-                    required
-                    autoComplete="email"
-                    aria-label="Email"
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      border: 'none',
-                      outline: 'none',
-                      background: 'transparent',
-                      padding: '0 16px',
-                      fontSize: 14,
-                      color: 'var(--app-text)',
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    style={{
-                      flexShrink: 0,
-                      border: 'none',
-                      backgroundColor: 'var(--accent)',
-                      color: '#0e0d0d',
-                      fontWeight: 700,
-                      fontSize: 13.5,
-                      padding: '0 26px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {loading ? '…' : 'Join waitlist'}
-                  </button>
-                </form>
-              )}
-
-              {error && (
-                <div className="auth-alert auth-alert--error" style={{ marginTop: 10 }}>
-                  <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <p style={{ margin: '14px 0 0', fontSize: 11, color: 'var(--app-text-subtle)' }}>
-                No spam. One email when your seat opens — that's it.
-              </p>
-
-              <div style={{ marginTop: 26, borderTop: '1px solid var(--app-border)', paddingTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--app-text-subtle)' }}>
-                  SEATS OPEN IN WAVES
-                </span>
-                <button
-                  type="button"
-                  onClick={() => { setTab('login'); setError(''); setSuccess(''); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
-                >
-                  Have an account? Sign in
-                </button>
-              </div>
-            </div>
-          </section>
-
+          <button
+            type="button"
+            onClick={() => { setTab('login'); setError(''); setSuccess(''); }}
+            style={{ marginTop: 40, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
+          >
+            Have an account? Sign in
+          </button>
         </div>
       </div>
     );

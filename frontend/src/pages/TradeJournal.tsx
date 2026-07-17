@@ -1221,6 +1221,8 @@ function TradeJournalCard({
 }) {
   const [showPsychDetail, setShowPsychDetail] = useState(false);
   const [showFlagPopover, setShowFlagPopover] = useState(false);
+  // Viewport-fixed placement so ancestor overflow clipping can't cut the list off.
+  const [flagPopoverPos, setFlagPopoverPos] = useState<{ left: number; top: number; maxHeight: number; openUp: boolean }>({ left: 0, top: 0, maxHeight: 320, openUp: false });
 
   // ── Thesis / Invalidation ────────────────────────────────────
   const th = trade.thesis ?? { setup: '', invalidation: '', asymmetry: '', setupType: '' };
@@ -1367,12 +1369,24 @@ function TradeJournalCard({
             </button>
           ))}
           <div style={{ position: 'relative' }}>
-            <button type="button" onClick={() => setShowFlagPopover(p => !p)}
+            <button type="button"
+              onClick={e => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const roomBelow = window.innerHeight - rect.bottom - 12;
+                const openUp = roomBelow < 260 && rect.top > roomBelow;
+                setFlagPopoverPos({
+                  left: Math.max(8, Math.min(rect.left, window.innerWidth - 272)),
+                  top: openUp ? rect.top - 4 : rect.bottom + 4,
+                  maxHeight: Math.max(140, Math.min(320, (openUp ? rect.top : roomBelow) - 8)),
+                  openUp,
+                });
+                setShowFlagPopover(p => !p);
+              }}
               style={{ padding: '3px 8px', fontSize: 10, borderRadius: 4, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--txt-3)', cursor: 'pointer' }}>
               + add flag
             </button>
             {showFlagPopover && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 400, background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.45)', minWidth: 260, maxHeight: 320, overflowY: 'auto', padding: 8 }}
+              <div style={{ position: 'fixed', left: flagPopoverPos.left, top: flagPopoverPos.top, transform: flagPopoverPos.openUp ? 'translateY(-100%)' : 'none', zIndex: 1500, background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.45)', minWidth: 260, maxHeight: flagPopoverPos.maxHeight, overflowY: 'auto', padding: 8 }}
                 onMouseLeave={() => setShowFlagPopover(false)}>
                 {ALL_BEHAVIORAL_FLAGS.map(f => {
                   const checked = flags.includes(f.id);
