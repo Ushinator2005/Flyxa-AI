@@ -85,21 +85,26 @@ export default function InSessionTradeCheckDock() {
     originY: number;
   } | null>(null);
 
-  // Open dock via custom event.
-  // Opens as a popup window (real OS window, draggable to any monitor).
-  // If the popup is already open, window.open with the same name focuses it.
-  // Falls back to inline dock only if the browser blocks popups.
+  // Open dock via custom event (the header "Trade Lens" shortcut).
+  // Document Picture-in-Picture first: it's an always-on-top OS window, so it
+  // stays visible when the user clicks their chart on another monitor. A plain
+  // popup loses that fight — it drops behind whatever window gets focus.
+  // Fallbacks: regular popup (unsupported browsers) → inline dock (popup blocked).
   useEffect(() => {
     const handler = () => {
-      const child = window.open(
-        '/trade-check',
-        'flyxa-trade-check',
-        `popup=yes,width=${W},height=${H_FULL}`,
-      );
-      if (child) { child.focus(); return; }
-      // Popup blocked — show inline dock
-      setOpen(true);
-      setMinimized(false);
+      void (async () => {
+        const opened = await tryOpenPip(pipWindowRef);
+        if (opened) return;
+        const child = window.open(
+          '/trade-check',
+          'flyxa-trade-check',
+          `popup=yes,width=${W},height=${H_FULL}`,
+        );
+        if (child) { child.focus(); return; }
+        // Popup blocked — show inline dock
+        setOpen(true);
+        setMinimized(false);
+      })();
     };
     window.addEventListener('flyxa:open-trade-check', handler);
     return () => window.removeEventListener('flyxa:open-trade-check', handler);
