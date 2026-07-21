@@ -665,8 +665,26 @@ export function computeEvaluationProgress(
   };
 }
 
+// When the previous trade was closed. `time` is the ENTRY time, so measuring
+// re-entry gaps from it overstates the wait on long-held trades — prefer the
+// recorded exit time, then entry + duration, then entry as the last resort.
+function exitDateTime(trade: Trade): number {
+  const entry = dateTime(trade);
+  if (trade.exitTime) {
+    const parsed = new Date(`${trade.date}T${trade.exitTime}:00`).getTime();
+    // An exit clock earlier than entry means the trade closed past midnight.
+    if (Number.isFinite(parsed)) return parsed < entry ? parsed + 86_400_000 : parsed;
+  }
+  const duration = trade.duration ?? trade.durationMinutes;
+  if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) {
+    return entry + duration * 60_000;
+  }
+  return entry;
+}
+
+// Minutes the trader actually waited: previous trade's close → next entry.
 function minutesBetween(previous: Trade, current: Trade): number {
-  return Math.max(0, (dateTime(current) - dateTime(previous)) / 60_000);
+  return Math.max(0, (dateTime(current) - exitDateTime(previous)) / 60_000);
 }
 
 function sessionName(time: string): string {

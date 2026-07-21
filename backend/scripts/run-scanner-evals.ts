@@ -40,6 +40,10 @@ interface ExpectedResult {
   entry_time?: string;
   timeframe_minutes?: number;
   entry_time_tolerance_minutes?: number;
+  close_time?: string;
+  close_time_tolerance_minutes?: number;
+  trade_length_minutes?: number;
+  trade_length_tolerance_minutes?: number;
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -129,6 +133,26 @@ function runPromptChecks(): { name: string; pass: boolean; detail?: string }[] {
     name: 'cursor-label rule stated once (no duplicate rule soup)',
     pass: duplicateRule(withGeometry, 'cursor price tracker') <= 1,
     detail: `${duplicateRule(withGeometry, 'cursor price tracker')} occurrence(s)`,
+  });
+
+  // Time geometry mode: the model must OCR anchor labels, never count candles.
+  const withTimeGeometry = buildMainExtractionPrompt(
+    colors,
+    { leftRatio: 0.5, rightRatio: 0.65 },
+    'Short',
+    { entryLineRatio: 0.5, stopLineRatio: 0.3, targetLineRatio: 0.7, timeAxisEntryXRatio: 0.4 },
+    { pitchRatio: 0.008, gridlineRatios: [0.2, 0.4, 0.6], boxLeftRatio: 0.5 },
+  );
+  checks.push({
+    name: 'time-geometry prompt asks for anchor labels and forbids model candle counting',
+    pass: withTimeGeometry.includes('anchor_labels')
+      && withTimeGeometry.includes('Do NOT count candles')
+      && !withTimeGeometry.includes('candle-count interpolation'),
+  });
+  checks.push({
+    name: 'fallback prompt keeps candle-count interpolation when no gridline geometry exists',
+    pass: withGeometry.includes('candle-count interpolation')
+      && withGeometry.includes('anchor_labels as an empty array'),
   });
 
   return checks;
@@ -227,6 +251,20 @@ async function runCase(caseName: string): Promise<{ name: string; fields: FieldR
     const got = result.entry_time ? minutesFromHHMM(result.entry_time) : null;
     const pass = want !== null && got !== null && Math.abs(got - want) <= tolerance;
     check(`entry_time (±${tolerance}m)`, expected.entry_time, result.entry_time, pass);
+  }
+  if (expected.close_time !== undefined) {
+    // Default tolerance = one candle: close time is quantized to the first-touch candle.
+    const tolerance = expected.close_time_tolerance_minutes ?? Math.max(2, expected.timeframe_minutes ?? 2);
+    const want = minutesFromHHMM(expected.close_time);
+    const got = result.close_time ? minutesFromHHMM(result.close_time) : null;
+    const pass = want !== null && got !== null && Math.abs(got - want) <= tolerance;
+    check(`close_time (±${tolerance}m)`, expected.close_time, result.close_time, pass);
+  }
+  if (expected.trade_length_minutes !== undefined) {
+    const tolerance = expected.trade_length_tolerance_minutes ?? Math.max(2, expected.timeframe_minutes ?? 2);
+    const got = typeof result.trade_length_seconds === 'number' ? result.trade_length_seconds / 60 : null;
+    const pass = got !== null && Math.abs(got - expected.trade_length_minutes) <= tolerance;
+    check(`trade_length (±${tolerance}m)`, expected.trade_length_minutes, got, pass);
   }
 
   console.log(`  [${caseName}] completed in ${elapsed}s${result.warnings?.length ? ` — ${result.warnings.length} warning(s)` : ''}`);

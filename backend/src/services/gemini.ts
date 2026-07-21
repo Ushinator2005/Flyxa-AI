@@ -14,12 +14,23 @@ const EXTRACTION_SCHEMA: ResponseSchema = {
     tp_price: { type: SchemaType.NUMBER, nullable: true },
     timeframe_minutes: { type: SchemaType.NUMBER, nullable: true },
     entry_time: { type: SchemaType.STRING, nullable: true },
+    anchor_labels: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          x_pct: { type: SchemaType.NUMBER },
+          label: { type: SchemaType.STRING, nullable: true },
+        },
+        required: ['x_pct', 'label'],
+      },
+    },
     price_confidence: { type: SchemaType.STRING },
     time_confidence: { type: SchemaType.STRING },
     evidence: { type: SchemaType.STRING },
     warnings: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
   },
-  required: ['symbol', 'direction', 'entry_price', 'sl_price', 'tp_price', 'timeframe_minutes', 'entry_time', 'price_confidence', 'time_confidence', 'evidence', 'warnings'],
+  required: ['symbol', 'direction', 'entry_price', 'sl_price', 'tp_price', 'timeframe_minutes', 'entry_time', 'anchor_labels', 'price_confidence', 'time_confidence', 'evidence', 'warnings'],
 };
 
 const BOUNDARY_SCHEMA: ResponseSchema = {
@@ -231,6 +242,93 @@ function parseTimeToken(value: unknown): string | null {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
+// ── Deterministic time from axis anchors ─────────────────────────────────────
+// The model's only time job in geometry mode is OCR: read the label under each
+// detected gridline. Entry time and timeframe validation are arithmetic here.
+
+type AnchorLabel = { xRatio: number; minutes: number };
+
+const STANDARD_TIMEFRAME_MINUTES = [1, 2, 3, 5, 10, 15, 30, 45, 60, 120, 240];
+
+function parseAnchorLabels(raw: unknown): AnchorLabel[] {
+  if (!Array.isArray(raw)) return [];
+  const anchors: AnchorLabel[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const x = parseNullableNumber(record.x_pct);
+    const label = parseTimeToken(record.label);
+    if (x === null || label === null) continue;
+    const [hours, minutes] = label.split(':').map(Number);
+    const xRatio = x > 1 ? x / 100 : x;
+    if (xRatio <= 0 || xRatio >= 1) continue;
+    anchors.push({ xRatio, minutes: hours * 60 + minutes });
+  }
+  return anchors.sort((a, b) => a.xRatio - b.xRatio);
+}
+
+function formatMinutesAsHHMM(totalMinutes: number): string {
+  const normalized = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`;
+}
+
+function computeTimeFromAnchors(
+  anchors: AnchorLabel[],
+  geometry: { pitchRatio: number | null; boxLeftRatio: number | null },
+  headerTimeframe: number | null,
+): { entryTime: string | null; timeframe: number | null; failures: string[]; warnings: string[]; geometric: boolean } {
+  const failures: string[] = [];
+  const warnings: string[] = [];
+  const pitch = geometry.pitchRatio;
+  if (!pitch || pitch <= 0) {
+    return { entryTime: null, timeframe: headerTimeframe, failures, warnings, geometric: false };
+  }
+  if (anchors.length === 0) {
+    failures.push('no readable x-axis time labels under the detected gridlines — re-read the labels in time-axis-focus character by character');
+    return { entryTime: null, timeframe: headerTimeframe, failures, warnings, geometric: false };
+  }
+
+  // Axis-implied timeframe: label gap ÷ candle count between adjacent anchors.
+  const impliedTimeframes: number[] = [];
+  for (let index = 1; index < anchors.length; index += 1) {
+    const dx = anchors[index].xRatio - anchors[index - 1].xRatio;
+    let labelGapMinutes = anchors[index].minutes - anchors[index - 1].minutes;
+    if (labelGapMinutes <= 0) labelGapMinutes += 24 * 60;
+    const candles = Math.round(dx / pitch);
+    if (candles < 1 || dx < pitch * 0.5 || labelGapMinutes > 12 * 60) continue;
+    const implied = labelGapMinutes / candles;
+    const snapped = STANDARD_TIMEFRAME_MINUTES.find(value => Math.abs(value - implied) / value <= 0.25);
+    if (snapped !== undefined) impliedTimeframes.push(snapped);
+  }
+  let axisTimeframe: number | null = null;
+  if (impliedTimeframes.length > 0) {
+    impliedTimeframes.sort((a, b) => a - b);
+    axisTimeframe = impliedTimeframes[Math.floor(impliedTimeframes.length / 2)];
+  }
+
+  let timeframe = headerTimeframe;
+  if (axisTimeframe !== null && headerTimeframe !== null && axisTimeframe !== headerTimeframe) {
+    // The axis is measured (label gap ÷ counted pixels); the header is OCR.
+    failures.push(`header timeframe ${headerTimeframe}m conflicts with the axis-derived ${axisTimeframe}m (anchor label spacing ÷ measured candle pitch) — re-read the header interval and the anchor labels`);
+    warnings.push(`Header timeframe (${headerTimeframe}m) conflicted with axis geometry — using ${axisTimeframe}m.`);
+    timeframe = axisTimeframe;
+  } else if (axisTimeframe !== null && headerTimeframe === null) {
+    warnings.push(`Timeframe inferred from axis geometry: ${axisTimeframe}m.`);
+    timeframe = axisTimeframe;
+  }
+
+  const boxLeft = geometry.boxLeftRatio;
+  if (boxLeft === null || timeframe === null || timeframe <= 0) {
+    return { entryTime: null, timeframe, failures, warnings, geometric: false };
+  }
+
+  const anchor = anchors.reduce((best, candidate) =>
+    Math.abs(candidate.xRatio - boxLeft) < Math.abs(best.xRatio - boxLeft) ? candidate : best);
+  const candlesFromAnchor = Math.round((boxLeft - anchor.xRatio) / pitch);
+  const entryTime = formatMinutesAsHHMM(anchor.minutes + candlesFromAnchor * timeframe);
+  return { entryTime, timeframe, failures, warnings, geometric: true };
+}
+
 function hexToColorName(hex: string): string {
   const h = hex.replace('#', '').toLowerCase();
   const r = parseInt(h.slice(0, 2), 16);
@@ -418,14 +516,34 @@ FINAL PRICE CHECK
 Before returning JSON, verify entry_price, sl_price, and tp_price each came from standalone position-tool labels or the explicit grid fallback. If any chosen label has a same-color horizontal line extending left from it, reject and replace it.`;
 }
 
-function buildTimeRules(lineHints?: ScannerLineHints): string {
+export type ScannerTimeGeometry = {
+  pitchRatio: number | null;
+  gridlineRatios: number[];
+  boxLeftRatio: number | null;
+};
+
+function buildTimeRules(lineHints?: ScannerLineHints, timeGeometry?: ScannerTimeGeometry): string {
+  if (timeGeometry && timeGeometry.gridlineRatios.length >= 2) {
+    const positions = timeGeometry.gridlineRatios
+      .map(ratio => `${Math.round(ratio * 100)}%`)
+      .join(', ');
+    return `TIME
+1. Read timeframe_minutes from the chart header interval (e.g. "5" means a 5-minute chart).
+2. The pixel scanner measured vertical time gridlines at these positions across the full_chart width, from the left edge: ${positions}.
+   For EACH position, read the time label printed on the bottom x-axis directly beneath that vertical gridline.
+   Fill anchor_labels with one object per gridline: {"x_pct": <the given percent as a number>, "label": "HH:MM"}.
+   Copy the label text exactly in 24-hour HH:MM. If the label under a gridline is a date (e.g. "Mon 13") or unreadable, set label to null for that position — never guess.
+3. Do NOT count candles to compute entry_time — the backend derives the exact entry time from your anchor_labels and the measured candle spacing. Still return your own entry_time estimate as a fallback.
+4. Do not estimate close_time or trade duration. Dedicated exit verifiers handle the exit after this extraction pass.`;
+  }
   return `TIME
 1. Read timeframe from the chart header.
 2. Read entry_time using candle-count interpolation, not by blindly copying the nearest x-axis label.
 ${typeof lineHints?.timeAxisEntryXRatio === 'number' ? `3. Use time-axis-focus first. The entry candle is near ${Math.round(lineHints.timeAxisEntryXRatio * 100)}% from the left of that crop.` : '3. Use the bottom x-axis labels in full_chart or time-axis-focus.'}
 4. Pick the x-axis time label whose candle is closest to the left edge of the P&L box.
 5. Count candles from that anchor to the entry candle. entry_time = anchor time + candle count * timeframe.
-6. Do not estimate close_time or trade duration. Dedicated exit verifiers handle the exit after this extraction pass.`;
+6. No gridline geometry was detected for this chart — return anchor_labels as an empty array.
+7. Do not estimate close_time or trade duration. Dedicated exit verifiers handle the exit after this extraction pass.`;
 }
 
 // Exported for the eval harness (scripts/run-scanner-evals.ts prompt checks).
@@ -434,6 +552,7 @@ export function buildMainExtractionPrompt(
   boxBounds?: ScannerBoxBounds,
   directionHint?: 'Long' | 'Short',
   lineHints?: ScannerLineHints,
+  timeGeometry?: ScannerTimeGeometry,
 ): string {
   const boxText = boxBounds
     ? `The compact position tool spans approximately ${Math.round(boxBounds.leftRatio * 100)}% to ${Math.round(boxBounds.rightRatio * 100)}% of the image width.`
@@ -449,7 +568,7 @@ ${boxText}
 
 ${buildPriceRules(userColors, Boolean(lineHints))}
 
-${buildTimeRules(lineHints)}
+${buildTimeRules(lineHints, timeGeometry)}
 
 Return ONLY raw JSON:
 {
@@ -460,6 +579,7 @@ Return ONLY raw JSON:
   "tp_price": number or null,
   "timeframe_minutes": number or null,
   "entry_time": "HH:MM" or null,
+  "anchor_labels": array of {"x_pct": number, "label": "HH:MM" or null},
   "price_confidence": "high" or "medium" or "low",
   "time_confidence": "high" or "medium" or "low",
   "evidence": "brief price/time evidence",
@@ -487,8 +607,9 @@ export async function readTradeChart(
     targetLineRatio?: number;
     timeAxisEntryXRatio?: number;
   },
+  timeGeometry?: ScannerTimeGeometry,
 ): Promise<ExtractionRead> {
-  const basePrompt = buildMainExtractionPrompt(userColors, boxBounds, directionHint, lineHints);
+  const basePrompt = buildMainExtractionPrompt(userColors, boxBounds, directionHint, lineHints, timeGeometry);
   const escalationModel = process.env.GEMINI_ESCALATION_MODEL?.trim() || 'gemini-2.5-pro';
 
   type AttemptOutcome = ExtractionRead & { structuralFailures: string[]; priceConfidenceLow: boolean };
@@ -558,7 +679,34 @@ export async function readTradeChart(
       }
 
       const timeframeRaw = parseNullableNumber(parsed.timeframe_minutes);
-      const timeframeMinutes = timeframeRaw !== null ? Math.max(0, Math.round(timeframeRaw)) : null;
+      const timeframeMinutes = timeframeRaw !== null && timeframeRaw > 0 ? Math.round(timeframeRaw) : null;
+
+      // Geometry mode: the model OCR'd anchor labels; entry time and the
+      // timeframe cross-check are computed here, deterministically.
+      const modelEntryTime = parseTimeToken(parsed.entry_time);
+      let entryTime = modelEntryTime;
+      let finalTimeframe = timeframeMinutes;
+      let finalTimeConfidence: 'high' | 'medium' | 'low' = timeConfidence;
+      if (timeGeometry) {
+        const computed = computeTimeFromAnchors(parseAnchorLabels(parsed.anchor_labels), timeGeometry, timeframeMinutes);
+        structuralFailures.push(...computed.failures);
+        sanityWarnings.push(...computed.warnings);
+        finalTimeframe = computed.timeframe ?? timeframeMinutes;
+        if (computed.geometric && computed.entryTime) {
+          if (modelEntryTime && modelEntryTime !== computed.entryTime) {
+            const toMinutes = (token: string) => Number(token.slice(0, 2)) * 60 + Number(token.slice(3, 5));
+            const rawDiff = Math.abs(toMinutes(modelEntryTime) - toMinutes(computed.entryTime));
+            if (Math.min(rawDiff, 1440 - rawDiff) > (finalTimeframe ?? 1)) {
+              sanityWarnings.push(`Model estimated entry ${modelEntryTime}; axis geometry computed ${computed.entryTime} — using the geometric time.`);
+            }
+          }
+          entryTime = computed.entryTime;
+          finalTimeConfidence = 'high';
+        }
+      }
+      if (finalTimeframe === null) {
+        structuralFailures.push('timeframe_minutes missing — read the chart interval from the header (e.g. "5" means a 5-minute chart)');
+      }
 
       return {
         symbol: typeof parsed.symbol === 'string' ? parsed.symbol : null,
@@ -568,10 +716,10 @@ export async function readTradeChart(
         tp_price,
         exit_reason: null,
         trade_length_seconds: null,
-        timeframe_minutes: timeframeMinutes,
-        entry_time: parseTimeToken(parsed.entry_time),
+        timeframe_minutes: finalTimeframe,
+        entry_time: entryTime,
         close_time: null,
-        confidence: timeConfidence,
+        confidence: finalTimeConfidence,
         first_touch_candle_index: null,
         evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
         warnings: sanityWarnings,
@@ -862,6 +1010,20 @@ export async function analyzeChartImage(
     timeAxisEntryXRatio: readRatioHint('time_axis_entry_x_ratio'),
   };
   const hasLineHints = Object.values(lineHints).some(value => typeof value === 'number');
+
+  // Pixel-measured time geometry: candle pitch + gridline positions. When both
+  // are present the model only OCRs axis labels and entry time is arithmetic.
+  const candlePitchRatio = typeof scannerContext?.candle_pitch_ratio === 'number' && scannerContext.candle_pitch_ratio > 0
+    ? scannerContext.candle_pitch_ratio
+    : null;
+  const gridlineRatios = Array.isArray(scannerContext?.gridline_x_ratios)
+    ? (scannerContext.gridline_x_ratios as unknown[]).filter((value): value is number =>
+        typeof value === 'number' && Number.isFinite(value) && value > 0 && value < 1)
+    : [];
+  const timeGeometry: ScannerTimeGeometry | undefined = candlePitchRatio !== null && gridlineRatios.length >= 2
+    ? { pitchRatio: candlePitchRatio, gridlineRatios, boxLeftRatio }
+    : undefined;
+
   const scannerDebug = scannerContext ? {
     direction_hint: directionHint,
     entry_line_ratio: lineHints.entryLineRatio,
@@ -870,6 +1032,9 @@ export async function analyzeChartImage(
     box_left_ratio: boxLeftRatio ?? undefined,
     box_right_ratio: boxRightRatio ?? undefined,
     used_dynamic_crops: boxBounds !== undefined && hasLineHints,
+    candle_pitch_ratio: candlePitchRatio ?? undefined,
+    gridline_count: gridlineRatios.length || undefined,
+    used_time_geometry: timeGeometry !== undefined,
   } : undefined;
 
   // Role-specific image subsets. Each pass only receives the crops relevant to
@@ -895,6 +1060,7 @@ export async function analyzeChartImage(
     boxBounds,
     directionHint,
     hasLineHints ? lineHints : undefined,
+    timeGeometry,
   );
   let verifiedExitReason: 'TP' | 'SL' | null = null;
   let verifiedConfidence: 'high' | 'medium' | 'low' = 'low';
@@ -1000,19 +1166,44 @@ export async function analyzeChartImage(
     }
   }
 
-  const verifiedDurationSeconds = verifiedExitReason !== null
+  let verifiedDurationSeconds = verifiedExitReason !== null
     && verifiedFirstTouchIndex !== null
     && result.timeframe_minutes !== null
     && result.timeframe_minutes > 0
       ? verifiedFirstTouchIndex * result.timeframe_minutes * 60
       : null;
-  const verifiedCloseTime = addSecondsToHHMM(result.entry_time ?? entryTime ?? null, verifiedDurationSeconds);
+
+  // Box-width invariant: the exit candle sits inside the position tool, so the
+  // first-touch index can never exceed the candles that physically fit in the
+  // box. An index past that is a miscount — discard the duration, keep the exit.
+  if (
+    verifiedDurationSeconds !== null
+    && verifiedFirstTouchIndex !== null
+    && candlePitchRatio !== null
+    && boxBounds
+  ) {
+    const boxCandleCapacity = Math.ceil((boxBounds.rightRatio - boxBounds.leftRatio) / candlePitchRatio) + 1;
+    if (verifiedFirstTouchIndex > boxCandleCapacity) {
+      verificationWarnings.push(
+        `First-touch candle index ${verifiedFirstTouchIndex} exceeds the ~${boxCandleCapacity} candles that fit inside the position tool — duration discarded as a miscount. Set the exit time manually.`
+      );
+      verifiedDurationSeconds = null;
+    }
+  }
+
+  // No wall-clock fallback: a scan that cannot read the entry time returns
+  // null so the journal shows "verify time" instead of a fabricated clock stamp.
+  void entryTime;
+  if (result.entry_time === null) {
+    verificationWarnings.push('Entry time could not be read from the chart x-axis — set it manually in the journal.');
+  }
+  const verifiedCloseTime = addSecondsToHHMM(result.entry_time, verifiedDurationSeconds);
 
   return {
     symbol: result.symbol,
     direction: result.direction,
     entry_price: result.entry_price,
-    entry_time: result.entry_time ?? entryTime ?? null,
+    entry_time: result.entry_time,
     close_time: verifiedCloseTime,
     entry_time_confidence: result.confidence,
     sl_price: result.sl_price,

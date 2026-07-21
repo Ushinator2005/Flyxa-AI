@@ -127,5 +127,8 @@ export interface ExtractedTradeData {
     box_left_ratio?: number;
     box_right_ratio?: number;
     used_dynamic_crops: boolean;
+    candle_pitch_ratio?: number;
+    gridline_count?: number;
+    used_time_geometry?: boolean;
   };
 }

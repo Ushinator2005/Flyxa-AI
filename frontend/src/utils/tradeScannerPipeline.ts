@@ -27,6 +27,8 @@ export interface ScannerContext {
   green_box?: Omit<ComponentBounds, 'count'>
   time_axis_entry_x_ratio?: number  // where the entry candle sits within the time-axis-focus crop (0–1)
   label_anchored?: boolean          // line ratios came from right-axis label pills, not zone fills
+  candle_pitch_ratio?: number       // measured candle spacing as a fraction of full image width
+  gridline_x_ratios?: number[]      // x positions (0–1, full image) of vertical time gridlines
 }
 
 const SYMBOL_MAP: Record<string, string> = {
@@ -670,6 +672,175 @@ function detectTradeBoxContext(
   }
 }
 
+// ── Time-axis geometry ────────────────────────────────────────────────────────
+// Measures candle pitch (spacing) and vertical time-gridline positions in
+// pixels so entry time and duration become backend arithmetic instead of the
+// vision model counting candles — the model only has to OCR axis labels.
+
+// Sub-pixel candle pitch from the periodicity of per-column candle coverage.
+// Autocorrelation peaks at the pitch and its multiples; we take the smallest
+// strong peak (the fundamental) and refine it parabolically.
+function detectPitchFromColumns(strong: Float64Array, imageWidth: number): number | undefined {
+  const n = strong.length
+  let mean = 0
+  for (let x = 0; x < n; x += 1) mean += strong[x]
+  mean /= n
+  const centered = new Float64Array(n)
+  let denom = 0
+  for (let x = 0; x < n; x += 1) {
+    centered[x] = strong[x] - mean
+    denom += centered[x] * centered[x]
+  }
+  if (denom <= 0) return undefined
+
+  const maxLag = Math.min(120, Math.floor(n / 4))
+  if (maxLag < 5) return undefined
+  const corr = new Float64Array(maxLag + 2)
+  for (let lag = 3; lag <= maxLag; lag += 1) {
+    let sum = 0
+    for (let x = 0; x + lag < n; x += 1) sum += centered[x] * centered[x + lag]
+    corr[lag] = sum / denom
+  }
+
+  let best = 0
+  let bestLag = 0
+  for (let lag = 4; lag < maxLag; lag += 1) {
+    if (corr[lag] > corr[lag - 1] && corr[lag] >= corr[lag + 1] && corr[lag] > best) {
+      best = corr[lag]
+      bestLag = lag
+    }
+  }
+  if (bestLag === 0 || best < 0.18) return undefined
+  for (let lag = 4; lag < bestLag; lag += 1) {
+    if (corr[lag] > corr[lag - 1] && corr[lag] >= corr[lag + 1] && corr[lag] >= best * 0.85) {
+      bestLag = lag
+      break
+    }
+  }
+
+  const y0 = corr[bestLag - 1]
+  const y1 = corr[bestLag]
+  const y2 = corr[bestLag + 1]
+  const curvature = y0 - 2 * y1 + y2
+  const offset = curvature !== 0 ? Math.max(-0.5, Math.min(0.5, 0.5 * (y0 - y2) / curvature)) : 0
+  return (bestLag + offset) / imageWidth
+}
+
+// Vertical time gridlines: thin columns faintly marked along most of their
+// candle-free height, at near-regular spacing. Charts with gridlines disabled
+// simply return undefined and the scanner falls back to model candle-counting.
+function detectGridlineColumns(
+  strong: Float64Array,
+  faint: Float64Array,
+  bandHeight: number,
+  chartLeftPx: number,
+  imageWidth: number,
+): number[] | undefined {
+  const n = strong.length
+  const candidateColumns: number[] = []
+  for (let x = 0; x < n; x += 1) {
+    const candleFree = bandHeight - strong[x]
+    if (candleFree > bandHeight * 0.3 && faint[x] >= candleFree * 0.55 && strong[x] < bandHeight * 0.55) {
+      candidateColumns.push(x)
+    }
+  }
+  if (candidateColumns.length < 2) return undefined
+
+  // Collapse adjacent candidate columns into line centers; reject wide runs
+  // (zone edges, panel borders) — gridlines are 1–3 px.
+  const centers: number[] = []
+  let runStart = 0
+  for (let i = 0; i < candidateColumns.length; i += 1) {
+    const isRunEnd = i === candidateColumns.length - 1 || candidateColumns[i + 1] - candidateColumns[i] > 2
+    if (!isRunEnd) continue
+    const run = candidateColumns.slice(runStart, i + 1)
+    if (run.length <= 4) centers.push(run[Math.floor(run.length / 2)])
+    runStart = i + 1
+  }
+  if (centers.length < 2) return undefined
+
+  const gaps = centers.slice(1).map((center, i) => center - centers[i])
+  const sortedGaps = [...gaps].sort((a, b) => a - b)
+  const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)]
+  if (medianGap < 8) return undefined
+
+  // Keep only lines that continue the regular rhythm (1× or 2× the median gap
+  // — a candle can hide one line without breaking the chain).
+  const kept: number[] = [centers[0]]
+  for (let i = 1; i < centers.length; i += 1) {
+    const gap = centers[i] - kept[kept.length - 1]
+    if (Math.abs(gap - medianGap) <= medianGap * 0.25 || Math.abs(gap - 2 * medianGap) <= medianGap * 0.3) {
+      kept.push(centers[i])
+    }
+  }
+  if (kept.length < 2) return undefined
+  return kept.slice(0, 12).map(x => (chartLeftPx + x) / imageWidth)
+}
+
+function detectTimeAxisGeometry(
+  image: HTMLImageElement,
+  scannerContext: ScannerContext | null,
+): { candlePitchRatio?: number; gridlineXRatios?: number[] } {
+  const naturalWidth = image.naturalWidth || image.width
+  const naturalHeight = image.naturalHeight || image.height
+  // A wider canvas than the 640px box detector: pitch is divided into candle
+  // counts, so quantization error compounds — measure at up to 1600px.
+  const scale = Math.min(1, 1600 / Math.max(1, naturalWidth))
+  const width = Math.max(1, Math.round(naturalWidth * scale))
+  const height = Math.max(1, Math.round(naturalHeight * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return {}
+  context.drawImage(image, 0, 0, width, height)
+  const { data } = context.getImageData(0, 0, width, height)
+
+  const chartLeftPx = Math.round(clampRatio(scannerContext?.chart_left_ratio ?? 0) * width)
+  const chartRightPx = Math.round(clampRatio(Math.min(scannerContext?.chart_right_ratio ?? 1, 0.88)) * width)
+  const yTop = Math.round(height * 0.14)
+  const yBottom = Math.round(height * 0.82)
+  const bandWidth = chartRightPx - chartLeftPx
+  const bandHeight = yBottom - yTop
+  if (bandWidth < 120 || bandHeight < 80) return {}
+
+  const luminanceAt = (x: number, y: number): number => {
+    const index = (y * width + x) * 4
+    return 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2]
+  }
+
+  // Modal background luminance over a sparse sample of the chart band.
+  const histogram = new Array(32).fill(0) as number[]
+  for (let y = yTop; y < yBottom; y += 3) {
+    for (let x = chartLeftPx; x < chartRightPx; x += 3) {
+      histogram[Math.min(31, Math.floor(luminanceAt(x, y) / 8))] += 1
+    }
+  }
+  const backgroundLum = (histogram.indexOf(Math.max(...histogram)) + 0.5) * 8
+
+  // Per-column pixel counts: strong deviation = candle bodies/wicks;
+  // faint deviation = gridlines and other hairlines.
+  const strong = new Float64Array(bandWidth)
+  const faint = new Float64Array(bandWidth)
+  for (let x = 0; x < bandWidth; x += 1) {
+    let strongCount = 0
+    let faintCount = 0
+    for (let y = yTop; y < yBottom; y += 1) {
+      const deviation = Math.abs(luminanceAt(chartLeftPx + x, y) - backgroundLum)
+      if (deviation > 26) strongCount += 1
+      else if (deviation > 7) faintCount += 1
+    }
+    strong[x] = strongCount
+    faint[x] = faintCount
+  }
+
+  return {
+    candlePitchRatio: detectPitchFromColumns(strong, width),
+    gridlineXRatios: detectGridlineColumns(strong, faint, bandHeight, chartLeftPx, width),
+  }
+}
+
 function buildDynamicFocusCrops(scannerContext: ScannerContext | null): CropPreset[] {
   // typeof checks: a box starting exactly at the left edge has box_left_ratio 0,
   // which is falsy — a plain truthiness test would discard valid geometry.
@@ -786,6 +957,11 @@ export async function buildScannerAssets(
   }
   const scannerContext = detectTradeBoxContext(image, resolvedColors.stopLoss, resolvedColors.takeProfit, resolvedColors.entry)
 
+  // Candle pitch + gridline positions turn entry time and duration into
+  // backend arithmetic. Measured independently of the box detector so it
+  // still works when only label anchors were found.
+  const timeGeometry = detectTimeAxisGeometry(image, scannerContext)
+
   // Also sets scannerContext.time_axis_entry_x_ratio from the time-axis crop geometry.
   const focusCrops = buildDynamicFocusCrops(scannerContext)
 
@@ -823,6 +999,8 @@ export async function buildScannerAssets(
   // not assemble scanner_colors themselves.
   const contextWithColors: Record<string, unknown> = {
     ...(scannerContext ?? {}),
+    ...(typeof timeGeometry.candlePitchRatio === 'number' ? { candle_pitch_ratio: timeGeometry.candlePitchRatio } : {}),
+    ...(timeGeometry.gridlineXRatios && timeGeometry.gridlineXRatios.length >= 2 ? { gridline_x_ratios: timeGeometry.gridlineXRatios } : {}),
     scanner_colors: {
       entryZone: { hex: resolvedColors.entry },
       supplyStopZone: { hex: resolvedColors.stopLoss },

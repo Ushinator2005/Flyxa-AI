@@ -21,6 +21,9 @@ export interface JournalTrade {
   entryTime: string;
   exitTime: string;
   durationMinutes?: number | null;
+  // Scanner's confidence in entryTime; 'low' (or a missing entryTime) surfaces
+  // a "verify time" chip in the journal. Manual edits reset it to 'high'.
+  timeConfidence?: 'high' | 'medium' | 'low' | null;
   entryPrice: number;
   exitPrice: number;
   entry?: number;
@@ -537,7 +540,18 @@ export function normalizeEntries(value: unknown[], rulesTemplate: string[]): Jou
           direction,
           entryTime: typeof trade.entryTime === 'string' ? trade.entryTime : typeof trade.time === 'string' ? trade.time : '09:30',
           exitTime: typeof trade.exitTime === 'string' ? trade.exitTime : '09:45',
-          durationMinutes: resolveTradeDurationMinutes(trade),
+          // Derive from the recorded time range only when BOTH times were
+          // actually saved — never from the '09:30'/'09:45' placeholders,
+          // which would fabricate a 15-minute hold.
+          durationMinutes: resolveTradeDurationMinutes(trade)
+            ?? (() => {
+              const rawEntry = typeof trade.entryTime === 'string' ? trade.entryTime : typeof trade.time === 'string' ? trade.time : null;
+              const rawExit = typeof trade.exitTime === 'string' ? trade.exitTime : null;
+              return rawEntry && rawExit ? minutesBetweenTimes(rawEntry, rawExit) : null;
+            })(),
+          timeConfidence: trade.timeConfidence === 'high' || trade.timeConfidence === 'medium' || trade.timeConfidence === 'low'
+            ? trade.timeConfidence
+            : undefined,
           entryPrice,
           exitPrice,
           entry: parsePrice(trade.entry) ?? parsePrice(entryPrice),

@@ -189,4 +189,18 @@ describe('evaluation coach', () => {
     const alerts = buildEvaluationAgentAlerts(account, trades, progress);
     expect(alerts.some(alert => alert.id === 'post-loss-cost')).toBe(true);
   });
+
+  it('measures the post-loss re-entry gap from the previous trade exit, not its entry', () => {
+    // Losses held for 90 minutes, re-entered 5 minutes after closing: an
+    // entry-to-entry gap (95m) looks patient; the real wait was 5 minutes.
+    const trades = [
+      { ...trade('loss-1', '2026-06-20', '09:00', -300), exitTime: '10:30' },
+      trade('next-1', '2026-06-20', '10:35', -200),
+      { ...trade('loss-2', '2026-06-21', '09:00', -250), exitTime: '10:30' },
+      trade('next-2', '2026-06-21', '10:35', -150),
+    ];
+    const progress = computeEvaluationProgress(account, trades, new Date('2026-06-21T12:00:00'));
+    const alerts = buildEvaluationAgentAlerts(account, trades, progress);
+    expect(alerts.some(alert => alert.id === 'post-loss-cost')).toBe(true);
+  });
 });

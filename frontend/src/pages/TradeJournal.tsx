@@ -3131,9 +3131,17 @@ function TradeListSection({
                           );
                         })()}
                         <span style={{ flex: 1 }} />
+                        {(!trade.entryTime || trade.timeConfidence === 'low') && (
+                          <span
+                            title="The scanner could not confidently read this trade's entry time from the chart. Expand the row to set it."
+                            style={{ padding: '1px 6px', border: '1px solid var(--amber-border, rgba(245,158,11,.4))', background: 'var(--amber-dim, rgba(245,158,11,.12))', borderRadius: 3, fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--amber)', flexShrink: 0, whiteSpace: 'nowrap' }}
+                          >
+                            verify time
+                          </span>
+                        )}
                         {(trade.entryTime || trade.durationMinutes != null) && (
                           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>
-                            {trade.entryTime ?? '--:--'}{trade.durationMinutes != null ? ` · ${formatDurationLabel(resolveTradeDurationMinutes(trade))}` : ''}
+                            {trade.entryTime || '--:--'}{trade.durationMinutes != null ? ` · ${formatDurationLabel(resolveTradeDurationMinutes(trade))}` : ''}
                           </span>
                         )}
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: trade.pnl > 0 ? 'var(--green)' : trade.pnl < 0 ? 'var(--red)' : 'var(--txt-2)', flexShrink: 0 }}>
@@ -3188,13 +3196,43 @@ function TradeListSection({
                                 ))}
                               </div>
                             </div>
+                            {/* Entry time, exit time and duration are one fact
+                                (exit = entry + duration) — editing any one of
+                                them reconciles the other two so cooldown rules
+                                and re-entry flags never read a stale exit. */}
                             <div>
                               <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Entry time</div>
                               <input
                                 type="time"
                                 defaultValue={trade.entryTime}
                                 key={`et-${trade.id}`}
-                                onBlur={e => { if (e.target.value && e.target.value !== trade.entryTime) mutateTradeFields(trade.id, { entryTime: e.target.value }); }}
+                                onBlur={e => {
+                                  const v = e.target.value;
+                                  if (!v || v === trade.entryTime) return;
+                                  const mins = resolveTradeDurationMinutes(trade);
+                                  mutateTradeFields(trade.id, {
+                                    entryTime: v,
+                                    timeConfidence: 'high',
+                                    ...(mins != null && mins > 0 ? { exitTime: addSecondsToTime(v, mins * 60) ?? trade.exitTime } : {}),
+                                  });
+                                }}
+                                style={{ padding: '3px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none' }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Exit time</div>
+                              <input
+                                type="time"
+                                defaultValue={trade.exitTime}
+                                key={`xt-${trade.id}`}
+                                onBlur={e => {
+                                  const v = e.target.value;
+                                  if (!v || v === trade.exitTime) return;
+                                  mutateTradeFields(trade.id, {
+                                    exitTime: v,
+                                    durationMinutes: trade.entryTime ? minutesBetweenTimes(trade.entryTime, v) : trade.durationMinutes,
+                                  });
+                                }}
                                 style={{ padding: '3px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none' }}
                               />
                             </div>
@@ -3208,7 +3246,13 @@ function TradeListSection({
                                 placeholder="—"
                                 onBlur={e => {
                                   const mins = parseInt(e.target.value, 10);
-                                  mutateTradeFields(trade.id, { durationMinutes: Number.isFinite(mins) && mins >= 0 ? mins : null });
+                                  const valid = Number.isFinite(mins) && mins >= 0;
+                                  mutateTradeFields(trade.id, {
+                                    durationMinutes: valid ? mins : null,
+                                    ...(valid && mins > 0 && trade.entryTime
+                                      ? { exitTime: addSecondsToTime(trade.entryTime, mins * 60) ?? trade.exitTime }
+                                      : {}),
+                                  });
                                 }}
                                 style={{ width: 60, padding: '4px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none' }}
                               />
@@ -3354,15 +3398,19 @@ async function performScanFile(file: File, ctx: PerformScanFileCtx) {
         : undefined;
       const entryPrice = scannerEntry ?? 0;
       const exitPrice = scannerExit ?? 0;
-      const entryTime = typeof extracted.entry_time === 'string' ? extracted.entry_time.slice(0, 5) : tradeTime;
+      // Honest times only: when the scanner cannot read the x-axis, the trade
+      // carries an empty entry time and a "verify time" chip — never the
+      // wall-clock moment the user happened to press scan.
+      const entryTime = typeof extracted.entry_time === 'string' ? extracted.entry_time.slice(0, 5) : '';
       const closeTime = typeof extracted.close_time === 'string'
         ? extracted.close_time.slice(0, 5)
-        : addSecondsToTime(entryTime, extracted.trade_length_seconds ?? null) ?? entryTime;
+        : (entryTime ? addSecondsToTime(entryTime, extracted.trade_length_seconds ?? null) : null) ?? entryTime;
       const durationFromSeconds = typeof extracted.trade_length_seconds === 'number'
         ? Math.max(1, Math.round(extracted.trade_length_seconds / 60))
         : null;
-      const durationFromTimeRange = minutesBetweenTimes(entryTime, closeTime);
+      const durationFromTimeRange = entryTime && closeTime ? minutesBetweenTimes(entryTime, closeTime) : null;
       const durationMinutes = durationFromSeconds ?? durationFromTimeRange;
+      const timeConfidence = extracted.entry_time_confidence ?? (entryTime ? null : 'low');
 
       const screenshotUrl = user
         ? await uploadScreenshot(fileDataUrl, user.id)
@@ -3378,6 +3426,7 @@ async function performScanFile(file: File, ctx: PerformScanFileCtx) {
         entryTime,
         exitTime: closeTime,
         durationMinutes,
+        timeConfidence,
         entryPrice,
         exitPrice,
         entry: scannerEntry,
