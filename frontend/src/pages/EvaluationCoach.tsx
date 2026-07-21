@@ -222,7 +222,9 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
 function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
   account: Account; progress: EvaluationProgress; onDismiss: () => void; onMarkFunded: () => void;
 }) {
-  const pct = Math.round((progress.drawdownUsed / (account.maxDrawdown || 1)) * 100);
+  // When the floor is unlocked, used + remaining equals the configured max
+  // drawdown exactly — a safe base even when account.maxDrawdown is unset.
+  const pct = Math.round((progress.drawdownUsed / (account.maxDrawdown || progress.drawdownUsed + progress.drawdownRemaining || 1)) * 100);
   return (
     <div className="ec-pass" data-tour-id="evaluation-overview">
       <div className="ec-pass-inner">
@@ -460,11 +462,10 @@ export default function EvaluationCoach() {
   const probColor = progress.passProbability >= 65 ? 'var(--green)' : progress.passProbability >= 40 ? 'var(--amber)' : 'var(--red)';
 
   // ── Equity path (hero chart) ────────────────────────────────────
-  // Account fields can arrive as strings from form inputs — coerce before math,
-  // otherwise `+` concatenates and the sparkline silently refuses to render.
-  const startBalance = Number(selected.size) > 0
-    ? Number(selected.size)
-    : progress.currentBalance - progress.netPnl;
+  // Derive the baseline from progress (currentBalance − netPnl = the exact
+  // starting balance) so the equity line shares the MLL series' anchor —
+  // using account.size here desyncs the chart whenever size ≠ startingBalance.
+  const startBalance = progress.currentBalance - progress.netPnl;
   const equityDates = [...byDayMap.keys()].sort();
   const equityPoints = (() => {
     let bal = startBalance;
@@ -656,6 +657,7 @@ export default function EvaluationCoach() {
 Account: ${selected.name} (${selected.firm})
 Eval status: ${progress.status} — ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
 MLL: balance must stay above ${money(progress.drawdownFloor)} (${ddTypeLabel}${progress.floorLocked ? ', locked' : progress.trailingStopsAt !== null ? `, locks at ${money(progress.trailingStopsAt)}` : ''})
+${progress.consistencyLimitPct !== null && progress.consistencyPct !== null ? `Consistency: biggest day is ${progress.consistencyPct}% of profit (firm limit ${progress.consistencyLimitPct}%)${progress.consistencyPct > progress.consistencyLimitPct ? ' — NOT met, needs steadier days' : ''}` : ''}
 Sessions traded: ${progress.tradingDays} | Avg P&L/session: ${money(avgDailyPnl)} | Pass probability: ${progress.passProbability}%
 Pace to target: ${paceHeadline} | ${paceDetail}
 Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'} | Plan adherence: ${planAdherencePct !== null ? `${planAdherencePct}%` : 'not enough tagged data'}

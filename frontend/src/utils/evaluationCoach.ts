@@ -58,6 +58,10 @@ export interface EvaluationProgress {
   trailingStopsAt: number | null;
   /** True once the MLL has reached trailingStopsAt and no longer moves. */
   floorLocked: boolean;
+  /** Firm consistency rule: no day may exceed this % of total profit. */
+  consistencyLimitPct: number | null;
+  /** Biggest profitable day as % of total net profit (null until profitable). */
+  consistencyPct: number | null;
   tradingDays: number;
   minimumTradingDays: number;
   passProbability: number;
@@ -503,9 +507,10 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
   },
 
   // ── Take Profit Trader (Test) ───────────────────────────────────────
-  // Researched Jul 2026: one-step Test, EOD trailing drawdown, daily loss
-  // limit removed on all sizes, minimum 5 trading days, 50% consistency.
-  // Draft: numbers from consistent secondary sources + TPT help center.
+  // Verified Jul 2026 against archived official TPT help-center articles
+  // (Rule 1/2/3/5 snapshots, latest Dec 2025): one-step Test, EOD trailing
+  // drawdown that stops trailing at the original starting balance, no daily
+  // loss limit, minimum 5 trading days, 50% consistency, 10× micro sizing.
   {
     id: 'tpt-25k',
     firm: 'Take Profit Trader',
@@ -517,12 +522,14 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxDrawdown: 1_500,
     minimumTradingDays: 5,
     maxContracts: 3,
+    maxMicros: 30,
     consistencyLimitPct: 50,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 25_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. The MLL stops trailing once it reaches the original starting balance (confirmed on the official help center).',
   },
   {
     id: 'tpt-50k',
@@ -535,12 +542,14 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxDrawdown: 2_000,
     minimumTradingDays: 5,
     maxContracts: 6,
+    maxMicros: 60,
     consistencyLimitPct: 50,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 50_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. The MLL stops trailing once it reaches the original starting balance (confirmed on the official help center).',
   },
   {
     id: 'tpt-75k',
@@ -550,15 +559,17 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     accountSize: 75_000,
     profitTarget: 4_500,
     dailyLossLimit: 0,
-    maxDrawdown: 3_000,
+    maxDrawdown: 2_500,
     minimumTradingDays: 5,
     maxContracts: 9,
+    maxMicros: 90,
     consistencyLimitPct: 50,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 75_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. The MLL stops trailing once it reaches the original starting balance (confirmed on the official help center).',
   },
   {
     id: 'tpt-100k',
@@ -568,15 +579,17 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     accountSize: 100_000,
     profitTarget: 6_000,
     dailyLossLimit: 0,
-    maxDrawdown: 4_000,
+    maxDrawdown: 3_000,
     minimumTradingDays: 5,
     maxContracts: 12,
+    maxMicros: 120,
     consistencyLimitPct: 50,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 100_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. The MLL stops trailing once it reaches the original starting balance (confirmed on the official help center).',
   },
   {
     id: 'tpt-150k',
@@ -589,12 +602,14 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxDrawdown: 4_500,
     minimumTradingDays: 5,
     maxContracts: 15,
+    maxMicros: 150,
     consistencyLimitPct: 50,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 150_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. The MLL stops trailing once it reaches the original starting balance (confirmed on the official help center).',
   },
 
   // ── Lucid Trading (LucidPro) ────────────────────────────────────────
@@ -680,7 +695,8 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
   },
 
   // ── Tradeify (Growth) ───────────────────────────────────────────────
-  // Researched Jul 2026. Growth: EOD trailing drawdown that does NOT lock
+  // Verified Jul 2026 against the archived official help center (Jun 2026
+  // snapshot) — every number matches. Growth: EOD trailing drawdown that does NOT lock
   // during the evaluation (funded accounts lock at start + $100), fixed daily
   // loss limit, no consistency rule, minimum 1 day. The Select plan differs
   // (no DLL, 40% consistency, 3 min days) — use a custom account for Select.
@@ -699,8 +715,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
-    sourceUrl: 'https://help.tradeify.co/en/collections/11501721-accounts-rules',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
     note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $600 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
   {
@@ -718,8 +735,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
-    sourceUrl: 'https://help.tradeify.co/en/collections/11501721-accounts-rules',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
     note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $1,250 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
   {
@@ -737,8 +755,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
-    sourceUrl: 'https://help.tradeify.co/en/collections/11501721-accounts-rules',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
     note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $2,500 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
   {
@@ -756,8 +775,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
-    sourceUrl: 'https://help.tradeify.co/en/collections/11501721-accounts-rules',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
     note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $3,750 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
 
@@ -964,6 +984,18 @@ export function computeEvaluationProgress(
   const dailyLossRemaining = dailyLimit > 0 ? Math.max(0, dailyLimit + Math.min(0, dailyPnl)) : Infinity;
   const violations = trades.flatMap(trade => trade.performanceViolations ?? []);
   const criticalViolations = violations.filter(item => item.severity === 'critical').length;
+
+  // Consistency rule (Topstep/TPT/TradeDay-style): no single day may exceed
+  // N% of total net profit. Breaking it holds the account at the target
+  // rather than failing it, so it blocks `passed` but never sets `violated`.
+  const consistencyLimitPct = account.consistencyLimitPct ?? template.consistencyLimitPct ?? null;
+  const dayNets = new Map<string, number>();
+  trades.forEach(trade => dayNets.set(trade.date, (dayNets.get(trade.date) ?? 0) + net(trade)));
+  const biggestDayProfit = dayNets.size > 0 ? Math.max(0, ...dayNets.values()) : 0;
+  const consistencyPct = consistencyLimitPct !== null && netPnl > 0
+    ? (biggestDayProfit / netPnl) * 100
+    : null;
+  const consistencyOk = consistencyLimitPct === null || consistencyPct === null || consistencyPct <= consistencyLimitPct;
   const recentTrades = trades.slice(-20);
   const recentWins = recentTrades.filter(trade => net(trade) > 0).length;
   const recentWinRate = recentTrades.length ? recentWins / recentTrades.length : 0.5;
@@ -989,8 +1021,11 @@ export function computeEvaluationProgress(
   if (maxDrawdown > 0 && drawdownRemaining <= maxDrawdown * 0.25) warnings.push(`Only $${Math.round(drawdownRemaining).toLocaleString()} of drawdown room remains.`);
   if (account.maxContracts && trades.some(trade => trade.contracts > account.maxContracts!)) warnings.push('At least one trade exceeded the configured contract limit.');
   if (criticalViolations) warnings.push(`${criticalViolations} critical process violation${criticalViolations === 1 ? '' : 's'} recorded.`);
+  if (!consistencyOk && consistencyPct !== null && consistencyLimitPct !== null) {
+    warnings.push(`Consistency rule not met: your biggest day is ${Math.round(consistencyPct)}% of total profit (limit ${consistencyLimitPct}%). More steady green days needed before the firm passes you.`);
+  }
 
-  const passed = netPnl >= profitTarget && tradingDays >= minimumTradingDays && criticalViolations === 0;
+  const passed = netPnl >= profitTarget && tradingDays >= minimumTradingDays && criticalViolations === 0 && consistencyOk;
   const violated = (dailyLimit > 0 && dailyLossRemaining <= 0) || drawdownRemaining <= 0;
   const status: EvaluationProgress['status'] = passed
     ? 'passed'
@@ -1014,6 +1049,8 @@ export function computeEvaluationProgress(
     drawdownType,
     trailingStopsAt,
     floorLocked,
+    consistencyLimitPct,
+    consistencyPct: consistencyPct !== null ? Math.round(consistencyPct) : null,
     tradingDays,
     minimumTradingDays,
     passProbability,

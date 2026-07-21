@@ -170,6 +170,25 @@ describe('evaluation coach', () => {
     expect(progress.drawdownFloor).toBe(48_500);
   });
 
+  it('blocks the pass while the consistency rule is not met', () => {
+    const consistencyAccount: Account = { ...account, consistencyLimitPct: 50 };
+    const progress = computeEvaluationProgress(consistencyAccount, [
+      trade('big', '2026-06-20', '09:00', 2_900),
+      trade('small', '2026-06-21', '09:00', 200),
+    ], new Date('2026-06-21T12:00:00'));
+    expect(progress.netPnl).toBe(3_100); // profit target reached...
+    expect(progress.consistencyPct).toBe(94); // ...but one day is 94% of it
+    expect(progress.status).not.toBe('passed');
+    expect(progress.warnings.some(warning => warning.includes('Consistency'))).toBe(true);
+  });
+
+  it('carries the officially verified Take Profit Trader drawdowns', () => {
+    const templates = getEvaluationTemplates();
+    expect(templates.find(t => t.id === 'tpt-75k')?.maxDrawdown).toBe(2_500);
+    expect(templates.find(t => t.id === 'tpt-100k')?.maxDrawdown).toBe(3_000);
+    expect(templates.find(t => t.id === 'tpt-100k')?.trailingStopsAt).toBe(100_000);
+  });
+
   it('builds an MLL series aligned to trading days for the equity chart', () => {
     const series = computeMllSeries({ ...account, drawdownType: 'eod_trailing' }, [
       trade('d1', '2026-06-20', '09:00', 1_000),
