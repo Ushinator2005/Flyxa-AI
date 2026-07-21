@@ -268,9 +268,13 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
   },
 
   // ── Apex Trader Funding (EOD evaluation accounts) ───────────────────
-  // Researched Jul 2026. Apex's help center blocks automated fetches, so
-  // these numbers rest on search excerpts of the help center plus multiple
-  // independent guides — hence status: draft, not verified. EOD trailing:
+  // Mechanics verified first-party Jul 2026 via the archived official help
+  // center (snapshot 2026-05-27): EOD threshold recalculated at 4:59:59 PM ET
+  // from the closing balance, trails the highest EOD balance, never moves
+  // down, and is enforced in real time intraday. Rithmic/Wealthcharts
+  // evaluations lock at the target-profit balance; Tradovate evaluations
+  // trail indefinitely; funded PAs lock at start + $100. Per-size figures
+  // cross-checked against multiple independent guides. EOD trailing:
   // the threshold ratchets on end-of-day balance highs only. On Rithmic
   // evaluations it locks at starting balance + profit target; on Tradovate it
   // trails without locking (we model the Rithmic lock). Funded PAs lock at
@@ -289,7 +293,8 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 26_500,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $26,500 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -306,7 +311,8 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 53_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $53,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -323,7 +329,8 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 106_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $106,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -340,7 +347,8 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 159_000,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $159,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -514,7 +522,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 25_000,
     status: 'draft',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days; no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
   },
   {
     id: 'tpt-50k',
@@ -532,7 +540,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 50_000,
     status: 'draft',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days; no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
   },
   {
     id: 'tpt-75k',
@@ -550,7 +558,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 75_000,
     status: 'draft',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days; no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
   },
   {
     id: 'tpt-100k',
@@ -568,7 +576,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 100_000,
     status: 'draft',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days; no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
   },
   {
     id: 'tpt-150k',
@@ -586,7 +594,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 150_000,
     status: 'draft',
     sourceUrl: 'https://takeprofittraderhelp.zendesk.com/hc/en-us/categories/15135982702621-Test-Rules',
-    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days; no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
+    note: 'One-step Test. EOD trailing drawdown (funded PRO accounts trail intraday instead). No daily loss limit. Minimum 5 trading days (confirmed on takeprofittrader.com); no day may exceed 50% of total profit. Lock at the starting balance is modeled — verify in the TPT dashboard.',
   },
 
   // ── Lucid Trading (LucidPro) ────────────────────────────────────────
