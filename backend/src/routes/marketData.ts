@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../services/supabase';
+import { getTreeNewsItems } from '../services/treeNews';
 import { AuthenticatedRequest } from '../types/index';
 
 const router = Router();
@@ -783,13 +784,33 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
   }
 });
 
+// Shared server-side cache for X posts. X bills per read, so one fetch per
+// half hour serves every user; without this, each user's 3-minute feed
+// refresh would hit X directly and multiply the bill by the user count.
+interface XNewsItem {
+  headline: string;
+  source: string;
+  timestamp: string;
+  summary: string;
+  url: string;
+}
+const X_NEWS_CACHE_TTL_MS = 30 * 60 * 1000;
+const X_NEWS_CACHE_MAX_KEYS = 30;
+const xNewsCache = new Map<string, { fetchedAt: number; items: XNewsItem[] }>();
+
 router.get('/x-news', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  const usernames = getConfiguredXUsernames(req.query.accounts);
+  const cacheKey = usernames.join(',');
   try {
     const bearerToken = process.env.X_BEARER_TOKEN?.trim();
-    const usernames = getConfiguredXUsernames(req.query.accounts);
 
     if (!bearerToken || usernames.length === 0) {
       return res.json([]);
+    }
+
+    const cached = xNewsCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < X_NEWS_CACHE_TTL_MS) {
+      return res.json(cached.items);
     }
 
     const userQuery = new URLSearchParams({
@@ -834,10 +855,135 @@ router.get('/x-news', authMiddleware, async (req: Request, res: Response, next: 
     ));
 
     combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    return res.json(combined.slice(0, 50));
+    const items = combined.slice(0, 50);
+
+    if (xNewsCache.size >= X_NEWS_CACHE_MAX_KEYS && !xNewsCache.has(cacheKey)) {
+      const oldestKey = xNewsCache.keys().next().value;
+      if (oldestKey !== undefined) xNewsCache.delete(oldestKey);
+    }
+    xNewsCache.set(cacheKey, { fetchedAt: Date.now(), items });
+
+    return res.json(items);
   } catch (error) {
+    // Serve stale posts rather than an error when X rate-limits or hiccups.
+    const stale = xNewsCache.get(cacheKey);
+    if (stale) return res.json(stale.items);
     return next(error);
   }
 });
+
+// ── RSS market news — free fast-headline sources, no keys, no billing ──
+const RSS_FEEDS: Array<{ source: string; url: string }> = [
+  { source: 'ForexLive', url: 'https://www.forexlive.com/feed/news' },
+  { source: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114' },
+  { source: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
+  { source: 'Investing.com', url: 'https://www.investing.com/rss/news_25.rss' },
+];
+// Just under the news page's 60-second refresh loop, so every client tick can
+// get a fresh batch. Polling this fast stays polite because fetchRssFeed uses
+// conditional requests — unchanged feeds answer 304 with no body.
+const RSS_NEWS_CACHE_TTL_MS = 55 * 1000;
+const RSS_ITEMS_PER_FEED = 20;
+let rssNewsCache: { fetchedAt: number; items: XNewsItem[] } | null = null;
+
+// Per-feed ETag/Last-Modified state for conditional GETs.
+interface RssFeedState {
+  etag?: string;
+  lastModified?: string;
+  items: XNewsItem[];
+}
+const rssFeedState = new Map<string, RssFeedState>();
+
+function decodeRssText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => {
+      try { return String.fromCodePoint(Number(code)); } catch { return ''; }
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => {
+      try { return String.fromCodePoint(parseInt(code, 16)); } catch { return ''; }
+    })
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function fetchRssFeed(feed: { source: string; url: string }): Promise<XNewsItem[]> {
+  const state = rssFeedState.get(feed.url);
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (compatible; FlyxaAI/1.0; +https://flyxa.app)',
+    Accept: 'application/rss+xml,application/xml,text/xml,*/*',
+  };
+  if (state?.etag) headers['If-None-Match'] = state.etag;
+  if (state?.lastModified) headers['If-Modified-Since'] = state.lastModified;
+
+  const response = await fetch(feed.url, { headers });
+  // 304 = nothing changed since last poll; reuse the parsed items for free.
+  if (response.status === 304 && state) return state.items;
+  if (!response.ok) return state?.items ?? [];
+  const xml = await response.text();
+
+  const items: XNewsItem[] = [];
+  for (const match of xml.matchAll(/<item[\s>]([\s\S]*?)<\/item>/gi)) {
+    const block = match[1] ?? '';
+    const headline = decodeRssText(readXmlTag(block, 'title'));
+    if (!headline) continue;
+    const link = decodeRssText(readXmlTag(block, 'link'));
+    const pubDate = readXmlTag(block, 'pubDate') || readXmlTag(block, 'dc:date');
+    const parsed = pubDate ? new Date(pubDate) : null;
+    items.push({
+      headline,
+      source: feed.source,
+      timestamp: parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString(),
+      summary: headline,
+      url: link,
+    });
+    if (items.length >= RSS_ITEMS_PER_FEED) break;
+  }
+
+  rssFeedState.set(feed.url, {
+    etag: response.headers.get('etag') ?? undefined,
+    lastModified: response.headers.get('last-modified') ?? undefined,
+    items,
+  });
+  return items;
+}
+
+router.get('/rss-news', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Pushed Tree News headlines are merged fresh on every request — they
+    // arrive over a live socket, so they bypass the RSS poll cache entirely.
+    if (rssNewsCache && Date.now() - rssNewsCache.fetchedAt < RSS_NEWS_CACHE_TTL_MS) {
+      return res.json(mergeWithTreeNews(rssNewsCache.items));
+    }
+
+    const settled = await Promise.allSettled(RSS_FEEDS.map(fetchRssFeed));
+    const combined = settled.flatMap(result => (result.status === 'fulfilled' ? result.value : []));
+
+    combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const items = combined.slice(0, 60);
+
+    if (items.length > 0) {
+      rssNewsCache = { fetchedAt: Date.now(), items };
+    }
+    return res.json(mergeWithTreeNews(items));
+  } catch (error) {
+    if (rssNewsCache) return res.json(mergeWithTreeNews(rssNewsCache.items));
+    return next(error);
+  }
+});
+
+function mergeWithTreeNews(rssItems: XNewsItem[]): XNewsItem[] {
+  const tree = getTreeNewsItems();
+  if (tree.length === 0) return rssItems;
+  const merged = [...tree, ...rssItems];
+  merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return merged.slice(0, 70);
+}
 
 export default router;

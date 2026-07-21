@@ -52,7 +52,10 @@ const CACHE_KEY = 'flyxa_news_cache_v2';
 const SOURCES_KEY = 'flyxa_news_sources';
 const CACHE_TTL = 15 * 60 * 1000;
 const CALENDAR_CACHE_TTL = 12 * 60 * 60 * 1000;
-const REFRESH_INTERVAL = 3 * 60 * 1000;
+// Same-minute headlines: the server's RSS cache holds ~55s, so each tick here
+// can pick up a fresh batch. The AI filter is skipped when the headline set is
+// unchanged, so the faster loop doesn't multiply Claude costs.
+const REFRESH_INTERVAL = 60 * 1000;
 type ImpactLevel = 'high' | 'medium' | 'low';
 type ImpactFilter = 'all' | ImpactLevel;
 type CalendarImpactSelection = Record<ImpactLevel, boolean>;
@@ -98,6 +101,7 @@ interface SourcePrefs {
   finnhub: boolean;
   polygon: boolean;
   x: boolean;
+  rss: boolean;
   xUsernames: string;
   xAccounts: XAccountPref[];
   economicCalendar: boolean;
@@ -210,7 +214,7 @@ function writeCalendarCache(result: CalendarResult, timeZone: string) {
 }
 
 function readSourcePrefs(): SourcePrefs {
-  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, xUsernames: '', xAccounts: [], economicCalendar: true, aiFilter: true };
+  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, rss: true, xUsernames: '', xAccounts: [], economicCalendar: true, aiFilter: true };
   try {
     const raw = localStorage.getItem(SOURCES_KEY);
     if (!raw) return defaults;
@@ -221,6 +225,7 @@ function readSourcePrefs(): SourcePrefs {
       finnhub: parsed.finnhub ?? defaults.finnhub,
       polygon: parsed.polygon ?? defaults.polygon,
       x: parsed.x ?? defaults.x,
+      rss: parsed.rss ?? defaults.rss,
       xUsernames,
       xAccounts,
       economicCalendar: parsed.economicCalendar ?? defaults.economicCalendar,
@@ -1048,6 +1053,7 @@ function SourcesPanel({
           { key: 'finnhub', label: 'Finnhub', note: 'Requires VITE_FINNHUB_KEY' },
           { key: 'polygon', label: 'Polygon.io', note: 'Requires VITE_POLYGON_KEY' },
           { key: 'x', label: 'X accounts', note: 'Requires backend X_BEARER_TOKEN' },
+          { key: 'rss', label: 'Live Wire', note: 'Tree News push · ForexLive · CNBC · FXStreet · Investing.com' },
           { key: 'economicCalendar', label: 'Economic Calendar', note: '' },
           { key: 'aiFilter', label: 'AI Filter', note: '' },
         ] as const).map(source => {
@@ -1374,6 +1380,9 @@ function XAccountsModal({
 export default function MarketNews() {
   const { preferences } = useAppSettings();
   const [items, setItems] = useState<NewsFilterItem[]>([]);
+  // Headline fingerprint of the last processed batch — lets the 60s refresh
+  // loop skip the AI filter (and a re-render) when nothing actually changed.
+  const lastBatchKeyRef = useRef('');
   const [calendar, setCalendar] = useState<CalendarEvent[]>([]);
   const [calendarIsToday, setCalendarIsToday] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -1408,16 +1417,18 @@ export default function MarketNews() {
     setLoading(true);
     setError(null);
     try {
-      const [finnhubRaw, polygonRaw, xRaw] = await Promise.allSettled([
+      const [finnhubRaw, polygonRaw, xRaw, rssRaw] = await Promise.allSettled([
         prefs.finnhub ? fetchFinnhubNews() : Promise.resolve([]),
         prefs.polygon ? fetchPolygonNews() : Promise.resolve([]),
         prefs.x ? marketDataApi.getXNews(getEnabledXUsernames(prefs)) : Promise.resolve([]),
+        prefs.rss ? marketDataApi.getRssNews() : Promise.resolve([]),
       ]);
 
       const combined: RawHeadline[] = [
         ...(finnhubRaw.status === 'fulfilled' ? finnhubRaw.value : []),
         ...(polygonRaw.status === 'fulfilled' ? polygonRaw.value : []),
         ...(xRaw.status === 'fulfilled' ? xRaw.value : []),
+        ...(rssRaw.status === 'fulfilled' ? rssRaw.value : []),
       ];
 
       if (combined.length === 0) {
@@ -1433,6 +1444,14 @@ export default function MarketNews() {
       const dedupedMap = new Map<string, RawHeadline>();
       for (const headline of combined) dedupedMap.set(headline.headline.slice(0, 100), headline);
       const deduped = Array.from(dedupedMap.values()).slice(0, 40);
+
+      const batchKey = `${sourceKey}::${Array.from(dedupedMap.keys()).join('|')}`;
+      if (batchKey === lastBatchKeyRef.current) {
+        setLastRefresh(new Date());
+        setLoading(false);
+        return;
+      }
+      lastBatchKeyRef.current = batchKey;
 
       let finalItems: NewsFilterItem[] = [];
       let rawFallback = false;

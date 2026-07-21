@@ -19,6 +19,7 @@ import accountRouter from './routes/account';
 import propFirmRulesRouter from './routes/propFirmRules';
 import subscriptionRouter, { stripeWebhookHandler } from './routes/subscription';
 import waitlistRouter from './routes/waitlist';
+import { startTreeNews } from './services/treeNews';
 
 dotenv.config({ override: true });
 
@@ -143,5 +144,8 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`Flyxa AI backend running on port ${PORT}`);
 });
+
+// Live news push — persistent WebSocket to Tree News feeding the news cache.
+startTreeNews();
 
 export default app;

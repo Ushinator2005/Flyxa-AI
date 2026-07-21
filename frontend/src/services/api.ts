@@ -351,6 +351,8 @@ export const marketDataApi = {
     const query = accounts?.trim() ? `?accounts=${encodeURIComponent(accounts)}` : '';
     return api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>(`/api/market-data/x-news${query}`);
   },
+  getRssNews: () =>
+    api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>('/api/market-data/rss-news'),
 };
 
 export interface RivalProfileResponse {
