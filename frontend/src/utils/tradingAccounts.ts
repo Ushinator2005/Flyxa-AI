@@ -56,6 +56,7 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
     ...(account.maxMicros !== undefined ? { maxMicros: account.maxMicros } : {}),
     ...(account.consistencyLimitPct !== undefined ? { consistencyLimitPct: account.consistencyLimitPct } : {}),
     ...(account.drawdownType !== undefined ? { drawdownType: account.drawdownType } : {}),
+    ...(account.trailingStopsAt !== undefined ? { trailingStopsAt: account.trailingStopsAt } : {}),
     ...(account.ruleVerifiedAt !== undefined ? { ruleVerifiedAt: account.ruleVerifiedAt } : {}),
     ...(account.ruleSourceUrl !== undefined ? { ruleSourceUrl: account.ruleSourceUrl } : {}),
   }));

@@ -258,7 +258,8 @@ export interface TradingAccount {
   maxContracts?: number;
   maxMicros?: number;
   consistencyLimitPct?: number | null;
-  drawdownType?: 'static' | 'trailing';
+  drawdownType?: 'static' | 'trailing' | 'eod_trailing' | 'intraday_trailing';
+  trailingStopsAt?: number | null;
   ruleVerifiedAt?: string;
   ruleSourceUrl?: string;
 }

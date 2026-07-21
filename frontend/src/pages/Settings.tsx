@@ -1123,6 +1123,7 @@ export default function Settings() {
       maxMicros: selectedTemplate?.maxMicros,
       consistencyLimitPct: selectedTemplate?.consistencyLimitPct,
       drawdownType: selectedTemplate?.drawdownType,
+      trailingStopsAt: selectedTemplate?.trailingStopsAt,
       ruleVerifiedAt: selectedTemplate?.verifiedAt,
       ruleSourceUrl: selectedTemplate?.sourceUrl,
     });

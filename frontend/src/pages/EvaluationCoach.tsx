@@ -9,6 +9,7 @@ import type { EvaluationProgress, EvaluationAgentAlert } from '../utils/evaluati
 import {
   buildEvaluationAgentAlerts,
   computeEvaluationProgress,
+  computeMllSeries,
   inferEvaluationTemplate,
   tradesForAccount,
 } from '../utils/evaluationCoach.js';
@@ -27,6 +28,12 @@ const roundTo = (value: number, step = 25) => {
 
 const STATUS_COLOR: Record<string, string> = {
   Blown: '#ef4444', Passed: '#22c55e', Funded: '#22c55e', Live: '#f59e0b', Eval: 'var(--cobalt)',
+};
+
+const DD_TYPE_LABEL: Record<string, string> = {
+  static: 'static',
+  eod_trailing: 'EOD trailing',
+  intraday_trailing: 'real-time trailing',
 };
 
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -126,16 +133,29 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 // The whole evaluation in one picture: the balance line running between the
-// drawdown floor (dashed, below) and the profit target (dashed, above).
-function EquitySpark({ points, target, floor, dates }: { points: number[]; target: number; floor: number; dates?: string[] }) {
+// MLL (dashed, below — stepped when it trails the trader's highs) and the
+// profit target (dashed, above).
+function EquitySpark({ points, target, floor, floorSeries, dates }: {
+  points: number[]; target: number; floor: number; floorSeries?: number[]; dates?: string[];
+}) {
   if (points.length < 2 || !Number.isFinite(target) || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
+  const floors = floorSeries && floorSeries.length === points.length && floorSeries.every(v => Number.isFinite(v))
+    ? floorSeries
+    : null;
   const W = 340, H = 84, PAD = 6;
-  const lo = Math.min(...points, floor);
+  const lo = Math.min(...points, ...(floors ?? [floor]));
   const hi = Math.max(...points, target);
   const span = hi - lo || 1;
   const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = (v: number) => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
   const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+  // Step path: the MLL holds through each day and ratchets as a day settles.
+  const floorPath = floors
+    ? floors.map((v, i) => i === 0
+        ? `M${x(0).toFixed(1)} ${y(v).toFixed(1)}`
+        : `L${x(i).toFixed(1)} ${y(floors[i - 1]).toFixed(1)} L${x(i).toFixed(1)} ${y(v).toFixed(1)}`)
+      .join(' ')
+    : null;
   const last = points[points.length - 1];
 
   // Percent positions for HTML overlays (SVG text would distort under
@@ -165,7 +185,9 @@ function EquitySpark({ points, target, floor, dates }: { points: number[]; targe
       <div style={{ position: 'relative' }}>
         <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
           <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
-          <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
+          {floorPath
+            ? <path d={floorPath} fill="none" stroke="var(--red)" strokeOpacity=".65" strokeDasharray="3 4" strokeWidth="1" />
+            : <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />}
           <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
           <circle cx={x(points.length - 1)} cy={y(last)} r="2.6" fill="var(--amber)" />
         </svg>
@@ -174,7 +196,7 @@ function EquitySpark({ points, target, floor, dates }: { points: number[]; targe
           TARGET {money(target)}
         </span>
         <span style={{ ...labelStyle('var(--red)'), top: `calc(${pct(floor)}% - 13px)` }}>
-          FLOOR {money(floor)}
+          MLL {money(floor)}
         </span>
         <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
           {money(last)}
@@ -321,6 +343,13 @@ export default function EvaluationCoach() {
     [allTrades, selected],
   );
 
+  // MLL per trading day — plotted under the equity path so the rising floor
+  // is visible, not just its current value.
+  const mllSeries = useMemo(
+    () => selected ? computeMllSeries(selected, allTrades) : [],
+    [allTrades, selected],
+  );
+
   const alerts = useMemo(
     () => selected && progress ? buildEvaluationAgentAlerts(selected, allTrades, progress) : [],
     [allTrades, progress, selected],
@@ -410,12 +439,11 @@ export default function EvaluationCoach() {
   const dropPassed = comparisons.filter(c => c.status === 'Passed');
   const dropBlown  = comparisons.filter(c => c.status === 'Blown');
 
+  const ddTypeLabel = DD_TYPE_LABEL[progress.drawdownType] ?? progress.drawdownType;
   const firmMeta = [
     selected.firm,
     selected.size ? money(selected.size) : null,
-    (selected.drawdownType ?? activeTemplate.drawdownType)
-      ? `${(selected.drawdownType ?? activeTemplate.drawdownType)?.replace(/_/g, ' ')} drawdown`
-      : null,
+    `${ddTypeLabel} MLL`,
   ].filter(Boolean).join(' · ');
 
   // ── Metric computations ─────────────────────────────────────────
@@ -536,7 +564,11 @@ export default function EvaluationCoach() {
     const report = {
       generatedAt: new Date().toISOString(),
       account: { name: selected.name, firm: selected.firm, size: selected.size },
-      rules: { profitTarget: target, dailyLossLimit: dailyLimit, maxDrawdown, minimumTradingDays: progress.minimumTradingDays },
+      rules: {
+        profitTarget: target, dailyLossLimit: dailyLimit, maxDrawdown, minimumTradingDays: progress.minimumTradingDays,
+        drawdownType: progress.drawdownType, trailingStopsAt: progress.trailingStopsAt,
+        currentMll: progress.drawdownFloor, mllLocked: progress.floorLocked,
+      },
       progress, agentAlerts: allAlerts,
       disclaimer: 'Verify all rule values against the current terms supplied by the prop firm.',
     };
@@ -610,6 +642,7 @@ export default function EvaluationCoach() {
 
 Account: ${selected.name} (${selected.firm})
 Eval status: ${progress.status} — ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
+MLL: balance must stay above ${money(progress.drawdownFloor)} (${ddTypeLabel}${progress.floorLocked ? ', locked' : progress.trailingStopsAt !== null ? `, locks at ${money(progress.trailingStopsAt)}` : ''})
 Sessions traded: ${progress.tradingDays} | Avg P&L/session: ${money(avgDailyPnl)} | Pass probability: ${progress.passProbability}%
 Pace to target: ${paceHeadline} | ${paceDetail}
 Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'} | Plan adherence: ${planAdherencePct !== null ? `${planAdherencePct}%` : 'not enough tagged data'}
@@ -667,6 +700,18 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
         </div>
 
         <div className="ec-strip-right">
+          <div className="ec-bal-block" title={progress.floorLocked
+            ? 'The MLL has stopped trailing — it no longer rises with new highs.'
+            : progress.trailingStopsAt !== null
+              ? `${ddTypeLabel} MLL — rises with your balance highs and locks at ${money(progress.trailingStopsAt)}.`
+              : `${ddTypeLabel} MLL.`}
+          >
+            <span className="ec-bal-label">MLL · liquidation level</span>
+            <div className="ec-bal-row">
+              <span className="ec-bal-val neg">{money(progress.drawdownFloor)}</span>
+              <span className="ec-bal-delta">{progress.floorLocked ? 'locked' : ddTypeLabel}</span>
+            </div>
+          </div>
           <div className="ec-bal-block">
             <span className="ec-bal-label">Current balance</span>
             <div className="ec-bal-row">
@@ -702,7 +747,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             <div className="ec-hero-chart-head">
               <span className="ec-metric-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
-                <span style={{ color: 'var(--red)' }}>{money(progress.currentBalance - progress.drawdownFloor)} above floor</span>
+                <span style={{ color: 'var(--red)' }}>{money(progress.currentBalance - progress.drawdownFloor)} above the {money(progress.drawdownFloor)} MLL</span>
                 {' · '}
                 {progress.targetRemaining <= 0
                   ? <span style={{ color: 'var(--green)' }}>target reached</span>
@@ -710,7 +755,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               </span>
             </div>
             {equityPoints.length >= 2
-              ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} dates={equityDates} />
+              ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} floorSeries={mllSeries} dates={equityDates} />
               : <p className="ec-no-data">No sessions recorded yet — the balance line starts with your first trade.</p>}
           </div>
           {dayDates.length > 0 && (
@@ -742,11 +787,18 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
 
             {/* Drawdown buffer — red only when the buffer is actually thin */}
             <div className="ec-metric-card">
-              <span className="ec-metric-lbl">Drawdown buffer</span>
+              <span className="ec-metric-lbl">Room above MLL</span>
               <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(progress.drawdownRemaining)}</strong>
               <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%` }} /></div>
               <span className="ec-metric-sub">
-                {drawdownUsedPct}% of {money(maxDrawdown)} used · floor {money(progress.drawdownFloor)}
+                MLL {money(progress.drawdownFloor)} · {drawdownUsedPct}% of {money(maxDrawdown)} used
+              </span>
+              <span className="ec-metric-sub">
+                {progress.drawdownType === 'static'
+                  ? 'Static — the MLL never moves.'
+                  : progress.floorLocked
+                    ? 'Locked — the MLL has stopped trailing.'
+                    : `${ddTypeLabel === 'EOD trailing' ? 'Rises with end-of-day balance highs' : 'Rises with every new balance high'}${progress.trailingStopsAt !== null ? `, locks at ${money(progress.trailingStopsAt)}` : ''}.`}
               </span>
             </div>
 

@@ -1,5 +1,16 @@
 import type { Account, Trade } from '../store/types.js';
 
+// How the maximum-loss-limit (MLL) floor moves:
+//   static             — fixed at startingBalance − maxDrawdown, never moves.
+//   eod_trailing       — ratchets up from end-of-day balance highs only; today's
+//                        running balance never raises it until the day settles.
+//   intraday_trailing  — ratchets up from every new equity high. Flyxa only sees
+//                        closed-trade equity, so firms that trail on unrealized
+//                        open-trade peaks (e.g. Apex) may sit slightly higher.
+//   trailing           — legacy value from older saved accounts; treated as
+//                        intraday_trailing (the previous behavior).
+export type DrawdownType = 'static' | 'trailing' | 'eod_trailing' | 'intraday_trailing';
+
 export interface EvaluationTemplate {
   id: string;
   firm: string;
@@ -11,7 +22,9 @@ export interface EvaluationTemplate {
   minimumTradingDays: number;
   maxContracts: number;
   consistencyLimitPct: number | null;
-  drawdownType: 'static' | 'trailing';
+  drawdownType: DrawdownType;
+  // Balance level where the MLL locks and stops trailing (null = trails forever).
+  trailingStopsAt?: number | null;
   note: string;
   program?: string;
   path?: 'standard' | 'no_activation_fee' | 'custom';
@@ -37,9 +50,14 @@ export interface EvaluationProgress {
   targetProgressPct: number;
   dailyPnl: number;
   dailyLossRemaining: number;
+  /** The MLL — the balance the account must stay above. */
   drawdownFloor: number;
   drawdownUsed: number;
   drawdownRemaining: number;
+  drawdownType: 'static' | 'eod_trailing' | 'intraday_trailing';
+  trailingStopsAt: number | null;
+  /** True once the MLL has reached trailingStopsAt and no longer moves. */
+  floorLocked: boolean;
   tradingDays: number;
   minimumTradingDays: number;
   passProbability: number;
@@ -77,7 +95,8 @@ export interface PropFirmRuleRecord {
   maximumMicros: number;
   consistencyTargetPct: number;
   minimumTradingDays: number;
-  drawdownType: 'trailing';
+  drawdownType: DrawdownType;
+  trailingStopsAt: number | null;
   activationFee: number;
   monthlyPrice: number;
   version: number;
@@ -108,6 +127,7 @@ export function ruleRecordToTemplate(rule: PropFirmRuleRecord): EvaluationTempla
     maxMicros: rule.maximumMicros,
     consistencyLimitPct: rule.consistencyTargetPct,
     drawdownType: rule.drawdownType,
+    trailingStopsAt: rule.trailingStopsAt,
     path: rule.path,
     activationFee: rule.activationFee,
     monthlyPrice: rule.monthlyPrice,
@@ -143,7 +163,8 @@ export const TOPSTEP_RULES: PropFirmRuleRecord[] = [
       maximumMicros: size.maximumMicros,
       consistencyTargetPct: 50,
       minimumTradingDays: 2,
-      drawdownType: 'trailing' as const,
+      drawdownType: 'eod_trailing' as const,
+      trailingStopsAt: size.accountSize,
       activationFee: 149,
       monthlyPrice: size.standardPrice,
       version: 1,
@@ -156,7 +177,7 @@ export const TOPSTEP_RULES: PropFirmRuleRecord[] = [
         'https://help.topstep.com/en/articles/10490293-daily-loss-limit-in-the-trading-combine-and-express-funded-account',
         'https://help.topstep.com/en/articles/14289835-topstep-pricing-and-payment-questions',
       ],
-      note: `Verified Topstep Trading Combine preset. The ${size.accountSize / 1000}K Standard path has a $149 Express Funded Account activation fee. A fixed $${size.optionalDailyLossLimit.toLocaleString()} daily loss limit is optional at purchase.`,
+      note: `Verified Topstep Trading Combine preset. The ${size.accountSize / 1000}K Standard path has a $149 Express Funded Account activation fee. A fixed $${size.optionalDailyLossLimit.toLocaleString()} daily loss limit is optional at purchase. The MLL trails end-of-day balance highs and locks once it reaches the $${size.accountSize.toLocaleString()} starting balance.`,
     },
     {
       id: `topstep-trading-combine-${size.accountSize}-no-activation-fee-v1`,
@@ -174,7 +195,8 @@ export const TOPSTEP_RULES: PropFirmRuleRecord[] = [
       maximumMicros: size.maximumMicros,
       consistencyTargetPct: 50,
       minimumTradingDays: 2,
-      drawdownType: 'trailing' as const,
+      drawdownType: 'eod_trailing' as const,
+      trailingStopsAt: size.accountSize,
       activationFee: 0,
       monthlyPrice: size.noActivationPrice,
       version: 1,
@@ -187,7 +209,7 @@ export const TOPSTEP_RULES: PropFirmRuleRecord[] = [
         'https://help.topstep.com/en/articles/10490293-daily-loss-limit-in-the-trading-combine-and-express-funded-account',
         'https://help.topstep.com/en/articles/14289835-topstep-pricing-and-payment-questions',
       ],
-      note: `Verified Topstep Trading Combine preset. The ${size.accountSize / 1000}K No Activation Fee path has no Express Funded Account activation fee. A fixed $${size.optionalDailyLossLimit.toLocaleString()} daily loss limit is optional at purchase.`,
+      note: `Verified Topstep Trading Combine preset. The ${size.accountSize / 1000}K No Activation Fee path has no Express Funded Account activation fee. A fixed $${size.optionalDailyLossLimit.toLocaleString()} daily loss limit is optional at purchase. The MLL trails end-of-day balance highs and locks once it reaches the $${size.accountSize.toLocaleString()} starting balance.`,
     },
   ])),
 ];
@@ -210,8 +232,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 5,
     consistencyLimitPct: 50,
-    drawdownType: 'trailing',
-    note: 'Trailing max loss starts at $48,000 (2K below starting balance). No minimum trading days. 50% consistency rule applies: no single day can account for more than 50% of total profit.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 50_000,
+    note: 'MLL starts at $48,000 (2K below starting balance), trails end-of-day balance highs, and locks at $50,000. No minimum trading days. 50% consistency rule applies: no single day can account for more than 50% of total profit.',
   },
   {
     id: 'topstep-100k',
@@ -224,8 +247,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 10,
     consistencyLimitPct: 50,
-    drawdownType: 'trailing',
-    note: 'Trailing max loss starts at $97,000 (3K below starting balance). No minimum trading days. 50% consistency rule applies.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 100_000,
+    note: 'MLL starts at $97,000 (3K below starting balance), trails end-of-day balance highs, and locks at $100,000. No minimum trading days. 50% consistency rule applies.',
   },
   {
     id: 'topstep-150k',
@@ -238,12 +262,15 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 15,
     consistencyLimitPct: 50,
-    drawdownType: 'trailing',
-    note: 'Trailing max loss starts at $145,500 (4.5K below starting balance). No minimum trading days. 50% consistency rule applies.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 150_000,
+    note: 'MLL starts at $145,500 (4.5K below starting balance), trails end-of-day balance highs, and locks at $150,000. No minimum trading days. 50% consistency rule applies.',
   },
 
-  // ── Apex Trader Funding (EOD plans) ────────────────────────────────
-  // Rules: end-of-day trailing drawdown (locks in at EOD high-water mark), no daily loss limit, no min days
+  // ── Apex Trader Funding ─────────────────────────────────────────────
+  // Rules: real-time trailing threshold (moves with every new equity high,
+  //        including unrealized open-trade peaks), locks at starting balance
+  //        + $100. No daily loss limit, no min days.
   // Source: apextraderfunding.com
   {
     id: 'apex-25k',
@@ -256,8 +283,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 4,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'EOD trailing drawdown — high-water mark only moves at end of day, not intraday. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 25_100,
+    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $25,100. No daily loss limit or minimum trading day requirement.',
   },
   {
     id: 'apex-50k',
@@ -270,8 +298,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 10,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'EOD trailing drawdown — high-water mark only moves at end of day. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 50_100,
+    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $50,100. No daily loss limit or minimum trading day requirement.',
   },
   {
     id: 'apex-100k',
@@ -284,8 +313,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 14,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'EOD trailing drawdown — high-water mark only moves at end of day. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 100_100,
+    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $100,100. No daily loss limit or minimum trading day requirement.',
   },
   {
     id: 'apex-150k',
@@ -298,8 +328,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 0,
     maxContracts: 17,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'EOD trailing drawdown — high-water mark only moves at end of day. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 150_100,
+    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $150,100. No daily loss limit or minimum trading day requirement.',
   },
 
   // ── FTMO Challenge ──────────────────────────────────────────────────
@@ -391,8 +422,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 2,
     maxContracts: 4,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'Rapid plan. Real-time trailing drawdown. No daily loss limit. Minimum 2 trading days required.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 50_000,
+    note: 'Rapid plan. Real-time trailing drawdown that locks at the $50,000 starting balance once earned back. No daily loss limit. Minimum 2 trading days required.',
   },
   {
     id: 'mffu-100k',
@@ -405,8 +437,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 5,
     maxContracts: 10,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'Rapid plan. Real-time trailing drawdown. No daily loss limit. Minimum 5 trading days required.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 100_000,
+    note: 'Rapid plan. Real-time trailing drawdown that locks at the $100,000 starting balance once earned back. No daily loss limit. Minimum 5 trading days required.',
   },
   {
     id: 'mffu-150k',
@@ -419,8 +452,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     minimumTradingDays: 5,
     maxContracts: 15,
     consistencyLimitPct: null,
-    drawdownType: 'trailing',
-    note: 'Rapid plan. Real-time trailing drawdown. No daily loss limit. Minimum 5 trading days required.',
+    drawdownType: 'intraday_trailing',
+    trailingStopsAt: 150_000,
+    note: 'Rapid plan. Real-time trailing drawdown that locks at the $150,000 starting balance once earned back. No daily loss limit. Minimum 5 trading days required.',
   },
 
   // ── Custom ──────────────────────────────────────────────────────────
@@ -491,6 +525,54 @@ function localDateSlice(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function resolveDrawdownType(account: Account, template: EvaluationTemplate): 'static' | 'eod_trailing' | 'intraday_trailing' {
+  const raw = account.drawdownType ?? template.drawdownType;
+  return raw === 'trailing' ? 'intraday_trailing' : raw;
+}
+
+function resolveTrailingStopsAt(account: Account, template: EvaluationTemplate): number | null {
+  return account.trailingStopsAt ?? template.trailingStopsAt ?? null;
+}
+
+/**
+ * The MLL over time, aligned with the equity sparkline: index 0 is the floor
+ * before any trading, then one value per trading day (ascending), sampled as
+ * that day settles. The floor only ratchets up, and locks at trailingStopsAt.
+ *
+ * EOD-trailing floors ignore the current (unsettled) day's balance, so the
+ * last value always equals the live drawdownFloor in EvaluationProgress.
+ */
+export function computeMllSeries(account: Account, allTrades: Trade[], now = new Date()): number[] {
+  const trades = tradesForAccount(allTrades, account.id).sort((a, b) => dateTime(a) - dateTime(b));
+  const template = inferEvaluationTemplate(account);
+  const maxDrawdown = account.maxDrawdown || template.maxDrawdown;
+  const drawdownType = resolveDrawdownType(account, template);
+  const trailingStopsAt = resolveTrailingStopsAt(account, template);
+  const today = localDateSlice(now);
+  const startingFloor = account.startingBalance - maxDrawdown;
+
+  const floors: number[] = [startingFloor];
+  let equity = account.startingBalance;
+  let intradayPeak = equity;
+  let eodPeak = equity;
+  trades.forEach((trade, index) => {
+    equity += net(trade);
+    intradayPeak = Math.max(intradayPeak, equity);
+    const lastOfDay = trades[index + 1]?.date !== trade.date;
+    if (!lastOfDay) return;
+    if (drawdownType === 'static') {
+      floors.push(startingFloor);
+      return;
+    }
+    if (trade.date !== today) eodPeak = Math.max(eodPeak, equity);
+    const peak = drawdownType === 'intraday_trailing' ? intradayPeak : eodPeak;
+    let floor = peak - maxDrawdown;
+    if (trailingStopsAt !== null) floor = Math.min(floor, trailingStopsAt);
+    floors.push(Math.max(startingFloor, floor));
+  });
+  return floors;
+}
+
 export function computeEvaluationProgress(
   account: Account,
   allTrades: Trade[],
@@ -502,25 +584,18 @@ export function computeEvaluationProgress(
   const dailyLimit = account.dailyLossLimit || template.dailyLossLimit;
   const maxDrawdown = account.maxDrawdown || template.maxDrawdown;
   const minimumTradingDays = account.minimumTradingDays ?? template.minimumTradingDays;
-  const drawdownType = account.drawdownType ?? template.drawdownType;
+  const drawdownType = resolveDrawdownType(account, template);
+  const trailingStopsAt = resolveTrailingStopsAt(account, template);
   const netPnl = trades.reduce((sum, trade) => sum + net(trade), 0);
   const currentBalance = account.startingBalance + netPnl;
   const today = localDateSlice(now);
   const dailyPnl = trades.filter(trade => trade.date === today).reduce((sum, trade) => sum + net(trade), 0);
   const tradingDays = new Set(trades.map(trade => trade.date)).size;
 
-  let equity = account.startingBalance;
-  let peak = equity;
-  trades.forEach(trade => {
-    equity += net(trade);
-    peak = Math.max(peak, equity);
-  });
-
   const targetProgressPct = profitTarget > 0 ? clamp((netPnl / profitTarget) * 100) : 0;
-  const startingDrawdownFloor = account.startingBalance - maxDrawdown;
-  const drawdownFloor = drawdownType === 'trailing'
-    ? Math.max(startingDrawdownFloor, peak - maxDrawdown)
-    : startingDrawdownFloor;
+  const mllSeries = computeMllSeries(account, allTrades, now);
+  const drawdownFloor = mllSeries[mllSeries.length - 1];
+  const floorLocked = trailingStopsAt !== null && drawdownFloor >= trailingStopsAt;
   const drawdownRemaining = Math.max(0, currentBalance - drawdownFloor);
   const drawdownUsed = Math.max(0, maxDrawdown - drawdownRemaining);
   const dailyLossRemaining = dailyLimit > 0 ? Math.max(0, dailyLimit + Math.min(0, dailyPnl)) : Infinity;
@@ -573,6 +648,9 @@ export function computeEvaluationProgress(
     drawdownFloor,
     drawdownUsed,
     drawdownRemaining,
+    drawdownType,
+    trailingStopsAt,
+    floorLocked,
     tradingDays,
     minimumTradingDays,
     passProbability,

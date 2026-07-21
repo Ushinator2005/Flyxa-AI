@@ -430,6 +430,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         maxContracts: account.maxContracts,
         consistencyLimitPct: account.consistencyLimitPct,
         drawdownType: account.drawdownType,
+        trailingStopsAt: account.trailingStopsAt,
       };
     });
     hydrateSharedData({ accounts: mapped });

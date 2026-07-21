@@ -3,6 +3,7 @@ import type { Account, Trade } from '../store/types.js';
 import {
   buildEvaluationAgentAlerts,
   computeEvaluationProgress,
+  computeMllSeries,
   getEvaluationTemplates,
   inferEvaluationTemplate,
   tradesForAccount,
@@ -75,6 +76,8 @@ describe('evaluation coach', () => {
     expect(template.minimumTradingDays).toBe(2);
     expect(template.responsibleTradingDiscount).toBe(10);
     expect(template.responsibleTradingBenefit).toContain('Double payout caps');
+    expect(template.drawdownType).toBe('eod_trailing');
+    expect(template.trailingStopsAt).toBe(50_000);
   });
 
   it('publishes six verified Topstep path and size combinations', () => {
@@ -124,6 +127,55 @@ describe('evaluation coach', () => {
     expect(progress.drawdownFloor).toBe(48000);
     expect(progress.drawdownRemaining).toBe(1830);
     expect(progress.drawdownUsed).toBe(170);
+  });
+
+  it('raises an intraday-trailing MLL from every closed-trade high, but an EOD MLL only from settled closes', () => {
+    const trades = [
+      trade('spike', '2026-06-20', '09:00', 1_000),
+      trade('giveback', '2026-06-20', '10:00', -800),
+    ];
+    const now = new Date('2026-06-22T12:00:00');
+
+    const intraday = computeEvaluationProgress({ ...account, drawdownType: 'intraday_trailing' }, trades, now);
+    expect(intraday.drawdownFloor).toBe(49_000); // peak 51,000 − 2,000
+    expect(intraday.drawdownType).toBe('intraday_trailing');
+
+    const eod = computeEvaluationProgress({ ...account, drawdownType: 'eod_trailing' }, trades, now);
+    expect(eod.drawdownFloor).toBe(48_200); // day settled at 50,200 − 2,000
+  });
+
+  it('does not let the unsettled current day raise an EOD-trailing MLL', () => {
+    const progress = computeEvaluationProgress({ ...account, drawdownType: 'eod_trailing' }, [
+      trade('big-day', '2026-06-20', '09:00', 1_500),
+    ], new Date('2026-06-20T12:00:00'));
+    expect(progress.drawdownFloor).toBe(48_000);
+  });
+
+  it('locks the MLL once it reaches trailingStopsAt', () => {
+    const progress = computeEvaluationProgress(
+      { ...account, drawdownType: 'intraday_trailing', trailingStopsAt: 50_000 },
+      [trade('runner', '2026-06-20', '09:00', 2_600)],
+      new Date('2026-06-22T12:00:00'),
+    );
+    expect(progress.drawdownFloor).toBe(50_000); // raw 50,600 capped at the lock
+    expect(progress.floorLocked).toBe(true);
+    expect(progress.drawdownRemaining).toBe(2_600);
+  });
+
+  it('treats the legacy trailing value as intraday trailing', () => {
+    const progress = computeEvaluationProgress({ ...account, drawdownType: 'trailing' }, [
+      trade('up', '2026-06-20', '09:00', 500),
+    ], new Date('2026-06-22T12:00:00'));
+    expect(progress.drawdownType).toBe('intraday_trailing');
+    expect(progress.drawdownFloor).toBe(48_500);
+  });
+
+  it('builds an MLL series aligned to trading days for the equity chart', () => {
+    const series = computeMllSeries({ ...account, drawdownType: 'eod_trailing' }, [
+      trade('d1', '2026-06-20', '09:00', 1_000),
+      trade('d2', '2026-06-21', '09:00', -500),
+    ], new Date('2026-06-22T12:00:00'));
+    expect(series).toEqual([48_000, 49_000, 49_000]);
   });
 
   it('creates a post-loss process warning from repeated immediate re-entry', () => {

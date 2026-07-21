@@ -118,7 +118,8 @@ export interface Account {
   minimumTradingDays?: number;
   maxContracts?: number;
   consistencyLimitPct?: number | null;
-  drawdownType?: 'static' | 'trailing';
+  drawdownType?: 'static' | 'trailing' | 'eod_trailing' | 'intraday_trailing';
+  trailingStopsAt?: number | null;
   evaluationStartedAt?: string;
   firmRuleVersionId?: string;
   evaluationPath?: 'standard' | 'no_activation_fee';

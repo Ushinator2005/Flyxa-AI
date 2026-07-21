@@ -528,7 +528,8 @@ export interface PropFirmRuleRecordResponse {
   maximumMicros: number;
   consistencyTargetPct: number;
   minimumTradingDays: number;
-  drawdownType: 'trailing';
+  drawdownType: 'static' | 'trailing' | 'eod_trailing' | 'intraday_trailing';
+  trailingStopsAt: number | null;
   activationFee: number;
   monthlyPrice: number;
   version: number;
