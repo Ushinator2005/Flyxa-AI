@@ -22,7 +22,7 @@ import { formatRiskRewardRatio } from '../utils/riskReward.js';
 import MonthlyHeatmap from '../components/dashboard/MonthlyHeatmap.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
-import { getRthTiming } from '../utils/marketHours.js';
+import { getMarketTiming } from '../utils/marketHours.js';
 import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
 import { useBreakingNewsAlert } from '../hooks/useBreakingNewsAlert.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
@@ -645,7 +645,7 @@ export default function Dashboard() {
         {/* Pre-session brief prompt — the market clock is the argument.
             Focal countdown cell + message + Begin; no alert styling. */}
         {!preSessionDone && (() => {
-          const timing = getRthTiming(new Date());
+          const timing = getMarketTiming(new Date(), preferences?.marketClock ?? 'equities');
           const mins = timing.minutesUntilOpen;
           // A 15-hour countdown the evening before is absurd — beyond 8h just
           // state when the next open is.

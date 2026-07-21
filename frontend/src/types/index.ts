@@ -292,4 +292,6 @@ export interface AppPreferences {
     stopLoss: string;
     takeProfit: string;
   };
+  // Which market's hours drive the header clock and pre-session timing.
+  marketClock?: 'equities' | 'futures' | 'forex';
 }

@@ -309,6 +309,7 @@ function parsePreferences(parsed: Partial<AppPreferences> | undefined): AppPrefe
     timezone: SUPPORTED_TIMEZONE_SET.has(rawTimezone) ? rawTimezone : DEFAULT_TIMEZONE,
     sessionTimes: normalizeSessionTimes(parsed.sessionTimes),
     scannerColors: parseScannerColors(parsed.scannerColors),
+    marketClock: parsed.marketClock === 'futures' || parsed.marketClock === 'forex' ? parsed.marketClock : 'equities',
   };
 }
 

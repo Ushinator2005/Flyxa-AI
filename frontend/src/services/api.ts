@@ -353,6 +353,8 @@ export const marketDataApi = {
   },
   getRssNews: () =>
     api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>('/api/market-data/rss-news'),
+  getEconCalendar: (from: string, to: string) =>
+    api.get<Array<Record<string, unknown>>>(`/api/market-data/econ-calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 };
 
 export interface RivalProfileResponse {

@@ -61,8 +61,16 @@ function parseMessage(raw: WebSocket.RawData): TreeNewsItem | null {
 
   const title = typeof data.title === 'string' ? data.title.trim() : '';
   const body = typeof data.body === 'string' ? data.body.trim() : '';
-  const headline = (title || body).replace(/\s+/g, ' ').slice(0, 300);
+
+  // Twitter-relayed messages put the author in `title` ("WOO X (@_WOO_X)")
+  // and the actual tweet in `body` — show the tweet, credit the handle.
+  const handleMatch = title.match(/^(.{0,60}?)\s*\(@([A-Za-z0-9_]{1,15})\)$/);
+  const isTwitterRelay = Boolean(handleMatch && body);
+
+  const headline = (isTwitterRelay ? body : title || body).replace(/\s+/g, ' ').slice(0, 300);
   if (!headline) return null;
+
+  const source = isTwitterRelay && handleMatch ? `@${handleMatch[2]}` : 'Tree News';
 
   const url =
     (typeof data.url === 'string' && data.url) ||
@@ -74,7 +82,7 @@ function parseMessage(raw: WebSocket.RawData): TreeNewsItem | null {
 
   return {
     headline,
-    source: 'Tree News',
+    source,
     timestamp: Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString(),
     summary: body && body !== headline ? body.replace(/\s+/g, ' ').slice(0, 300) : headline,
     url,

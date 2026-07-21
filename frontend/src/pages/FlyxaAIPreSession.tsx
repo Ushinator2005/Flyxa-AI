@@ -16,7 +16,7 @@ import { generateNextSessionPrescriptions } from '../utils/performanceLoop.js';
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
 import { evaluateEntryRules } from '../utils/tradingRules.js';
-import { getRthTiming } from '../utils/marketHours.js';
+import { getMarketTiming } from '../utils/marketHours.js';
 import { C } from '../utils/theme.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
@@ -480,7 +480,7 @@ export default function FlyxaAIPreSession() {
 
   const sessionPlan = baseSessionPlan;
 
-  const rthTiming = useMemo(() => getRthTiming(now), [now]);
+  const rthTiming = useMemo(() => getMarketTiming(now, preferences.marketClock ?? 'equities'), [now, preferences.marketClock]);
   const emotionLogged = emotion.trim().length > 0;
   const activeOathItems: ChecklistItem[] = storedOathItems ?? oathChecklistItems;
 

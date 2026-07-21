@@ -742,6 +742,93 @@ router.get('/chart', authMiddleware, async (req: Request, res: Response, next: N
   }
 });
 
+// ── Econ calendar archive ──────────────────────────────────────────
+// The FF feed only publishes this week + next, so every USD event we see is
+// upserted into Supabase (re-upserts capture actuals as they fill in) and
+// past weeks are served from the archive. History accumulates from ship day.
+
+interface EconArchiveRow {
+  title: string;
+  country: string;
+  date_text: string;
+  time_text: string;
+  impact: string;
+  actual: string | null;
+  forecast: string | null;
+  previous: string | null;
+  date_slice: string;
+  time_key: string;
+}
+
+function econEventToRow(event: Record<string, unknown>): EconArchiveRow | null {
+  const title = String(event.title ?? event.event ?? '').trim();
+  const dateText = String(event.date ?? '').trim();
+  const country = String(event.country ?? '').trim();
+  if (!title || !dateText) return null;
+  // Archive the currencies the calendar can be personalized to.
+  const ARCHIVED = ['USD', 'US', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'CNY'];
+  if (!ARCHIVED.includes(country.toUpperCase())) return null;
+  const dateSlice = dateText.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateSlice)) return null;
+  const timeText = String(event.time ?? '').trim();
+  const clean = (value: unknown) => {
+    const text = String(value ?? '').trim();
+    return text || null;
+  };
+  return {
+    title,
+    country,
+    date_text: dateText,
+    time_text: timeText,
+    impact: String(event.impact ?? '').trim(),
+    actual: clean(event.actual),
+    forecast: clean(event.forecast),
+    previous: clean(event.previous),
+    date_slice: dateSlice,
+    time_key: dateText.length > 10 ? dateText.slice(11, 19) : timeText,
+  };
+}
+
+async function archiveEconEvents(events: Array<Record<string, unknown>>): Promise<void> {
+  const byKey = new Map<string, EconArchiveRow>();
+  for (const event of events) {
+    const row = econEventToRow(event);
+    if (row) byKey.set(`${row.title}|${row.date_slice}|${row.time_key}`, row);
+  }
+  if (byKey.size === 0) return;
+  const { error } = await supabase
+    .from('econ_calendar_events')
+    .upsert(Array.from(byKey.values()), { onConflict: 'title,date_slice,time_key' });
+  if (error) throw error;
+}
+
+const ECON_ARCHIVE_LOOKBACK_DAYS = 180;
+
+async function readArchivedEconEvents(): Promise<Array<Record<string, unknown>>> {
+  try {
+    const since = new Date(Date.now() - ECON_ARCHIVE_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const { data, error } = await supabase
+      .from('econ_calendar_events')
+      .select('title, country, date_text, time_text, impact, actual, forecast, previous')
+      .gte('date_slice', since)
+      .order('date_slice', { ascending: true })
+      .limit(4000);
+    if (error || !Array.isArray(data)) return [];
+    return data.map(row => ({
+      title: row.title,
+      country: row.country,
+      date: row.date_text,
+      ...(row.time_text ? { time: row.time_text } : {}),
+      impact: row.impact,
+      actual: row.actual ?? undefined,
+      forecast: row.forecast ?? undefined,
+      previous: row.previous ?? undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const jsonSources = [
@@ -760,7 +847,10 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
     ));
 
     if (combinedJson.length > 0) {
-      return res.json(dedupeCalendarEvents(combinedJson));
+      const live = dedupeCalendarEvents(combinedJson);
+      void archiveEconEvents(live).catch(err => console.error('Econ archive write failed:', err));
+      // Live events first so dedupe prefers the fresher copy over the archive.
+      return res.json(dedupeCalendarEvents([...live, ...await readArchivedEconEvents()]));
     }
 
     // Fallback: XML export is often available even when JSON is rate-limited.
@@ -775,10 +865,13 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
       result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []
     ));
     if (combinedXml.length > 0) {
-      return res.json(dedupeCalendarEvents(combinedXml));
+      const live = dedupeCalendarEvents(combinedXml);
+      void archiveEconEvents(live).catch(err => console.error('Econ archive write failed:', err));
+      return res.json(dedupeCalendarEvents([...live, ...await readArchivedEconEvents()]));
     }
 
-    return res.json([]);
+    // Both feeds down or rate-limited — the archive still covers past weeks.
+    return res.json(await readArchivedEconEvents());
   } catch (error) {
     return next(error);
   }
@@ -868,6 +961,52 @@ router.get('/x-news', authMiddleware, async (req: Request, res: Response, next: 
     // Serve stale posts rather than an error when X rate-limits or hiccups.
     const stale = xNewsCache.get(cacheKey);
     if (stale) return res.json(stale.items);
+    return next(error);
+  }
+});
+
+// ── Economic calendar proxy — FMP key stays server-side, one shared cache ──
+// The free FF feeds only cover this week + next; FMP takes date ranges, so
+// past and future weeks work. Returns [] when unconfigured and the frontend
+// falls back to the FF feeds.
+const FMP_API_KEY = process.env.FMP_API_KEY?.trim();
+const ECON_CAL_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const econCalendarCache = new Map<string, { fetchedAt: number; payload: unknown[] }>();
+
+router.get('/econ-calendar', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!FMP_API_KEY) return res.json([]);
+
+    const from = String(req.query.from ?? '').trim();
+    const to = String(req.query.to ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
+    }
+
+    const cacheKey = `${from}|${to}`;
+    const cached = econCalendarCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < ECON_CAL_CACHE_TTL_MS) {
+      return res.json(cached.payload);
+    }
+
+    const response = await fetch(
+      `https://financialmodelingprep.com/stable/economic-calendar?from=${from}&to=${to}&apikey=${FMP_API_KEY}`
+    );
+    if (!response.ok) {
+      return res.json(cached?.payload ?? []);
+    }
+    const payload = await response.json() as unknown;
+    if (!Array.isArray(payload)) {
+      return res.json(cached?.payload ?? []);
+    }
+
+    if (econCalendarCache.size >= 20 && !econCalendarCache.has(cacheKey)) {
+      const oldestKey = econCalendarCache.keys().next().value;
+      if (oldestKey !== undefined) econCalendarCache.delete(oldestKey);
+    }
+    econCalendarCache.set(cacheKey, { fetchedAt: Date.now(), payload });
+    return res.json(payload);
+  } catch (error) {
     return next(error);
   }
 });

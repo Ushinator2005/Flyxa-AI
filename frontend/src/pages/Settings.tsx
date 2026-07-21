@@ -17,6 +17,7 @@ import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceKey, normalizeConfluenceTag } from '../utils/confluenceTags.js';
 import { getEvaluationTemplates } from '../utils/evaluationCoach.js';
 import { CALENDAR_CACHE_KEY, LEGACY_CALENDAR_CACHE_KEYS } from '../utils/calendarCache.js';
+import { MARKET_CLOCK_OPTIONS } from '../utils/marketHours.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
@@ -1862,6 +1863,32 @@ export default function Settings() {
                   </optgroup>
                 ))}
               </WorkspaceSelect>
+            </label>
+
+            <label>
+              <span
+                style={{
+                  display: 'block',
+                  marginBottom: '6px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: T2,
+                }}
+              >
+                Market Clock
+              </span>
+              <WorkspaceSelect
+                value={preferences.marketClock ?? 'equities'}
+                onChange={v => updatePreferences({ marketClock: v as 'equities' | 'futures' | 'forex' })}
+              >
+                {MARKET_CLOCK_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </WorkspaceSelect>
+              <p style={{ marginTop: '6px', fontSize: '10px', color: T3, lineHeight: 1.5 }}>
+                {MARKET_CLOCK_OPTIONS.find(option => option.value === (preferences.marketClock ?? 'equities'))?.detail}
+                {' '}— drives the header clock and pre-session timing.
+              </p>
             </label>
           </div>
         </SectionPanel>

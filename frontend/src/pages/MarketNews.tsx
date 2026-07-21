@@ -28,7 +28,6 @@ const S1 = 'var(--app-panel)';
 const S2 = 'var(--app-panel-strong)';
 const BORDER = 'var(--app-border)';
 const AMBER = 'var(--amber)';
-const AMBER_DIM = 'var(--amber-dim)';
 const AMBER_BORDER = 'var(--amber-border)';
 const GREEN = 'var(--green)';
 const GREEN_DIM = 'var(--green-dim)';
@@ -51,7 +50,9 @@ const NEWS_API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'ht
 // AI filter. Anything matching gets BREAKING treatment the second it lands.
 const HOT_NEWS_RE = /\b(trump|white house|biden|tariff|sanction|war|invasion|strike|missile|nuclear|attack|explosion|emergency|fed\b|fomc|powell|rate (cut|hike)|cpi|ppi|nfp|payrolls|inflation|halt|crash|default)\b/i;
 const POLYGON_KEY = import.meta.env.VITE_POLYGON_KEY as string | undefined;
-const FMP_KEY = import.meta.env.VITE_FMP_KEY as string | undefined;
+// X posts need a funded X developer account (~$360/mo at current pricing).
+// Locked in the UI until that ever makes sense — flip this to re-enable.
+const X_SOURCE_ENABLED = false;
 const CACHE_KEY = 'flyxa_news_cache_v2';
 const SOURCES_KEY = 'flyxa_news_sources';
 const CACHE_TTL = 15 * 60 * 1000;
@@ -109,6 +110,7 @@ interface SourcePrefs {
   xUsernames: string;
   xAccounts: XAccountPref[];
   economicCalendar: boolean;
+  calendarCurrencies: string[];
   aiFilter: boolean;
 }
 
@@ -189,27 +191,30 @@ function writeCache(items: NewsFilterItem[], sourceKey: string) {
   }
 }
 
-function readCalendarCache(timeZone: string): CalendarResult | null {
+function readCalendarCache(timeZone: string, currenciesKey = 'USD'): CalendarResult | null {
   try {
     const raw = localStorage.getItem(CALENDAR_CACHE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<CalendarCache>;
+    const parsed = JSON.parse(raw) as Partial<CalendarCache> & { currencies?: string };
     if (parsed.timeZone !== timeZone) return null;
+    if ((parsed.currencies ?? 'USD') !== currenciesKey) return null;
     if (typeof parsed.fetchedAt !== 'number' || Date.now() - parsed.fetchedAt > CALENDAR_CACHE_TTL) return null;
     if (!Array.isArray(parsed.events) || parsed.events.length === 0) return null;
-    return { events: parsed.events as CalendarEvent[], isToday: parsed.isToday === true };
+    return { events: parsed.events as CalendarEvent[], isToday: parsed.isToday === true, fullRange: (parsed as { fullRange?: boolean }).fullRange === true };
   } catch {
     return null;
   }
 }
 
-function writeCalendarCache(result: CalendarResult, timeZone: string) {
+function writeCalendarCache(result: CalendarResult, timeZone: string, currenciesKey = 'USD') {
   if (!result.events.length) return;
   try {
     localStorage.setItem(CALENDAR_CACHE_KEY, JSON.stringify({
       events: result.events,
       fetchedAt: Date.now(),
       isToday: result.isToday,
+      fullRange: result.fullRange === true,
+      currencies: currenciesKey,
       timeZone,
     }));
   } catch {
@@ -218,7 +223,7 @@ function writeCalendarCache(result: CalendarResult, timeZone: string) {
 }
 
 function readSourcePrefs(): SourcePrefs {
-  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, rss: true, xUsernames: '', xAccounts: [], economicCalendar: true, aiFilter: true };
+  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, rss: true, xUsernames: '', xAccounts: [], economicCalendar: true, calendarCurrencies: ['USD'], aiFilter: true };
   try {
     const raw = localStorage.getItem(SOURCES_KEY);
     if (!raw) return defaults;
@@ -230,6 +235,7 @@ function readSourcePrefs(): SourcePrefs {
       polygon: parsed.polygon ?? defaults.polygon,
       x: parsed.x ?? defaults.x,
       rss: parsed.rss ?? defaults.rss,
+      calendarCurrencies: normalizeCalendarCurrencies(parsed.calendarCurrencies),
       xUsernames,
       xAccounts,
       economicCalendar: parsed.economicCalendar ?? defaults.economicCalendar,
@@ -324,7 +330,7 @@ interface FMPCalEvent {
   unit: string;
 }
 
-interface CalendarResult { events: CalendarEvent[]; isToday: boolean }
+interface CalendarResult { events: CalendarEvent[]; isToday: boolean; fullRange?: boolean }
 
 type ForexFactoryRawEvent = {
   title?: string;
@@ -355,6 +361,22 @@ function toStringOrUndefined(value: unknown): string | undefined {
 function isUsCalendarCountry(value: unknown): boolean {
   const text = String(value ?? '').trim().toLowerCase();
   return text === 'us' || text === 'usa' || text === 'usd' || text === 'united states' || text === 'united states of america';
+}
+
+// Currencies the calendar can be personalized to — matches what the FF feed tags.
+const CALENDAR_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'CNY'] as const;
+
+function normalizeCurrencyCode(value: unknown): string {
+  const text = String(value ?? '').trim().toUpperCase();
+  if (['US', 'USA', 'UNITED STATES', 'UNITED STATES OF AMERICA'].includes(text)) return 'USD';
+  return text;
+}
+
+function normalizeCalendarCurrencies(value: unknown): string[] {
+  const list = Array.isArray(value)
+    ? value.map(normalizeCurrencyCode).filter(code => (CALENDAR_CURRENCIES as readonly string[]).includes(code))
+    : [];
+  return list.length > 0 ? Array.from(new Set(list)) : ['USD'];
 }
 
 function getCalendarDateText(value: unknown): string {
@@ -419,22 +441,24 @@ function normalizeForexFactoryEvents(
   todaySlice: string,
   timeZone = DEFAULT_CALENDAR_TIME_ZONE,
   sourceTimeZone = FEED_CALENDAR_TIME_ZONE,
+  allowedCurrencies: string[] = ['USD'],
 ): CalendarResult {
   const events: CalendarEvent[] = [];
+  const allowed = new Set(allowedCurrencies.map(normalizeCurrencyCode));
   let lastDate = '';
   let lastCurrency = '';
 
   raw.forEach((event) => {
     const rawCurrency = String(event.country ?? event.currency ?? '').trim().toUpperCase();
     if (rawCurrency) lastCurrency = rawCurrency;
-    const cc = rawCurrency || lastCurrency;
+    const cc = normalizeCurrencyCode(rawCurrency || lastCurrency);
 
     const parsedDate = normalizeForexFactoryDate(event.date);
     if (parsedDate) lastDate = parsedDate;
     const date = parsedDate || lastDate;
 
     if (!date) return;
-    if (!isUsCalendarCountry(cc)) return;
+    if (!allowed.has(cc)) return;
 
     const normalizedTime = normalizeForexFactoryTime(event.time);
     let converted = normalizedTime
@@ -464,7 +488,7 @@ function normalizeForexFactoryEvents(
       date: converted?.date ?? date,
       time: converted?.time ?? normalizedTime,
       impact: normalizeImpact(event.impact),
-      country: 'USD',
+      country: cc,
       actual: toStringOrUndefined(event.actual),
       forecast: toStringOrUndefined(event.forecast),
       previous: toStringOrUndefined(event.previous),
@@ -482,8 +506,13 @@ function normalizeForexFactoryEvents(
     isToday: events.some(event => event.date === todaySlice),
   };
 }
-async function fetchForexFactoryCalendar(timeZone = DEFAULT_CALENDAR_TIME_ZONE, weeksAhead = 4): Promise<CalendarResult> {
+async function fetchForexFactoryCalendar(
+  timeZone = DEFAULT_CALENDAR_TIME_ZONE,
+  weeksAhead = 4,
+  currencies: string[] = ['USD'],
+): Promise<CalendarResult> {
   const safeTimeZone = normalizeCalendarTimeZone(timeZone);
+  const usdOnly = currencies.length === 1 && currencies[0] === 'USD';
   const now = new Date();
   const todaySlice = getTimeZoneParts(now, safeTimeZone).date;
   // Fetch from the start of last week through (weeksAhead) weeks ahead so
@@ -492,14 +521,14 @@ async function fetchForexFactoryCalendar(timeZone = DEFAULT_CALENDAR_TIME_ZONE, 
   const fromSlice = toDateSlice(addDays(thisWeekStart, -7));                    // prev week Monday
   const endSlice  = toDateSlice(addDays(thisWeekStart, Math.max(28, weeksAhead * 7))); // at least 4 weeks
 
-  if (FMP_KEY) {
+  // Full-range calendar via the backend proxy (FMP key lives server-side).
+  // Empty response = proxy unconfigured or FMP down — fall through to FF feeds.
+  // FMP path is USD-only, so it's skipped when the user personalizes currencies.
+  if (usdOnly) {
     try {
-      const res = await fetch(
-        `https://financialmodelingprep.com/stable/economic-calendar?from=${fromSlice}&to=${endSlice}&apikey=${FMP_KEY}`
-      );
-      if (res.ok) {
-        const raw = await res.json() as FMPCalEvent[];
-        if (Array.isArray(raw)) {
+      const raw = await marketDataApi.getEconCalendar(fromSlice, endSlice) as unknown as FMPCalEvent[];
+      if (Array.isArray(raw) && raw.length > 0) {
+        {
           const rankImpact = (i: string) => {
             const lower = i.toLowerCase();
             return lower === 'high' ? 0 : lower === 'medium' ? 1 : 2;
@@ -533,7 +562,7 @@ async function fetchForexFactoryCalendar(timeZone = DEFAULT_CALENDAR_TIME_ZONE, 
 
           const hasToday = events.some(e => e.date === todaySlice);
           if (events.length > 0) {
-            return { events, isToday: hasToday };
+            return { events, isToday: hasToday, fullRange: true };
           }
         }
       }
@@ -545,7 +574,7 @@ async function fetchForexFactoryCalendar(timeZone = DEFAULT_CALENDAR_TIME_ZONE, 
   try {
     const ffRaw = await marketDataApi.getFfCalendar();
     if (Array.isArray(ffRaw)) {
-      const normalized = normalizeForexFactoryEvents(ffRaw as ForexFactoryRawEvent[], todaySlice, safeTimeZone);
+      const normalized = normalizeForexFactoryEvents(ffRaw as ForexFactoryRawEvent[], todaySlice, safeTimeZone, FEED_CALENDAR_TIME_ZONE, currencies);
       if (normalized.events.length > 0) return normalized;
     }
   } catch {
@@ -568,7 +597,7 @@ async function fetchForexFactoryCalendar(timeZone = DEFAULT_CALENDAR_TIME_ZONE, 
     ];
 
     if (combined.length > 0) {
-      return normalizeForexFactoryEvents(combined as ForexFactoryRawEvent[], todaySlice, safeTimeZone);
+      return normalizeForexFactoryEvents(combined as ForexFactoryRawEvent[], todaySlice, safeTimeZone, FEED_CALENDAR_TIME_ZONE, currencies);
     }
   } catch {
     // ignore
@@ -576,11 +605,27 @@ async function fetchForexFactoryCalendar(timeZone = DEFAULT_CALENDAR_TIME_ZONE, 
 
   return { events: [], isToday: true };
 }
+// Keyword floor for severity — keeps the tape's ticks meaningful even when
+// the AI filter is skipped or returns nothing (raw fallback mode).
+const MED_NEWS_RE = /\b(oil|crude|opec|earnings|stocks?|shares|indexes?|market|yields?|treasury|dollar|euro|gold|bitcoin|gdp|jobs|unemployment|blockade|ceasefire|troops|houthis?|iran|china|recession|deficit|bond)\b/i;
+
+function keywordImpact(headline: string): ImpactLevel {
+  if (HOT_NEWS_RE.test(headline)) return 'high';
+  if (MED_NEWS_RE.test(headline)) return 'medium';
+  return 'low';
+}
+
+const IMPACT_ORDER: Record<ImpactLevel, number> = { high: 2, medium: 1, low: 0 };
+
+function maxImpact(a: ImpactLevel, b: ImpactLevel): ImpactLevel {
+  return IMPACT_ORDER[a] >= IMPACT_ORDER[b] ? a : b;
+}
+
 function rawToNewsItem(raw: RawHeadline): NewsFilterItem {
   return {
     headline: raw.headline,
     summary: raw.summary || '',
-    impact: 'low',
+    impact: keywordImpact(raw.headline),
     category: 'Other',
     marketImpact: { es: 'neutral', nq: 'neutral' },
     isBreaking: false,
@@ -606,20 +651,45 @@ function fmtClock(timestamp: string): string {
   return `${two(parsed.getHours())}:${two(parsed.getMinutes())}:${two(parsed.getSeconds())}`;
 }
 
+// Wire headlines often end in "– Reuters" while the source tag already says
+// REUTERS — strip the redundant suffix for display.
+function stripSourceSuffix(headline: string, source: string): string {
+  const escaped = source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return headline.replace(new RegExp(`\\s*[–—-]\\s*${escaped}\\s*$`, 'i'), '');
+}
+
+const normalizeForCompare = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
 // One dense tape row — time, source, headline. The Tree News idiom:
 // chronology is the layout, impact is the color.
 function NewsCard({ item }: { item: NewsFilterItem }) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetail = Boolean(item.marketImpact?.note || (item.summary && item.summary !== item.headline));
+  // A summary only counts as detail when it genuinely says more than the
+  // headline — wire summaries are frequently the headline minus punctuation.
+  const summaryAddsInfo = Boolean(
+    item.summary
+    && !normalizeForCompare(item.headline).includes(normalizeForCompare(item.summary))
+    && !normalizeForCompare(item.summary).includes(normalizeForCompare(item.headline))
+  );
+  const hasDetail = Boolean(item.marketImpact?.note || summaryAddsInfo);
   const combined = combinedSentiment(item.marketImpact?.es, item.marketImpact?.nq);
   const hot = item.isBreaking || item.impact === 'high';
   const headlineColor = item.isBreaking ? RED : item.impact === 'high' ? '#ffffff' : item.impact === 'medium' ? T1 : T2;
+  const displayHeadline = stripSourceSuffix(item.headline, item.source);
+
+  // Left-edge severity tick — scannable down the whole tape at a glance:
+  // red = breaking, amber = high impact, faint amber = medium, none = low.
+  const impactTick = item.isBreaking ? RED
+    : item.impact === 'high' ? AMBER
+    : item.impact === 'medium' ? 'rgba(245,158,11,0.45)'
+    : 'transparent';
 
   return (
     <article
       style={{
-        padding: '6px 14px',
+        padding: '6px 14px 6px 11px',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderLeft: `3px solid ${impactTick}`,
         cursor: item.url || hasDetail ? 'pointer' : 'default',
         transition: 'background .08s',
         background: item.isBreaking ? 'rgba(239,68,68,0.06)' : 'transparent',
@@ -642,13 +712,14 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
           {item.source}
         </span>
         <p style={{
-          margin: 0, flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45,
-          color: headlineColor, fontWeight: hot ? 600 : 450,
+          margin: 0, flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 11.5, lineHeight: 1.5,
+          color: headlineColor, fontWeight: hot ? 600 : 400, letterSpacing: '0.01em',
         }}>
-          {item.isBreaking && <span style={{ marginRight: 6, fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: RED, fontFamily: MONO }}>BREAKING</span>}
-          {item.headline}
+          {item.isBreaking && <span style={{ marginRight: 6, fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: RED }}>BREAKING</span>}
+          {displayHeadline}
         </p>
-        {combined.label && combined.label !== '—' && (
+        {/* Sentiment only when there IS one — a terminal doesn't print "neutral" */}
+        {(combined.label === 'bullish' || combined.label === 'bearish' || combined.label === 'mixed') && (
           <span style={{ flexShrink: 0, fontSize: 9, fontFamily: MONO, color: combined.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
             {combined.label}
           </span>
@@ -665,11 +736,11 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
 
       {expanded && hasDetail && (
         <div style={{ margin: '6px 0 2px 66px', paddingLeft: 10, borderLeft: '2px solid rgba(255,255,255,0.08)' }}>
-          {item.summary && item.summary !== item.headline && (
+          {summaryAddsInfo && (
             <p style={{ margin: 0, color: T2, fontSize: 11.5, lineHeight: 1.55 }}>{item.summary}</p>
           )}
           {item.marketImpact?.note && (
-            <p style={{ margin: item.summary && item.summary !== item.headline ? '5px 0 0' : 0, color: AMBER, fontSize: 11, lineHeight: 1.5 }}>{item.marketImpact.note}</p>
+            <p style={{ margin: summaryAddsInfo ? '5px 0 0' : 0, color: AMBER, fontSize: 11, lineHeight: 1.5 }}>{item.marketImpact.note}</p>
           )}
         </div>
       )}
@@ -768,14 +839,24 @@ function CalendarImpactFilterButton({
   onChange: (value: CalendarImpactSelection) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const options: Array<{ key: ImpactLevel; label: string }> = [
     { key: 'high', label: 'High' },
     { key: 'medium', label: 'Medium' },
     { key: 'low', label: 'Low' },
   ];
 
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
   return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
+    <div ref={containerRef} style={{ position: 'relative', flexShrink: 0 }}>
       <button
         type="button"
         aria-label="Filter economic calendar impact"
@@ -861,11 +942,126 @@ function CalendarImpactFilterButton({
   );
 }
 
+// Currency personalization — pick which economies' events the calendar tracks.
+function CalendarCurrencyButton({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = new Set(value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        type="button"
+        aria-label="Choose calendar currencies"
+        aria-expanded={open}
+        onClick={() => setOpen(current => !current)}
+        style={{
+          height: 28,
+          border: `1px solid ${open ? AMBER : BORDER}`,
+          borderRadius: 6,
+          background: open ? AMBER : S2,
+          color: open ? '#000' : T2,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 8px',
+          fontFamily: MONO,
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.05em',
+          cursor: 'pointer',
+        }}
+      >
+        {value.length <= 2 ? value.join(' ') : `${value[0]} +${value.length - 1}`}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 32,
+            right: 0,
+            zIndex: 20,
+            width: 132,
+            border: `1px solid ${BORDER}`,
+            borderRadius: 8,
+            background: S1,
+            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+            padding: 6,
+          }}
+        >
+          {CALENDAR_CURRENCIES.map(code => {
+            const checked = selected.has(code);
+            return (
+              <label
+                key={code}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  padding: '6px 6px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  color: checked ? T1 : T2,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.05em',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={event => {
+                    const next = new Set(selected);
+                    if (event.target.checked) next.add(code);
+                    else next.delete(code);
+                    // Never allow zero currencies — the calendar would go blank.
+                    const list = CALENDAR_CURRENCIES.filter(c => next.has(c));
+                    onChange(list.length > 0 ? list : ['USD']);
+                  }}
+                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+                />
+                <span aria-hidden style={{
+                  width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+                  border: `1px solid ${checked ? 'rgba(245,158,11,0.55)' : BORDER}`,
+                  background: checked ? 'rgba(245,158,11,0.16)' : 'transparent',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {checked && <span style={{ fontSize: 8, lineHeight: 1, color: AMBER, fontWeight: 700 }}>✓</span>}
+                </span>
+                {code}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CalendarPanel({
   events,
   isToday,
   impactSelection,
   onImpactSelectionChange,
+  currencies,
+  onCurrenciesChange,
   displayTimezone,
   weekOffset,
   onWeekOffsetChange: setWeekOffset,
@@ -874,13 +1070,14 @@ function CalendarPanel({
   isToday: boolean;
   impactSelection: CalendarImpactSelection;
   onImpactSelectionChange: (value: CalendarImpactSelection) => void;
+  currencies: string[];
+  onCurrenciesChange: (value: string[]) => void;
   displayTimezone: string;
   weekOffset: number;
   onWeekOffsetChange: (offset: number | ((prev: number) => number)) => void;
 }) {
   const safeDisplayTimezone = normalizeCalendarTimeZone(displayTimezone);
   const todaySlice = getTimeZoneParts(new Date(), safeDisplayTimezone).date;
-  const subtitle = events.length === 0 ? 'USD' : 'USD weekly view';
   const filteredEvents = events.filter((event) => impactSelection[event.impact]);
   const weekStart = useMemo(() => {
     const currentWeek = startOfWeekMonday(parseDateSlice(todaySlice));
@@ -936,26 +1133,53 @@ function CalendarPanel({
     <section style={{ paddingTop: 4 }}>
       {/* Calendar header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, padding: '0 14px 0 12px', borderLeft: `2px solid ${COBALT}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: T2 }}>Econ Calendar</span>
-          <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{subtitle}</span>
-          {weekOffset === 0 && <span style={{ fontSize: 9, color: isToday ? GREEN : T3, fontFamily: MONO }}>{isToday ? '● live' : '○ missing'}</span>}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: T1 }}>
+            Economic Calendar
+          </span>
+          {weekOffset === 0 && (
+            <span style={{ fontSize: 8.5, letterSpacing: '.1em', color: isToday ? GREEN : T3, fontFamily: MONO }}>
+              {isToday ? '● LIVE' : '○ STALE'}
+            </span>
+          )}
         </div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <CalendarCurrencyButton value={currencies} onChange={onCurrenciesChange} />
           <CalendarImpactFilterButton value={impactSelection} onChange={onImpactSelectionChange} />
         </div>
       </div>
 
       {/* Week nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, padding: '0 14px' }}>
-        <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{formatWeekRange(weekStart)}</span>
+        <span style={{ fontSize: 9.5, letterSpacing: '.06em', color: T3, fontFamily: MONO, textTransform: 'uppercase' }}>
+          {formatWeekRange(weekStart)} · {currencies.length <= 3 ? currencies.join(' ') : `${currencies.length} currencies`}
+        </span>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
           {[
             { label: '‹', action: () => setWeekOffset(c => c - 1), active: false },
-            { label: 'Now', action: () => setWeekOffset(0), active: weekOffset === 0 },
+            { label: 'TODAY', action: () => setWeekOffset(0), active: weekOffset === 0 },
             { label: '›', action: () => setWeekOffset(c => c + 1), active: false },
           ].map(btn => (
-            <button key={btn.label} type="button" onClick={btn.action} style={{ height: 22, borderRadius: 4, border: `1px solid ${btn.active ? AMBER : BORDER}`, background: btn.active ? AMBER : S2, color: btn.active ? '#000' : T3, padding: '0 7px', fontSize: 11, fontWeight: 700, cursor: 'pointer', lineHeight: 1, transition: 'background .12s, color .12s' }}>
+            <button
+              key={btn.label}
+              type="button"
+              onClick={btn.action}
+              style={{
+                height: 21,
+                borderRadius: 4,
+                border: `1px solid ${btn.active ? 'rgba(245,158,11,0.5)' : BORDER}`,
+                background: btn.active ? 'rgba(245,158,11,0.12)' : 'transparent',
+                color: btn.active ? AMBER : T3,
+                padding: '0 7px',
+                fontFamily: MONO,
+                fontSize: btn.label.length > 1 ? 8.5 : 11,
+                letterSpacing: btn.label.length > 1 ? '0.08em' : undefined,
+                fontWeight: 700,
+                cursor: 'pointer',
+                lineHeight: 1,
+                transition: 'border-color .12s, color .12s, background .12s',
+              }}
+            >
               {btn.label}
             </button>
           ))}
@@ -967,7 +1191,9 @@ function CalendarPanel({
       ) : filteredEvents.length === 0 ? (
         <p style={{ margin: 0, color: T3, fontSize: 11, padding: '0 14px' }}>No events for selected impacts.</p>
       ) : weekEvents.length === 0 ? (
-        <p style={{ margin: 0, color: T3, fontSize: 11, padding: '0 14px' }}>No events this week.</p>
+        <p style={{ margin: 0, color: T3, fontSize: 11, lineHeight: 1.6, padding: '0 14px' }}>
+          {weekOffset > 0 ? 'Not published yet.' : 'No events for this week.'}
+        </p>
       ) : (
         <div
           ref={calendarScrollRef}
@@ -1010,7 +1236,14 @@ function CalendarPanel({
                       <span style={{ fontFamily: MONO, fontSize: 12, color: T2, fontWeight: 700 }}>{fmtFFTime(event.time)}</span>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: impDot, flexShrink: 0, boxShadow: isHigh ? `0 0 5px ${RED}` : 'none' }} />
                       <div style={{ minWidth: 0 }}>
-                        <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>{event.event}</span>
+                        <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>
+                          {currencies.length > 1 && event.country && (
+                            <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: T3, marginRight: 6 }}>
+                              {event.country}
+                            </span>
+                          )}
+                          {event.event}
+                        </span>
                         {(event.forecast || event.previous) && (
                           <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
                             {event.forecast && <span style={{ fontSize: 9, color: T3, fontFamily: MONO }}>F: <span style={{ color: T2 }}>{event.forecast}</span></span>}
@@ -1067,27 +1300,28 @@ function SourcesPanel({
       </p>
       <div style={{ padding: '0 14px', display: 'grid', gap: 7 }}>
         {([
-          { key: 'finnhub', label: 'Finnhub', note: 'Requires VITE_FINNHUB_KEY' },
-          { key: 'polygon', label: 'Polygon.io', note: 'Requires VITE_POLYGON_KEY' },
-          { key: 'x', label: 'X accounts', note: 'Requires backend X_BEARER_TOKEN' },
           { key: 'rss', label: 'Live Wire', note: 'Tree News push · ForexLive · CNBC · FXStreet · Investing.com' },
+          { key: 'finnhub', label: 'Finnhub', note: 'Requires VITE_FINNHUB_KEY' },
+          { key: 'x', label: 'X accounts', note: 'Not available yet' },
           { key: 'economicCalendar', label: 'Economic Calendar', note: '' },
           { key: 'aiFilter', label: 'AI Filter', note: '' },
         ] as const).map(source => {
           const available =
             source.key === 'finnhub'
               ? Boolean(FINNHUB_KEY)
-              : source.key === 'polygon'
-                ? Boolean(POLYGON_KEY)
+              : source.key === 'x'
+                ? X_SOURCE_ENABLED
                 : true;
           const active = prefs[source.key] && available;
           return (
             <label
               key={source.key}
+              title={!available && source.note ? source.note : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: 9,
+                padding: '3px 0',
                 cursor: available ? 'pointer' : 'not-allowed',
                 opacity: available ? 1 : 0.45,
               }}
@@ -1097,59 +1331,58 @@ function SourcesPanel({
                 checked={active}
                 disabled={!available}
                 onChange={event => onChange({ ...prefs, [source.key]: event.target.checked })}
-                style={{ accentColor: AMBER }}
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
               />
-              <span style={{ fontSize: 11, color: T2 }}>{source.label}</span>
-              {!available && source.note && <span style={{ fontSize: 9, color: T3 }}>({source.note})</span>}
+              <span aria-hidden style={{
+                width: 13, height: 13, borderRadius: 3, flexShrink: 0,
+                border: `1px solid ${active ? 'rgba(245,158,11,0.55)' : BORDER}`,
+                background: active ? 'rgba(245,158,11,0.16)' : 'transparent',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'border-color .12s, background .12s',
+              }}>
+                {active && <span style={{ fontSize: 9, lineHeight: 1, color: AMBER, fontWeight: 700 }}>✓</span>}
+              </span>
+              <span style={{ fontSize: 11.5, color: active ? T1 : T2 }}>{source.label}</span>
+              {!available && (
+                <span style={{ marginLeft: 'auto', fontSize: 8.5, color: T3, fontFamily: MONO, letterSpacing: '0.08em' }}>
+                  {source.key === 'x' ? 'COMING SOON' : 'KEY REQUIRED'}
+                </span>
+              )}
             </label>
           );
         })}
       </div>
-      <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 10, padding: '10px 14px 0' }}>
-        <button
-          type="button"
-          onClick={onOpenXAccounts}
-          style={{
-            width: '100%',
-            minHeight: 42,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            borderRadius: 8,
-            border: `1px solid ${AMBER_BORDER}`,
-            background: `linear-gradient(180deg, ${AMBER_DIM}, rgba(251, 146, 60, 0.07))`,
-            color: AMBER,
-            padding: '0 11px',
-            cursor: 'pointer',
-            fontFamily: SANS,
-            boxShadow: '0 0 0 1px rgba(251, 146, 60, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18)',
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-            <span
-              style={{
-                width: 22,
-                height: 22,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 7,
-                border: `1px solid ${AMBER_BORDER}`,
-                background: 'rgba(251, 146, 60, 0.16)',
-                flexShrink: 0,
-              }}
-            >
-              <Plus size={13} />
+      {X_SOURCE_ENABLED && (
+        <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 10, padding: '10px 14px 0' }}>
+          <button
+            type="button"
+            onClick={onOpenXAccounts}
+            style={{
+              width: '100%',
+              minHeight: 36,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              borderRadius: 7,
+              border: `1px solid ${BORDER}`,
+              background: S2,
+              padding: '0 11px',
+              cursor: 'pointer',
+              fontFamily: SANS,
+            }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <Plus size={12} style={{ color: T3, flexShrink: 0 }} />
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: T1 }}>Manage X accounts</span>
             </span>
-            <span style={{ display: 'grid', gap: 2, minWidth: 0, textAlign: 'left' }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: T1 }}>Add X accounts</span>
-              <span style={{ color: T3, fontSize: 10, fontWeight: 650 }}>{enabledCount} of {xAccounts.length || 0} active</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+              <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', color: T3 }}>{enabledCount} ACTIVE</span>
+              <ChevronDown size={13} style={{ color: T3 }} />
             </span>
-          </span>
-          <ChevronDown size={14} />
-        </button>
-      </div>
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -1416,7 +1649,6 @@ export default function MarketNews() {
   const [xAccountDraft, setXAccountDraft] = useState('');
   const [xAccountsModalOpen, setXAccountsModalOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'impact' | 'newest'>('impact');
   const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1437,7 +1669,7 @@ export default function MarketNews() {
       const [finnhubRaw, polygonRaw, xRaw, rssRaw] = await Promise.allSettled([
         prefs.finnhub ? fetchFinnhubNews() : Promise.resolve([]),
         prefs.polygon ? fetchPolygonNews() : Promise.resolve([]),
-        prefs.x ? marketDataApi.getXNews(getEnabledXUsernames(prefs)) : Promise.resolve([]),
+        X_SOURCE_ENABLED && prefs.x ? marketDataApi.getXNews(getEnabledXUsernames(prefs)) : Promise.resolve([]),
         prefs.rss ? marketDataApi.getRssNews() : Promise.resolve([]),
       ]);
 
@@ -1489,6 +1721,10 @@ export default function MarketNews() {
         finalItems = deduped.slice(0, 40).map(rawToNewsItem);
       }
 
+      // Keyword floor on top of the AI's call — a war or Fed headline never
+      // renders as noise, even when the AI underrates or skips it.
+      finalItems = finalItems.map(item => ({ ...item, impact: maxImpact(item.impact, keywordImpact(item.headline)) }));
+
       // Tape ordering: strict chronology, newest first. Impact shows as
       // color on the row, never as position — a tape that reorders lies.
       finalItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -1513,16 +1749,17 @@ export default function MarketNews() {
     }
 
     // Serve from cache immediately so the calendar shows without waiting for network
-    const cached = readCalendarCache(safeTimeZone);
+    const currenciesKey = prefs.calendarCurrencies.join(',');
+    const cached = readCalendarCache(safeTimeZone, currenciesKey);
     if (cached) {
       setCalendar(cached.events);
       setCalendarIsToday(cached.isToday);
     }
 
     try {
-      const calendarResult = await fetchForexFactoryCalendar(safeTimeZone, weeksAhead);
+      const calendarResult = await fetchForexFactoryCalendar(safeTimeZone, weeksAhead, prefs.calendarCurrencies);
       if (calendarResult.events.length > 0) {
-        writeCalendarCache(calendarResult, safeTimeZone);
+        writeCalendarCache(calendarResult, safeTimeZone, currenciesKey);
         setCalendar(calendarResult.events);
         setCalendarIsToday(calendarResult.isToday);
       }
@@ -1533,7 +1770,7 @@ export default function MarketNews() {
         setCalendarIsToday(true);
       }
     }
-  }, [prefs.economicCalendar, preferences.timezone]);
+  }, [prefs.economicCalendar, prefs.calendarCurrencies, preferences.timezone]);
 
   useEffect(() => {
     fetchNews();
@@ -1669,15 +1906,9 @@ export default function MarketNews() {
       return haystack.includes(query.trim().toLowerCase());
     });
 
-    if (sortBy === 'newest') {
-      return [...filtered].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }
-    return [...filtered].sort((a, b) => {
-      const impactDiff = impactRank(a.impact) - impactRank(b.impact);
-      if (impactDiff !== 0) return impactDiff;
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-    });
-  }, [filter, items, query, sortBy]);
+    // Tape order is always chronological — the impact chips filter, never reorder.
+    return [...filtered].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [filter, items, query]);
 
   const topBreaking = useMemo(() => items.find(item => item.isBreaking), [items]);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
@@ -1692,23 +1923,21 @@ export default function MarketNews() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, overflow: 'hidden', fontFamily: SANS, background: PAGE_BG }}>
       <div style={{ padding: '10px 16px 8px', borderBottom: `1px solid ${BORDER}`, background: PAGE_BG, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: AMBER, fontFamily: MONO }}>FLYXA</span>
-            <span style={{ width: 1, height: 14, background: BORDER, flexShrink: 0 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: T1 }}>Market Intelligence</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 650, letterSpacing: '-0.01em', color: T1, whiteSpace: 'nowrap' }}>
+              Market News
+            </span>
             {!isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 8 }}>
-                {[
-                  { label: 'BREAK', value: breakingCount, color: RED },
-                  { label: 'HIGH', value: highCount, color: AMBER },
-                  { label: 'CAL', value: highCalendarCount, color: COBALT },
-                ].map((stat) => (
-                  <span key={stat.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: T3, fontFamily: MONO }}>
-                    {stat.label}
-                    <span style={{ color: stat.value > 0 ? stat.color : T3, fontWeight: 700, fontSize: 11 }}>{stat.value}</span>
-                  </span>
-                ))}
-              </div>
+              <>
+                <span style={{ width: 1, height: 15, background: BORDER, flexShrink: 0 }} />
+                <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.08em', color: T3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ color: breakingCount > 0 ? RED : T3, fontWeight: breakingCount > 0 ? 700 : 400 }}>{breakingCount} BREAKING</span>
+                  {' · '}
+                  <span style={{ color: highCount > 0 ? AMBER : T3, fontWeight: highCount > 0 ? 700 : 400 }}>{highCount} HIGH IMPACT</span>
+                  {' · '}
+                  <span style={{ color: highCalendarCount > 0 ? COBALT : T3, fontWeight: highCalendarCount > 0 ? 700 : 400 }}>{highCalendarCount} EVENTS AHEAD</span>
+                </span>
+              </>
             )}
           </div>
 
@@ -1764,16 +1993,6 @@ export default function MarketNews() {
           </div>
 
           <InlineToggle
-            label="Sort"
-            value={sortBy}
-            options={[
-              { key: 'impact', label: 'Impact' },
-              { key: 'newest', label: 'Newest' },
-            ]}
-            onChange={value => setSortBy(value as 'impact' | 'newest')}
-          />
-
-          <InlineToggle
             label="Impact"
             value={filter}
             options={[
@@ -1815,10 +2034,15 @@ export default function MarketNews() {
         }}
       >
         <main className="mn-feed" style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-          <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 10px 14px' }}>
-          <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid rgba(255,255,255,0.09)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: T3, borderLeft: `2px solid ${AMBER}`, paddingLeft: 10 }}>News Feed</span>
-            {displayed.length > 0 && <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{displayed.length} {displayed.length === 1 ? 'story' : 'stories'}</span>}
+          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 10px 14px' }}>
+          <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid rgba(255,255,255,0.09)`, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: T1, borderLeft: `2px solid ${AMBER}`, paddingLeft: 10 }}>
+              Live Wire
+            </span>
+            <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '.06em', color: T3, textTransform: 'uppercase' }}>
+              {displayed.length > 0 && <>{displayed.length} stories · </>}
+              {lastRefresh ? <>upd {fmtClock(lastRefresh.toISOString())}</> : 'connecting'}
+            </span>
           </div>
           {topBreaking && (
             <div style={{ margin: '8px 0 0', padding: '8px 14px', borderBottom: `1px solid ${RED_BORDER}`, background: 'rgba(239,68,68,0.07)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -1878,23 +2102,12 @@ export default function MarketNews() {
           )}
 
           {!loading && isRawFallback && items.length > 0 && (
-            <div
-              style={{
-                margin: '12px 0 0',
-                padding: '8px 12px',
-                borderRadius: 6,
-                border: `1px solid ${AMBER_BORDER}`,
-                background: AMBER_DIM,
-                color: T2,
-                fontSize: 11,
-              }}
-            >
-              <span style={{ color: AMBER, fontWeight: 700 }}>Fallback Mode:</span> AI filter did not return ES/NQ-specific items, so latest raw
-              headlines are shown.
+            <div style={{ padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3 }}>
+              <span style={{ color: AMBER }}>raw wire</span> · unfiltered headlines — ai found nothing es/nq-specific this batch
             </div>
           )}
 
-          <div style={{ marginTop: 10 }}>
+          <div>
             {displayed.map((item, index) => (
               <NewsCard key={`${item.headline}-${index}`} item={item} />
             ))}
@@ -1953,6 +2166,8 @@ export default function MarketNews() {
                 isToday={calendarIsToday}
                 impactSelection={calendarImpactSelection}
                 onImpactSelectionChange={setCalendarImpactSelection}
+                currencies={prefs.calendarCurrencies}
+                onCurrenciesChange={value => handlePrefsChange({ ...prefs, calendarCurrencies: value })}
                 displayTimezone={preferences.timezone}
                 weekOffset={calendarWeekOffset}
                 onWeekOffsetChange={setCalendarWeekOffset}
