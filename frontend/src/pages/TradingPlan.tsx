@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BarChart3,
-  LockKeyhole,
   Plus,
   RefreshCw,
   Save,
@@ -15,13 +13,6 @@ import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRul
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import './TradingPlan.css';
-
-type TradingPlanTab = 'rule-adherence' | 'risk-rules';
-
-const TAB_ITEMS: Array<{ id: TradingPlanTab; label: string; icon: typeof LockKeyhole }> = [
-  { id: 'risk-rules', label: 'Risk Rules', icon: LockKeyhole },
-  { id: 'rule-adherence', label: 'Rule Adherence', icon: BarChart3 },
-];
 
 // Discipline chart palette — binary verdict per day: amber when every rule
 // held, red the moment a single one broke. No partial credit.
@@ -55,8 +46,6 @@ function formatLastSaved(lastSaved: Date | null, now: number): string {
 
 
 export default function TradingPlan() {
-  const [activeTab, setActiveTab] = useState<TradingPlanTab>('risk-rules');
-
   const storeRiskRules = useFlyxaStore(state => state.riskRules);
   const riskRules = useMemo(() => storeRiskRules.map(normalizeRiskRule), [storeRiskRules]);
 
@@ -79,6 +68,10 @@ export default function TradingPlan() {
   const [pendingContracts, setPendingContracts] = useState<Record<string, { symbol: string; max: string }>>({});
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [hoveredRuleId, setHoveredRuleId] = useState<string | null>(null);
+  // Record interactivity: click a day bar to see its rule verdicts; click a
+  // ledger rule to replay that single rule's history on the chart.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [chartRuleId, setChartRuleId] = useState<string | null>(null);
 
   // The signature line: has today's pre-session "hold to accept" been done?
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
@@ -191,17 +184,6 @@ export default function TradingPlan() {
     : planReport.pct >= 60 ? 'var(--amber)'
     : 'var(--red)';
 
-  const worstRule = useMemo(() => {
-    let worst: { label: string; pct: number } | null = null;
-    for (const rule of riskRules) {
-      if (rule.enabled === false || (rule.kind ?? 'manual') === 'manual') continue;
-      const stats = ruleStatsMap.get(rule.id);
-      if (!stats || stats.checked === 0 || stats.pct === null) continue;
-      if (!worst || stats.pct < worst.pct) worst = { label: rule.label, pct: stats.pct };
-    }
-    return worst;
-  }, [riskRules, ruleStatsMap]);
-
   // One entry per calendar day over the last 30 — the discipline chart renders
   // every day, including unverified ones, so gaps in the habit stay visible.
   const daySeries = useMemo(() => {
@@ -245,6 +227,37 @@ export default function TradingPlan() {
     }
     return map;
   }, [planReport]);
+
+  // Per-day rule verdicts (for the click-a-bar readout) and per-rule verdicts
+  // keyed by date (for the click-a-rule chart replay).
+  const dayEvalMap = useMemo(() => {
+    const map = new Map<string, Array<{ ruleId: string; state: 'ok' | 'fail' }>>();
+    for (const day of planReport.daily) {
+      const checked = day.evaluations
+        .filter(ev => ev.state !== 'unchecked')
+        .map(ev => ({ ruleId: ev.ruleId, state: (ev.state === 'ok' ? 'ok' : 'fail') as 'ok' | 'fail' }));
+      if (checked.length > 0) map.set(day.date, checked);
+    }
+    return map;
+  }, [planReport]);
+
+  const ruleStateByDate = useMemo(() => {
+    const map = new Map<string, Map<string, 'ok' | 'fail'>>();
+    for (const day of planReport.daily) {
+      for (const ev of day.evaluations) {
+        if (ev.state === 'unchecked') continue;
+        if (!map.has(ev.ruleId)) map.set(ev.ruleId, new Map());
+        map.get(ev.ruleId)!.set(day.date, ev.state === 'ok' ? 'ok' : 'fail');
+      }
+    }
+    return map;
+  }, [planReport]);
+
+  const ruleLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const rule of riskRules) map.set(rule.id, rule.label);
+    return map;
+  }, [riskRules]);
 
   // Clean-day streaks across verified days — the discipline scoreboard.
   const cleanStreaks = useMemo(() => {
@@ -357,7 +370,7 @@ export default function TradingPlan() {
         <div className="tp-header-main">
           <div>
             <p className="tp-eyebrow">Trading Plan</p>
-            <h1 className="tp-title">Risk Rules</h1>
+            <h1 className="tp-title">Rules</h1>
           </div>
           <div className="tp-actions">
             <span className="tp-saved">{lastSavedLabel}</span>
@@ -372,28 +385,24 @@ export default function TradingPlan() {
           </div>
         </div>
 
-        <nav className="tp-tabs" data-tour-id="trading-plan-tabs">
-          {TAB_ITEMS.map(tab => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`tp-tab ${active ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <Icon size={13} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
       </header>
 
-      <main className="tp-content trading-plan-scroll">
-        {activeTab === 'rule-adherence' && (
-          <section data-tour-id="trading-plan-core" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 16, alignItems: 'start' }}>
+      <main className="tp-content trading-plan-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* ── The record — chart + ledger. Renders after the rulebook (flex
+            order): the contract first, then whether it was honored. */}
+        <section data-tour-id="trading-plan-core" style={{ order: 2, marginTop: 14, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 16, alignItems: 'start' }}>
+          {/* Chapter divider — the seam between contract and consequences */}
+          <div style={{ gridColumn: '1 / -1', paddingTop: 22, borderTop: '1px solid var(--app-border)', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 className="tp-title">The record</h2>
+              <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>
+                Every session verified against the rulebook — the last 30 days.
+              </p>
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: adherenceColor, flexShrink: 0 }}>
+              {planReport.pct !== null ? `HELD TO ${planReport.pct}%` : 'NO VERIFIED DAYS YET'}
+            </span>
+          </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
             {/* Daily discipline — one bar per calendar day, binary verdict */}
@@ -402,34 +411,65 @@ export default function TradingPlan() {
                 <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
                   DAILY DISCIPLINE · 30D
                 </p>
-                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: BAR_ON }} /> ALL RULES HELD
-                  </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: BAR_BREAK }} /> RULE BROKEN
-                  </span>
-                </p>
+                {chartRuleId ? (
+                  <button
+                    type="button"
+                    onClick={() => setChartRuleId(null)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      border: '1px solid rgba(245,158,11,0.5)', borderRadius: 5,
+                      background: 'rgba(245,158,11,0.12)', color: 'var(--amber)',
+                      padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9,
+                      fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+                    }}
+                  >
+                    {ruleLabelById.get(chartRuleId) ?? 'Rule'} · ✕
+                  </button>
+                ) : (
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: BAR_ON }} /> ALL RULES HELD
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: BAR_BREAK }} /> RULE BROKEN
+                    </span>
+                  </p>
+                )}
               </div>
 
               <div style={{ position: 'relative', height: 148, margin: '18px 18px 0' }}>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 3 }}>
                   {daySeries.map(day => {
                     const hasData = day.pct !== null;
+                    const ruleState = chartRuleId ? ruleStateByDate.get(chartRuleId)?.get(day.date) : undefined;
+                    const barColor = chartRuleId
+                      ? (ruleState === 'ok' ? BAR_ON : ruleState === 'fail' ? BAR_BREAK : (day.isToday ? 'transparent' : BAR_EMPTY))
+                      : hasData
+                        ? (day.failed === 0 ? BAR_ON : BAR_BREAK)
+                        : day.isToday ? 'transparent' : BAR_EMPTY;
+                    const barHeight = chartRuleId
+                      ? (ruleState ? '62%' : day.isToday ? '100%' : 5)
+                      : hasData ? `${Math.max(8, day.pct as number)}%` : day.isToday ? '100%' : 5;
+                    const clickable = hasData;
                     return (
                       <span
                         key={day.date}
-                        title={hasData
-                          ? `${day.label} · ${day.failed === 0 ? 'all rules held' : `${day.failed} break${day.failed !== 1 ? 's' : ''}`}`
-                          : `${day.label} · no verified session`}
+                        onClick={clickable ? () => setSelectedDay(current => (current === day.date ? null : day.date)) : undefined}
+                        title={chartRuleId
+                          ? `${day.label} · ${ruleState === 'ok' ? 'held' : ruleState === 'fail' ? 'broken' : 'not checked'}`
+                          : hasData
+                            ? `${day.label} · ${day.failed === 0 ? 'all rules held' : `${day.failed} break${day.failed !== 1 ? 's' : ''}`} — click for detail`
+                            : `${day.label} · no verified session`}
                         style={{
                           flex: 1,
-                          height: hasData ? `${Math.max(8, day.pct as number)}%` : day.isToday ? '100%' : 5,
+                          height: barHeight,
                           borderRadius: '2px 2px 0 0',
-                          backgroundColor: hasData
-                            ? (day.failed === 0 ? BAR_ON : BAR_BREAK)
-                            : day.isToday ? 'transparent' : BAR_EMPTY,
-                          border: day.isToday ? '1px solid var(--txt-2)' : 'none',
+                          backgroundColor: barColor,
+                          border: day.isToday && !hasData ? '1px solid var(--txt-2)' : 'none',
+                          outline: selectedDay === day.date ? '1px solid var(--txt)' : 'none',
+                          outlineOffset: 1,
+                          cursor: clickable ? 'pointer' : 'default',
+                          transition: 'height 0.2s ease, background-color 0.2s ease',
                         }}
                       />
                     );
@@ -442,6 +482,31 @@ export default function TradingPlan() {
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--txt-3)' }}>{daySeries[15].label}</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--txt-3)' }}>{daySeries[29].label}</span>
               </div>
+
+              {/* Click-a-bar readout: exactly which rules held or broke that day */}
+              {selectedDay && (
+                <div style={{ borderTop: '1px solid var(--app-border)', padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '6px 14px', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--txt)' }}>
+                    {daySeries.find(day => day.date === selectedDay)?.label?.toUpperCase() ?? selectedDay}
+                  </span>
+                  {(dayEvalMap.get(selectedDay) ?? []).map(ev => (
+                    <span key={ev.ruleId} style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.05em', color: ev.state === 'ok' ? 'var(--grn, #22d68a)' : 'var(--red)' }}>
+                      {ev.state === 'ok' ? '✓' : '✗'} {ruleLabelById.get(ev.ruleId) ?? 'Rule'}
+                    </span>
+                  ))}
+                  {(dayEvalMap.get(selectedDay) ?? []).length === 0 && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--txt-3)' }}>No rule checks that day.</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDay(null)}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--txt-3)', fontSize: 11, cursor: 'pointer', padding: '0 2px' }}
+                    aria-label="Clear selected day"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
               <div style={{ borderTop: '1px solid var(--app-border)', padding: '11px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: 'var(--txt-3)' }}>
@@ -463,7 +528,7 @@ export default function TradingPlan() {
                   BY RULE · WORST FIRST
                 </p>
                 <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
-                  Verified against logged trades by the journal engine
+                  Click a rule to replay its history on the chart
                 </p>
               </div>
               {(() => {
@@ -474,7 +539,7 @@ export default function TradingPlan() {
                 if (rows.length === 0) {
                   return (
                     <p style={{ margin: 0, padding: '16px 18px', fontSize: 12, color: 'var(--txt-3)' }}>
-                      No auto-checked rules are enabled — turn rules on in the Risk Rules tab and stats appear here.
+                      No auto-checked rules are enabled — turn rules on in the rulebook above and stats appear here.
                     </p>
                   );
                 }
@@ -482,16 +547,25 @@ export default function TradingPlan() {
                   const pct = stats && stats.checked > 0 ? (stats.pct ?? 0) : null;
                   const pctTextColor = pct === null ? 'var(--txt-3)' : pct >= ADHERENCE_TARGET ? 'var(--amber)' : 'var(--red)';
                   const results = ruleDayResults.get(rule.id) ?? [];
+                  const chartActive = chartRuleId === rule.id;
                   return (
                     <div
                       key={rule.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setChartRuleId(current => (current === rule.id ? null : rule.id))}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setChartRuleId(current => (current === rule.id ? null : rule.id)); } }}
                       style={{
                         display: 'grid',
                         gridTemplateColumns: 'minmax(160px, 230px) minmax(0, 1fr) 58px 150px',
                         gap: 18,
                         alignItems: 'center',
-                        padding: '13px 18px',
+                        padding: '13px 16px 13px 15px',
                         borderTop: rowIndex === 0 ? 'none' : '1px solid var(--app-border)',
+                        borderLeft: chartActive ? '3px solid var(--amber)' : '3px solid transparent',
+                        backgroundColor: chartActive ? 'rgba(245,158,11,0.05)' : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.12s, border-color 0.12s',
                       }}
                     >
                       <span style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -570,10 +644,9 @@ export default function TradingPlan() {
               </div>
             </aside>
           </section>
-        )}
 
-        {activeTab === 'risk-rules' && (
-          <section data-tour-id="risk-rules-framework" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* ── The rulebook — the contract itself ── */}
+          <section data-tour-id="risk-rules-framework" style={{ order: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 16, alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -857,57 +930,9 @@ export default function TradingPlan() {
             </p>
             </div>
 
-            {/* Right rail — the rulebook's consequences, not decoration */}
+            {/* Right rail — where the contract applies. The adherence numbers
+                live in the record section below, once. */}
             <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--txt)' }}>Held to — last 30 days</p>
-                </div>
-                <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, lineHeight: 1, color: adherenceColor }}>
-                    {planReport.pct !== null ? `${planReport.pct}%` : '—'}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
-                    adherence · {totalBreaks} break{totalBreaks !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div style={{ padding: '0 16px 14px', display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                  {daySeries.filter(day => day.pct !== null).map(day => (
-                    <span
-                      key={day.date}
-                      title={`${day.label} · ${day.failed === 0 ? 'all rules held' : `${day.failed} break${day.failed !== 1 ? 's' : ''}`}`}
-                      style={{
-                        width: 13,
-                        height: 13,
-                        borderRadius: 3,
-                        backgroundColor: day.failed === 0 ? BAR_ON : BAR_BREAK,
-                        opacity: day.failed === 0 ? 0.92 : 0.8,
-                      }}
-                    />
-                  ))}
-                </div>
-                {worstRule && (
-                  <div style={{ padding: '10px 16px', borderTop: '1px solid var(--app-border)' }}>
-                    <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Most broken</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--txt-2)' }}>
-                      {worstRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--red)' }}>{worstRule.pct}%</span>
-                    </p>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('rule-adherence')}
-                  style={{
-                    width: '100%', textAlign: 'left', cursor: 'pointer',
-                    border: 'none', borderTop: '1px solid var(--app-border)',
-                    background: 'none', padding: '10px 16px',
-                    fontSize: 11, fontWeight: 600, color: 'var(--amber)',
-                  }}
-                >
-                  View full adherence →
-                </button>
-              </div>
-
               <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', padding: '12px 16px' }}>
                 <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
                   Where these rules act
@@ -928,7 +953,6 @@ export default function TradingPlan() {
             </div>
 
           </section>
-        )}
       </main>
     </div>
   );

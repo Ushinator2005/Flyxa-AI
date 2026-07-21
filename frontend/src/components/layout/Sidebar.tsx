@@ -41,7 +41,7 @@ const primaryNavItems: NavItemDef[] = [
   { path: '/flyxa-ai',     icon: Brain,           label: 'Flyxa AI'      },
   { path: '/market-news',  icon: Newspaper,       label: 'Market News'   },
   { path: '/journal',      icon: FileText,        label: 'Daily Journal' },
-  { path: '/trading-plan', icon: LockKeyhole,     label: 'Risk Rules'    },
+  { path: '/trading-plan', icon: LockKeyhole,     label: 'Rules'         },
   { path: '/rivals',       icon: Swords,          label: 'Rivals'        },
 ];
 

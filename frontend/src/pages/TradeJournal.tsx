@@ -34,6 +34,7 @@ import { evaluateEntryRules, summarizeRuleEvaluations } from '../utils/tradingRu
 import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
 import { flushSupabaseStoreNow, saveStoreStatePatchNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
+import SessionShareCard from '../components/share/SessionShareCard.js';
 import ScannerDropZone from '../components/scanner/ScannerDropZone.js';
 import DatePicker from '../components/common/DatePicker.js';
 import './TradeJournal.css';
@@ -1479,6 +1480,7 @@ export default function TradeJournal() {
   const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [deleteEntryConfirm, setDeleteEntryConfirm] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [isScreenshotFullscreen, setIsScreenshotFullscreen] = useState(false);
   const [isTradeDateEditorOpen, setIsTradeDateEditorOpen] = useState(false);
   const [tradeDateDraft, setTradeDateDraft] = useState(getTodayIso(preferences.timezone));
@@ -2023,6 +2025,7 @@ export default function TradeJournal() {
               saveEntryDate={saveEntryDate}
               deleteEntry={deleteEntry}
               goToScanner={goToScanner}
+              onShare={() => setShareOpen(true)}
             />
 
             <div className="tj-entry-body">
@@ -2158,6 +2161,37 @@ export default function TradeJournal() {
         currentImage={currentImage}
         setIsScreenshotFullscreen={setIsScreenshotFullscreen}
       />
+
+      {selectedEntry && (
+        <SessionShareCard
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          data={(() => {
+            const stats = computeEntryStats(selectedEntry, riskRules);
+            // Third stat by social currency: best trade if there's more than
+            // one, otherwise the day's instrument.
+            const nets = selectedEntry.trades.map(t => t.pnl - (t.commission ?? 0));
+            const best = nets.length ? Math.max(...nets) : 0;
+            const symbols = Array.from(new Set(selectedEntry.trades.map(t => t.symbol).filter(Boolean)));
+            const extraStat = selectedEntry.trades.length > 1 && best > 0
+              ? { label: 'Best trade', value: formatSignedCurrency(best), color: 'var(--green)', sensitive: true }
+              : symbols.length > 0
+                ? { label: 'Instrument', value: symbols.slice(0, 2).join(' · ') }
+                : null;
+            return {
+              dateLabel: formatDateTitle(selectedEntry.date),
+              netPnl: stats.pnl,
+              trades: selectedEntry.trades.length,
+              winRate: Math.round(stats.winRate),
+              grade: null,
+              extraStat,
+              username: (user?.user_metadata?.display_name as string | undefined)
+                ?? user?.email?.split('@')[0]
+                ?? 'trader',
+            };
+          })()}
+        />
+      )}
 
       {showCSVImport && (
         <CSVImportModal
@@ -2574,6 +2608,7 @@ interface EntryHeaderSectionProps {
   saveEntryDate: () => void;
   deleteEntry: () => Promise<void>;
   goToScanner: () => void;
+  onShare: () => void;
 }
 
 function EntryHeaderSection({
@@ -2595,6 +2630,7 @@ function EntryHeaderSection({
   saveEntryDate,
   deleteEntry,
   goToScanner,
+  onShare,
 }: EntryHeaderSectionProps) {
   const { preferences, accounts } = useAppSettings();
   return (
@@ -2720,6 +2756,17 @@ function EntryHeaderSection({
                       <Trash2 size={13} />
                       Delete
                     </button>
+                    {selectedEntry.trades.length > 0 && (
+                      <button
+                        type="button"
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+                        onClick={onShare}
+                        title="Create a share card for this day"
+                      >
+                        <Upload size={13} />
+                        Share
+                      </button>
+                    )}
                     <button
                       type="button"
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 4, border: 'none', background: 'var(--amber)', color: '#000', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}

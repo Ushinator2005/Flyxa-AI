@@ -127,7 +127,7 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 
 // The whole evaluation in one picture: the balance line running between the
 // drawdown floor (dashed, below) and the profit target (dashed, above).
-function EquitySpark({ points, target, floor }: { points: number[]; target: number; floor: number }) {
+function EquitySpark({ points, target, floor, dates }: { points: number[]; target: number; floor: number; dates?: string[] }) {
   if (points.length < 2 || !Number.isFinite(target) || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
   const W = 340, H = 84, PAD = 6;
   const lo = Math.min(...points, floor);
@@ -137,13 +137,63 @@ function EquitySpark({ points, target, floor }: { points: number[]; target: numb
   const y = (v: number) => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
   const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
   const last = points[points.length - 1];
+
+  // Percent positions for HTML overlays (SVG text would distort under
+  // preserveAspectRatio="none").
+  const pct = (v: number) => (y(v) / H) * 100;
+  const labelStyle = (color: string): React.CSSProperties => ({
+    position: 'absolute',
+    right: 8,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: '0.07em',
+    color,
+    background: 'var(--app-panel)',
+    padding: '0 4px',
+    lineHeight: '11px',
+    pointerEvents: 'none',
+  });
+
+  const fmtAxisDate = (slice: string) => {
+    const parsed = new Date(`${slice}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? slice : parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
-      <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
-      <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
-      <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={x(points.length - 1)} cy={y(last)} r="2.6" fill="var(--amber)" />
-    </svg>
+    <div>
+      <div style={{ position: 'relative' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
+          <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
+          <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
+          <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={x(points.length - 1)} cy={y(last)} r="2.6" fill="var(--amber)" />
+        </svg>
+        {/* Line labels pinned to the lines they describe */}
+        <span style={{ ...labelStyle('var(--green)'), top: `calc(${pct(target)}% + 2px)` }}>
+          TARGET {money(target)}
+        </span>
+        <span style={{ ...labelStyle('var(--red)'), top: `calc(${pct(floor)}% - 13px)` }}>
+          FLOOR {money(floor)}
+        </span>
+        <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
+          {money(last)}
+        </span>
+      </div>
+      {dates && dates.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
+            {fmtAxisDate(dates[0])}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
+            {dates.length} SESSION{dates.length !== 1 ? 'S' : ''}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
+            {fmtAxisDate(dates[dates.length - 1])}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -387,11 +437,11 @@ export default function EvaluationCoach() {
   const startBalance = Number(selected.size) > 0
     ? Number(selected.size)
     : progress.currentBalance - progress.netPnl;
+  const equityDates = [...byDayMap.keys()].sort();
   const equityPoints = (() => {
-    const asc = [...byDayMap.keys()].sort();
     let bal = startBalance;
     const pts = [bal];
-    for (const d of asc) { bal += Number(byDayMap.get(d) ?? 0); pts.push(bal); }
+    for (const d of equityDates) { bal += Number(byDayMap.get(d) ?? 0); pts.push(bal); }
     return pts;
   })();
   const targetBalance = startBalance + Number(target);
@@ -652,13 +702,15 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             <div className="ec-hero-chart-head">
               <span className="ec-metric-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
-                <span style={{ color: 'var(--red)' }}>floor {money(progress.drawdownFloor)}</span>
-                {' · '}balance {money(progress.currentBalance)}{' · '}
-                <span style={{ color: 'var(--green)' }}>target {money(targetBalance)}</span>
+                <span style={{ color: 'var(--red)' }}>{money(progress.currentBalance - progress.drawdownFloor)} above floor</span>
+                {' · '}
+                {progress.targetRemaining <= 0
+                  ? <span style={{ color: 'var(--green)' }}>target reached</span>
+                  : <span style={{ color: 'var(--green)' }}>{money(progress.targetRemaining)} to target</span>}
               </span>
             </div>
             {equityPoints.length >= 2
-              ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} />
+              ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} dates={equityDates} />
               : <p className="ec-no-data">No sessions recorded yet — the balance line starts with your first trade.</p>}
           </div>
           {dayDates.length > 0 && (

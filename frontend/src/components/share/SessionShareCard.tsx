@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import QRCode from 'react-qr-code';
 import { C } from '../../utils/theme.js';
@@ -65,6 +65,15 @@ export default function SessionShareCard({ open, onClose, data }: {
   const [maskAmount, setMaskAmount] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, onClose]);
 
   const capture = useCallback(async (): Promise<{ dataUrl: string; blob: Blob } | null> => {
     const el = cardRef.current;
@@ -170,7 +179,23 @@ export default function SessionShareCard({ open, onClose, data }: {
       }}
       onClick={onClose}
     >
-      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '100%' }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '100%' }}>
+
+        {/* Exit — outside the card DOM so it never appears in the export */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close share card"
+          style={{
+            position: 'absolute', top: -14, right: -14, zIndex: 2,
+            width: 30, height: 30, borderRadius: '50%',
+            border: `1px solid ${C.b1}`, backgroundColor: C.d1, color: C.t1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, lineHeight: 1, cursor: 'pointer',
+          }}
+        >
+          ✕
+        </button>
 
         {/* ── The card (this exact DOM gets exported at 3×) ── */}
         <div

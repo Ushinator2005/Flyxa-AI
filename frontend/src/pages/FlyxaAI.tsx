@@ -376,7 +376,18 @@ export default function FlyxaAI() {
     { key: 'ask', label: 'Ask Flyxa', to: '/flyxa-ai/ask', end: false },
   ];
   const primaryAction = actionItems[0] ?? gradeHint;
-  const topInsights = displayedInsights.slice(0, 3);
+
+  // Split real findings from "log more data to unlock X" placeholders — the
+  // latter collapse into a single quiet row instead of full report cards.
+  const isLockedInsight = (insight: WeeklyInsight) =>
+    /^(no |not enough|need )/i.test(insight.frequency ?? '')
+    || insight.tags.some(tag => /^(no |need more|not enough)/i.test(tag.label));
+  const realInsights = displayedInsights.filter(insight => !isLockedInsight(insight));
+  const lockedTokens = displayedInsights
+    .filter(isLockedInsight)
+    .map(insight => insight.keyPhrases[0] ?? insight.badge)
+    .filter(Boolean);
+  const topInsights = realInsights.slice(0, 3);
   const keyMetrics = [
     weeklyDebriefData.stats.netR,
     weeklyDebriefData.stats.winRate,
@@ -386,9 +397,14 @@ export default function FlyxaAI() {
   const coachHeadline = boundedScore >= 75
     ? 'Your process is stable enough to refine, not rebuild.'
     : 'Your edge needs fewer decisions and cleaner execution.';
+  // With 1–2 sessions the verdict voice must hedge — same tone as 15 trades
+  // would be AI theater.
+  const smallSample = weeklyWindow.weeklyTrades.length > 0 && weeklyDebriefData.sessionCount <= 2;
   const coachSubcopy = safeAccountTrades.length === 0
     ? 'Log a few trades and Flyxa will turn the journal into a practical debrief.'
-    : primaryAction;
+    : smallSample
+      ? `Early read — only ${weeklyDebriefData.sessionCount} session${weeklyDebriefData.sessionCount !== 1 ? 's' : ''} in this period, so treat it directionally. ${primaryAction}`
+      : primaryAction;
   const gradeSoftBackground = weekGrade === 'A'
     ? 'rgba(34,214,138,0.10)'
     : weekGrade === 'B'
@@ -424,6 +440,12 @@ export default function FlyxaAI() {
 
             {safeAccountTrades.length === 0 ? (
               <LockedEmptyState navigate={navigate} />
+            ) : weeklyWindow.weeklyTrades.length === 0 ? (
+              <EmptyWeekReport
+                prevPnl={previousWeekPnl}
+                prevLabel={periodWindow.prevLabel}
+                timeframe={timeframe}
+              />
             ) : (
               /* One continuous report sheet — sections divided by hairlines,
                  not boxes. The document is the design. */
@@ -452,7 +474,7 @@ export default function FlyxaAI() {
                 <KeyMetricsSection metrics={keyMetrics} />
 
                 <div className="grid lg:grid-cols-[minmax(0,1fr)_320px]">
-                  <InsightsListSection topInsights={topInsights} navigate={navigate} />
+                  <InsightsListSection topInsights={topInsights} lockedTokens={lockedTokens} navigate={navigate} />
 
                   <DebriefAsideSection
                     weakestProcess={weakestProcess}
@@ -743,7 +765,37 @@ function KeyMetricsSection({ metrics }: { metrics: WeeklyStat[] }) {
   );
 }
 
-function InsightsListSection({ topInsights, navigate }: { topInsights: WeeklyInsight[]; navigate: NavigateFunction }) {
+// A period with zero sessions gets an honest short page — no fabricated
+// verdicts, no red 0/100 scores. Absence of trading is not a failing grade.
+function EmptyWeekReport({ prevPnl, prevLabel, timeframe }: { prevPnl: number; prevLabel: string; timeframe: TimeFrame }) {
+  const periodNoun = timeframe === '1W' ? 'week' : 'period';
+  const prevMoney = `${prevPnl >= 0 ? '+' : '−'}$${Math.abs(prevPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (
+    <section className="mt-6 overflow-hidden rounded-[18px] border" style={{ borderColor: colors.b0, backgroundColor: colors.d1 }}>
+      <div className="px-6 py-10 lg:px-10 lg:py-12">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: colors.acc, fontFamily: colors.mono }}>
+          No sessions logged
+        </p>
+        <h2 className="mt-3 pb-1 text-[24px] font-bold tracking-[-0.01em]" style={{ color: colors.t0, fontFamily: 'var(--font-display)', lineHeight: 1.3 }}>
+          Nothing to grade this {periodNoun}.
+        </h2>
+        <p className="mt-3 max-w-[540px] text-[13.5px] leading-7" style={{ color: colors.t1 }}>
+          A quiet {periodNoun} is not a failing one — scores and findings only
+          exist where there are trades. The report resumes with your next
+          logged session.
+        </p>
+        {prevPnl !== 0 && (
+          <p className="mt-6 text-[11px] uppercase tracking-[0.1em]" style={{ color: colors.t2, fontFamily: colors.mono }}>
+            {prevLabel || 'Previous period'} ·{' '}
+            <span style={{ color: prevPnl >= 0 ? colors.grn : colors.red, fontWeight: 700 }}>{prevMoney}</span>
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function InsightsListSection({ topInsights, lockedTokens, navigate }: { topInsights: WeeklyInsight[]; lockedTokens: string[]; navigate: NavigateFunction }) {
   return (
                   <section data-tour-id="flyxa-ai-insights" className="min-w-0 border-t" style={{ borderColor: colors.b0 }}>
                     <div className="px-5 pb-1 pt-5 lg:px-7 lg:pt-6">
@@ -754,6 +806,13 @@ function InsightsListSection({ topInsights, navigate }: { topInsights: WeeklyIns
                         What the data argues
                       </h2>
                     </div>
+
+                    {topInsights.length === 0 && (
+                      <p className="px-5 pb-4 pt-4 text-[12.5px] leading-6 lg:px-7" style={{ color: colors.t1 }}>
+                        Not enough tagged data for firm findings this period — the
+                        row below shows what more logging unlocks.
+                      </p>
+                    )}
 
                     <div className="divide-y" style={{ borderColor: colors.b0 }}>
                       {topInsights.map((insight, index) => {
@@ -801,6 +860,16 @@ function InsightsListSection({ topInsights, navigate }: { topInsights: WeeklyIns
                           </article>
                         );
                       })}
+
+                      {/* Locked analyses collapse to one quiet line instead of
+                          stacked "need more data" cards. */}
+                      {lockedTokens.length > 0 && (
+                        <div className="px-5 py-4 lg:px-7">
+                          <p className="text-[10.5px] uppercase tracking-[0.1em]" style={{ color: colors.t2, fontFamily: colors.mono }}>
+                            + unlocks with more logging · {lockedTokens.join(' · ')}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </section>
   );
