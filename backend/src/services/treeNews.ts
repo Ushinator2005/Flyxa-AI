@@ -29,11 +29,24 @@ let socket: WebSocket | null = null;
 let reconnectDelay = RECONNECT_BASE_MS;
 let stopped = false;
 
+// Live subscribers (SSE clients) — notified the instant a new item lands.
+type TreeNewsListener = (item: TreeNewsItem) => void;
+const listeners = new Set<TreeNewsListener>();
+
+/** Subscribe to new items as they arrive; returns an unsubscribe function. */
+export function onTreeNewsItem(listener: TreeNewsListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 function pushItem(item: TreeNewsItem): void {
   // Dedupe on headline — Tree occasionally re-sends.
   if (buffer.some(existing => existing.headline === item.headline)) return;
   buffer.unshift(item);
   if (buffer.length > BUFFER_MAX) buffer.length = BUFFER_MAX;
+  for (const listener of listeners) {
+    try { listener(item); } catch { /* one bad client must not break the rest */ }
+  }
 }
 
 // Tree messages vary by origin (native, Twitter relay, Telegram relay).

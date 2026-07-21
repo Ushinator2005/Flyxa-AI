@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../services/supabase';
-import { getTreeNewsItems } from '../services/treeNews';
+import { getTreeNewsItems, onTreeNewsItem } from '../services/treeNews';
 import { AuthenticatedRequest } from '../types/index';
 
 const router = Router();
@@ -985,5 +985,37 @@ function mergeWithTreeNews(rssItems: XNewsItem[]): XNewsItem[] {
   merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   return merged.slice(0, 70);
 }
+
+// Server-Sent Events: pushes Tree News headlines to open clients the moment
+// they arrive, so market-moving news (war, tariffs, presidential posts) hits
+// the screen in seconds instead of on the next polling tick.
+// EventSource can't send an Authorization header, so the Supabase JWT rides
+// as a query param and is verified the same way authMiddleware does it.
+router.get('/news-stream', async (req: Request, res: Response) => {
+  const token = String(req.query.token ?? '').trim();
+  if (!token) return res.status(401).json({ error: 'Token required' });
+
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) return res.status(401).json({ error: 'Invalid token' });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(': connected\n\n');
+
+  const unsubscribe = onTreeNewsItem(item => {
+    res.write(`data: ${JSON.stringify(item)}\n\n`);
+  });
+  // Heartbeat comment keeps proxies from killing the idle connection.
+  const heartbeat = setInterval(() => res.write(': hb\n\n'), 25_000);
+
+  req.on('close', () => {
+    unsubscribe();
+    clearInterval(heartbeat);
+  });
+});
 
 export default router;

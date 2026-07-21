@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
-  ChevronUp,
   ExternalLink,
   Filter,
   Plus,
@@ -11,7 +10,7 @@ import {
   Settings2,
   X,
 } from 'lucide-react';
-import { aiApi, marketDataApi, NewsFilterItem } from '../services/api.js';
+import { aiApi, marketDataApi, supabase, NewsFilterItem } from '../services/api.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import Modal from '../components/common/Modal.js';
 import {
@@ -46,6 +45,11 @@ const SANS = 'var(--font-sans)';
 const MONO = 'var(--font-mono)';
 
 const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY as string | undefined;
+const NEWS_API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3001';
+
+// Instant risk classification for live-pushed headlines — no waiting for the
+// AI filter. Anything matching gets BREAKING treatment the second it lands.
+const HOT_NEWS_RE = /\b(trump|white house|biden|tariff|sanction|war|invasion|strike|missile|nuclear|attack|explosion|emergency|fed\b|fomc|powell|rate (cut|hike)|cpi|ppi|nfp|payrolls|inflation|halt|crash|default)\b/i;
 const POLYGON_KEY = import.meta.env.VITE_POLYGON_KEY as string | undefined;
 const FMP_KEY = import.meta.env.VITE_FMP_KEY as string | undefined;
 const CACHE_KEY = 'flyxa_news_cache_v2';
@@ -586,76 +590,89 @@ function rawToNewsItem(raw: RawHeadline): NewsFilterItem {
   };
 }
 
+// Tape-row source colors — deterministic per source name so the eye can
+// pattern-match a feed the way Tree News readers do.
+const TAPE_SOURCE_PALETTE = ['#7db8ff', '#f5c86e', '#8de0b7', '#c8a6ff', '#7fd8e0', '#f0a3a3'];
+function tapeSourceColor(source: string): string {
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  return TAPE_SOURCE_PALETTE[hash % TAPE_SOURCE_PALETTE.length];
+}
+
+function fmtClock(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return '--:--:--';
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${two(parsed.getHours())}:${two(parsed.getMinutes())}:${two(parsed.getSeconds())}`;
+}
+
+// One dense tape row — time, source, headline. The Tree News idiom:
+// chronology is the layout, impact is the color.
 function NewsCard({ item }: { item: NewsFilterItem }) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetail = Boolean(item.summary || item.marketImpact?.note);
+  const hasDetail = Boolean(item.marketImpact?.note || (item.summary && item.summary !== item.headline));
   const combined = combinedSentiment(item.marketImpact?.es, item.marketImpact?.nq);
-  const dotColor = item.isBreaking ? RED : item.impact === 'high' ? RED : item.impact === 'medium' ? AMBER : T3;
+  const hot = item.isBreaking || item.impact === 'high';
+  const headlineColor = item.isBreaking ? RED : item.impact === 'high' ? '#ffffff' : item.impact === 'medium' ? T1 : T2;
 
   return (
     <article
-      style={{ padding: '11px 14px', borderBottom: `1px solid rgba(255,255,255,0.09)`, cursor: item.url ? 'pointer' : 'default', transition: 'background .1s', background: item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent' }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.09)' : 'rgba(255,255,255,0.03)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.05)' : 'transparent'; }}
-      onClick={() => { if (item.url) window.open(item.url, '_blank', 'noopener,noreferrer'); }}
+      style={{
+        padding: '6px 14px',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        cursor: item.url || hasDetail ? 'pointer' : 'default',
+        transition: 'background .08s',
+        background: item.isBreaking ? 'rgba(239,68,68,0.06)' : 'transparent',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.10)' : 'rgba(255,255,255,0.03)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = item.isBreaking ? 'rgba(239,68,68,0.06)' : 'transparent'; }}
+      onClick={() => {
+        if (hasDetail) setExpanded(v => !v);
+        else if (item.url) window.open(item.url, '_blank', 'noopener,noreferrer');
+      }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        {/* Impact indicator */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4, flexShrink: 0 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, boxShadow: item.impact === 'high' || item.isBreaking ? `0 0 6px ${dotColor}` : 'none' }} />
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: item.isBreaking ? '#fff' : T1, fontWeight: item.isBreaking ? 600 : 450, flex: 1, minWidth: 0 }}>
-              {item.isBreaking && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 7, fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: RED, fontFamily: MONO }}>⚡ BREAKING</span>}
-              {item.headline}
-            </p>
-            {item.url && (
-              <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                style={{ color: T3, lineHeight: 0, flexShrink: 0, marginTop: 2 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = COBALT; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = T3; }}>
-                <ExternalLink size={12} />
-              </a>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{fmtRelative(item.timestamp)}</span>
-            <span style={{ fontSize: 10, color: T3, opacity: 0.4 }}>·</span>
-            <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{item.source}</span>
-            {item.category && item.category !== 'Other' && (
-              <>
-                <span style={{ fontSize: 10, color: T3, opacity: 0.4 }}>·</span>
-                <span style={{ fontSize: 9, color: T3, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '.05em' }}>{item.category}</span>
-              </>
-            )}
-            <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
-              <span style={{ fontSize: 9, fontFamily: MONO, color: combined.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
-                {combined.label}
-              </span>
-            </span>
-          </div>
-
-          {hasDetail && (
-            <button onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
-              style={{ marginTop: 5, background: 'transparent', border: 'none', color: COBALT, fontSize: 10, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', fontFamily: SANS }}>
-              {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-              {expanded ? 'Hide' : 'Details'}
-            </button>
-          )}
-
-          {expanded && hasDetail && (
-            <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid rgba(255,255,255,0.06)` }}>
-              {item.summary && <p style={{ margin: 0, color: T2, fontSize: 12, lineHeight: 1.55 }}>{item.summary}</p>}
-              {item.marketImpact?.note && (
-                <p style={{ margin: item.summary ? '6px 0 0' : 0, color: AMBER, fontSize: 11, lineHeight: 1.5 }}>{item.marketImpact.note}</p>
-              )}
-            </div>
-          )}
-        </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+        <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 10.5, color: hot ? T1 : T3, fontVariantNumeric: 'tabular-nums' }}>
+          {fmtClock(item.timestamp)}
+        </span>
+        <span style={{
+          flexShrink: 0, fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color: tapeSourceColor(item.source), minWidth: 74,
+        }}>
+          {item.source}
+        </span>
+        <p style={{
+          margin: 0, flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.45,
+          color: headlineColor, fontWeight: hot ? 600 : 450,
+        }}>
+          {item.isBreaking && <span style={{ marginRight: 6, fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: RED, fontFamily: MONO }}>BREAKING</span>}
+          {item.headline}
+        </p>
+        {combined.label && combined.label !== '—' && (
+          <span style={{ flexShrink: 0, fontSize: 9, fontFamily: MONO, color: combined.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+            {combined.label}
+          </span>
+        )}
+        {item.url && (
+          <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+            style={{ color: T3, lineHeight: 0, flexShrink: 0, alignSelf: 'center' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = COBALT; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = T3; }}>
+            <ExternalLink size={11} />
+          </a>
+        )}
       </div>
+
+      {expanded && hasDetail && (
+        <div style={{ margin: '6px 0 2px 66px', paddingLeft: 10, borderLeft: '2px solid rgba(255,255,255,0.08)' }}>
+          {item.summary && item.summary !== item.headline && (
+            <p style={{ margin: 0, color: T2, fontSize: 11.5, lineHeight: 1.55 }}>{item.summary}</p>
+          )}
+          {item.marketImpact?.note && (
+            <p style={{ margin: item.summary && item.summary !== item.headline ? '5px 0 0' : 0, color: AMBER, fontSize: 11, lineHeight: 1.5 }}>{item.marketImpact.note}</p>
+          )}
+        </div>
+      )}
     </article>
   );
 }
@@ -1461,22 +1478,20 @@ export default function MarketNews() {
           if (filtered.length > 0) {
             finalItems = filtered;
           } else {
-            finalItems = deduped.slice(0, 20).map(rawToNewsItem);
+            finalItems = deduped.slice(0, 40).map(rawToNewsItem);
             rawFallback = true;
           }
         } catch {
-          finalItems = deduped.slice(0, 20).map(rawToNewsItem);
+          finalItems = deduped.slice(0, 40).map(rawToNewsItem);
           rawFallback = true;
         }
       } else {
-        finalItems = deduped.slice(0, 20).map(rawToNewsItem);
+        finalItems = deduped.slice(0, 40).map(rawToNewsItem);
       }
 
-      finalItems.sort((a, b) => {
-        const impactDiff = impactRank(a.impact) - impactRank(b.impact);
-        if (impactDiff !== 0) return impactDiff;
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      });
+      // Tape ordering: strict chronology, newest first. Impact shows as
+      // color on the row, never as position — a tape that reorders lies.
+      finalItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       setItems(finalItems);
       setIsRawFallback(rawFallback);
@@ -1535,6 +1550,60 @@ export default function MarketNews() {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [fetchNews, fetchSidebar]);
+
+  // Live push channel — Tree News headlines stream in over SSE and hit the
+  // tape immediately, classified by keyword so war/tariff/Fed headlines get
+  // BREAKING treatment without waiting for the AI filter or the next tick.
+  useEffect(() => {
+    let source: EventSource | null = null;
+    let retryTimer: number | null = null;
+    let closed = false;
+
+    const connect = async () => {
+      if (closed) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token || closed) return;
+
+      source = new EventSource(`${NEWS_API_URL}/api/market-data/news-stream?token=${encodeURIComponent(token)}`);
+      source.onmessage = event => {
+        try {
+          const raw = JSON.parse(event.data) as { headline?: string; source?: string; timestamp?: string; summary?: string; url?: string };
+          if (!raw.headline) return;
+          const hot = HOT_NEWS_RE.test(raw.headline);
+          const live: NewsFilterItem = {
+            headline: raw.headline,
+            summary: raw.summary ?? raw.headline,
+            impact: hot ? 'high' : 'medium',
+            category: 'Live',
+            marketImpact: { es: '—', nq: '—' },
+            isBreaking: hot,
+            source: raw.source ?? 'Tree News',
+            timestamp: raw.timestamp ?? new Date().toISOString(),
+            url: raw.url,
+          };
+          setItems(prev => {
+            if (prev.some(existing => existing.headline === live.headline)) return prev;
+            return [live, ...prev].slice(0, 60);
+          });
+          setLastRefresh(new Date());
+        } catch { /* malformed event — ignore */ }
+      };
+      // Recreate with a fresh token instead of letting EventSource retry a stale one.
+      source.onerror = () => {
+        source?.close();
+        source = null;
+        if (!closed) retryTimer = window.setTimeout(() => { void connect(); }, 5000);
+      };
+    };
+
+    void connect();
+    return () => {
+      closed = true;
+      source?.close();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
+  }, []);
 
   // When the user navigates forward, re-fetch on the first visit to each new
   // week offset. Starting at 0 ensures offset=1 (next week) always triggers a
