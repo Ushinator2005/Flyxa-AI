@@ -13,7 +13,11 @@ const anthropic = new Anthropic({
 const MODEL = 'claude-sonnet-4-5';
 const MODEL_TEMPERATURE = 0;
 
-export async function analyzeIndividualTrade(trade: Trade, statsContext: string | null = null): Promise<string> {
+export async function analyzeIndividualTrade(
+  trade: Trade,
+  statsContext: string | null = null,
+  voiceContext: string | null = null
+): Promise<string> {
   const rr = trade.sl_price && trade.entry_price && trade.tp_price
     ? Math.abs(trade.tp_price - trade.entry_price) / Math.abs(trade.sl_price - trade.entry_price)
     : 0;
@@ -49,6 +53,8 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
     const daily = sessionContext.dailyReflection;
     if (daily) {
       if (daily.pre) sessionContextLines.push(`Daily pre-market plan: ${daily.pre}`);
+      if (daily.post) sessionContextLines.push(`Post-session reflection: ${daily.post}`);
+      if (daily.lessons) sessionContextLines.push(`Lessons noted that day: ${daily.lessons}`);
       const dailyParts = [
         daily.bias ? `daily bias ${daily.bias}` : null,
         daily.newsRisk ? `news risk ${daily.newsRisk}` : null,
@@ -66,6 +72,10 @@ export async function analyzeIndividualTrade(trade: Trade, statsContext: string 
     ? `\n\n## Trader's Historical Data (use ONLY these numbers — do not invent or estimate any figures not present here)\n${statsContext}`
     : `\n\n## Trader's Historical Data\nNo historical stats available. Do not output N/A rows; say there is not enough logged history yet only if a comparison is unavailable.`;
 
+  const voiceBlock = voiceContext
+    ? `\n\n## Trader's Recent Journal Writing (verbatim, newest first — analyse HOW they write, not just what)\n${voiceContext}`
+    : '';
+
   const response = await anthropic.messages.create({
     model: MODEL,
     temperature: MODEL_TEMPERATURE,
@@ -78,6 +88,13 @@ CRITICAL: Every dollar amount, win rate, P&L figure, and trade count you cite MU
 
 Use the pre-session context when it is provided. Judge whether this trade aligned with the trader's stated state of mind, readiness, session plan, and market bias. Treat pre-session bias as context, not a guarantee: a counter-bias trade can still be valid if the notes explain the shift.
 
+When the trader's recent journal writing is provided, read it the way a performance psychologist listens to a voice recording — HOW they write is data, not just what they write:
+- Establish their baseline voice from the samples: typical entry length, structure, punctuation habits, and how they normally talk about losses.
+- Flag deviations from that baseline on or around this trade's date: entries going terse or vanishing after red days; exclamation marks, ALL CAPS, or profanity appearing in a normally measured writer; revenge phrasing ("get it back", "make it back", "one more"); certainty inflation ("free money", "guaranteed", "easy", "can't lose"); blaming the market, algos, or news instead of their own process; bargaining language ("just this once"); or a clean writer suddenly going sloppy — dropped punctuation, typos, fragments.
+- Silence is a signal: a day with trades but no writing — especially after losses — usually marks avoidance or tilt. The context lists these days explicitly.
+- When you make a tone-based read, QUOTE the exact phrase and its date as evidence. Never claim a tone shift you cannot quote. If the writing shows no deviation, say nothing about tone rather than inventing one.
+- Join the linguistic read to the numbers: when the writing shows tilt and the stats show its cost, connect them into one causal line. That connection — "you wrote X on the 14th, and your next three trades gave back $Y" — is the most valuable sentence you can produce.
+
 Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis. Do not create a new permanent trading rule after every reviewed trade; only recommend a hard rule when repeated historical evidence supports it.`,
     messages: [
       {
@@ -88,7 +105,7 @@ Entry ${trade.entry_price} → Exit ${trade.exit_price} | SL ${trade.sl_price} |
 P&L: $${trade.pnl.toFixed(2)} | Planned R:R: ${rr.toFixed(2)} | Duration: ${trade.trade_length_seconds ? Math.round(trade.trade_length_seconds / 60) + 'min' : 'unknown'}
 Emotional state: ${trade.emotional_state} | Confidence: ${trade.confidence_level}/10 | Followed plan: ${trade.followed_plan ? 'Yes' : 'No'}
 Confluences: ${Array.isArray(trade.confluences) && trade.confluences.length > 0 ? trade.confluences.join(', ') : 'None tagged'}
-Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${sessionContextBlock}${contextBlock}
+Notes: ${[trade.pre_trade_notes, trade.post_trade_notes].filter(Boolean).join(' | ') || 'None'}${sessionContextBlock}${contextBlock}${voiceBlock}
 
 Write a structured analysis using exactly these three sections:
 
@@ -98,7 +115,7 @@ Anchor the analysis in their data. Write 2-3 bullets maximum. Use only the stron
 ## The Read
 **[One sharp verdict sentence — what this trade actually represents, beyond the surface result]**
 > [First insight — WHY this decision was made. One sentence, max 18 words. Include a number where possible.]
-> [Second insight — what setup quality, pre-session state/bias, and plan adherence together reveal. One sentence.]
+> [Second insight — what setup quality, pre-session state/bias, and plan adherence together reveal. One sentence. When the journal writing carries a tone signal (tilt, revenge phrasing, certainty inflation, silence after losses), THIS line must be the linguistic read — quote the trader's own words and date.]
 
 ## Next Focus
 **[The one thing to pay attention to before or during the next similar setup, framed as an execution focus rather than a logging task.]**

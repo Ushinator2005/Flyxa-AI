@@ -43,6 +43,8 @@ export interface Trade {
     sessionPlan?: Array<{ id?: string; source?: string; rule?: string }>;
     dailyReflection?: {
       pre?: string;
+      post?: string;
+      lessons?: string;
       bias?: string | null;
       newsRisk?: string | null;
       sessionTarget?: number | null;

@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authMiddleware } from '../middleware/auth';
+import { aiQuotaMiddleware } from '../middleware/aiQuota';
 import { supabase } from '../services/supabase';
 import {
   analyzeIndividualTrade,
@@ -10,8 +11,9 @@ import {
   compareTradeToPlaybook,
   answerFlyxaQuestion,
   answerTradeDataQuery,
-  filterNewsItems,
 } from '../services/claude';
+import { filterNewsItemsCached } from '../services/newsFilterCache';
+import { buildServerTradeContext } from '../services/tradeContext';
 import { analyzeChartImage } from '../services/gemini';
 import { AuthenticatedRequest, Trade } from '../types/index';
 import { normalizeConfluences } from '../utils/confluenceTags';
@@ -58,7 +60,7 @@ router.post('/scan', authMiddleware, upload.fields([
 });
 
 // POST /ask-flyxa-data  — AI-powered trade data query
-router.post('/ask-flyxa-data', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/ask-flyxa-data', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const question = typeof req.body.question === 'string' ? req.body.question : '';
     const stats = (req.body.stats && typeof req.body.stats === 'object' && !Array.isArray(req.body.stats))
@@ -78,7 +80,7 @@ router.post('/ask-flyxa-data', authMiddleware, async (req: AuthenticatedRequest,
 });
 
 // POST /flyxa-chat
-router.post('/flyxa-chat', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/flyxa-chat', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const question = typeof req.body.question === 'string' ? req.body.question : '';
     const history = Array.isArray(req.body.history)
@@ -106,7 +108,7 @@ router.post('/flyxa-chat', authMiddleware, async (req: AuthenticatedRequest, res
 });
 
 // POST /trade-analysis/:tradeId
-router.post('/trade-analysis/:tradeId', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/trade-analysis/:tradeId', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { tradeId } = req.params;
     const requestTrade = req.body?.trade;
@@ -124,6 +126,23 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
         .single();
       if (error || !trade) { res.status(404).json({ error: 'Trade not found' }); return; }
       focusTrade = trade as Trade;
+    }
+
+    // Enrich with server-side pre-session/journal context so every analysis
+    // path gets it — not just clients that assemble sessionContext themselves.
+    // Client-supplied fields win; the server fills the gaps and always
+    // contributes the post-session reflection + journal voice samples.
+    const serverCtx = await buildServerTradeContext(req.userId!, focusTrade.trade_date);
+    if (serverCtx.sessionContext) {
+      const clientCtx = focusTrade.sessionContext ?? {};
+      focusTrade.sessionContext = {
+        ...serverCtx.sessionContext,
+        ...clientCtx,
+        dailyReflection: {
+          ...(serverCtx.sessionContext.dailyReflection ?? {}),
+          ...(clientCtx.dailyReflection ?? {}),
+        },
+      };
     }
 
     // Fetch user's full trade history for stats context (lightweight fields only)
@@ -240,7 +259,7 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
     if (postLossNote) contextLines.push(`Context: ${postLossNote}`);
     const statsContext = contextLines.length ? contextLines.join('\n') : null;
 
-    const analysis = await analyzeIndividualTrade(focusTrade, statsContext);
+    const analysis = await analyzeIndividualTrade(focusTrade, statsContext, serverCtx.voiceContext);
     res.json({ analysis });
   } catch (err) {
     next(err);
@@ -248,7 +267,7 @@ router.post('/trade-analysis/:tradeId', authMiddleware, async (req: Authenticate
 });
 
 // POST /patterns
-router.post('/patterns', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/patterns', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { startDate, endDate } = req.body;
 
@@ -277,7 +296,7 @@ router.post('/patterns', authMiddleware, async (req: AuthenticatedRequest, res: 
 });
 
 // POST /weekly-report
-router.post('/weekly-report', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/weekly-report', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { weekStart, weekEnd } = req.body;
     if (!weekStart || !weekEnd) {
@@ -303,7 +322,7 @@ router.post('/weekly-report', authMiddleware, async (req: AuthenticatedRequest, 
 });
 
 // POST /psychology-report
-router.post('/psychology-report', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/psychology-report', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const [tradesResult, psychResult] = await Promise.all([
       supabase
@@ -332,7 +351,7 @@ router.post('/psychology-report', authMiddleware, async (req: AuthenticatedReque
 });
 
 // POST /playbook-check/:tradeId
-router.post('/playbook-check/:tradeId', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/playbook-check/:tradeId', authMiddleware, aiQuotaMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { tradeId } = req.params;
 
@@ -374,7 +393,7 @@ router.post('/filter-news', authMiddleware, async (req: AuthenticatedRequest, re
       res.status(400).json({ error: 'headlines array required' });
       return;
     }
-    const items = await filterNewsItems(headlines.slice(0, 40));
+    const items = await filterNewsItemsCached(headlines.slice(0, 40));
     res.json({ items });
   } catch (err) {
     next(err);
