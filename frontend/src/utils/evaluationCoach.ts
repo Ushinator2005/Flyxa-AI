@@ -268,7 +268,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
   },
 
   // ── Apex Trader Funding (EOD evaluation accounts) ───────────────────
-  // Verified Jul 2026 against apextraderfunding.com help center. EOD trailing:
+  // Researched Jul 2026. Apex's help center blocks automated fetches, so
+  // these numbers rest on search excerpts of the help center plus multiple
+  // independent guides — hence status: draft, not verified. EOD trailing:
   // the threshold ratchets on end-of-day balance highs only. On Rithmic
   // evaluations it locks at starting balance + profit target; on Tradovate it
   // trails without locking (we model the Rithmic lock). Funded PAs lock at
@@ -287,8 +289,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 26_500,
-    status: 'verified',
-    verifiedAt: '2026-07-22T00:00:00Z',
+    status: 'draft',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $26,500 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -305,8 +306,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 53_000,
-    status: 'verified',
-    verifiedAt: '2026-07-22T00:00:00Z',
+    status: 'draft',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $53,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -323,8 +323,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 106_000,
-    status: 'verified',
-    verifiedAt: '2026-07-22T00:00:00Z',
+    status: 'draft',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $106,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -341,8 +340,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: null,
     drawdownType: 'eod_trailing',
     trailingStopsAt: 159_000,
-    status: 'verified',
-    verifiedAt: '2026-07-22T00:00:00Z',
+    status: 'draft',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
     note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $159,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
@@ -772,9 +770,10 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: 30,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://www.tradeday.com',
-    note: 'EOD trailing max drawdown — ratchets at the 4 PM CT settlement and applies through both evaluation and funded stages. No daily loss limit. Minimum 5 trading days; no single day above 30% of total profit during the evaluation.',
+    note: 'Quick Pay (EOD) plan — verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
   },
   {
     id: 'tradeday-100k',
@@ -789,9 +788,10 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: 30,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://www.tradeday.com',
-    note: 'EOD trailing max drawdown — ratchets at the 4 PM CT settlement and applies through both evaluation and funded stages. No daily loss limit. Minimum 5 trading days; no single day above 30% of total profit during the evaluation.',
+    note: 'Quick Pay (EOD) plan — verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
   },
   {
     id: 'tradeday-150k',
@@ -806,9 +806,10 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     consistencyLimitPct: 30,
     drawdownType: 'eod_trailing',
     trailingStopsAt: null,
-    status: 'draft',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://www.tradeday.com',
-    note: 'EOD trailing max drawdown — ratchets at the 4 PM CT settlement and applies through both evaluation and funded stages. No daily loss limit. Minimum 5 trading days; no single day above 30% of total profit during the evaluation.',
+    note: 'Quick Pay (EOD) plan — verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
   },
 
   // ── Custom ──────────────────────────────────────────────────────────
