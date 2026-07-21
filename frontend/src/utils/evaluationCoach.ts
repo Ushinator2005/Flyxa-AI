@@ -267,11 +267,13 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     note: 'MLL starts at $145,500 (4.5K below starting balance), trails end-of-day balance highs, and locks at $150,000. No minimum trading days. 50% consistency rule applies.',
   },
 
-  // ── Apex Trader Funding ─────────────────────────────────────────────
-  // Rules: real-time trailing threshold (moves with every new equity high,
-  //        including unrealized open-trade peaks), locks at starting balance
-  //        + $100. No daily loss limit, no min days.
-  // Source: apextraderfunding.com
+  // ── Apex Trader Funding (EOD evaluation accounts) ───────────────────
+  // Verified Jul 2026 against apextraderfunding.com help center. EOD trailing:
+  // the threshold ratchets on end-of-day balance highs only. On Rithmic
+  // evaluations it locks at starting balance + profit target; on Tradovate it
+  // trails without locking (we model the Rithmic lock). Funded PAs lock at
+  // start + $100. Apex also sells intraday-trailing variants — override the
+  // drawdown type on the account if yours is one. No daily loss limit.
   {
     id: 'apex-25k',
     firm: 'Apex Trader Funding',
@@ -280,12 +282,15 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     profitTarget: 1_500,
     dailyLossLimit: 0,
     maxDrawdown: 1_500,
-    minimumTradingDays: 0,
+    minimumTradingDays: 1,
     maxContracts: 4,
     consistencyLimitPct: null,
-    drawdownType: 'intraday_trailing',
-    trailingStopsAt: 25_100,
-    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $25,100. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 26_500,
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
+    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $26,500 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
   {
     id: 'apex-50k',
@@ -295,12 +300,15 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     profitTarget: 3_000,
     dailyLossLimit: 0,
     maxDrawdown: 2_500,
-    minimumTradingDays: 0,
+    minimumTradingDays: 1,
     maxContracts: 10,
     consistencyLimitPct: null,
-    drawdownType: 'intraday_trailing',
-    trailingStopsAt: 50_100,
-    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $50,100. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 53_000,
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
+    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $53,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
   {
     id: 'apex-100k',
@@ -310,33 +318,40 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     profitTarget: 6_000,
     dailyLossLimit: 0,
     maxDrawdown: 3_000,
-    minimumTradingDays: 0,
+    minimumTradingDays: 1,
     maxContracts: 14,
     consistencyLimitPct: null,
-    drawdownType: 'intraday_trailing',
-    trailingStopsAt: 100_100,
-    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $100,100. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 106_000,
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
+    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $106,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
   {
     id: 'apex-150k',
     firm: 'Apex Trader Funding',
     label: 'Apex 150K',
     accountSize: 150_000,
-    profitTarget: 8_000,
+    profitTarget: 9_000,
     dailyLossLimit: 0,
-    maxDrawdown: 3_000,
-    minimumTradingDays: 0,
+    maxDrawdown: 5_000,
+    minimumTradingDays: 1,
     maxContracts: 17,
     consistencyLimitPct: null,
-    drawdownType: 'intraday_trailing',
-    trailingStopsAt: 150_100,
-    note: 'Real-time trailing threshold — rises with every new equity high (including unrealized open-trade peaks, which Flyxa cannot see from closed trades) and locks at $150,100. No daily loss limit or minimum trading day requirement.',
+    drawdownType: 'eod_trailing',
+    trailingStopsAt: 159_000,
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
+    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $159,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
   },
 
-  // ── FTMO Challenge ──────────────────────────────────────────────────
-  // Rules: static drawdown (max loss measured from initial balance, not peak), 10% profit target,
-  //        5% daily loss, 10% max loss, minimum 4 trading days. No contract limits (forex/CFD).
-  // Source: ftmo.com/en/trading-objectives
+  // ── FTMO Challenge (2-step) ─────────────────────────────────────────
+  // Verified Jul 2026 against ftmo.com/en/trading-objectives: static drawdown
+  // (max loss measured from initial balance, not peak), 10% profit target,
+  // 5% daily loss, 10% max loss, minimum 4 trading days, no time limit.
+  // The 1-step variant differs (3% daily) — use a custom account for that.
   {
     id: 'ftmo-10k',
     firm: 'FTMO',
@@ -349,6 +364,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxContracts: 0,
     consistencyLimitPct: null,
     drawdownType: 'static',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://ftmo.com/en/trading-objectives/',
     note: 'Static drawdown measured from starting balance (not peak). 10% profit target, 5% daily loss, 10% max drawdown. Minimum 4 trading days. No contract limit (forex/CFD product).',
   },
   {
@@ -363,6 +381,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxContracts: 0,
     consistencyLimitPct: null,
     drawdownType: 'static',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://ftmo.com/en/trading-objectives/',
     note: 'Static drawdown measured from starting balance. 10% profit target, 5% daily loss, 10% max drawdown. Minimum 4 trading days. No contract limit.',
   },
   {
@@ -377,6 +398,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxContracts: 0,
     consistencyLimitPct: null,
     drawdownType: 'static',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://ftmo.com/en/trading-objectives/',
     note: 'Static drawdown measured from starting balance. 10% profit target, 5% daily loss, 10% max drawdown. Minimum 4 trading days. No contract limit.',
   },
   {
@@ -391,6 +415,9 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxContracts: 0,
     consistencyLimitPct: null,
     drawdownType: 'static',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://ftmo.com/en/trading-objectives/',
     note: 'Static drawdown measured from starting balance. 10% profit target, 5% daily loss, 10% max drawdown. Minimum 4 trading days. No contract limit.',
   },
   {
@@ -405,12 +432,18 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxContracts: 0,
     consistencyLimitPct: null,
     drawdownType: 'static',
+    status: 'verified',
+    verifiedAt: '2026-07-22T00:00:00Z',
+    sourceUrl: 'https://ftmo.com/en/trading-objectives/',
     note: 'Static drawdown measured from starting balance. 10% profit target, 5% daily loss, 10% max drawdown. Minimum 4 trading days. No contract limit.',
   },
 
   // ── MyFundedFutures (Rapid plan) ────────────────────────────────────
-  // Rules: trailing drawdown (real-time), no daily loss limit, minimum trading days required
-  // Source: myfundedfutures.com
+  // Updated Jul 2026: MFFU replaced Starter/Expert/Milestone with Core/Rapid/
+  // Pro in Jul 2025. Rapid = intraday (real-time) trailing drawdown of 4%,
+  // locks at starting balance + $100, no daily loss limit, minimum 2 trading
+  // days. Status draft: numbers cross-checked against secondary sources only —
+  // confirm contract limits in the MFFU dashboard.
   {
     id: 'mffu-50k',
     firm: 'MyFundedFutures',
@@ -423,8 +456,10 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     maxContracts: 4,
     consistencyLimitPct: null,
     drawdownType: 'intraday_trailing',
-    trailingStopsAt: 50_000,
-    note: 'Rapid plan. Real-time trailing drawdown that locks at the $50,000 starting balance once earned back. No daily loss limit. Minimum 2 trading days required.',
+    trailingStopsAt: 50_100,
+    status: 'draft',
+    sourceUrl: 'https://myfundedfutures.com',
+    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades) — locks at $50,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
   },
   {
     id: 'mffu-100k',
@@ -433,13 +468,15 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     accountSize: 100_000,
     profitTarget: 6_000,
     dailyLossLimit: 0,
-    maxDrawdown: 3_000,
-    minimumTradingDays: 5,
+    maxDrawdown: 4_000,
+    minimumTradingDays: 2,
     maxContracts: 10,
     consistencyLimitPct: null,
     drawdownType: 'intraday_trailing',
-    trailingStopsAt: 100_000,
-    note: 'Rapid plan. Real-time trailing drawdown that locks at the $100,000 starting balance once earned back. No daily loss limit. Minimum 5 trading days required.',
+    trailingStopsAt: 100_100,
+    status: 'draft',
+    sourceUrl: 'https://myfundedfutures.com',
+    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades) — locks at $100,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
   },
   {
     id: 'mffu-150k',
@@ -448,13 +485,15 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     accountSize: 150_000,
     profitTarget: 9_000,
     dailyLossLimit: 0,
-    maxDrawdown: 4_500,
-    minimumTradingDays: 5,
+    maxDrawdown: 6_000,
+    minimumTradingDays: 2,
     maxContracts: 15,
     consistencyLimitPct: null,
     drawdownType: 'intraday_trailing',
-    trailingStopsAt: 150_000,
-    note: 'Rapid plan. Real-time trailing drawdown that locks at the $150,000 starting balance once earned back. No daily loss limit. Minimum 5 trading days required.',
+    trailingStopsAt: 150_100,
+    status: 'draft',
+    sourceUrl: 'https://myfundedfutures.com',
+    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades) — locks at $150,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
   },
 
   // ── Custom ──────────────────────────────────────────────────────────
@@ -687,8 +726,41 @@ function minutesBetween(previous: Trade, current: Trade): number {
   return Math.max(0, (dateTime(current) - exitDateTime(previous)) / 60_000);
 }
 
-function sessionName(time: string): string {
-  const hour = Number.parseInt(time.split(':')[0] ?? '', 10);
+export interface SessionWindows {
+  asia?: { start: string; end: string };
+  london?: { start: string; end: string };
+  preMarket?: { start: string; end: string };
+  newYork?: { start: string; end: string };
+}
+
+function timeToMinutes(time: string | undefined): number | null {
+  if (!time) return null;
+  const [hours, minutes] = time.split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function inWindow(minutes: number, window?: { start: string; end: string }): boolean {
+  const start = timeToMinutes(window?.start);
+  const end = timeToMinutes(window?.end);
+  if (start === null || end === null || start === end) return false;
+  // An end before the start means the window crosses midnight (e.g. Asia).
+  return start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+}
+
+// Buckets a trade's entry clock into the user's configured session windows.
+// The hour-based split is only a fallback for callers without preferences.
+function sessionName(time: string, windows?: SessionWindows): string {
+  const minutes = timeToMinutes(time);
+  if (minutes === null) return 'off-session';
+  if (windows) {
+    if (inWindow(minutes, windows.newYork)) return 'New York';
+    if (inWindow(minutes, windows.london)) return 'London';
+    if (inWindow(minutes, windows.preMarket)) return 'pre-market';
+    if (inWindow(minutes, windows.asia)) return 'Asia';
+    return 'off-session';
+  }
+  const hour = Math.floor(minutes / 60);
   if (hour >= 2 && hour < 8) return 'London';
   if (hour >= 8 && hour < 13) return 'New York';
   return 'off-session';
@@ -698,6 +770,7 @@ export function buildEvaluationAgentAlerts(
   account: Account,
   allTrades: Trade[],
   progress: EvaluationProgress,
+  sessionWindows?: SessionWindows,
 ): EvaluationAgentAlert[] {
   const trades = tradesForAccount(allTrades, account.id).sort((a, b) => dateTime(a) - dateTime(b));
   const alerts: EvaluationAgentAlert[] = [];
@@ -738,9 +811,32 @@ export function buildEvaluationAgentAlerts(
     }
   }
 
+  // Hold-time asymmetry — sitting in losers while cutting winners is the
+  // classic disposition leak. Only measurable on trades with known durations.
+  const holdMinutes = (trade: Trade): number | null => {
+    if (typeof trade.duration === 'number' && trade.duration > 0) return trade.duration;
+    if (typeof trade.durationMinutes === 'number' && trade.durationMinutes > 0) return trade.durationMinutes;
+    return null;
+  };
+  const winHolds = trades.filter(trade => net(trade) > 0).map(holdMinutes).filter((v): v is number => v !== null);
+  const lossHolds = trades.filter(trade => net(trade) < 0).map(holdMinutes).filter((v): v is number => v !== null);
+  if (winHolds.length >= 3 && lossHolds.length >= 3) {
+    const avgWinHold = winHolds.reduce((sum, v) => sum + v, 0) / winHolds.length;
+    const avgLossHold = lossHolds.reduce((sum, v) => sum + v, 0) / lossHolds.length;
+    if (avgWinHold > 0 && avgLossHold > avgWinHold * 1.5) {
+      alerts.push({
+        id: 'hold-time-asymmetry',
+        severity: 'warning',
+        title: 'Losers are held longer than winners',
+        message: `Average losing hold is ${Math.round(avgLossHold)} minutes vs ${Math.round(avgWinHold)} for winners (${(avgLossHold / avgWinHold).toFixed(1)}×). That is hoping, not managing.`,
+        action: 'Exit at your invalidation — put a hard time stop on losing trades.',
+      });
+    }
+  }
+
   const sessions = new Map<string, Trade[]>();
   trades.forEach(trade => {
-    const label = sessionName(trade.time);
+    const label = sessionName(trade.time, sessionWindows);
     sessions.set(label, [...(sessions.get(label) ?? []), trade]);
   });
   sessions.forEach((items, label) => {

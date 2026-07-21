@@ -54,6 +54,8 @@ interface ScanResultShape {
   exit_reason?: string | null
   entry_time?: string | null
   timeframe_minutes?: number | null
+  close_time?: string | null
+  trade_length_seconds?: number | null
 }
 
 export async function maybeCaptureScanBundle(args: {
@@ -91,6 +93,10 @@ export async function maybeCaptureScanBundle(args: {
         exit_reason: result.exit_reason === undefined ? undefined : result.exit_reason,
         entry_time: result.entry_time ?? undefined,
         timeframe_minutes: result.timeframe_minutes ?? undefined,
+        close_time: result.close_time ?? undefined,
+        trade_length_minutes: typeof result.trade_length_seconds === 'number'
+          ? Math.round(result.trade_length_seconds / 60)
+          : undefined,
       } : {},
     }
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')

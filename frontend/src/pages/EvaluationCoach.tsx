@@ -263,7 +263,7 @@ export default function EvaluationCoach() {
   const entries = useFlyxaStore(state => state.entries);
   const activeAccountId = useFlyxaStore(state => state.activeAccountId);
   const updateAccount = useFlyxaStore(state => state.updateAccount);
-  const { accounts: tradingAccounts, decorateTrades, selectedAccountId: appSelectedId } = useAppSettings();
+  const { accounts: tradingAccounts, decorateTrades, selectedAccountId: appSelectedId, preferences } = useAppSettings();
 
   const statusById = useMemo(
     () => new Map(tradingAccounts.map(ta => [ta.id, ta.status])),
@@ -351,8 +351,8 @@ export default function EvaluationCoach() {
   );
 
   const alerts = useMemo(
-    () => selected && progress ? buildEvaluationAgentAlerts(selected, allTrades, progress) : [],
-    [allTrades, progress, selected],
+    () => selected && progress ? buildEvaluationAgentAlerts(selected, allTrades, progress, preferences.sessionTimes) : [],
+    [allTrades, progress, selected, preferences.sessionTimes],
   );
 
   const accountTrades = useMemo(
@@ -504,6 +504,19 @@ export default function EvaluationCoach() {
     const losses = accountTrades.filter(trade => tradeNet(trade) < 0);
     return losses.length ? Math.abs(losses.reduce((sum, trade) => sum + tradeNet(trade), 0) / losses.length) : 0;
   })();
+  // Hold-time asymmetry feeds the AI directive — only from known durations.
+  const { avgWinHoldMin, avgLossHoldMin } = (() => {
+    const holdOf = (trade: Trade): number | null => {
+      if (typeof trade.duration === 'number' && trade.duration > 0) return trade.duration;
+      if (typeof trade.durationMinutes === 'number' && trade.durationMinutes > 0) return trade.durationMinutes;
+      return null;
+    };
+    const average = (values: number[]) => values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+    return {
+      avgWinHoldMin: average(accountTrades.filter(t => tradeNet(t) > 0).map(holdOf).filter((v): v is number => v !== null)),
+      avgLossHoldMin: average(accountTrades.filter(t => tradeNet(t) < 0).map(holdOf).filter((v): v is number => v !== null)),
+    };
+  })();
   const riskFromDaily = dailyLimit > 0
     ? Math.max(0, Math.min(dailyRemaining ?? dailyLimit, dailyLimit * (drawdownRemainingPct < 40 ? 0.2 : 0.3)))
     : Infinity;
@@ -646,6 +659,7 @@ MLL: balance must stay above ${money(progress.drawdownFloor)} (${ddTypeLabel}${p
 Sessions traded: ${progress.tradingDays} | Avg P&L/session: ${money(avgDailyPnl)} | Pass probability: ${progress.passProbability}%
 Pace to target: ${paceHeadline} | ${paceDetail}
 Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'} | Plan adherence: ${planAdherencePct !== null ? `${planAdherencePct}%` : 'not enough tagged data'}
+${avgWinHoldMin > 0 && avgLossHoldMin > 0 ? `Hold time: winners avg ${Math.round(avgWinHoldMin)}m, losers ${Math.round(avgLossHoldMin)}m${avgLossHoldMin > avgWinHoldMin * 1.5 ? ' — losers held too long' : ''}` : ''}
 Main leak: ${primaryLeak ?? 'none detected'}
 Last 3 sessions: ${last3 || 'none yet'}
 ${behavioralWarnings.length ? `Behavioral patterns: ${behavioralWarnings.map(w => w.title).join('; ')}` : ''}

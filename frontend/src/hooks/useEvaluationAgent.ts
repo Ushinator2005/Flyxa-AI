@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { pushToast } from '../store/toastStore.js';
+import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import {
   buildEvaluationAgentAlerts,
   computeEvaluationProgress,
@@ -13,6 +14,7 @@ export function useEvaluationAgent() {
   const accounts = useFlyxaStore(state => state.accounts);
   const activeAccountId = useFlyxaStore(state => state.activeAccountId);
   const entries = useFlyxaStore(state => state.entries);
+  const { preferences } = useAppSettings();
   const allTrades = useMemo(() => entries.flatMap(entry => entry.trades), [entries]);
   const account = accounts.find(item => item.id === activeAccountId)
     ?? accounts.find(item => item.type === 'eval' || item.phase === 'eval');
@@ -22,8 +24,8 @@ export function useEvaluationAgent() {
     const accountTrades = tradesForAccount(allTrades, account.id);
     if (!accountTrades.length) return null;
     const progress = computeEvaluationProgress(account, allTrades);
-    return buildEvaluationAgentAlerts(account, allTrades, progress)[0] ?? null;
-  }, [account, allTrades]);
+    return buildEvaluationAgentAlerts(account, allTrades, progress, preferences.sessionTimes)[0] ?? null;
+  }, [account, allTrades, preferences.sessionTimes]);
 
   useEffect(() => {
     if (!alert || !account) return;

@@ -256,6 +256,25 @@ function InfoTooltip({ text }: { text: string }) {
   );
 }
 
+// Hold-time buckets for the P&L-by-hold-time skyline. Durations come from the
+// scanner or journal time fields; trades without one are excluded, not zeroed.
+const HOLD_BUCKETS = [
+  { label: '<5m', maxMinutes: 5 },
+  { label: '5–15m', maxMinutes: 15 },
+  { label: '15–30m', maxMinutes: 30 },
+  { label: '30–60m', maxMinutes: 60 },
+  { label: '1h+', maxMinutes: Infinity },
+] as const;
+
+function formatHoldSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return '<1m';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+}
+
 // Diverging skyline — columns rise (green) or fall (red) from a shared zero
 // baseline whose position is proportional to the data's positive/negative range.
 function DivergingColumns({ rows }: { rows: Array<{ label: string; pnl: number; count: number }> }) {
@@ -616,6 +635,25 @@ export default function Analytics() {
       };
     });
   }, [filteredTrades, preferences.sessionTimes]);
+
+  const holdTime = useMemo(() => {
+    const totals = HOLD_BUCKETS.map(() => ({ pnl: 0, count: 0 }));
+    let known = 0;
+    filteredTrades.forEach(trade => {
+      const seconds = trade.trade_length_seconds;
+      if (typeof seconds !== 'number' || seconds <= 0) return;
+      known += 1;
+      const minutes = seconds / 60;
+      const index = HOLD_BUCKETS.findIndex(bucket => minutes < bucket.maxMinutes);
+      const bucket = totals[index === -1 ? HOLD_BUCKETS.length - 1 : index];
+      bucket.pnl += trade.pnl - (trade.commission ?? 0);
+      bucket.count += 1;
+    });
+    const rows = HOLD_BUCKETS.map((bucket, index) => ({ label: bucket.label, ...totals[index] }));
+    const best = rows.filter(row => row.count > 0).sort((a, b) => b.pnl - a.pnl)[0] ?? null;
+    const worst = rows.filter(row => row.count > 0 && row.pnl < 0).sort((a, b) => a.pnl - b.pnl)[0] ?? null;
+    return { rows, known, best, worst };
+  }, [filteredTrades]);
 
   const streakStats = useMemo(() => {
     const outcomes = filteredTrades.map(trade => {
@@ -1205,7 +1243,7 @@ export default function Analytics() {
         </section>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
           <h3 style={KICKER}>P&amp;L by day of week</h3>
           <DivergingColumns rows={dayOfWeekRows} />
@@ -1216,6 +1254,28 @@ export default function Analytics() {
           <DivergingColumns rows={sessionRows} />
         </section>
 
+        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <h3 style={KICKER}>P&amp;L by hold time</h3>
+          {holdTime.known > 0 ? (
+            <>
+              <DivergingColumns rows={holdTime.rows} />
+              <p style={{ margin: '10px 0 0', fontSize: 10.5, lineHeight: 1.5, color: 'var(--app-text-subtle)' }}>
+                Winners held <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgWinHold)}</b> avg
+                {' '}· losers <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgLossHold)}</b>
+                {metrics.avgLossHold > 0 && metrics.avgWinHold > 0 && metrics.avgLossHold > metrics.avgWinHold * 1.5 && (
+                  <> — <span style={{ color: DASHBOARD_RED }}>you sit in losers ~{(metrics.avgLossHold / metrics.avgWinHold).toFixed(1)}× longer than winners.</span></>
+                )}
+                {holdTime.worst && holdTime.best && holdTime.worst.label !== holdTime.best.label && (
+                  <> {holdTime.worst.label} holds are the leak ({formatSignedCurrency(holdTime.worst.pnl)}).</>
+                )}
+              </p>
+            </>
+          ) : (
+            <p style={{ margin: '18px 0 6px', fontSize: 12, color: 'var(--app-text-subtle)' }}>
+              No hold-time data in this period — durations come from scanned charts or the journal&apos;s entry/exit time fields.
+            </p>
+          )}
+        </section>
       </div>
 
       {/* P&L Distribution — dot plot */}

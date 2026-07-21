@@ -66,9 +66,20 @@ scanner-evals/cases/<case-name>/
   "exit_reason": "TP",
   "entry_time": "10:18",
   "entry_time_tolerance_minutes": 2,
-  "timeframe_minutes": 1
+  "timeframe_minutes": 1,
+  "close_time": "10:31",
+  "close_time_tolerance_minutes": 2,
+  "trade_length_minutes": 13,
+  "trade_length_tolerance_minutes": 2
 }
 ```
+
+Time fields: `close_time` and `trade_length_minutes` default their tolerance to
+one candle (`timeframe_minutes`) since the scanner quantizes the exit to the
+first-touch candle. Bundles captured after the time-geometry change also carry
+`candle_pitch_ratio` / `gridline_x_ratios` in `context` — those cases exercise
+the deterministic entry-time path; older bundles without them exercise the
+candle-counting fallback. Collect both.
 
 Notes:
 - `exit_reason: null` is a valid expectation — use it for genuinely ambiguous
