@@ -821,7 +821,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
                             const sel = ps.distractions.includes(d);
                             return (
                               <button key={d} type="button" onClick={() => toggleDistraction(d)}
-                                style={{ padding: '2px 6px', fontSize: 9, borderRadius: 2, border: `1px solid ${sel ? (d === 'None' ? 'var(--green-border)' : 'var(--amber-border)') : 'var(--border)'}`, background: sel ? (d === 'None' ? 'var(--green-dim)' : 'var(--amber-dim)') : 'transparent', color: sel ? (d === 'None' ? 'var(--green)' : 'var(--amber)') : 'var(--txt-3)', cursor: 'pointer' }}>
+                                style={{ padding: '3px 8px', fontSize: 9.5, borderRadius: 4, border: `1px solid ${sel ? (d === 'None' ? 'var(--green)' : 'var(--amber)') : 'var(--border)'}`, background: sel ? (d === 'None' ? 'var(--green)' : 'var(--amber)') : 'transparent', color: sel ? '#161310' : 'var(--txt-3)', cursor: 'pointer', fontWeight: sel ? 600 : 400, transition: 'background .1s, color .1s' }}>
                                 {d}
                               </button>
                             );
@@ -833,7 +833,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                           {ENVIRONMENTS.map(env => (
                             <button key={env} type="button" onClick={() => updatePs({ environment: ps.environment === env ? '' : env })}
-                              style={{ padding: '2px 6px', fontSize: 9, borderRadius: 2, border: `1px solid ${ps.environment === env ? 'var(--amber-border)' : 'var(--border)'}`, background: ps.environment === env ? 'var(--amber-dim)' : 'transparent', color: ps.environment === env ? 'var(--amber)' : 'var(--txt-3)', cursor: 'pointer' }}>
+                              style={{ padding: '3px 8px', fontSize: 9.5, borderRadius: 4, border: `1px solid ${ps.environment === env ? 'var(--amber)' : 'var(--border)'}`, background: ps.environment === env ? 'var(--amber)' : 'transparent', color: ps.environment === env ? '#161310' : 'var(--txt-3)', cursor: 'pointer', fontWeight: ps.environment === env ? 600 : 400, transition: 'background .1s, color .1s' }}>
                               {env}
                             </button>
                           ))}
@@ -862,7 +862,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
               <div style={{ display:'flex', gap:3 }}>
                 {GRADES.map(g => (
                   <button key={g} type="button" onClick={() => update({ sessionGrade: dr.sessionGrade === g ? null : g })}
-                    style={{ padding:'3px 8px', fontSize:9, borderRadius:4, border:`1px solid ${dr.sessionGrade===g?'var(--amber-border)':'var(--app-border)'}`, background:dr.sessionGrade===g?'var(--amber-dim)':'transparent', color:dr.sessionGrade===g?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-mono)', fontWeight:500 }}>
+                    style={{ padding:'4px 9px', fontSize:10, borderRadius:4, border:`1px solid ${dr.sessionGrade===g?'var(--amber)':'var(--app-border)'}`, background:dr.sessionGrade===g?'var(--amber)':'transparent', color:dr.sessionGrade===g?'#161310':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-mono)', fontWeight:500, transition:'background .1s, color .1s' }}>
                     {g}
                   </button>
                 ))}
@@ -873,7 +873,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
               <div style={{ display:'flex', gap:3 }}>
                 {[true,false].map(v => (
                   <button key={String(v)} type="button" onClick={() => update({ marketRespectedBias: dr.marketRespectedBias === v ? null : v })}
-                    style={{ padding:'3px 8px', fontSize:9, borderRadius:4, border:`1px solid ${dr.marketRespectedBias===v?'var(--amber-border)':'var(--app-border)'}`, background:dr.marketRespectedBias===v?'var(--amber-dim)':'transparent', color:dr.marketRespectedBias===v?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600 }}>
+                    style={{ padding:'4px 10px', fontSize:10, borderRadius:4, border:`1px solid ${dr.marketRespectedBias===v?'var(--amber)':'var(--app-border)'}`, background:dr.marketRespectedBias===v?'var(--amber)':'transparent', color:dr.marketRespectedBias===v?'#161310':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600, transition:'background .1s, color .1s' }}>
                     {v ? 'YES' : 'NO'}
                   </button>
                 ))}
@@ -896,7 +896,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
             <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
               {LESSON_CATS.map(cat => (
                 <button key={cat} type="button" onClick={() => update({ lessonCategory: dr.lessonCategory === cat ? null : cat })}
-                  style={{ padding:'3px 8px', fontSize:9, borderRadius:3, border:`1px solid ${dr.lessonCategory===cat?'var(--amber-border)':'var(--app-border)'}`, background:dr.lessonCategory===cat?'var(--amber-dim)':'transparent', color:dr.lessonCategory===cat?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)' }}>
+                  style={{ padding:'4px 9px', fontSize:10, borderRadius:4, border:`1px solid ${dr.lessonCategory===cat?'var(--amber)':'var(--app-border)'}`, background:dr.lessonCategory===cat?'var(--amber)':'transparent', color:dr.lessonCategory===cat?'#161310':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:dr.lessonCategory===cat?600:400, transition:'background .1s, color .1s' }}>
                   {cat}
                 </button>
               ))}
@@ -1292,9 +1292,12 @@ function TradeJournalCard({
     };
   }, []);
 
+  // The right column reuses the stored thesis.invalidation field but now
+  // captures post-entry management — the stop price already IS the
+  // invalidation, so free text restating it was dead weight.
   const THESIS_COLS = [
     { key: 'setup' as const, title: 'Trade Thesis', placeholder: 'What edge did you see? Why this level, this direction, right now?' },
-    { key: 'invalidation' as const, title: 'Invalidation', placeholder: 'If price does X, the trade is invalid and I should be out.' },
+    { key: 'invalidation' as const, title: 'Execution Review', placeholder: 'How you managed it after entry: partials, stop moves, the exit. What went to plan and what didn\'t?' },
   ];
 
   return (
@@ -3241,7 +3244,7 @@ function TradeListSection({
                               <input
                                 type="number"
                                 min={0}
-                                defaultValue={trade.durationMinutes ?? ''}
+                                defaultValue={resolveTradeDurationMinutes(trade) ?? ''}
                                 key={`dur-${trade.id}`}
                                 placeholder="—"
                                 onBlur={e => {

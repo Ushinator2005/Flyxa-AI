@@ -975,8 +975,8 @@ export default function TradeForm({
                 <textarea className="input-field resize-none" rows={2} value={thesisSetup} onChange={e => setThesisSetup(e.target.value)} placeholder="What edge did you see?" />
               </div>
               <div>
-                <label className="label">Invalidation</label>
-                <textarea className="input-field resize-none" rows={2} value={thesisInvalidation} onChange={e => setThesisInvalidation(e.target.value)} placeholder="What would prove this wrong?" />
+                <label className="label">Execution Review</label>
+                <textarea className="input-field resize-none" rows={2} value={thesisInvalidation} onChange={e => setThesisInvalidation(e.target.value)} placeholder="How you managed it: partials, stop moves, the exit." />
               </div>
               <div>
                 <label className="label">Execution Trigger</label>

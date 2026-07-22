@@ -2109,6 +2109,8 @@ export default function Settings() {
             Click a swatch to open the color picker and match it to the zone color on your TradingView chart.
           </p>
         </SectionPanel>
+        {/* Founder-only tooling — meaningless (and confusing) for invited users. */}
+        {user?.email?.toLowerCase() === 'ushinator2005@gmail.com' && (
         <div style={{ marginTop: 12 }}>
           <SectionPanel
             title="Eval capture"
@@ -2159,6 +2161,7 @@ export default function Settings() {
             )}
           </SectionPanel>
         </div>
+        )}
       </section>
 
       {/* Accounts section */}

@@ -200,6 +200,13 @@ export function resolveTradeDurationMinutes(trade?: Partial<JournalTrade> | null
     duration?: number | null;
     trade_length_seconds?: number | null;
   };
+  // Entry and exit times are the ground truth: a scan can extract a duration
+  // that disagrees with its own extracted times (e.g. 09:51 -> 10:00 with
+  // "5 min"), and stored duration fields go stale when a time is corrected.
+  if (record.entryTime && record.exitTime) {
+    const fromTimes = minutesBetweenTimes(record.entryTime, record.exitTime);
+    if (fromTimes != null) return fromTimes;
+  }
   if (typeof record.durationMinutes === 'number' && Number.isFinite(record.durationMinutes)) {
     return record.durationMinutes;
   }
