@@ -1177,7 +1177,7 @@ export default function Backtest() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {QUICK_SYMBOLS.map(qs => (
                 <button key={qs} type="button" onClick={() => setSymbol(qs)}
-                  style={{ background: symbol === qs ? 'var(--amber-dim)' : 'var(--surface-2)', border: `1px solid ${symbol === qs ? 'var(--amber-border)' : 'var(--border)'}`, borderRadius: 6, padding: '7px 13px', fontSize: 12, color: symbol === qs ? 'var(--amber)' : 'var(--txt-3)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                  style={{ background: symbol === qs ? 'var(--amber-dim)' : 'var(--surface-2)', border: `1px solid ${symbol === qs ? 'var(--amber-border)' : 'var(--border)'}`, borderRadius: 6, padding: '7px 13px', fontSize: 12, color: symbol === qs ? 'var(--amber)' : 'var(--txt-3)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
                   {qs}
                 </button>
               ))}

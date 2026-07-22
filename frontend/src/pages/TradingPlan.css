@@ -751,7 +751,7 @@
 }
 
 .tp-contract-sym-name {
-  font: 700 13px var(--font-mono);
+  font: 500 13px var(--font-mono);
   letter-spacing: .05em;
   color: var(--txt);
 }
@@ -911,7 +911,7 @@
   background: var(--cobalt-dim);
 }
 .tp-contract-chip-sym {
-  font: 700 10px var(--font-mono);
+  font: 500 10px var(--font-mono);
   letter-spacing: .06em;
 }
 .tp-contract-chip-name {

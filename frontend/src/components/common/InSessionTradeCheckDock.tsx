@@ -343,7 +343,7 @@ export default function InSessionTradeCheckDock() {
                 {logPrompt.tradeCount} trade{logPrompt.tradeCount !== 1 ? 's' : ''}
               </span>
               {logPrompt.pnl !== 0 && (
-                <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', fontWeight: 800, color: logPrompt.pnl > 0 ? 'rgba(52,211,153,0.95)' : 'rgba(248,113,113,0.95)', letterSpacing: '0.01em' }}>
+                <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', fontWeight: 500, color: logPrompt.pnl > 0 ? 'rgba(52,211,153,0.95)' : 'rgba(248,113,113,0.95)', letterSpacing: '0.01em' }}>
                   {logPrompt.pnl > 0 ? '+' : ''}{fmtMoney(logPrompt.pnl)}
                 </span>
               )}

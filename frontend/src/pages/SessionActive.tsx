@@ -265,7 +265,7 @@ export default function SessionActive() {
           {pnl !== 0 && <PnLIcon size={26} color={pnlColor} strokeWidth={1.6} />}
           <span style={{
             fontSize: 'clamp(28px, 3.4vw, 42px)',
-            fontWeight: 600,
+            fontWeight: 500,
             fontFamily: MONO,
             color: pnlColor,
             lineHeight: 1,
@@ -345,7 +345,7 @@ export default function SessionActive() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: T3 }}>Loss budget</span>
-            <span style={{ fontSize: 12, fontFamily: MONO, color: riskColor, fontWeight: 600 }}>
+            <span style={{ fontSize: 12, fontFamily: MONO, color: riskColor, fontWeight: 500 }}>
               {Math.round(lossUsedPct)}%{lossRemaining !== null && <span style={{ color: T3, fontWeight: 400 }}> · {formatMoney(lossRemaining)} left</span>}
             </span>
           </div>
@@ -357,7 +357,7 @@ export default function SessionActive() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
               <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: T3 }}>Daily target</span>
-              <span style={{ fontSize: 12, fontFamily: MONO, color: targetPct >= 100 ? GREEN : T2, fontWeight: 600 }}>
+              <span style={{ fontSize: 12, fontFamily: MONO, color: targetPct >= 100 ? GREEN : T2, fontWeight: 500 }}>
                 {Math.round(targetPct)}%<span style={{ color: T3, fontWeight: 400 }}> of {formatMoney(profitTarget!)}</span>
               </span>
             </div>

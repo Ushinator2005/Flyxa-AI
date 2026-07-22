@@ -64,7 +64,7 @@ const KICKER: CSSProperties = {
   margin: 0,
   fontFamily: 'var(--font-mono)',
   fontSize: 10,
-  fontWeight: 600,
+  fontWeight: 500,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
   color: 'var(--app-text-muted)',
@@ -313,7 +313,7 @@ function DivergingColumns({ rows }: { rows: Array<{ label: string; pnl: number; 
                 }}
               >
                 {positive && (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap', color: DASHBOARD_GREEN, marginBottom: 6 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', color: DASHBOARD_GREEN, marginBottom: 6 }}>
                     {formatSignedCurrency(row.pnl)}
                   </span>
                 )}
@@ -323,7 +323,7 @@ function DivergingColumns({ rows }: { rows: Array<{ label: string; pnl: number; 
                   borderRadius: positive ? '3px 3px 0 0' : '0 0 3px 3px',
                 }} />
                 {!positive && (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap', color: DASHBOARD_RED, marginTop: 6 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', color: DASHBOARD_RED, marginTop: 6 }}>
                     {formatSignedCurrency(row.pnl)}
                   </span>
                 )}
@@ -1014,7 +1014,7 @@ export default function Analytics() {
           <div>
             <p style={KICKER}>Net P&amp;L · {periodSubtitle}</p>
             <p style={{
-              margin: '9px 0 0', fontFamily: 'var(--font-mono)', fontSize: 29, fontWeight: 600,
+              margin: '9px 0 0', fontFamily: 'var(--font-mono)', fontSize: 29, fontWeight: 500,
               lineHeight: 1, letterSpacing: '-0.02em',
               color: metrics.netPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
             }}>
@@ -1094,7 +1094,7 @@ export default function Analytics() {
               <p style={{ ...KICKER, fontSize: 9, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--app-text-subtle)' }}>
                 {cell.label}{cell.tip && <InfoTooltip text={cell.tip} />}
               </p>
-              <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', color: cell.color ?? 'var(--app-text)' }}>
+              <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', color: cell.color ?? 'var(--app-text)' }}>
                 {cell.value}
               </p>
               {cell.sub && <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--app-text-subtle)', whiteSpace: 'nowrap' }}>{cell.sub}</p>}
@@ -1110,7 +1110,7 @@ export default function Analytics() {
             <p style={KICKER}>Win rate · {winLossTotal} scored</p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 9 }}>
               <p style={{
-                margin: 0, fontFamily: 'var(--font-mono)', fontSize: 29, fontWeight: 600, lineHeight: 1,
+                margin: 0, fontFamily: 'var(--font-mono)', fontSize: 29, fontWeight: 500, lineHeight: 1,
                 color: winLossTotal === 0 ? 'var(--app-text-subtle)' : metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED,
               }}>
                 {winLossTotal === 0 ? '--' : `${metrics.winRate.toFixed(0)}%`}
@@ -1176,7 +1176,7 @@ export default function Analytics() {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '15px 18px 0' }}>
             <p style={KICKER}>Plan adherence · {periodSubtitle}</p>
             <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600, lineHeight: 1, flexShrink: 0,
+              fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 500, lineHeight: 1, flexShrink: 0,
               color: planReport.pct === null ? 'var(--app-text-subtle)'
                 : planReport.pct >= 80 ? DASHBOARD_GREEN
                 : planReport.pct >= 60 ? BAR_ON
@@ -1449,7 +1449,7 @@ export default function Analytics() {
           const maxAbs = Math.max(1, ...shown.map(row => Math.abs(row.netPnL)));
           const ledgerRow = (row: typeof shown[0], rank: number, positive: boolean) => (
             <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) minmax(90px, 220px) 100px', gap: 16, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--app-border)' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--app-text-subtle)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: 'var(--app-text-subtle)' }}>
                 {String(rank).padStart(2, '0')}
               </span>
               <div style={{ minWidth: 0 }}>
@@ -1459,18 +1459,18 @@ export default function Analytics() {
               <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden', display: 'flex', justifyContent: positive ? 'flex-start' : 'flex-end' }}>
                 <div style={{ width: `${Math.max(2, (Math.abs(row.netPnL) / maxAbs) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9 }} />
               </div>
-              <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', color: positive ? DASHBOARD_GREEN : DASHBOARD_RED }}>
+              <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap', color: positive ? DASHBOARD_GREEN : DASHBOARD_RED }}>
                 {formatSignedCurrency(row.netPnL)}
               </span>
             </div>
           );
           return (
             <div className="mt-4">
-              <p style={{ margin: '0 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: DASHBOARD_GREEN }}>MOST PROFITABLE</p>
+              <p style={{ margin: '0 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: DASHBOARD_GREEN }}>MOST PROFITABLE</p>
               {strongestConfluences.length > 0
                 ? strongestConfluences.map((row, i) => ledgerRow(row, i + 1, true))
                 : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
-              <p style={{ margin: '16px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: DASHBOARD_RED }}>MOST COSTLY</p>
+              <p style={{ margin: '16px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: DASHBOARD_RED }}>MOST COSTLY</p>
               {weakestConfluences.length > 0
                 ? weakestConfluences.map((row, i) => ledgerRow(row, i + 1, false))
                 : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
@@ -1488,7 +1488,7 @@ export default function Analytics() {
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <p style={{ ...KICKER, fontSize: 9, color: 'var(--app-text-subtle)' }}>Avoidable loss</p>
-              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, lineHeight: 1, color: DASHBOARD_RED }}>
+              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 500, lineHeight: 1, color: DASHBOARD_RED }}>
                 −{formatCurrency(mistakeCost.avoidableCost)}
               </p>
             </div>
@@ -1499,7 +1499,7 @@ export default function Analytics() {
               const maxCost = Math.max(1, mistakeCost.topRows[0]?.cost ?? 0, mistakeCost.otherCost);
               const leakRow = (rank: string, label: string, count: number, cost: number, dim = false) => (
                 <div key={label} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) minmax(90px, 220px) 52px 110px', gap: 16, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--app-border)' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--app-text-subtle)' }}>{rank}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: 'var(--app-text-subtle)' }}>{rank}</span>
                   <span style={{ fontSize: 12.5, fontWeight: dim ? 400 : 600, color: dim ? 'var(--app-text-muted)' : 'var(--app-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {label}
                   </span>
@@ -1507,7 +1507,7 @@ export default function Analytics() {
                     <div style={{ width: `${Math.max(2, (cost / maxCost) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: DASHBOARD_RED, opacity: dim ? 0.5 : 0.9 }} />
                   </div>
                   <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{count}×</span>
-                  <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', color: DASHBOARD_RED }}>
+                  <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap', color: DASHBOARD_RED }}>
                     −{formatCurrency(cost)}
                   </span>
                 </div>

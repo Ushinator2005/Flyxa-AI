@@ -320,7 +320,7 @@ export default function Header() {
             alignItems: 'center',
             padding: '0 12px',
             fontSize: 10,
-            fontWeight: 700,
+            fontWeight: 500,
             letterSpacing: '0.11em',
             textTransform: 'uppercase',
             fontFamily: 'var(--font-mono)',

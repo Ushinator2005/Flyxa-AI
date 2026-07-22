@@ -286,7 +286,7 @@ function EntryItem({
         <span style={{ fontSize: '9px', fontWeight: 700, color: selected ? AMBER : T3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {formatEntryDate(entry.date, 'MMM')}
         </span>
-        <span style={{ fontSize: '18px', fontWeight: 600, color: selected ? AMBER : T1, lineHeight: 1, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ fontSize: '18px', fontWeight: 500, color: selected ? AMBER : T1, lineHeight: 1, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
           {formatEntryDate(entry.date, 'd')}
         </span>
       </div>

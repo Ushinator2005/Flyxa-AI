@@ -536,7 +536,7 @@ export default function Dashboard() {
 
               {/* TODAY */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>TODAY</p>
+                <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: '0 0 8px', fontFamily: MONO }}>TODAY</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 5 }}>
                   <p style={{ fontSize: isMobile ? 22 : 26, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: todayPnL > 0 ? GREEN : todayPnL < 0 ? RED : T2, margin: 0, lineHeight: 1 }}>
                     {todayTrades.length > 0 ? fmtUSD(todayPnL) : '—'}
@@ -557,7 +557,7 @@ export default function Dashboard() {
               <div style={cs}>
                 {/* Label row — target hint on the right when set */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: 0, fontFamily: MONO }}>{refLabel}</p>
+                  <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: 0, fontFamily: MONO }}>{refLabel}</p>
                   {targetBal !== null && hasSelectedAccount && (
                     <span style={{ fontSize: 10, color: T3, fontFamily: MONO, letterSpacing: '0.02em' }}>
                       target {fmtCompact(targetBal)}
@@ -600,7 +600,7 @@ export default function Dashboard() {
 
               {/* EXECUTION */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>EXECUTION</p>
+                <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: '0 0 8px', fontFamily: MONO }}>EXECUTION</p>
                 <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1, margin: '0 0 5px', lineHeight: 1 }}>
                   {fmtPct(summary.winRate)}
                 </p>
@@ -609,7 +609,7 @@ export default function Dashboard() {
 
               {/* MONTHLY P&L */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{monthLabel.toUpperCase()} P&amp;L</p>
+                <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: '0 0 8px', fontFamily: MONO }}>{monthLabel.toUpperCase()} P&amp;L</p>
                 <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: monthPnL > 0 ? GREEN : monthPnL < 0 ? RED : T2, margin: '0 0 5px', lineHeight: 1 }}>
                   {monthTrades.length > 0 ? fmtUSD(monthPnL) : '—'}
                 </p>
@@ -620,7 +620,7 @@ export default function Dashboard() {
 
               {/* UP NEXT */}
               <div style={{ ...cs, ...(isMobile && { gridColumn: '1 / -1' }) }}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: T3, margin: '0 0 8px', fontFamily: MONO }}>UP NEXT</p>
+                <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: '0 0 8px', fontFamily: MONO }}>UP NEXT</p>
                 {nextEv ? (
                   <>
                     <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: RED, margin: '0 0 5px', lineHeight: 1 }}>
@@ -666,7 +666,7 @@ export default function Dashboard() {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 2, padding: '10px 18px', borderRight: `1px solid ${BORDER}`, flexShrink: 0, minWidth: 92,
               }}>
-                <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, lineHeight: 1, color: clock.color, letterSpacing: '-0.01em' }}>
+                <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 500, lineHeight: 1, color: clock.color, letterSpacing: '-0.01em' }}>
                   {clock.value}
                 </span>
                 <span style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: T3 }}>
@@ -1064,7 +1064,7 @@ export default function Dashboard() {
                               }}>{ev.event}</div>
                               {released ? (
                                 <div style={{ fontSize: 10, color: T3, marginTop: 2 }}>
-                                  <span style={{ color: ev.actual && ev.forecast && parseFloat(String(ev.actual)) >= parseFloat(String(ev.forecast)) ? GREEN : RED, fontFamily: MONO, fontWeight: 600 }}>{ev.actual}</span>
+                                  <span style={{ color: ev.actual && ev.forecast && parseFloat(String(ev.actual)) >= parseFloat(String(ev.forecast)) ? GREEN : RED, fontFamily: MONO, fontWeight: 500 }}>{ev.actual}</span>
                                   {ev.forecast && <span style={{ color: T3 }}> · est {ev.forecast}</span>}
                                 </div>
                               ) : (
@@ -1074,7 +1074,7 @@ export default function Dashboard() {
                             {countdown !== null && (
                               <span style={{
                                 fontSize: 10,
-                                fontWeight: 600,
+                                fontWeight: 500,
                                 fontFamily: MONO,
                                 color: secsLeft !== null && secsLeft < 60 ? RED : RED,
                                 opacity: secsLeft !== null && secsLeft < 60 ? 1 : 0.75,

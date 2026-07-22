@@ -510,6 +510,10 @@ export const subscriptionApi = {
 export const waitlistApi = {
   join: (email: string, source: string) =>
     api.post<{ ok: boolean; already: boolean }>('/api/waitlist', { email, source }),
+  inviteInfo: (token: string) =>
+    api.get<{ email: string }>(`/api/waitlist/invite/${encodeURIComponent(token)}`),
+  redeemInvite: (token: string, password: string) =>
+    api.post<{ ok: boolean; email: string }>('/api/waitlist/redeem', { token, password }),
 };
 
 export interface PropFirmRuleRecordResponse {

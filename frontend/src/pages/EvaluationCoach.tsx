@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, Download, ShieldCheck, Trophy } from 'lucide-react';
+import { ChevronDown, ShieldCheck, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account, Trade } from '../store/types.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -161,12 +161,14 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
   // Percent positions for HTML overlays (SVG text would distort under
   // preserveAspectRatio="none").
   const pct = (v: number) => (y(v) / H) * 100;
+  // Weight capped at 500 — DM Mono has no bolder cut, and synthetic bold
+  // renders thick and fuzzy.
   const labelStyle = (color: string): React.CSSProperties => ({
     position: 'absolute',
     right: 8,
     fontFamily: 'var(--font-mono)',
     fontSize: 8.5,
-    fontWeight: 700,
+    fontWeight: 500,
     letterSpacing: '0.07em',
     color,
     background: 'var(--app-panel)',
@@ -191,16 +193,20 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
           <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
           <circle cx={x(points.length - 1)} cy={y(last)} r="2.6" fill="var(--amber)" />
         </svg>
-        {/* Line labels pinned to the lines they describe */}
+        {/* Line labels pinned to the lines they describe. The balance label
+            drops out when it would sit on top of the target/floor labels —
+            e.g. a passed run finishing right at target. */}
         <span style={{ ...labelStyle('var(--green)'), top: `calc(${pct(target)}% + 2px)` }}>
           TARGET {money(target)}
         </span>
         <span style={{ ...labelStyle('var(--red)'), top: `calc(${pct(floor)}% - 13px)` }}>
           MLL {money(floor)}
         </span>
-        <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
-          {money(last)}
-        </span>
+        {Math.abs(pct(last) - pct(target)) > 16 && Math.abs(pct(last) - pct(floor)) > 16 && (
+          <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
+            {money(last)}
+          </span>
+        )}
       </div>
       {dates && dates.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
@@ -219,8 +225,9 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
   );
 }
 
-function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
+function PassScreen({ account, progress, equity, onDismiss, onMarkFunded }: {
   account: Account; progress: EvaluationProgress; onDismiss: () => void; onMarkFunded: () => void;
+  equity?: { points: number[]; target: number; floor: number; dates: string[] };
 }) {
   // When the floor is unlocked, used + remaining equals the configured max
   // drawdown exactly — a safe base even when account.maxDrawdown is unset.
@@ -228,12 +235,21 @@ function PassScreen({ account, progress, onDismiss, onMarkFunded }: {
   return (
     <div className="ec-pass" data-tour-id="evaluation-overview">
       <div className="ec-pass-inner">
-        <div className="ec-pass-icon"><Trophy size={28} /></div>
-        <p className="ec-pass-kicker">Evaluation complete</p>
-        <h1 className="ec-pass-title">{account.name}</h1>
-        <p className="ec-pass-firm">{account.firm}</p>
+        <div className="ec-pass-medal"><Trophy size={22} /></div>
+        <p className="ec-pass-kicker"><span className="ec-pass-rule" />Evaluation complete<span className="ec-pass-rule" /></p>
+        <h1 className="ec-pass-title">Passed.</h1>
+        <p className="ec-pass-sub">{account.name} · {account.firm}</p>
+        {equity && equity.points.length >= 2 && (
+          <div className="ec-pass-proof">
+            <div className="ec-pass-proof-head">
+              <span>The run</span>
+              <span>Target cleared</span>
+            </div>
+            <EquitySpark points={equity.points} target={equity.target} floor={equity.floor} dates={equity.dates} />
+          </div>
+        )}
         <div className="ec-pass-stats">
-          <div className="ec-pass-stat"><strong>{money(progress.netPnl)}</strong><span>Net profit</span></div>
+          <div className="ec-pass-stat"><strong className="ec-pass-pos">{money(progress.netPnl)}</strong><span>Net profit</span></div>
           <div className="ec-pass-stat"><strong>{progress.tradingDays}</strong><span>Trading days</span></div>
           <div className="ec-pass-stat"><strong>{pct}%</strong><span>Drawdown used</span></div>
         </div>
@@ -386,6 +402,22 @@ export default function EvaluationCoach() {
   // ── Behavioral warnings ─────────────────────────────────────────
   const behavioralWarnings = useMemo(() => computeBehavioralWarnings(accountTrades), [accountTrades]);
 
+  // Recent journal post-sessions for this account. MUST live above the early
+  // returns — a hook after a conditional return changes the hook count when a
+  // passed account renders the PassScreen, and React throws.
+  const recentJournalReflections = useMemo(() => {
+    const accountId = selected?.id;
+    if (!accountId) return [] as Array<{ date: string; post: string }>;
+    return entries
+      .filter(e => {
+        const accs = e.accountIds?.length ? e.accountIds : (e.account ? [e.account] : []);
+        return accs.includes(accountId) && Boolean(e.dailyReflection?.post?.trim());
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 3)
+      .map(e => ({ date: e.date, post: (e.dailyReflection?.post ?? '').trim() }));
+  }, [entries, selected?.id]);
+
   // ── Load debrief from saved account notes ───────────────────────
   useEffect(() => {
     debriefEditedRef.current = false;
@@ -421,9 +453,20 @@ export default function EvaluationCoach() {
   if (!selected || !progress) return <EmptyEvaluation />;
 
   if (progress.status === 'passed' && !dismissPass) {
+    // Rebuild the equity run here — the main-view series below is computed
+    // after this early return.
+    const passStart = Number(selected.size) > 0
+      ? Number(selected.size)
+      : progress.currentBalance - progress.netPnl;
+    const passDates = [...byDayMap.keys()].sort();
+    let passBal = passStart;
+    const passPoints = [passBal];
+    for (const d of passDates) { passBal += Number(byDayMap.get(d) ?? 0); passPoints.push(passBal); }
+    const passTarget = passStart + Number(selected.profitTarget ?? inferEvaluationTemplate(selected).profitTarget);
     return (
       <PassScreen
         account={selected} progress={progress}
+        equity={{ points: passPoints, target: passTarget, floor: Number(progress.drawdownFloor), dates: passDates }}
         onDismiss={() => setDismissPass(true)}
         onMarkFunded={() => { updateAccount(selected.id, { phase: 'funded', type: 'live' }); setDismissPass(true); }}
       />
@@ -573,26 +616,6 @@ export default function EvaluationCoach() {
   // ── Alert bar ───────────────────────────────────────────────────
 
   // ── All alerts (risk + behavioral) ─────────────────────────────
-  function exportReport() {
-    if (!progress) return;
-    const report = {
-      generatedAt: new Date().toISOString(),
-      account: { name: selected.name, firm: selected.firm, size: selected.size },
-      rules: {
-        profitTarget: target, dailyLossLimit: dailyLimit, maxDrawdown, minimumTradingDays: progress.minimumTradingDays,
-        drawdownType: progress.drawdownType, trailingStopsAt: progress.trailingStopsAt,
-        currentMll: progress.drawdownFloor, mllLocked: progress.floorLocked,
-      },
-      progress, agentAlerts: allAlerts,
-      disclaimer: 'Verify all rule values against the current terms supplied by the prop firm.',
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `flyxa-eval-${selected.name.replace(/\s+/g, '-').toLowerCase()}.json`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
   function DropRow({ account }: { account: Account }) {
     const isSelected = account.id === selected.id;
     const st = statusById.get(account.id) ?? 'Eval';
@@ -610,19 +633,6 @@ export default function EvaluationCoach() {
       </button>
     );
   }
-
-  // ── Recent journal post-sessions for this account ───────────────
-  const recentJournalReflections = useMemo(() => {
-    const accountId = selected.id;
-    return entries
-      .filter(e => {
-        const accs = e.accountIds?.length ? e.accountIds : (e.account ? [e.account] : []);
-        return accs.includes(accountId) && Boolean(e.dailyReflection?.post?.trim());
-      })
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 3)
-      .map(e => ({ date: e.date, post: (e.dailyReflection?.post ?? '').trim() }));
-  }, [entries, selected.id]);
 
   // ── AI mission load ─────────────────────────────────────────────
   // Placed after early returns so it only fires when the page renders
@@ -715,21 +725,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
           {firmMeta && <p className="ec-acct-meta">{firmMeta}</p>}
         </div>
 
-        <div className="ec-strip-right">
-          <div className="ec-bal-block" title={progress.floorLocked
-            ? 'The MLL has stopped trailing — it no longer rises with new highs.'
-            : progress.trailingStopsAt !== null
-              ? `${ddTypeLabel} MLL — rises with your balance highs and locks at ${money(progress.trailingStopsAt)}.`
-              : `${ddTypeLabel} MLL.`}
-          >
-            <span className="ec-bal-label">MLL · liquidation level</span>
-            <div className="ec-bal-row">
-              <span className="ec-bal-val neg">{money(progress.drawdownFloor)}</span>
-              <span className="ec-bal-delta">{progress.floorLocked ? 'locked' : ddTypeLabel}</span>
-            </div>
-          </div>
+        <div className="ec-strip-right" style={{ gap: 34 }}>
           <div className="ec-bal-block">
-            <span className="ec-bal-label">Current balance</span>
+            <span className="ec-bal-label">Balance</span>
             <div className="ec-bal-row">
               <span className={`ec-bal-val${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>{money(progress.currentBalance)}</span>
               {progress.netPnl !== 0 && (
@@ -739,9 +737,20 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               )}
             </div>
           </div>
-          <button type="button" className="ec-btn-export" onClick={exportReport}>
-            <Download size={12} /> Export
-          </button>
+          <div className="ec-bal-block" title={progress.floorLocked
+            ? 'The MLL has stopped trailing — it no longer rises with new highs. The account is closed if balance touches this.'
+            : progress.trailingStopsAt !== null
+              ? `${ddTypeLabel} MLL — rises with your balance highs and locks at ${money(progress.trailingStopsAt)}. The account is closed if balance touches this.`
+              : `${ddTypeLabel} MLL — the account is closed if balance touches this.`}
+          >
+            <span className="ec-bal-label">MLL{progress.floorLocked ? ' · locked' : ''}</span>
+            <div className="ec-bal-row">
+              <span className="ec-bal-val neg">{money(progress.drawdownFloor)}</span>
+              <span className="ec-bal-delta" style={{ color: 'var(--txt-3, var(--app-text-subtle))' }}>
+                {money(progress.currentBalance - progress.drawdownFloor)} room
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

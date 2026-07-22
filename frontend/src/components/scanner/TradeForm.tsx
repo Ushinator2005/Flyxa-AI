@@ -749,7 +749,7 @@ export default function TradeForm({
                   style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: 16,
-                    fontWeight: 600,
+                    fontWeight: 500,
                     width: 130,
                     background: 'transparent',
                     border: `1px solid ${BD}`,
@@ -761,7 +761,7 @@ export default function TradeForm({
                 />
               ) : (
                 <p
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: pnl === 0 ? AMBER : pnl > 0 ? '#34d399' : '#f87171', cursor: 'pointer' }}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 500, color: pnl === 0 ? AMBER : pnl > 0 ? '#34d399' : '#f87171', cursor: 'pointer' }}
                   onClick={() => { setPnlOverride(v => v !== null ? v : calcPnL()); setPnlEditMode(true); }}
                   title="Click to override Gross P&L"
                 >
@@ -771,7 +771,7 @@ export default function TradeForm({
             </div>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: 11, color: T3, marginBottom: 3 }}>R:R</p>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: T1 }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 500, color: T1 }}>
                 {rr === 'N/A' ? 'N/A' : formatRiskRewardRatio(Number(rr))}
               </p>
             </div>
@@ -806,7 +806,7 @@ export default function TradeForm({
             </div>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: 11, color: T3, marginBottom: 2 }}>Net P&amp;L</p>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: (pnl - commission) === 0 ? AMBER : (pnl - commission) > 0 ? '#34d399' : '#f87171' }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500, color: (pnl - commission) === 0 ? AMBER : (pnl - commission) > 0 ? '#34d399' : '#f87171' }}>
                 {formatCurrency(pnl - commission)}
               </p>
             </div>

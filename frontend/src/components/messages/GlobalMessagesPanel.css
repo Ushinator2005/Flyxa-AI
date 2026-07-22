@@ -57,7 +57,7 @@
 /* Section label — replaces circular icon badge */
 .gmp-header-label {
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--app-text-subtle);

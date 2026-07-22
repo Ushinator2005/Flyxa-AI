@@ -705,22 +705,30 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
         <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 10.5, color: hot ? T1 : T3, fontVariantNumeric: 'tabular-nums' }}>
           {fmtClock(item.timestamp)}
         </span>
+        {/* Explicit impact word — no color-decoding required */}
         <span style={{
-          flexShrink: 0, fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+          flexShrink: 0, width: 34, fontFamily: MONO, fontSize: 8.5, fontWeight: 500,
+          letterSpacing: '0.08em',
+          color: item.isBreaking ? RED : item.impact === 'high' ? AMBER : item.impact === 'medium' ? 'rgba(245,158,11,0.55)' : 'transparent',
+        }}>
+          {item.isBreaking ? 'BRK' : item.impact === 'high' ? 'HIGH' : item.impact === 'medium' ? 'MED' : '·'}
+        </span>
+        <span style={{
+          flexShrink: 0, fontFamily: MONO, fontSize: 9, fontWeight: 500, letterSpacing: '0.06em',
           textTransform: 'uppercase', color: tapeSourceColor(item.source), minWidth: 74,
         }}>
           {item.source}
         </span>
         <p style={{
           margin: 0, flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 11.5, lineHeight: 1.5,
-          color: headlineColor, fontWeight: hot ? 600 : 400, letterSpacing: '0.01em',
+          color: headlineColor, fontWeight: hot ? 500 : 400, letterSpacing: '0.01em',
         }}>
-          {item.isBreaking && <span style={{ marginRight: 6, fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: RED }}>BREAKING</span>}
+          {item.isBreaking && <span style={{ marginRight: 6, fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: RED }}>BREAKING</span>}
           {displayHeadline}
         </p>
         {/* Sentiment only when there IS one — a terminal doesn't print "neutral" */}
         {(combined.label === 'bullish' || combined.label === 'bearish' || combined.label === 'mixed') && (
-          <span style={{ flexShrink: 0, fontSize: 9, fontFamily: MONO, color: combined.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700 }}>
+          <span style={{ flexShrink: 0, fontSize: 9, fontFamily: MONO, color: combined.color, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
             {combined.label}
           </span>
         )}
@@ -873,7 +881,7 @@ function CalendarImpactFilterButton({
           gap: 6,
           padding: '0 8px',
           fontSize: 10,
-          fontWeight: 700,
+          fontWeight: 600,
           cursor: 'pointer',
           maxWidth: 118,
           transition: 'background .12s, color .12s',
@@ -982,7 +990,7 @@ function CalendarCurrencyButton({
           padding: '0 8px',
           fontFamily: MONO,
           fontSize: 10,
-          fontWeight: 700,
+          fontWeight: 500,
           letterSpacing: '0.05em',
           cursor: 'pointer',
         }}
@@ -1020,7 +1028,7 @@ function CalendarCurrencyButton({
                   color: checked ? T1 : T2,
                   fontFamily: MONO,
                   fontSize: 11,
-                  fontWeight: 600,
+                  fontWeight: 500,
                   letterSpacing: '0.05em',
                 }}
               >
@@ -1043,7 +1051,7 @@ function CalendarCurrencyButton({
                   background: checked ? 'rgba(245,158,11,0.16)' : 'transparent',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  {checked && <span style={{ fontSize: 8, lineHeight: 1, color: AMBER, fontWeight: 700 }}>✓</span>}
+                  {checked && <span style={{ fontSize: 8, lineHeight: 1, color: AMBER, fontWeight: 600 }}>✓</span>}
                 </span>
                 {code}
               </label>
@@ -1134,7 +1142,7 @@ function CalendarPanel({
       {/* Calendar header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, padding: '0 14px 0 12px', borderLeft: `2px solid ${COBALT}` }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: T1 }}>
+          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.12em', color: T1 }}>
             Economic Calendar
           </span>
           {weekOffset === 0 && (
@@ -1174,7 +1182,7 @@ function CalendarPanel({
                 fontFamily: MONO,
                 fontSize: btn.label.length > 1 ? 8.5 : 11,
                 letterSpacing: btn.label.length > 1 ? '0.08em' : undefined,
-                fontWeight: 700,
+                fontWeight: 500,
                 cursor: 'pointer',
                 lineHeight: 1,
                 transition: 'border-color .12s, color .12s, background .12s',
@@ -1204,7 +1212,7 @@ function CalendarPanel({
               {/* Date header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 4px', position: 'sticky', top: 0, background: S2, zIndex: 2, borderBottom: `1px solid ${BORDER}` }}>
                 <span style={{ width: 3, height: 12, borderRadius: 2, background: date === todaySlice ? COBALT : AMBER, flexShrink: 0 }} />
-                <span style={{ fontSize: 10, fontWeight: 800, color: date === todaySlice ? COBALT : AMBER, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: date === todaySlice ? COBALT : AMBER, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {fmtCalendarDate(date, safeDisplayTimezone)}
                 </span>
                 {date === todaySlice && <span style={{ fontSize: 9, color: COBALT, fontFamily: MONO, opacity: .7 }}>today</span>}
@@ -1233,12 +1241,12 @@ function CalendarPanel({
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.04)' : 'transparent'; }}
                     >
-                      <span style={{ fontFamily: MONO, fontSize: 12, color: T2, fontWeight: 700 }}>{fmtFFTime(event.time)}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 12, color: T2, fontWeight: 500 }}>{fmtFFTime(event.time)}</span>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: impDot, flexShrink: 0, boxShadow: isHigh ? `0 0 5px ${RED}` : 'none' }} />
                       <div style={{ minWidth: 0 }}>
                         <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>
                           {currencies.length > 1 && event.country && (
-                            <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: T3, marginRight: 6 }}>
+                            <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 500, letterSpacing: '0.06em', color: T3, marginRight: 6 }}>
                               {event.country}
                             </span>
                           )}
@@ -1253,7 +1261,7 @@ function CalendarPanel({
                         )}
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        {hasActual && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: aColor }}>{event.actual}</span>}
+                        {hasActual && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, color: aColor }}>{event.actual}</span>}
                       </div>
                     </div>
                   );
@@ -1287,7 +1295,7 @@ function SourcesPanel({
           color: T2,
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          fontWeight: 700,
+          fontWeight: 600,
           display: 'inline-flex',
           gap: 5,
           alignItems: 'center',
@@ -1340,7 +1348,7 @@ function SourcesPanel({
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'border-color .12s, background .12s',
               }}>
-                {active && <span style={{ fontSize: 9, lineHeight: 1, color: AMBER, fontWeight: 700 }}>✓</span>}
+                {active && <span style={{ fontSize: 9, lineHeight: 1, color: AMBER, fontWeight: 600 }}>✓</span>}
               </span>
               <span style={{ fontSize: 11.5, color: active ? T1 : T2 }}>{source.label}</span>
               {!available && (
@@ -1444,7 +1452,7 @@ function XAccountsModal({
               <TwitterXLogo size={17} />
             </span>
             <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, color: T1, fontSize: 17, fontWeight: 800 }}>X accounts</p>
+              <p style={{ margin: 0, color: T1, fontSize: 17, fontWeight: 600 }}>X accounts</p>
               <p style={{ margin: '4px 0 0', color: T2, fontSize: 12, lineHeight: 1.45 }}>
                 Add the accounts you want Flyxa to monitor in Market News.
               </p>
@@ -1469,8 +1477,8 @@ function XAccountsModal({
                   gap: 12,
                 }}
               >
-                <span style={{ color: T3, fontSize: 11, fontWeight: 700 }}>{stat.label}</span>
-                <span style={{ color: T1, fontSize: 13, fontWeight: 800 }}>{stat.value}</span>
+                <span style={{ color: T3, fontSize: 11, fontWeight: 600 }}>{stat.label}</span>
+                <span style={{ color: T1, fontSize: 13, fontWeight: 600 }}>{stat.value}</span>
               </div>
             ))}
           </div>
@@ -1515,7 +1523,7 @@ function XAccountsModal({
                 background: canAdd ? AMBER : S2,
                 color: canAdd ? '#111111' : T3,
                 cursor: canAdd ? 'pointer' : 'not-allowed',
-                fontWeight: 800,
+                fontWeight: 600,
                 fontSize: 12,
                 fontFamily: SANS,
               }}
@@ -1588,7 +1596,7 @@ function XAccountsModal({
                       color: account.enabled ? GREEN : T2,
                       cursor: 'pointer',
                       fontSize: 11,
-                      fontWeight: 800,
+                      fontWeight: 600,
                       fontFamily: SANS,
                     }}
                   >
@@ -1957,7 +1965,7 @@ export default function MarketNews() {
                 alignItems: 'center',
                 gap: 5,
                 fontSize: 10,
-                fontWeight: 600,
+                fontWeight: 500,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontFamily: MONO,
               }}
@@ -2036,7 +2044,7 @@ export default function MarketNews() {
         <main className="mn-feed" style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
           <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 10px 14px' }}>
           <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid rgba(255,255,255,0.09)`, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-            <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: T1, borderLeft: `2px solid ${AMBER}`, paddingLeft: 10 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.12em', color: T1, borderLeft: `2px solid ${AMBER}`, paddingLeft: 10 }}>
               Live Wire
             </span>
             <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '.06em', color: T3, textTransform: 'uppercase' }}>
@@ -2046,7 +2054,7 @@ export default function MarketNews() {
           </div>
           {topBreaking && (
             <div style={{ margin: '8px 0 0', padding: '8px 14px', borderBottom: `1px solid ${RED_BORDER}`, background: 'rgba(239,68,68,0.07)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: RED, fontFamily: MONO, flexShrink: 0, paddingTop: 2 }}>⚡ BREAKING</span>
+              <span style={{ fontSize: 9, fontWeight: 500, letterSpacing: '.1em', color: RED, fontFamily: MONO, flexShrink: 0, paddingTop: 2 }}>⚡ BREAKING</span>
               <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, flex: 1 }}>{topBreaking.headline}</span>
               <span style={{ fontSize: 9, color: T3, fontFamily: MONO, flexShrink: 0, paddingTop: 2 }}>{fmtRelative(topBreaking.timestamp)}</span>
             </div>

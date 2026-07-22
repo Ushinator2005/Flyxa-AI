@@ -286,7 +286,7 @@
 }
 
 .ec-hero-num {
-  font: 600 42px/1 var(--font-mono);
+  font: 500 42px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.03em;
   color: var(--txt);
@@ -397,7 +397,7 @@
 
 .ec-metric-val {
   display: block;
-  font: 600 20px/1 var(--font-mono);
+  font: 500 20px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
   color: var(--txt);
@@ -635,7 +635,7 @@
 }
 
 .ec-verdict-badge {
-  font: 700 24px/1 var(--font-mono);
+  font: 500 24px/1 var(--font-mono);
   letter-spacing: .04em;
   -webkit-font-smoothing: antialiased;
 }
@@ -882,7 +882,7 @@
 
 .ec-card-badge {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   font-family: var(--font-mono);
   color: var(--amber);
   border: 1px solid var(--amber-border);
@@ -902,7 +902,7 @@
 
 .ec-alert-idx {
   flex-shrink: 0;
-  font: 600 10px/1 var(--font-mono);
+  font: 500 10px/1 var(--font-mono);
   color: var(--txt-3);
   padding-top: 3px;
 }
@@ -1011,61 +1011,118 @@
 
 /* ── Pass screen ──────────────────────────────────────────────── */
 .ec-pass {
+  position: relative;
   height: 100%;
   display: grid;
   place-content: center;
   padding: 32px;
   background: var(--bg);
+  overflow: hidden;
 }
 .ec-pass-inner {
-  width: min(480px, 100%);
+  position: relative;
+  width: min(560px, 100%);
   margin-inline: auto;
   text-align: center;
 }
-.ec-pass-icon {
+/* Staggered entrance — each block rises in sequence */
+.ec-pass-inner > * {
+  animation: ec-pass-rise .5s ease both;
+}
+.ec-pass-inner > *:nth-child(2) { animation-delay: .06s; }
+.ec-pass-inner > *:nth-child(3) { animation-delay: .12s; }
+.ec-pass-inner > *:nth-child(4) { animation-delay: .18s; }
+.ec-pass-inner > *:nth-child(5) { animation-delay: .26s; }
+.ec-pass-inner > *:nth-child(6) { animation-delay: .34s; }
+.ec-pass-inner > *:nth-child(7) { animation-delay: .4s; }
+.ec-pass-inner > *:nth-child(8) { animation-delay: .46s; }
+@keyframes ec-pass-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ec-pass-inner > * { animation: none; }
+}
+.ec-pass-medal {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
   background: var(--green-dim);
   border: 1px solid var(--green-border);
+  /* detached outer ring — medal, not badge */
+  box-shadow: 0 0 0 5px var(--bg), 0 0 0 6px var(--green-border);
   color: var(--green);
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 .ec-pass-kicker {
-  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .1em;
+  font-weight: 500;
+  letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--green);
 }
+.ec-pass-rule {
+  flex: 0 0 44px;
+  height: 1px;
+  background: var(--green-border);
+}
 .ec-pass-title {
-  margin: 0 0 6px;
-  font-size: 24px;
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 5vw, 40px);
   font-weight: 700;
   letter-spacing: -.02em;
+  line-height: 1;
   color: var(--txt);
 }
-.ec-pass-firm {
-  margin: 0 0 24px;
-  font-size: 12px;
-  color: var(--txt-3);
+.ec-pass-sub {
+  margin: 0 0 26px;
+  font-size: 13px;
+  color: var(--txt-2);
 }
+.ec-pass-proof {
+  width: min(430px, 100%);
+  margin: 0 auto 22px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--app-panel);
+  text-align: left;
+}
+.ec-pass-proof-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.ec-pass-proof-head span:first-child { color: var(--txt-2); }
+.ec-pass-proof-head span:last-child { color: var(--green); }
 .ec-pass-stats {
   display: flex;
   justify-content: center;
-  gap: 32px;
+  gap: 40px;
   margin-bottom: 24px;
 }
 .ec-pass-stat strong {
   display: block;
-  font: 600 20px/1 var(--font-mono);
+  font: 500 24px/1 var(--font-mono);
   color: var(--txt);
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
+.ec-pass-stat strong.ec-pass-pos { color: var(--green); }
 .ec-pass-stat span {
   font-size: 10px;
   color: var(--txt-3);
@@ -1259,7 +1316,7 @@
 
 .ec-strategy-item strong {
   display: block;
-  font: 600 15px/1.15 var(--font-mono);
+  font: 500 15px/1.15 var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.015em;
   color: var(--txt);

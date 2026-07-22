@@ -1660,7 +1660,7 @@ export default function Settings() {
                   color: AMBER,
                   fontFamily: 'var(--font-mono)',
                   fontSize: '13px',
-                  fontWeight: 700,
+                  fontWeight: 500,
                   flexShrink: 0,
                   overflow: 'hidden',
                 }}
@@ -2594,7 +2594,7 @@ export default function Settings() {
                           {[...getPayouts(account.id)].sort((a, b) => b.date.localeCompare(a.date)).map(payout => (
                             <div key={payout.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--app-border)' }}>
                               <span style={{ fontSize: 11, color: 'var(--app-text-muted)', minWidth: 84, fontFamily: 'var(--font-mono)' }}>{payout.date}</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: AMBER, fontFamily: 'var(--font-mono)', minWidth: 100 }}>
+                              <span style={{ fontSize: 12, fontWeight: 500, color: AMBER, fontFamily: 'var(--font-mono)', minWidth: 100 }}>
                                 +${payout.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                               <span style={{ fontSize: 11, color: 'var(--app-text-subtle)', flex: 1 }}>{payout.note ?? ''}</span>
@@ -2612,7 +2612,7 @@ export default function Settings() {
                         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
                           <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>
                             Total:{' '}
-                            <span style={{ fontWeight: 700, color: AMBER, fontFamily: 'var(--font-mono)' }}>
+                            <span style={{ fontWeight: 500, color: AMBER, fontFamily: 'var(--font-mono)' }}>
                               ${getPayouts(account.id).reduce((s, p) => s + p.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </span>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { waitlistApi } from '../services/api.js';
@@ -34,6 +34,57 @@ export default function Auth() {
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
+
+  // Invite redemption — the only way to create an account. The token arrives
+  // as ?invite=... from the seat-open email; the backend resolves it to an
+  // email and creates the user with the service role (public signups stay
+  // disabled in Supabase).
+  const [inviteToken] = useState(() => new URLSearchParams(window.location.search).get('invite'));
+  const [inviteStatus, setInviteStatus] = useState<'loading' | 'ready' | 'invalid'>('loading');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    waitlistApi.inviteInfo(inviteToken)
+      .then(({ email: invitedEmail }) => {
+        setInviteEmail(invitedEmail);
+        setInviteStatus('ready');
+      })
+      .catch(err => {
+        setInviteMessage(err instanceof Error ? err.message : 'This invite link is not valid.');
+        setInviteStatus('invalid');
+      });
+  }, [inviteToken]);
+
+  const clearInvite = () => {
+    window.history.replaceState(null, '', window.location.pathname);
+    window.location.reload();
+  };
+
+  const handleRedeem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await waitlistApi.redeemInvite(inviteToken ?? '', password);
+      const { error: signInError } = await signIn(inviteEmail, password);
+      if (signInError) setError(signInError);
+      // On success the auth context routes into the app.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the account. Try again.');
+    }
+    setLoading(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +137,153 @@ export default function Auth() {
     setLoading(false);
   };
 
+  // Invite redemption screen — same one-column composition as the waitlist.
+  if (inviteToken) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-theme-toggle">
+          <ThemeToggle compact />
+        </div>
+
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', textAlign: 'center' }}>
+          <FlyxaLogo
+            size={92}
+            showWordmark
+            wordmarkClassName="text-[3.2rem] font-bold tracking-[-0.05em]"
+            subtitleClassName="text-[12px] tracking-[0.6em]"
+          />
+
+          <p style={{
+            margin: '52px 0 0',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            fontWeight: 500,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: 'var(--accent)',
+          }}>
+            Private beta · seat open
+          </p>
+
+          {inviteStatus === 'loading' && (
+            <p style={{ margin: '24px 0 0', fontSize: 14, color: 'var(--app-text-muted)' }}>
+              Checking your invite…
+            </p>
+          )}
+
+          {inviteStatus === 'invalid' && (
+            <>
+              <h1 style={{
+                margin: '16px 0 12px',
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(1.7rem, 3.4vw, 2.2rem)',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+                color: 'var(--app-text)',
+              }}>
+                This invite won't open.
+              </h1>
+              <p style={{ margin: '0 0 26px', fontSize: 14, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 420 }}>
+                {inviteMessage}
+              </p>
+              <button
+                type="button"
+                onClick={clearInvite}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
+              >
+                Go to sign in
+              </button>
+            </>
+          )}
+
+          {inviteStatus === 'ready' && (
+            <>
+              <h1 style={{
+                margin: '16px 0 12px',
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(2rem, 4vw, 2.7rem)',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+                color: 'var(--app-text)',
+              }}>
+                Create your account.
+              </h1>
+
+              <p style={{ margin: '0 0 30px', fontSize: 14, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 400 }}>
+                Your seat is reserved for{' '}
+                <span style={{ color: 'var(--app-text)', fontWeight: 600 }}>{inviteEmail}</span>.
+                Choose a password and you're in.
+              </p>
+
+              <form onSubmit={handleRedeem} style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12, textAlign: 'left' }}>
+                <div className="auth-field">
+                  <label htmlFor="invite-password" className="auth-label">Password</label>
+                  <div className="auth-input-wrap">
+                    <input
+                      id="invite-password"
+                      type={showPassword ? 'text' : 'password'}
+                      className="auth-input"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      style={{ paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(c => !c)}
+                      className="auth-pw-toggle"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="auth-field">
+                  <label htmlFor="invite-password-confirm" className="auth-label">Confirm password</label>
+                  <input
+                    id="invite-password-confirm"
+                    type={showPassword ? 'text' : 'password'}
+                    className="auth-input"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Same password again"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                {error && (
+                  <div className="auth-alert auth-alert--error">
+                    <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" disabled={loading} className="auth-submit-btn">
+                  {loading ? 'Creating your account…' : 'Create account'}
+                </button>
+              </form>
+
+              <p style={{ margin: '16px 0 0', fontSize: 11, color: 'var(--app-text-subtle)' }}>
+                By continuing you agree to our{' '}
+                <a href="/terms" style={{ color: 'inherit', textDecoration: 'underline' }}>Terms</a>
+                {' '}and{' '}
+                <a href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>Privacy Policy</a>.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // The waitlist is its own minimal screen — one column, one field, no chrome.
   if (tab === 'waitlist') {
     return (
@@ -107,7 +305,7 @@ export default function Auth() {
             margin: '52px 0 0',
             fontFamily: 'var(--font-mono)',
             fontSize: 10,
-            fontWeight: 600,
+            fontWeight: 500,
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
             color: 'var(--accent)',

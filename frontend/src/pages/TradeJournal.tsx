@@ -425,7 +425,7 @@ function PriceLevelsBlock({ trade, onMutate }: PriceLevelsBlockProps) {
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 18,
-                fontWeight: 600,
+                fontWeight: 500,
                 width: 130,
                 background: 'transparent',
                 border: '1px solid var(--border)',
@@ -862,7 +862,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
               <div style={{ display:'flex', gap:3 }}>
                 {GRADES.map(g => (
                   <button key={g} type="button" onClick={() => update({ sessionGrade: dr.sessionGrade === g ? null : g })}
-                    style={{ padding:'3px 8px', fontSize:9, borderRadius:4, border:`1px solid ${dr.sessionGrade===g?'var(--amber-border)':'var(--app-border)'}`, background:dr.sessionGrade===g?'var(--amber-dim)':'transparent', color:dr.sessionGrade===g?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-mono)', fontWeight:700 }}>
+                    style={{ padding:'3px 8px', fontSize:9, borderRadius:4, border:`1px solid ${dr.sessionGrade===g?'var(--amber-border)':'var(--app-border)'}`, background:dr.sessionGrade===g?'var(--amber-dim)':'transparent', color:dr.sessionGrade===g?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-mono)', fontWeight:500 }}>
                     {g}
                   </button>
                 ))}
@@ -1184,14 +1184,14 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
             )}
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', color: score > 0 ? scoreColor : 'var(--txt-3)', lineHeight: 1 }}>{score > 0 ? score : '—'}</span>
+            <span style={{ fontSize: 14, fontWeight: 500, fontFamily: 'var(--font-mono)', color: score > 0 ? scoreColor : 'var(--txt-3)', lineHeight: 1 }}>{score > 0 ? score : '—'}</span>
           </div>
         </div>
         {/* Title + insights */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>Process Score</span>
-            {score > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: scoreColor }}>{grade}</span>}
+            {score > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: scoreColor }}>{grade}</span>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {insights.slice(0, 2).map((ins, i) => (
@@ -1415,7 +1415,7 @@ function TradeJournalCard({
             return (
               <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>{label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: score === 0 ? 'var(--txt-3)' : score <= 2 ? 'var(--red)' : score === 3 ? 'var(--amber)' : 'var(--green)' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: score === 0 ? 'var(--txt-3)' : score <= 2 ? 'var(--red)' : score === 3 ? 'var(--amber)' : 'var(--green)' }}>
                   {score === 0 ? '—' : score}
                 </span>
               </span>

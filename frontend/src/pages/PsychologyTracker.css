@@ -515,7 +515,7 @@
 .psy-impact-value {
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   text-align: right;
   white-space: nowrap;
 }
@@ -676,7 +676,7 @@
   flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .psy-flag-pnl.green { color: var(--green); }

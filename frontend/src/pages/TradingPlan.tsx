@@ -399,7 +399,7 @@ export default function TradingPlan() {
                 Every session verified against the rulebook — the last 30 days.
               </p>
             </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: adherenceColor, flexShrink: 0 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', color: adherenceColor, flexShrink: 0 }}>
               {planReport.pct !== null ? `HELD TO ${planReport.pct}%` : 'NO VERIFIED DAYS YET'}
             </span>
           </div>
@@ -408,7 +408,7 @@ export default function TradingPlan() {
             {/* Daily discipline — one bar per calendar day, binary verdict */}
             <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '15px 18px 0' }}>
-                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
                   DAILY DISCIPLINE · 30D
                 </p>
                 {chartRuleId ? (
@@ -420,7 +420,7 @@ export default function TradingPlan() {
                       border: '1px solid rgba(245,158,11,0.5)', borderRadius: 5,
                       background: 'rgba(245,158,11,0.12)', color: 'var(--amber)',
                       padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9,
-                      fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+                      fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
                     }}
                   >
                     {ruleLabelById.get(chartRuleId) ?? 'Rule'} · ✕
@@ -486,7 +486,7 @@ export default function TradingPlan() {
               {/* Click-a-bar readout: exactly which rules held or broke that day */}
               {selectedDay && (
                 <div style={{ borderTop: '1px solid var(--app-border)', padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '6px 14px', flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--txt)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 500, letterSpacing: '0.08em', color: 'var(--txt)' }}>
                     {daySeries.find(day => day.date === selectedDay)?.label?.toUpperCase() ?? selectedDay}
                   </span>
                   {(dayEvalMap.get(selectedDay) ?? []).map(ev => (
@@ -524,7 +524,7 @@ export default function TradingPlan() {
             {/* Per-rule ledger, worst offender first */}
             <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--app-border)' }}>
-                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
                   BY RULE · WORST FIRST
                 </p>
                 <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
@@ -578,7 +578,7 @@ export default function TradingPlan() {
                           <div style={{ width: '100%', height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)' }} />
                         )}
                       </div>
-                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: pctTextColor }}>
+                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: pctTextColor }}>
                         {pct !== null ? `${pct}%` : '—'}
                       </span>
                       <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>
@@ -601,10 +601,10 @@ export default function TradingPlan() {
             <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
                 <div style={{ padding: '14px 16px 0' }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
                     CLEAN STREAK
                   </p>
-                  <p style={{ margin: '11px 0 0', fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 700, lineHeight: 1, color: cleanStreaks.current > 0 ? 'var(--amber)' : 'var(--txt-3)' }}>
+                  <p style={{ margin: '11px 0 0', fontFamily: 'var(--font-mono)', fontSize: 38, fontWeight: 500, lineHeight: 1, color: cleanStreaks.current > 0 ? 'var(--amber)' : 'var(--txt-3)' }}>
                     {cleanStreaks.current}
                   </p>
                   <p style={{ margin: '7px 0 15px', fontSize: 11, lineHeight: 1.5, color: 'var(--txt-3)' }}>
@@ -619,7 +619,7 @@ export default function TradingPlan() {
 
               <div style={{ border: '1px solid var(--app-border)', borderRadius: 10, backgroundColor: 'var(--app-panel)', overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: 'var(--txt-2)' }}>
                     THE DAMAGE · 30D
                   </p>
                 </div>
@@ -627,7 +627,7 @@ export default function TradingPlan() {
                   <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Most broken</p>
                   <p style={{ margin: '5px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--txt-2)' }}>
                     {planReport.mostBrokenRule
-                      ? <>{planReport.mostBrokenRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--red)' }}>{planReport.mostBrokenRule.failed}×</span></>
+                      ? <>{planReport.mostBrokenRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--red)' }}>{planReport.mostBrokenRule.failed}×</span></>
                       : 'No rule breaks in the last 30 days.'}
                   </p>
                 </div>
@@ -635,7 +635,7 @@ export default function TradingPlan() {
                   <div style={{ padding: '12px 16px', borderTop: '1px solid var(--app-border)' }}>
                     <p style={{ margin: 0, fontSize: 9, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>Costliest when broken</p>
                     <p style={{ margin: '5px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--txt-2)' }}>
-                      {planReport.mostExpensiveRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--red)' }}>
+                      {planReport.mostExpensiveRule.label} — <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--red)' }}>
                         −${Math.round(planReport.mostExpensiveRule.lossWhenBroken).toLocaleString()}
                       </span> lost on break days
                     </p>
@@ -663,10 +663,10 @@ export default function TradingPlan() {
                   <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>
                     {activeRuleCount} rule{activeRuleCount !== 1 ? 's' : ''} in force
                     {planReport.pct !== null && (
-                      <> · held to <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: adherenceColor }}>{planReport.pct}%</span> over the last 30 days</>
+                      <> · held to <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: adherenceColor }}>{planReport.pct}%</span> over the last 30 days</>
                     )}
                     {todayStats.checkedCount > 0 && (
-                      <> · <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--amber)' }}>{todayStats.passed} of {todayStats.checkedCount}</span> held today</>
+                      <> · <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--amber)' }}>{todayStats.passed} of {todayStats.checkedCount}</span> held today</>
                     )}
                   </p>
                 </div>
@@ -723,7 +723,7 @@ export default function TradingPlan() {
                       }}
                     >
                       <span style={{
-                        flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
+                        flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500,
                         color: hoveredRuleId === rule.id ? 'var(--amber)' : 'var(--txt-3)',
                         letterSpacing: '0.05em', transition: 'color 0.13s ease',
                       }}>
@@ -740,7 +740,7 @@ export default function TradingPlan() {
                       {value ? (
                         <span style={{
                           flexShrink: 0, textAlign: 'right',
-                          fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 700,
+                          fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 500,
                           letterSpacing: '-0.01em', color: value.color, whiteSpace: 'nowrap',
                         }}>
                           {value.text}
@@ -913,7 +913,7 @@ export default function TradingPlan() {
 
               {/* Signature line — a contract is either in force or it isn't */}
               <div style={{ borderTop: '1px solid var(--app-border)', padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: riskAcceptedToday ? 'var(--green)' : 'var(--txt-3)' }}>
+                <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: riskAcceptedToday ? 'var(--green)' : 'var(--txt-3)' }}>
                   {riskAcceptedToday ? '✓' : '·'}
                 </span>
                 <span style={{ fontSize: 11, fontStyle: 'italic', lineHeight: 1.5, color: riskAcceptedToday ? 'var(--txt-2)' : 'var(--txt-3)' }}>
