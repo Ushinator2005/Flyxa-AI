@@ -3,8 +3,10 @@ import rateLimit from 'express-rate-limit';
 import { supabase } from '../services/supabase';
 import { LOGO_EMAIL_BASE64 } from '../assets/logoEmail';
 
-// Where invite links point. Local dev inherits the Vite origin from .env.
-const APP_URL = process.env.FRONTEND_URL?.trim() || 'https://www.flyxa.app';
+// Where invite links point. Deliberately NOT FRONTEND_URL — invites are sent
+// from the founder's laptop where that is localhost, and an emailed localhost
+// link is dead on arrival. Override with WAITLIST_APP_URL only for testing.
+const APP_URL = process.env.WAITLIST_APP_URL?.trim() || 'https://www.flyxa.app';
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INVITE_TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
 
