@@ -28,7 +28,6 @@ const Backtest = lazy(() => import('./pages/Backtest.js'));
 const TradingPlan = lazy(() => import('./pages/TradingPlan.js'));
 const Billing = lazy(() => import('./pages/Billing.js'));
 const EvaluationCoach = lazy(() => import('./pages/EvaluationCoach.js'));
-const PsychologyTracker = lazy(() => import('./pages/PsychologyTracker.js'));
 const Journal = lazy(() => import('./pages/Journal.js'));
 const Goals = lazy(() => import('./pages/Goals.js'));
 const Rivals = lazy(() => import('./pages/Rivals.js'));
@@ -420,7 +419,6 @@ export default function App() {
               <Route path="/billing" element={<Billing />} />
               <Route path="/evaluation-coach" element={<EvaluationCoach />} />
               <Route path="/chart" element={<Navigate to="/backtest" replace />} />
-              <Route path="/psychology" element={<PsychologyTracker />} />
               <Route path="/session" element={<SessionActive />} />
               <Route path="/journal" element={<Journal />} />
               <Route path="/goals" element={<Goals />} />

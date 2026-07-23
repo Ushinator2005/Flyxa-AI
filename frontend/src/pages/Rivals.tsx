@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bell, BookOpen, Check, ChevronDown, Clock3, Flame,
-  Gauge, LockKeyhole, MessageCircle, Plus, Search, Share2, ShieldCheck,
-  TrendingDown, TrendingUp, Trophy, Users, X,
+  Bell, Check, ChevronDown, Clock3, LockKeyhole,
+  MessageCircle, Plus, Share2, X,
 } from 'lucide-react';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
@@ -21,7 +20,7 @@ type FormDot = { tone: 'win' | 'loss' | 'empty'; label: string };
 
 const PERIODS: Array<{ value: LeaderboardPeriod; label: string }> = [
   { value: 'week', label: 'This week' },
-  { value: 'month', label: 'Last 30 days' },
+  { value: 'month', label: '30 days' },
   { value: 'season', label: 'Season' },
   { value: 'allTime', label: 'All time' },
 ];
@@ -82,18 +81,10 @@ function formatMetricValue(value: number, metric: LeaderboardMetric): string {
 }
 
 function formatMetricGap(value: number, metric: LeaderboardMetric): string {
-  if (metric === 'netPnl') return formatCurrency(Math.max(0, value));
+  if (metric === 'netPnl') return formatCurrency(Math.max(0, value)).replace('+', '');
   if (metric === 'riskAdjusted') return `${Math.max(0, value).toFixed(2)}x`;
   if (metric === 'journalStreak') return `${Math.ceil(Math.max(0, value))} days`;
   return `${Math.ceil(Math.max(0, value))} points`;
-}
-
-function positionStripeColor(position: number, isMe: boolean | undefined): string {
-  if (isMe) return 'var(--rv-blue)';
-  if (position === 1) return 'var(--rv-gold)';
-  if (position === 2) return 'var(--rv-silver)';
-  if (position === 3) return 'var(--rv-bronze)';
-  return 'var(--rv-text-3)';
 }
 
 function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, period: LeaderboardPeriod): number {
@@ -149,13 +140,6 @@ function getFormDots(rival: Rival): FormDot[] {
   });
 }
 
-function getSeasonProgress() {
-  const now = new Date();
-  const season = String(now.getMonth() + 1).padStart(2, '0');
-  const day = Math.max(1, Math.min(90, now.getDate()));
-  return { label: `SEASON ${season} · DAY ${day} / 90`, pct: Math.min(100, (day / 90) * 100) };
-}
-
 function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
   const stats = getPeriodStats(rival, period);
   if (stats.tradeCount === 0) return 'No logged trades yet — the table moves when the journal fills.';
@@ -170,7 +154,6 @@ export default function Rivals() {
   const { trades: allMyTrades } = useTrades();
   const [period, setPeriod] = useState<LeaderboardPeriod>('season');
   const [metric, setMetric] = useState<LeaderboardMetric>('netPnl');
-  const [query, setQuery] = useState('');
   const [selectedRivalId, setSelectedRivalId] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [activeChatRival, setActiveChatRival] = useState<Rival | null>(null);
@@ -214,9 +197,7 @@ export default function Rivals() {
     () => [...leagueRivals].sort((a, b) => metricValue(b, metric, period) - metricValue(a, metric, period)),
     [leagueRivals, metric, period],
   );
-  const filtered = ranked.filter(rival => `${rival.displayName} ${rival.username}`.toLowerCase().includes(query.trim().toLowerCase()));
   const selectedRival = rivals.find(rival => rival.id === selectedRivalId) ?? currentUser;
-  const seasonProgress = useMemo(() => getSeasonProgress(), []);
   const pendingRequests = rivalRequests.filter(request => request.status === 'pending');
 
   // Reset share state when switching rivals
@@ -257,6 +238,14 @@ export default function Rivals() {
 
   const selectedStats = getPeriodStats(selectedRival, period);
   const selectedPeriodLabel = PERIODS.find(item => item.value === period)?.label ?? 'selected period';
+  const metricLabel = MODES.find(mode => mode.value === metric)?.label ?? 'Net P&L';
+
+  const selectedPosition = ranked.findIndex(rival => rival.id === selectedRival.id) + 1;
+  const aheadRival = selectedPosition > 1 ? ranked[selectedPosition - 2] : null;
+  const selectedGap = aheadRival
+    ? Math.max(0, metricValue(aheadRival, metric, period) - metricValue(selectedRival, metric, period))
+    : 0;
+  const selectedMovement = rankMovement(selectedRival, leagueRivals, metric, period);
 
   async function handleRequestAction(id: string, action: 'accept' | 'decline' | 'cancel') {
     setRequestBusyId(id);
@@ -275,307 +264,327 @@ export default function Rivals() {
   }
 
   return (
-    <div className="rivals-page rv-competitive-page">
-      <div className="rivals-shell rv-league-shell">
-        <header className="rv-league-header" data-tour-id="rivals-header">
+    <div className="rv2-page">
+
+      {/* ── Header ── */}
+      <header className="rv2-hd" data-tour-id="rivals-header">
+        <div>
+          <h1>Leaderboard</h1>
+          <p>Compare verified P&amp;L, consistency, and process with your trading circle.</p>
+        </div>
+        <div className="rv2-acts">
+          <button className="rv2-btn" type="button" onClick={() => setLeagueBuilderOpen(open => !open)}>
+            <LockKeyhole size={13} /> Private league
+          </button>
+          <button className="rv2-btn primary" type="button" onClick={() => setIsAddOpen(true)}>
+            <Plus size={13} /> Add rival
+          </button>
+        </div>
+      </header>
+
+      {pendingRequests.length > 0 && (
+        <div className="rivals-requests-banner">
+          <button type="button" className="rivals-requests-banner-header" onClick={() => setRequestsOpen(open => !open)}>
+            <span className="rivals-requests-banner-icon"><Bell size={14} /><span className="rivals-requests-banner-pulse" /></span>
+            <span className="rivals-requests-banner-label">Pending invites <span className="rivals-requests-banner-count">{pendingRequests.length}</span></span>
+            <ChevronDown size={15} style={{ transform: requestsOpen ? 'rotate(180deg)' : undefined }} />
+          </button>
+          {requestsOpen && <div className="rivals-requests-banner-body">{pendingRequests.map(request => (
+            <RequestRow key={request.id} request={request} busy={requestBusyId === request.id} onAction={action => void handleRequestAction(request.id, action)} />
+          ))}</div>}
+        </div>
+      )}
+
+      {leagueBuilderOpen && (
+        <section className="rv-league-builder">
           <div>
-            <div className="rv-page-kicker">RIVALS</div>
-            <h1>Leaderboard</h1>
-            <p>Compare verified P&L, consistency, and process with your trading circle.</p>
+            <span className="rv-section-kicker">NEW PRIVATE LEAGUE</span>
+            <h3>Build your circle</h3>
+            <p>Choose accepted rivals and save a focused leaderboard.</p>
           </div>
-          <div className="rv-header-actions">
-            <button className="rv-secondary-button" type="button" onClick={() => setLeagueBuilderOpen(open => !open)}>
-              <LockKeyhole size={14} /> Private league
-            </button>
-            <button className="rivals-cta" type="button" onClick={() => setIsAddOpen(true)}>
-              <Plus size={14} /> Add rival
-            </button>
+          <input value={leagueName} onChange={event => setLeagueName(event.target.value)} placeholder="League name" />
+          <div className="rv-member-picks">
+            {rivals.filter(rival => !rival.isMe).map(rival => (
+              <button type="button" key={rival.id} className={leagueMembers.includes(rival.id) ? 'selected' : ''} onClick={() => setLeagueMembers(current => current.includes(rival.id) ? current.filter(id => id !== rival.id) : [...current, rival.id])}>
+                <RivalAvatar rival={rival} /> {rival.displayName} {leagueMembers.includes(rival.id) && <Check size={13} />}
+              </button>
+            ))}
           </div>
-        </header>
+          <button type="button" className="rivals-cta" onClick={createLeague}>Create league</button>
+        </section>
+      )}
 
-        {pendingRequests.length > 0 && (
-          <div className="rivals-requests-banner">
-            <button type="button" className="rivals-requests-banner-header" onClick={() => setRequestsOpen(open => !open)}>
-              <span className="rivals-requests-banner-icon"><Bell size={14} /><span className="rivals-requests-banner-pulse" /></span>
-              <span className="rivals-requests-banner-label">Pending invites <span className="rivals-requests-banner-count">{pendingRequests.length}</span></span>
-              <ChevronDown size={15} style={{ transform: requestsOpen ? 'rotate(180deg)' : undefined }} />
-            </button>
-            {requestsOpen && <div className="rivals-requests-banner-body">{pendingRequests.map(request => (
-              <RequestRow key={request.id} request={request} busy={requestBusyId === request.id} onAction={action => void handleRequestAction(request.id, action)} />
-            ))}</div>}
+      {/* ── Controls: one row, no nested bars ── */}
+      <div className="rv2-ctl" data-tour-id="rivals-controls">
+        <div className="rv2-ctl-grp">
+          <span className="rv2-lbl">Rank by</span>
+          <div className="rv2-seg">
+            {MODES.map(mode => (
+              <button type="button" key={mode.value} title={mode.help} className={metric === mode.value ? 'on' : ''} onClick={() => setMetric(mode.value)}>
+                {mode.label}
+              </button>
+            ))}
           </div>
-        )}
-
-        {leagueBuilderOpen && (
-          <section className="rv-league-builder">
-            <div>
-              <span className="rv-section-kicker">NEW PRIVATE LEAGUE</span>
-              <h3>Build your circle</h3>
-              <p>Choose accepted rivals and save a focused leaderboard.</p>
-            </div>
-            <input value={leagueName} onChange={event => setLeagueName(event.target.value)} placeholder="League name" />
-            <div className="rv-member-picks">
-              {rivals.filter(rival => !rival.isMe).map(rival => (
-                <button type="button" key={rival.id} className={leagueMembers.includes(rival.id) ? 'selected' : ''} onClick={() => setLeagueMembers(current => current.includes(rival.id) ? current.filter(id => id !== rival.id) : [...current, rival.id])}>
-                  <RivalAvatar rival={rival} /> {rival.displayName} {leagueMembers.includes(rival.id) && <Check size={13} />}
-                </button>
+        </div>
+        <div className="rv2-ctl-grp">
+          {leagues.length > 0 && (
+            <div className="rv2-seg">
+              <button type="button" className={activeLeagueId === 'all' ? 'on' : ''} onClick={() => setActiveLeagueId('all')}>All rivals</button>
+              {leagues.map(league => (
+                <button key={league.id} type="button" className={activeLeagueId === league.id ? 'on' : ''} onClick={() => setActiveLeagueId(league.id)}>{league.name}</button>
               ))}
             </div>
-            <button type="button" className="rivals-cta" onClick={createLeague}>Create league</button>
-          </section>
-        )}
-
-        <nav className="rv-league-tabs">
-          <button className={activeLeagueId === 'all' ? 'active' : ''} onClick={() => setActiveLeagueId('all')}><Users size={13} /> All rivals</button>
-          {leagues.map(league => <button key={league.id} className={activeLeagueId === league.id ? 'active' : ''} onClick={() => setActiveLeagueId(league.id)}><LockKeyhole size={12} /> {league.name}</button>)}
-        </nav>
-
-        <section className="rv-command-bar" data-tour-id="rivals-controls">
-          <div className="rv-command-selects">
-            <div className="rv-metric-tabs">
-              {MODES.map(mode => <button type="button" key={mode.value} title={mode.help} className={metric === mode.value ? 'active' : ''} onClick={() => setMetric(mode.value)}>{mode.label}</button>)}
-            </div>
-            <div className="rv-period-tabs">
-              {PERIODS.map(item => <button type="button" key={item.value} className={period === item.value ? 'active' : ''} onClick={() => setPeriod(item.value)}>{item.label}</button>)}
-            </div>
+          )}
+          <div className="rv2-seg">
+            {PERIODS.map(item => (
+              <button type="button" key={item.value} className={period === item.value ? 'on' : ''} onClick={() => setPeriod(item.value)}>{item.label}</button>
+            ))}
           </div>
-          <div className="rv-command-tools">
-            <label><Search size={13} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search traders" /></label>
+        </div>
+      </div>
+
+      {/* ── Standings table + selected trader rail ── */}
+      <div className="rv2-grid">
+        <div className="rv2-tbl" data-tour-id="rivals-standings">
+          <div className="rv2-tbl-hd">
+            <b>{activeLeague?.name ?? 'Standings'}</b>
           </div>
-        </section>
-
-        <div className="rv-competition-layout">
-          <main className="rv-ranking-card" data-tour-id="rivals-standings">
-            <div className="rv-ranking-title">
-              <div><h2>{activeLeague?.name ?? 'Standings'}</h2><p>Updated from saved journal trades</p></div>
-              <div className="rv-ranking-title-right">
-                <span className="rv-season-chip">{seasonProgress.label}</span>
-                <span className="rv-live-indicator"><i /> Live</span>
-              </div>
-            </div>
-            <div className="rv-card-grid">
-              <div className="rv-standings-head" aria-hidden="true">
-                <span>#</span>
-                <span />
-                <span>Trader</span>
-                <span className="rvh-center">Last 5</span>
-                <span className="rvh-center">Trades</span>
-                <div className="rvh-stats"><span>Win</span><span>Avg R</span><span>Consist</span></div>
-                <span className="rvh-right">{MODES.find(mode => mode.value === metric)?.label}</span>
-              </div>
-              {filtered.map((rival) => {
-                const stats = getPeriodStats(rival, period);
-                const movement = rankMovement(rival, leagueRivals, metric, period);
-                const position = ranked.findIndex(item => item.id === rival.id) + 1;
-                const stripeColor = positionStripeColor(position, rival.isMe);
-                const isSelected = selectedRival.id === rival.id;
-                const formDots = getFormDots(rival);
-                const rivalValue = metricValue(rival, metric, period);
-                const ahead = position > 1 ? ranked[position - 2] : null;
-                const gapToAhead = ahead ? Math.max(0, metricValue(ahead, metric, period) - rivalValue) : 0;
-                return (
-                  <button
-                    key={rival.id}
-                    type="button"
-                    aria-pressed={isSelected}
-                    className={['rv-rival-card', rival.isMe ? 'me' : '', isSelected ? 'selected' : '', movement !== 0 ? 'rank-flash' : ''].filter(Boolean).join(' ')}
-                    style={{ '--rv-card-tier-color': stripeColor } as React.CSSProperties}
-                    onClick={() => setSelectedRivalId(rival.id)}
-                  >
-                    <div className="rv-card-rank">
-                      <span className="rv-card-pos">#{position}</span>
-                    </div>
-                    <RivalAvatar rival={rival} />
-                    <div className="rv-card-identity">
-                      <strong>{rival.displayName}{rival.isMe && <em>You</em>}</strong>
-                      <small>@{rival.username}</small>
-                      {rival.isMe && <span className="rv-card-coach">{coachingInsight(rival, period)}</span>}
-                    </div>
-                    <div className="rv-form-dots" aria-label="Last 5 market days. Green means winning day, red means losing day, hollow means no trades." title="Last 5 market days: green = winning day, red = losing day, hollow = no trades.">
-                      {formDots.map((dot, index) => <span key={`${rival.id}-${index}-${dot.tone}`} className={`rv-form-dot ${dot.tone}`} title={dot.label} />)}
-                    </div>
-                    <span className="rv-card-volume" title={`Trades in ${selectedPeriodLabel}`}>
-                      <b>{stats.tradeCount}</b> trade{stats.tradeCount === 1 ? '' : 's'}
-                    </span>
-                    <div className="rv-card-stats">
-                      <div className="rv-card-stat">
-                        <span>Win</span>
-                        <strong>{stats.winRate}%</strong>
-                      </div>
-                      <div className="rv-card-stat">
-                        <span>Avg R</span>
-                        <strong>{stats.avgR == null ? '—' : `${stats.avgR.toFixed(2)}R`}</strong>
-                      </div>
-                      <div className="rv-card-stat">
-                        <span>Consist.</span>
-                        <strong>{stats.consistency}</strong>
-                        <i className="rv-card-stat-bar"><u style={{ width: `${stats.consistency}%` }} /></i>
-                      </div>
-                    </div>
-                    <div className="rv-card-pnl">
-                      <AnimatedMetric rival={rival} metric={metric} period={period} className={rivalValue >= 0 ? 'positive' : 'negative'} />
-                      <small className="rv-row-hover-meta">{ahead ? `${formatMetricGap(gapToAhead, metric)} behind #${position - 1}` : 'View profile'}</small>
-                      <span className={`rv-movement ${movement > 0 ? 'up' : movement < 0 ? 'down' : ''}`}>
-                        {movement > 0 ? <><TrendingUp size={11} />{movement}</> : movement < 0 ? <><TrendingDown size={11} />{Math.abs(movement)}</> : <span className="rv-card-neutral">—</span>}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </main>
-
-          <aside className="rv-competitive-rail" data-tour-id="rivals-detail">
-            <section className="rv-trader-insight">
-              <div className="rv-insight-head"><RivalAvatar rival={selectedRival} large /><div><h3>{selectedRival.displayName}</h3><small>@{selectedRival.username}</small></div>{!selectedRival.isMe && selectedRival.userId && <button aria-label={`Message ${selectedRival.displayName}`} onClick={() => { setActiveChatRival(selectedRival); setChatOpen(true); }}><MessageCircle size={14} /></button>}</div>
-              <div className="rv-inspector-tabs">
-                <button type="button" className={inspectorTab === 'overview' ? 'active' : ''} onClick={() => setInspectorTab('overview')}>Overview</button>
-                <button type="button" className={inspectorTab === 'progress' ? 'active' : ''} onClick={() => setInspectorTab('progress')}>Progress</button>
-                <button type="button" className={inspectorTab === 'trades' ? 'active' : ''} onClick={() => setInspectorTab('trades')}>Trades</button>
-              </div>
-              {inspectorTab === 'overview' ? (
-                <>
-                  {(() => {
-                    const selectedPosition = ranked.findIndex(rival => rival.id === selectedRival.id) + 1;
-                    const aheadRival = selectedPosition > 1 ? ranked[selectedPosition - 2] : null;
-                    const selectedGap = aheadRival
-                      ? Math.max(0, metricValue(aheadRival, metric, period) - metricValue(selectedRival, metric, period))
-                      : 0;
-                    return (
-                      <div className="rv-inspector-meta">
-                        <span>Rank #{selectedPosition} of {ranked.length}</span>
-                        {aheadRival
-                          ? <span>{formatMetricGap(selectedGap, metric)} behind #{selectedPosition - 1}</span>
-                          : <span>Leading this board</span>}
-                      </div>
-                    );
-                  })()}
-                  <div className="rv-insight-equity"><div><span>{PERIODS.find(item => item.value === period)?.label} equity</span><strong className={selectedStats.netPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(selectedStats.netPnl)}</strong></div><Sparkline values={selectedStats.equityCurve} large /></div>
-                  <div className="rv-insight-kpis">
-                    <Stat label="Trades" value={String(selectedStats.tradeCount)} />
-                    <Stat label="Trading days" value={String(selectedStats.tradingDays)} />
-                    <Stat label="Win rate" value={`${selectedStats.winRate}%`} />
-                    <Stat label="Consistency" value={`${selectedStats.consistency}/100`} />
-                    <Stat label="Avg R" value={selectedStats.avgR == null ? '—' : `${selectedStats.avgR.toFixed(2)}R`} />
-                    <Stat label="Green days" value={String(selectedStats.greenDays)} />
-                    <Stat label="Max drawdown" value={selectedStats.maxDrawdown > 0 ? `-$${Math.abs(selectedStats.maxDrawdown).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'} />
-                    <Stat label="Rule adherence" value={selectedStats.ruleAdherence > 0 ? `${Math.round(selectedStats.ruleAdherence)}%` : '—'} />
+          <div className="rv2-thead" aria-hidden="true">
+            <span>#</span><span>Trader</span><span>Last 5</span>
+            <span className="r">Trades</span><span className="r">Win</span><span className="r">Avg R</span>
+            <span className="r">Consist</span><span className="r">{metricLabel}</span>
+          </div>
+          {ranked.map((rival, index) => {
+            const stats = getPeriodStats(rival, period);
+            const position = index + 1;
+            const isSelected = selectedRival.id === rival.id;
+            const formDots = getFormDots(rival);
+            const rivalValue = metricValue(rival, metric, period);
+            return (
+              <button
+                key={rival.id}
+                type="button"
+                aria-pressed={isSelected}
+                className={['rv2-trow', rival.isMe ? 'you' : '', isSelected ? 'sel' : ''].filter(Boolean).join(' ')}
+                onClick={() => setSelectedRivalId(rival.id)}
+              >
+                <span className={`rv2-rank${position === 1 ? ' first' : ''}`}>{position}</span>
+                <div className="rv2-who">
+                  <RivalAvatar rival={rival} />
+                  <div className="rv2-nm">
+                    <b>{rival.displayName}</b>
+                    <span>@{rival.username}</span>
                   </div>
-                  <p className="rv-trader-note">{selectedStats.consistency >= 75 ? 'High consistency with controlled downside.' : selectedStats.netPnl > 0 ? 'Profitable, with room to tighten consistency.' : 'Process metrics are the clearest route back up the table.'}</p>
-                </>
-              ) : inspectorTab === 'progress' ? (
-                <div className="rv-inspector-progress">
-                  <div className="rv-inspector-section-head"><h4>Weekly habits</h4><span>Resets Monday</span></div>
-                  <Challenge icon={<BookOpen size={14} />} title="Document every trade" value={selectedRival.mascot.stats.tradingJournalScore} target={100} suffix="%" />
-                  <Challenge icon={<ShieldCheck size={14} />} title="Verified + reported adherence" value={getPeriodStats(selectedRival, 'week').ruleAdherence} target={100} suffix="%" />
-                  <Challenge icon={<Flame size={14} />} title="Build a green streak" value={getPeriodStats(selectedRival, 'week').greenDays} target={5} suffix="/5" />
-                  <div className="rv-inspector-section-head rv-milestone-head"><h4>Milestones</h4><span>Verified data</span></div>
-                  <div className="rv-achievement-list">
-                    <Badge unlocked={selectedStats.greenDays >= 5} icon={<TrendingUp size={14} />} title="Five green days" />
-                    <Badge unlocked={selectedStats.ruleAdherence >= 90} icon={<ShieldCheck size={14} />} title="90% rule adherence" />
-                    <Badge unlocked={selectedStats.maxDrawdown <= Math.max(100, Math.abs(selectedStats.netPnl) * .3)} icon={<Gauge size={14} />} title="Controlled drawdown" />
-                    <Badge unlocked={selectedStats.tradeCount >= 10} icon={<BookOpen size={14} />} title="10 documented trades" />
-                    <Badge unlocked={selectedStats.winRate >= 60} icon={<Trophy size={14} />} title="60% win rate" />
-                    <Badge unlocked={selectedStats.consistency >= 75} icon={<ShieldCheck size={14} />} title="75 consistency score" />
-                  </div>
+                  {rival.isMe && <span className="rv2-yt">YOU</span>}
                 </div>
+                <div className="rv2-l5" title="Last 5 market days: green = winning day, red = losing day, hollow = no trades.">
+                  {formDots.map((dot, dotIndex) => <i key={`${rival.id}-${dotIndex}`} className={dot.tone === 'win' ? 'w' : dot.tone === 'loss' ? 'l' : ''} title={dot.label} />)}
+                </div>
+                <span className="rv2-num r">{stats.tradeCount}</span>
+                <span className="rv2-num r">{stats.winRate}%</span>
+                <span className="rv2-num r">{stats.avgR == null ? '—' : `${stats.avgR.toFixed(2)}R`}</span>
+                <div className="rv2-consist">
+                  <span className="rv2-cb"><i style={{ width: `${Math.max(0, Math.min(100, stats.consistency))}%` }} /></span>
+                  <span className="rv2-num">{stats.consistency}</span>
+                </div>
+                <span className={`rv2-pnl${metric === 'netPnl' ? (rivalValue > 0 ? ' pos' : rivalValue < 0 ? ' neg' : '') : ''}`}>
+                  {formatMetricValue(rivalValue, metric)}
+                </span>
+              </button>
+            );
+          })}
+          <button type="button" className="rv2-add-row" onClick={() => setIsAddOpen(true)}>
+            <Plus size={12} /> Add a rival to the board
+          </button>
+        </div>
+
+        {/* ── Right rail: the selected trader, made actionable ── */}
+        <aside className="rv2-me" data-tour-id="rivals-detail">
+          <div className="rv2-me-hd">
+            <RivalAvatar rival={selectedRival} large />
+            <div className="rv2-nm">
+              <b>{selectedRival.displayName}</b>
+              <span>@{selectedRival.username}</span>
+            </div>
+            {!selectedRival.isMe && selectedRival.userId && (
+              <button type="button" className="rv2-chat" aria-label={`Message ${selectedRival.displayName}`} onClick={() => { setActiveChatRival(selectedRival); setChatOpen(true); }}>
+                <MessageCircle size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="rv-inspector-tabs">
+            <button type="button" className={inspectorTab === 'overview' ? 'active' : ''} onClick={() => setInspectorTab('overview')}>Overview</button>
+            <button type="button" className={inspectorTab === 'progress' ? 'active' : ''} onClick={() => setInspectorTab('progress')}>Progress</button>
+            <button type="button" className={inspectorTab === 'trades' ? 'active' : ''} onClick={() => setInspectorTab('trades')}>Trades</button>
+          </div>
+
+          {inspectorTab === 'overview' ? (
+            <>
+              <div className="rv2-me-rank">
+                <b>#{selectedPosition}<span> of {ranked.length}</span></b>
+                <i>
+                  {selectedMovement > 0 ? `▲ ${selectedMovement} THIS ${period === 'week' ? 'WEEK' : 'PERIOD'}`
+                    : selectedMovement < 0 ? `▼ ${Math.abs(selectedMovement)} THIS ${period === 'week' ? 'WEEK' : 'PERIOD'}`
+                    : 'NO RANK CHANGE'}
+                </i>
+              </div>
+              <div className="rv2-gap">
+                {aheadRival
+                  ? <><b>{formatMetricGap(selectedGap, metric)}</b> behind #{selectedPosition - 1} on {metricLabel.toLowerCase()}</>
+                  : <>Leading this board on <b>{metricLabel.toLowerCase()}</b></>}
+              </div>
+              <div className="rv2-kv">
+                <div className="rv2-kv-cell">
+                  <span className="rv2-lbl">{selectedPeriodLabel} P&amp;L</span>
+                  <b className={selectedStats.netPnl > 0 ? 'pos' : selectedStats.netPnl < 0 ? 'neg' : ''}>{formatCurrency(selectedStats.netPnl)}</b>
+                </div>
+                <div className="rv2-kv-cell"><span className="rv2-lbl">Trades</span><b>{selectedStats.tradeCount}</b></div>
+                <div className="rv2-kv-cell"><span className="rv2-lbl">Win rate</span><b>{selectedStats.winRate}%</b></div>
+                <div className="rv2-kv-cell"><span className="rv2-lbl">Consistency</span><b>{selectedStats.consistency}/100</b></div>
+                <div className="rv2-kv-cell">
+                  <span className="rv2-lbl">Rule adherence</span>
+                  <b>{selectedStats.ruleAdherence > 0 ? `${Math.round(selectedStats.ruleAdherence)}%` : '—'}</b>
+                </div>
+                <div className="rv2-kv-cell">
+                  <span className="rv2-lbl">Green days</span>
+                  <b>{selectedStats.greenDays}{selectedStats.tradingDays > 0 ? ` of ${selectedStats.tradingDays}` : ''}</b>
+                </div>
+              </div>
+              <div className="rv2-me-note">{coachingInsight(selectedRival, period)}</div>
+            </>
+          ) : inspectorTab === 'progress' ? (
+            (() => {
+              const weekStats = getPeriodStats(selectedRival, 'week');
+              const habits = [
+                { label: 'Document every trade', pct: Math.round(selectedRival.mascot.stats.tradingJournalScore), value: `${Math.round(selectedRival.mascot.stats.tradingJournalScore)}%` },
+                { label: 'Verified rule adherence', pct: Math.round(weekStats.ruleAdherence), value: `${Math.round(weekStats.ruleAdherence)}%` },
+                { label: 'Build a green streak', pct: Math.round((weekStats.greenDays / 5) * 100), value: `${Math.min(weekStats.greenDays, 5)}/5` },
+              ];
+              const milestones = [
+                { label: 'Five green days', done: selectedStats.greenDays >= 5 },
+                { label: '90% rule adherence', done: selectedStats.ruleAdherence >= 90 },
+                { label: 'Controlled drawdown', done: selectedStats.maxDrawdown <= Math.max(100, Math.abs(selectedStats.netPnl) * .3) },
+                { label: '10 documented trades', done: selectedStats.tradeCount >= 10 },
+                { label: '60% win rate', done: selectedStats.winRate >= 60 },
+                { label: '75 consistency score', done: selectedStats.consistency >= 75 },
+              ];
+              const doneCount = milestones.filter(m => m.done).length;
+              return (
+                <div className="rv2-prog">
+                  <div className="rv2-sec-hd"><span>Weekly habits</span><span>RESETS MONDAY</span></div>
+                  {habits.map(habit => (
+                    <div key={habit.label} className="rv2-hab">
+                      <span className="rv2-hab-name">{habit.label}</span>
+                      <span className="rv2-cb"><i style={{ width: `${Math.max(0, Math.min(100, habit.pct))}%` }} /></span>
+                      <b>{habit.value}</b>
+                    </div>
+                  ))}
+                  <div className="rv2-sec-hd"><span>Milestones</span><span>{doneCount} OF {milestones.length}</span></div>
+                  {milestones.map(milestone => (
+                    <div key={milestone.label} className={`rv2-ms${milestone.done ? ' done' : ''}`}>
+                      <span>{milestone.label}</span>
+                      <b>{milestone.done ? '✓' : '·'}</b>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()
+          ) : (
+            /* Trades tab */
+            <div className="rv-trades-panel">
+              {selectedRival.isMe ? (
+                <p className="rv-trades-empty">Select a rival to see trades they've shared with you.</p>
               ) : (
-                /* Trades tab */
-                <div className="rv-trades-panel">
-                  {selectedRival.isMe ? (
-                    <p className="rv-trades-empty">Select a rival to see trades they've shared with you.</p>
+                <>
+                  <div className="rv-trades-section-head">
+                    <span>Shared by {selectedRival.displayName}</span>
+                  </div>
+
+                  {sharesLoading ? (
+                    <p className="rv-trades-empty">Loading…</p>
+                  ) : sharedTrades.length === 0 ? (
+                    <p className="rv-trades-empty">No trades shared with you yet.</p>
                   ) : (
+                    sharedTrades.map((record) => {
+                      const { shareId, sharedAt, trade } = record;
+                      return (<button key={shareId} type="button" className="rv-shared-trade" onClick={() => setViewingSharedTrade(record)}>
+                        <div className="rv-st-header">
+                          <span className="rv-st-symbol">{trade.symbol}</span>
+                          <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
+                          <span className="rv-st-date">{trade.trade_date}</span>
+                          <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
+                        </div>
+                        <div className="rv-st-meta">
+                          <span>Entry {trade.entry_price}</span>
+                          <span>Exit {trade.exit_price}</span>
+                          <span>{trade.exit_reason}</span>
+                          <span className="rv-st-shared-at">{new Date(sharedAt).toLocaleDateString()}</span>
+                        </div>
+                        {trade.screenshot_url && (
+                          <div className="rv-st-screenshot">
+                            <img src={trade.screenshot_url} alt="Trade screenshot" />
+                          </div>
+                        )}
+                        {(trade.pre_trade_notes || trade.post_trade_notes) && (
+                          <div className="rv-st-notes">
+                            {trade.pre_trade_notes && <p>{trade.pre_trade_notes}</p>}
+                            {trade.post_trade_notes && <p>{trade.post_trade_notes}</p>}
+                          </div>
+                        )}
+                      </button>
+                    );})
+                  )}
+
+                  {!selectedRival.isMe && selectedRival.userId && (
                     <>
-                      <div className="rv-trades-section-head">
-                        <span>Shared by {selectedRival.displayName}</span>
+                      <div className="rv-trades-section-head rv-trades-share-head">
+                        <span>Share a trade</span>
+                        <button
+                          type="button"
+                          className="rv-trades-share-toggle"
+                          onClick={() => setSharePickerOpen(p => !p)}
+                        >
+                          <Share2 size={11} />
+                          {sharePickerOpen ? 'Cancel' : `With ${selectedRival.displayName}`}
+                        </button>
                       </div>
 
-                      {sharesLoading ? (
-                        <p className="rv-trades-empty">Loading…</p>
-                      ) : sharedTrades.length === 0 ? (
-                        <p className="rv-trades-empty">No trades shared with you yet.</p>
-                      ) : (
-                        sharedTrades.map((record) => {
-                          const { shareId, sharedAt, trade } = record;
-                          return (<button key={shareId} type="button" className="rv-shared-trade" onClick={() => setViewingSharedTrade(record)}>
-                            <div className="rv-st-header">
-                              <span className="rv-st-symbol">{trade.symbol}</span>
-                              <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
-                              <span className="rv-st-date">{trade.trade_date}</span>
-                              <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
-                            </div>
-                            <div className="rv-st-meta">
-                              <span>Entry {trade.entry_price}</span>
-                              <span>Exit {trade.exit_price}</span>
-                              <span>{trade.exit_reason}</span>
-                              <span className="rv-st-shared-at">{new Date(sharedAt).toLocaleDateString()}</span>
-                            </div>
-                            {trade.screenshot_url && (
-                              <div className="rv-st-screenshot">
-                                <img src={trade.screenshot_url} alt="Trade screenshot" />
-                              </div>
-                            )}
-                            {(trade.pre_trade_notes || trade.post_trade_notes) && (
-                              <div className="rv-st-notes">
-                                {trade.pre_trade_notes && <p>{trade.pre_trade_notes}</p>}
-                                {trade.post_trade_notes && <p>{trade.post_trade_notes}</p>}
-                              </div>
-                            )}
-                          </button>
-                        );})
-                      )}
-
-                      {!selectedRival.isMe && selectedRival.userId && (
-                        <>
-                          <div className="rv-trades-section-head rv-trades-share-head">
-                            <span>Share a trade</span>
-                            <button
-                              type="button"
-                              className="rv-trades-share-toggle"
-                              onClick={() => setSharePickerOpen(p => !p)}
-                            >
-                              <Share2 size={11} />
-                              {sharePickerOpen ? 'Cancel' : `With ${selectedRival.displayName}`}
-                            </button>
+                      {sharePickerOpen && (
+                        allMyTrades.length === 0 ? (
+                          <p className="rv-trades-empty">No trades found in your journal yet.</p>
+                        ) : (
+                          <div className="rv-share-picker">
+                            {allMyTrades.slice(0, 20).map(trade => {
+                              const alreadyShared = sharedSet.has(trade.id);
+                              const busy = sharingBusy === trade.id;
+                              return (
+                                <div key={trade.id} className={`rv-share-trade-row${alreadyShared ? ' shared' : ''}`}>
+                                  <span className="rv-st-symbol">{trade.symbol}</span>
+                                  <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
+                                  <span className="rv-st-date">{trade.trade_date}</span>
+                                  <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
+                                  <button
+                                    type="button"
+                                    className={`rv-share-btn${alreadyShared ? ' shared' : ''}`}
+                                    disabled={busy || alreadyShared}
+                                    onClick={() => void handleShareTrade(trade.id)}
+                                  >
+                                    {alreadyShared ? <><Check size={10} /> Shared</> : busy ? '…' : 'Share'}
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
-
-                          {sharePickerOpen && (
-                            allMyTrades.length === 0 ? (
-                              <p className="rv-trades-empty">No trades found in your journal yet.</p>
-                            ) : (
-                              <div className="rv-share-picker">
-                                {allMyTrades.slice(0, 20).map(trade => {
-                                  const alreadyShared = sharedSet.has(trade.id);
-                                  const busy = sharingBusy === trade.id;
-                                  return (
-                                    <div key={trade.id} className={`rv-share-trade-row${alreadyShared ? ' shared' : ''}`}>
-                                      <span className="rv-st-symbol">{trade.symbol}</span>
-                                      <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
-                                      <span className="rv-st-date">{trade.trade_date}</span>
-                                      <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
-                                      <button
-                                        type="button"
-                                        className={`rv-share-btn${alreadyShared ? ' shared' : ''}`}
-                                        disabled={busy || alreadyShared}
-                                        onClick={() => void handleShareTrade(trade.id)}
-                                      >
-                                        {alreadyShared ? <><Check size={10} /> Shared</> : busy ? '…' : 'Share'}
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )
-                          )}
-                        </>
+                        )
                       )}
                     </>
                   )}
-                </div>
+                </>
               )}
-            </section>
-          </aside>
-        </div>
+            </div>
+          )}
+        </aside>
       </div>
 
       <AddRivalModal open={isAddOpen} onClose={() => setIsAddOpen(false)} onSubmit={username => addRival(username)} />
@@ -594,71 +603,8 @@ export default function Rivals() {
   );
 }
 
-function Sparkline({ values, compact = false, large = false, ambient = false }: { values: number[]; compact?: boolean; large?: boolean; ambient?: boolean }) {
-  const pts = values.length > 1 ? values : [0, values[0] ?? 0];
-  const min = Math.min(...pts);
-  const max = Math.max(...pts);
-  const range = Math.max(1, max - min);
-  const W = large ? 260 : compact ? 76 : 120;
-  const H = large ? 62 : compact ? 28 : 40;
-  const PAD = 3;
-  const xOf = (i: number) => (i / Math.max(1, pts.length - 1)) * (W - PAD * 2) + PAD;
-  const yOf = (v: number) => H - PAD - ((v - min) / range) * (H - PAD * 2);
-  const linePts = pts.map((v, i) => `${xOf(i)},${yOf(v)}`).join(' ');
-  const areaPts = [`${PAD},${H}`, ...pts.map((v, i) => `${xOf(i)},${yOf(v)}`), `${W - PAD},${H}`].join(' ');
-  const positive = pts[pts.length - 1] >= pts[0];
-  const color = positive ? '#34d399' : '#f87171';
-  const fillId = `rv-spk-fill-${React.useId().replace(/:/g, '')}`;
-  return (
-    <svg className={`rv-sparkline ${large ? 'large' : ''} ${ambient ? 'ambient' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <polygon points={areaPts} fill={`url(#${fillId})`} />
-      <polyline className="rv-sparkline-path" points={linePts} fill="none" stroke={color} strokeWidth={ambient ? 2.2 : large ? 1.5 : 1.2} vectorEffect="non-scaling-stroke" pathLength={1} />
-    </svg>
-  );
-}
-
-function AnimatedMetric({ rival, metric, period, className }: { rival: Rival; metric: LeaderboardMetric; period: LeaderboardPeriod; className?: string }) {
-  const target = metricValue(rival, metric, period);
-  const [displayValue, setDisplayValue] = useState(0);
-
-  useEffect(() => {
-    let frame = 0;
-    const start = performance.now();
-    const duration = 420;
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(target * eased);
-      if (progress < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [target]);
-
-  return <strong className={className}>{formatMetricValue(displayValue, metric)}</strong>;
-}
-
 function RivalAvatar({ rival, large = false }: { rival: Rival; large?: boolean }) {
   return <span className={`rv-leader-avatar ${large ? 'large' : ''}`} style={{ color: rival.avatarColor, borderColor: `${rival.avatarColor}66`, background: `${rival.avatarColor}18` }}>{rival.avatarUrl ? <img src={rival.avatarUrl} alt="" /> : rival.avatarInitials}</span>;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return <div><span>{label}</span><strong>{value}</strong></div>;
-}
-
-function Challenge({ icon, title, value, target, suffix }: { icon: React.ReactNode; title: string; value: number; target: number; suffix: string }) {
-  const progress = Math.max(0, Math.min(100, (value / target) * 100));
-  return <div className="rv-challenge"><span className="rv-challenge-icon">{icon}</span><div><strong>{title}</strong><i><u style={{ width: `${progress}%` }} /></i></div><b>{Math.min(value, target)}{suffix}</b></div>;
-}
-
-function Badge({ unlocked, icon, title }: { unlocked: boolean; icon: React.ReactNode; title: string }) {
-  return <div className={unlocked ? 'unlocked' : ''}><span>{icon}</span><strong>{title}</strong>{unlocked ? <Check size={12} /> : <LockKeyhole size={11} />}</div>;
 }
 
 function RequestRow({ request, busy, onAction }: { request: RivalRequestResponse; busy: boolean; onAction: (action: 'accept' | 'decline' | 'cancel') => void }) {

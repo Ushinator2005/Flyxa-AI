@@ -1891,6 +1891,30 @@ export default function Settings() {
                 {' '}— drives the header clock and pre-session timing.
               </p>
             </label>
+
+            <label>
+              <span
+                style={{
+                  display: 'block',
+                  marginBottom: '6px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: T2,
+                }}
+              >
+                Clock Format
+              </span>
+              <WorkspaceSelect
+                value={preferences.clockFormat ?? '12h'}
+                onChange={v => updatePreferences({ clockFormat: v as '12h' | '24h' })}
+              >
+                <option value="12h">12-hour (9:27 AM)</option>
+                <option value="24h">24-hour (09:27)</option>
+              </WorkspaceSelect>
+              <p style={{ marginTop: '6px', fontSize: '10px', color: T3, lineHeight: 1.5 }}>
+                Applies to the header clock and the news wire timestamps.
+              </p>
+            </label>
           </div>
         </SectionPanel>
 

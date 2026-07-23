@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -644,11 +644,82 @@ function tapeSourceColor(source: string): string {
   return TAPE_SOURCE_PALETTE[hash % TAPE_SOURCE_PALETTE.length];
 }
 
-function fmtClock(timestamp: string): string {
+// Tape timestamps render in market time (ET) so they line up with the
+// header market clock instead of the viewer's local timezone, and follow
+// the same 12h/24h preference as that clock.
+function fmtClock(timestamp: string, format: '12h' | '24h' = '12h'): string {
   const parsed = new Date(timestamp);
   if (Number.isNaN(parsed.getTime())) return '--:--:--';
-  const two = (n: number) => String(n).padStart(2, '0');
-  return `${two(parsed.getHours())}:${two(parsed.getMinutes())}:${two(parsed.getSeconds())}`;
+  const hour12 = format !== '24h';
+  try {
+    return parsed.toLocaleTimeString(hour12 ? 'en-US' : 'en-GB', {
+      timeZone: 'America/New_York',
+      hour12,
+      hour: hour12 ? 'numeric' : '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    const two = (n: number) => String(n).padStart(2, '0');
+    return `${two(parsed.getHours())}:${two(parsed.getMinutes())}:${two(parsed.getSeconds())}`;
+  }
+}
+
+// ET calendar date for a timestamp — used to group the tape by trading day.
+function etDateSlice(timestamp: string): string | null {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return null;
+  try {
+    return parsed.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  } catch {
+    return parsed.toISOString().slice(0, 10);
+  }
+}
+
+// TODAY / YESTERDAY / "MON JUL 21" labels for the tape's day separators.
+function etDayLabel(slice: string): string {
+  const today = etDateSlice(new Date().toISOString());
+  if (slice === today) return 'TODAY';
+  const yesterday = etDateSlice(new Date(Date.now() - 86400000).toISOString());
+  if (slice === yesterday) return 'YESTERDAY';
+  const parsed = new Date(`${slice}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return slice;
+  return parsed
+    .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    .toUpperCase();
+}
+
+// Wall-clock time in a timezone -> UTC epoch ms (same math as the dashboard's
+// calendar snippet, so both agree on when an event has passed).
+function wallTimeToUtcMs(dateSlice: string, timeHHMM: string, tz: string): number | null {
+  try {
+    const [yearS, monthS, dayS] = dateSlice.split('-');
+    const [hourS, minuteS] = timeHHMM.split(':');
+    const year = Number(yearS), month = Number(monthS), day = Number(dayS);
+    const hour = Number(hourS), minute = Number(minuteS);
+    if ([year, month, day, hour, minute].some(Number.isNaN)) return null;
+    const utcGuess = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(utcGuess));
+    const get = (type: string) => Number(parts.find(part => part.type === type)?.value ?? 0);
+    const shownAsUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+    return utcGuess - (shownAsUtc - utcGuess);
+  } catch {
+    return null;
+  }
+}
+
+// Re-render a normalized 24h HH:MM string per the clock-format preference.
+function applyClockFormat(hhmm: string, format: '12h' | '24h'): string {
+  if (format === '24h' || !/^\d{2}:\d{2}$/.test(hhmm)) return hhmm;
+  const [h, m] = hhmm.split(':').map(Number);
+  const meridiem = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${meridiem}`;
 }
 
 // Wire headlines often end in "– Reuters" while the source tag already says
@@ -663,6 +734,8 @@ const normalizeForCompare = (value: string) => value.toLowerCase().replace(/[^a-
 // One dense tape row — time, source, headline. The Tree News idiom:
 // chronology is the layout, impact is the color.
 function NewsCard({ item }: { item: NewsFilterItem }) {
+  const { preferences } = useAppSettings();
+  const clockFormat = preferences.clockFormat ?? '12h';
   const [expanded, setExpanded] = useState(false);
   // A summary only counts as detail when it genuinely says more than the
   // headline — wire summaries are frequently the headline minus punctuation.
@@ -703,7 +776,7 @@ function NewsCard({ item }: { item: NewsFilterItem }) {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
         <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 10.5, color: hot ? T1 : T3, fontVariantNumeric: 'tabular-nums' }}>
-          {fmtClock(item.timestamp)}
+          {fmtClock(item.timestamp, clockFormat)}
         </span>
         {/* Explicit impact word — no color-decoding required */}
         <span style={{
@@ -1047,11 +1120,11 @@ function CalendarCurrencyButton({
                 />
                 <span aria-hidden style={{
                   width: 12, height: 12, borderRadius: 3, flexShrink: 0,
-                  border: `1px solid ${checked ? 'rgba(245,158,11,0.55)' : BORDER}`,
-                  background: checked ? 'rgba(245,158,11,0.16)' : 'transparent',
+                  border: `1px solid ${checked ? AMBER : BORDER}`,
+                  background: checked ? AMBER : 'transparent',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  {checked && <span style={{ fontSize: 8, lineHeight: 1, color: AMBER, fontWeight: 600 }}>✓</span>}
+                  {checked && <span style={{ fontSize: 8, lineHeight: 1, color: '#161310', fontWeight: 700 }}>✓</span>}
                 </span>
                 {code}
               </label>
@@ -1084,6 +1157,8 @@ function CalendarPanel({
   weekOffset: number;
   onWeekOffsetChange: (offset: number | ((prev: number) => number)) => void;
 }) {
+  const { preferences } = useAppSettings();
+  const clockFormat = preferences.clockFormat ?? '12h';
   const safeDisplayTimezone = normalizeCalendarTimeZone(displayTimezone);
   const todaySlice = getTimeZoneParts(new Date(), safeDisplayTimezone).date;
   const filteredEvents = events.filter((event) => impactSelection[event.impact]);
@@ -1175,9 +1250,9 @@ function CalendarPanel({
               style={{
                 height: 21,
                 borderRadius: 4,
-                border: `1px solid ${btn.active ? 'rgba(245,158,11,0.5)' : BORDER}`,
-                background: btn.active ? 'rgba(245,158,11,0.12)' : 'transparent',
-                color: btn.active ? AMBER : T3,
+                border: `1px solid ${btn.active ? AMBER : BORDER}`,
+                background: btn.active ? AMBER : 'transparent',
+                color: btn.active ? '#161310' : T3,
                 padding: '0 7px',
                 fontFamily: MONO,
                 fontSize: btn.label.length > 1 ? 8.5 : 11,
@@ -1225,6 +1300,13 @@ function CalendarPanel({
                   const isHigh = event.impact === 'high';
                   const isMed = event.impact === 'medium';
                   const impDot = isHigh ? RED : isMed ? AMBER : T3;
+                  // Released or past its scheduled time -> struck out and dimmed,
+                  // matching the dashboard's calendar treatment.
+                  const normTime = fmtFFTime(event.time);
+                  const eventMs = /^\d{2}:\d{2}$/.test(normTime)
+                    ? wallTimeToUtcMs(event.date, normTime, safeDisplayTimezone)
+                    : null;
+                  const hasPassed = hasActual || (eventMs !== null ? eventMs <= Date.now() : event.date < todaySlice);
                   return (
                     <div
                       key={`${event.event}-${index}`}
@@ -1235,16 +1317,17 @@ function CalendarPanel({
                         gap: 8,
                         padding: '7px 14px',
                         borderBottom: `1px solid ${BORDER}`,
-                        background: isHigh ? 'rgba(239,68,68,0.04)' : 'transparent',
-                        transition: 'background .1s',
+                        background: isHigh && !hasPassed ? 'rgba(239,68,68,0.04)' : 'transparent',
+                        opacity: hasPassed ? 0.42 : 1,
+                        transition: 'background .1s, opacity .2s',
                       }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isHigh ? 'rgba(239,68,68,0.04)' : 'transparent'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = isHigh && !hasPassed ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isHigh && !hasPassed ? 'rgba(239,68,68,0.04)' : 'transparent'; }}
                     >
-                      <span style={{ fontFamily: MONO, fontSize: 12, color: T2, fontWeight: 500 }}>{fmtFFTime(event.time)}</span>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: impDot, flexShrink: 0, boxShadow: isHigh ? `0 0 5px ${RED}` : 'none' }} />
+                      <span style={{ fontFamily: MONO, fontSize: 12, color: T2, fontWeight: 500 }}>{applyClockFormat(normTime, clockFormat)}</span>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: impDot, flexShrink: 0, boxShadow: isHigh && !hasPassed ? `0 0 5px ${RED}` : 'none' }} />
                       <div style={{ minWidth: 0 }}>
-                        <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block' }}>
+                        <span style={{ fontSize: 12, color: isHigh ? '#fff' : T1, fontWeight: isHigh ? 600 : 450, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block', textDecoration: hasPassed ? 'line-through' : 'none', textDecorationColor: 'rgba(255,255,255,0.25)' }}>
                           {currencies.length > 1 && event.country && (
                             <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 500, letterSpacing: '0.06em', color: T3, marginRight: 6 }}>
                               {event.country}
@@ -1343,12 +1426,12 @@ function SourcesPanel({
               />
               <span aria-hidden style={{
                 width: 13, height: 13, borderRadius: 3, flexShrink: 0,
-                border: `1px solid ${active ? 'rgba(245,158,11,0.55)' : BORDER}`,
-                background: active ? 'rgba(245,158,11,0.16)' : 'transparent',
+                border: `1px solid ${active ? AMBER : BORDER}`,
+                background: active ? AMBER : 'transparent',
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'border-color .12s, background .12s',
               }}>
-                {active && <span style={{ fontSize: 9, lineHeight: 1, color: AMBER, fontWeight: 600 }}>✓</span>}
+                {active && <span style={{ fontSize: 9, lineHeight: 1, color: '#161310', fontWeight: 700 }}>✓</span>}
               </span>
               <span style={{ fontSize: 11.5, color: active ? T1 : T2 }}>{source.label}</span>
               {!available && (
@@ -2116,9 +2199,27 @@ export default function MarketNews() {
           )}
 
           <div>
-            {displayed.map((item, index) => (
-              <NewsCard key={`${item.headline}-${index}`} item={item} />
-            ))}
+            {displayed.map((item, index) => {
+              const daySlice = etDateSlice(item.timestamp);
+              const prevSlice = index > 0 ? etDateSlice(displayed[index - 1].timestamp) : null;
+              return (
+                <Fragment key={`${item.headline}-${index}`}>
+                  {daySlice !== prevSlice && daySlice && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px 5px',
+                      borderBottom: '1px solid rgba(255,255,255,0.04)',
+                      position: 'sticky', top: 0, zIndex: 2, background: S1,
+                    }}>
+                      <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 500, letterSpacing: '0.12em', color: etDayLabel(daySlice) === 'TODAY' ? AMBER : T3 }}>
+                        {etDayLabel(daySlice)}
+                      </span>
+                      <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
+                    </div>
+                  )}
+                  <NewsCard item={item} />
+                </Fragment>
+              );
+            })}
           </div>
           </div>
         </main>

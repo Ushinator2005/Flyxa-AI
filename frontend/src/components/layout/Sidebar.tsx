@@ -47,7 +47,6 @@ const primaryNavItems: NavItemDef[] = [
 
 const moreNavItems: NavItemDef[] = [
   { path: '/backtest',     icon: Target,          label: 'Backtest'      },
-  { path: '/psychology',   icon: Brain,           label: 'Psychology'    },
   { path: '/goals',        icon: Crosshair,       label: 'Goals'         },
   { path: '/achievements', icon: Trophy,          label: 'Achievements'  },
 ];
@@ -83,11 +82,13 @@ function NavItem({
         textDecoration: 'none', fontFamily: SANS,
         color: isActive ? AMBER : hov ? T1 : T2,
         background: isActive ? AMBER_DIM : hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        border: isActive ? `1px solid ${AMBER_BORD}` : '1px solid transparent',
+        border: '1px solid transparent',
         transition: 'background 0.13s, color 0.13s, border-color 0.13s',
       }}
     >
-      <Icon size={16} strokeWidth={1.5} />
+      {/* Icons only survive in the collapsed rail, where they ARE the nav.
+          Expanded, the labels carry it — icon rows read cluttered. */}
+      {collapsed && <Icon size={16} strokeWidth={1.5} />}
       {!collapsed && <span>{label}</span>}
     </NavLink>
   );

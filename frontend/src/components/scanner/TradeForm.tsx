@@ -437,15 +437,13 @@ export default function TradeForm({
     </p>
   );
 
+  // Selected state is a solid fill with dark text — the tinted-wash look
+  // reads unfinished.
   const toggleBtn = (active: boolean, color: 'green' | 'red' | 'amber'): React.CSSProperties => {
-    const colors = {
-      green: { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', text: '#34d399' },
-      red:   { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.35)',  text: '#f87171' },
-      amber: { bg: AMBER_DIM,               border: AMBER_BD,                text: AMBER },
-    }[color];
+    const solid = { green: '#34d399', red: '#f87171', amber: AMBER }[color];
     return active
-      ? { flex: 1, height: 36, borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.bg, color: colors.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }
-      : { flex: 1, height: 36, borderRadius: 6, border: `1px solid ${BD}`, background: 'transparent', color: T2, fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 };
+      ? { flex: 1, height: 36, borderRadius: 6, border: `1px solid ${solid}`, background: solid, color: '#161310', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background .1s, color .1s' }
+      : { flex: 1, height: 36, borderRadius: 6, border: `1px solid ${BD}`, background: 'transparent', color: T2, fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background .1s, color .1s' };
   };
 
   const durationInput: React.CSSProperties = { width: '100%', background: 'transparent', border: 'none', textAlign: 'center', fontSize: 13, color: T1, outline: 'none' };

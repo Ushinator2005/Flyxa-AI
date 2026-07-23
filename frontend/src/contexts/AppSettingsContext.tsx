@@ -310,6 +310,7 @@ function parsePreferences(parsed: Partial<AppPreferences> | undefined): AppPrefe
     sessionTimes: normalizeSessionTimes(parsed.sessionTimes),
     scannerColors: parseScannerColors(parsed.scannerColors),
     marketClock: parsed.marketClock === 'futures' || parsed.marketClock === 'forex' ? parsed.marketClock : 'equities',
+    clockFormat: parsed.clockFormat === '24h' ? '24h' : '12h',
   };
 }
 

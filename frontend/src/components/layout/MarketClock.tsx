@@ -18,20 +18,20 @@ function formatMinutes(totalMinutes: number): string {
   return `${mins}m`;
 }
 
-function formatDisplayTime(date: Date, timeZone: string): string {
+function formatDisplayTime(date: Date, timeZone: string, hour12: boolean): string {
   try {
     return new Intl.DateTimeFormat('en-US', {
       timeZone,
-      hour: 'numeric',
+      hour: hour12 ? 'numeric' : '2-digit',
       minute: '2-digit',
-      hour12: true,
+      hour12,
       timeZoneName: 'short',
     }).format(date);
   } catch {
     return new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
+      hour: hour12 ? 'numeric' : '2-digit',
       minute: '2-digit',
-      hour12: true,
+      hour12,
     }).format(date);
   }
 }
@@ -46,8 +46,9 @@ export default function MarketClock({ displayTimezone }: MarketClockProps) {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  const hour12 = (preferences.clockFormat ?? '12h') !== '24h';
   const timing = useMemo(() => getMarketTiming(now, preset), [now, preset]);
-  const displayTime = useMemo(() => formatDisplayTime(now, displayTimezone), [displayTimezone, now]);
+  const displayTime = useMemo(() => formatDisplayTime(now, displayTimezone, hour12), [displayTimezone, now, hour12]);
   const presetOption = MARKET_CLOCK_OPTIONS.find(option => option.value === preset);
 
   const tone = timing.marketOpenNow ? 'open' : 'pending';

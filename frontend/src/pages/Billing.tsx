@@ -2074,7 +2074,7 @@ export default function Billing() {
                   {importCandidates.map(account => {
                     const checked = selectedImportIds.includes(account.id);
                     return (
-                      <label key={account.id} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) auto', gap: 12, alignItems: 'center', border: checked ? '1px solid var(--amber-border)' : '1px solid var(--border)', background: checked ? 'var(--amber-dim)' : 'var(--surface-2)', borderRadius: 7, padding: '12px 13px', cursor: 'pointer' }}>
+                      <label key={account.id} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) auto', gap: 12, alignItems: 'center', border: checked ? '1px solid var(--amber)' : '1px solid var(--border)', background: 'var(--surface-2)', borderRadius: 7, padding: '12px 13px', cursor: 'pointer', transition: 'border-color .1s' }}>
                         <input
                           type="checkbox"
                           checked={checked}

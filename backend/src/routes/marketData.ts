@@ -455,13 +455,50 @@ function parseForexFactoryXml(xml: string): Array<Record<string, unknown>> {
   return events;
 }
 
+// FF's JSON feed dates events as ISO ("2026-07-24T08:30:00-04:00") while its
+// XML fallback uses "07-24-2026" + "8:30am". The archive can hold either
+// format, so dedupe must compare NORMALIZED values or the same event survives
+// twice whenever both formats meet.
+function normalizeEventDateSlice(event: Record<string, unknown>): string {
+  const raw = String(event.date ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const usFormat = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (usFormat) return `${usFormat[3]}-${usFormat[1]}-${usFormat[2]}`;
+  return raw.toLowerCase();
+}
+
+function normalizeEventTime(event: Record<string, unknown>): string {
+  const rawDate = String(event.date ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(rawDate)) return rawDate.slice(11, 16);
+  const rawTime = String(event.time ?? '').trim().toLowerCase();
+  const twelveHour = rawTime.match(/^(\d{1,2}):(\d{2})(am|pm)$/);
+  if (twelveHour) {
+    let hours = Number(twelveHour[1]) % 12;
+    if (twelveHour[3] === 'pm') hours += 12;
+    return `${String(hours).padStart(2, '0')}:${twelveHour[2]}`;
+  }
+  if (/^\d{1,2}:\d{2}/.test(rawTime)) return rawTime.slice(0, 5).padStart(5, '0');
+  return rawTime; // 'all day', 'tentative', ''
+}
+
 function getCalendarEventKey(event: Record<string, unknown>): string {
   return [
-    String(event.date ?? ''),
-    String(event.time ?? ''),
-    String(event.country ?? ''),
-    String(event.title ?? event.event ?? ''),
-  ].join('|').toLowerCase();
+    normalizeEventDateSlice(event),
+    normalizeEventTime(event),
+    String(event.country ?? '').toUpperCase(),
+    String(event.title ?? event.event ?? '').toLowerCase().replace(/\s+/g, ' ').trim(),
+  ].join('|');
+}
+
+// Chronological order regardless of which source each event came from.
+// All-day events lead their day; tentative/unknown times trail it.
+function sortCalendarEvents(events: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  const sortKey = (event: Record<string, unknown>) => {
+    const time = normalizeEventTime(event);
+    const timeRank = /^\d{2}:\d{2}$/.test(time) ? time : time === 'all day' ? '00:00' : '99:99';
+    return `${normalizeEventDateSlice(event)}|${timeRank}`;
+  };
+  return [...events].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 }
 
 function dedupeCalendarEvents(events: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
@@ -785,7 +822,9 @@ function econEventToRow(event: Record<string, unknown>): EconArchiveRow | null {
     forecast: clean(event.forecast),
     previous: clean(event.previous),
     date_slice: dateSlice,
-    time_key: dateText.length > 10 ? dateText.slice(11, 19) : timeText,
+    // Normalized so the JSON and XML variants of the same event share one
+    // archive row instead of upserting under two different keys.
+    time_key: normalizeEventTime(event),
   };
 }
 
@@ -850,7 +889,7 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
       const live = dedupeCalendarEvents(combinedJson);
       void archiveEconEvents(live).catch(err => console.error('Econ archive write failed:', err));
       // Live events first so dedupe prefers the fresher copy over the archive.
-      return res.json(dedupeCalendarEvents([...live, ...await readArchivedEconEvents()]));
+      return res.json(sortCalendarEvents(dedupeCalendarEvents([...live, ...await readArchivedEconEvents()])));
     }
 
     // Fallback: XML export is often available even when JSON is rate-limited.
@@ -867,11 +906,11 @@ router.get('/ff-calendar', authMiddleware, async (_req: Request, res: Response, 
     if (combinedXml.length > 0) {
       const live = dedupeCalendarEvents(combinedXml);
       void archiveEconEvents(live).catch(err => console.error('Econ archive write failed:', err));
-      return res.json(dedupeCalendarEvents([...live, ...await readArchivedEconEvents()]));
+      return res.json(sortCalendarEvents(dedupeCalendarEvents([...live, ...await readArchivedEconEvents()])));
     }
 
     // Both feeds down or rate-limited — the archive still covers past weeks.
-    return res.json(await readArchivedEconEvents());
+    return res.json(sortCalendarEvents(dedupeCalendarEvents(await readArchivedEconEvents())));
   } catch (error) {
     return next(error);
   }

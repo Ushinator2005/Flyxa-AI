@@ -1,363 +1,213 @@
-import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
-  Trophy,
-  Flame,
-  Zap,
-  Crown,
-  Shield,
-  ShieldCheck,
-  Target,
-  Award,
-  TrendingUp,
-  CheckCircle,
-  Star,
-  Calendar,
-  ArrowUpRight,
-  Ruler,
-  DollarSign,
-  Gem,
-  Snowflake,
-  ClipboardCheck,
-  ListChecks,
-  PenLine,
+  Trophy, Flame, Zap, Crown, Shield, ShieldCheck, Target, Award, TrendingUp,
+  CheckCircle, Star, Calendar, Ruler, DollarSign, Gem, Snowflake,
+  ClipboardCheck, ListChecks, PenLine,
 } from 'lucide-react';
 import { useAchievements } from '../hooks/useAchievements.js';
 import type { Achievement as AchievementItem } from '../hooks/useAchievements.js';
-import type { AchievementCategory, AchievementRarity } from '../utils/streaks.js';
+import useFlyxaStore from '../store/flyxaStore.js';
 import './Achievements.css';
 
 const ICON_MAP: Record<string, LucideIcon> = {
-  Zap,
-  Flame,
-  Crown,
-  Shield,
-  ShieldCheck,
-  Target,
-  Award,
-  TrendingUp,
-  CheckCircle,
-  Star,
-  Calendar,
-  Trophy,
-  Ruler,
-  DollarSign,
-  Gem,
-  Snowflake,
-  ClipboardCheck,
-  ListChecks,
-  PenLine,
+  Zap, Flame, Crown, Shield, ShieldCheck, Target, Award, TrendingUp,
+  CheckCircle, Star, Calendar, Trophy, Ruler, DollarSign, Gem, Snowflake,
+  ClipboardCheck, ListChecks, PenLine,
 };
 
-const CATEGORIES: Array<{ value: AchievementCategory | 'all'; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'milestone', label: 'Milestone' },
-  { value: 'streak', label: 'Streak' },
+const GROUPS: Array<{ value: AchievementItem['category']; label: string }> = [
+  { value: 'milestone', label: 'Milestones' },
+  { value: 'streak', label: 'Streaks' },
   { value: 'discipline', label: 'Discipline' },
-  { value: 'session', label: 'Session' },
+  { value: 'session', label: 'Sessions' },
   { value: 'consistency', label: 'Consistency' },
 ];
 
-type Tone = 'green' | 'blue' | 'purple' | 'amber';
-type RarityClass = 'common' | 'rare' | 'epic' | 'legendary';
-
-function AchievementIcon({ name, size = 20 }: { name: string; size?: number }) {
+function AchievementIcon({ name, size = 15 }: { name: string; size?: number }) {
   const Icon = ICON_MAP[name] ?? Trophy;
-  return <Icon size={size} strokeWidth={1.9} />;
+  return <Icon size={size} strokeWidth={1.8} />;
 }
 
-function formatUnlockedDate(unlockedAt?: string | null): string | null {
-  if (!unlockedAt) return null;
-  return new Date(unlockedAt).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function fmtUnlockDate(unlockedAt: string | null): string {
+  if (!unlockedAt) return '';
+  return new Date(unlockedAt)
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    .toUpperCase();
 }
 
-function getRarityClass(rarity?: AchievementRarity): RarityClass {
-  if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary') return rarity;
-  return 'common';
+/** Consecutive-day journal streak: any day with trades or a post-session note. */
+function journalStreaks(dates: string[]): { current: number; best: number } {
+  if (dates.length === 0) return { current: 0, best: 0 };
+  const sorted = [...new Set(dates)].sort();
+  const DAY = 86400000;
+  const toMs = (slice: string) => new Date(`${slice}T00:00:00`).getTime();
+
+  let best = 1;
+  let run = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    run = toMs(sorted[i]) - toMs(sorted[i - 1]) === DAY ? run + 1 : 1;
+    best = Math.max(best, run);
+  }
+
+  // Current streak only counts if it reaches today or yesterday.
+  const todayMs = toMs(new Date().toISOString().slice(0, 10));
+  const lastMs = toMs(sorted[sorted.length - 1]);
+  if (todayMs - lastMs > DAY) return { current: 0, best };
+  let current = 1;
+  for (let i = sorted.length - 1; i > 0; i--) {
+    if (toMs(sorted[i]) - toMs(sorted[i - 1]) === DAY) current += 1;
+    else break;
+  }
+  return { current, best };
 }
 
-function StreakCard({
-  label,
-  value,
-  best,
-  icon,
-  tone,
-  note,
-}: {
-  label: string;
-  value: number;
-  best: number;
-  icon: ReactNode;
-  tone: Tone;
-  note: string;
-}) {
-  const progress = best > 0 ? Math.min(100, Math.round((value / best) * 100)) : value > 0 ? 100 : 0;
-
+function BadgeCard({ achievement }: { achievement: AchievementItem }) {
+  const unlocked = achievement.unlocked;
   return (
-    <article className={`achv-streak-card achv-tone-${tone}`}>
-      <header className="achv-streak-head">
-        <span className="achv-streak-icon">{icon}</span>
-        <span className="achv-streak-label">{label}</span>
-      </header>
-      <div className="achv-streak-main">
-        <p className="achv-streak-value">{value}</p>
-        <span className="achv-streak-unit">current</span>
+    <article className={`achv-bd${unlocked ? ' won' : ' lk'}`}>
+      <div className="achv-bd-ic"><AchievementIcon name={achievement.icon} /></div>
+      <div className="achv-bd-t">
+        <b>{achievement.label}</b>
+        <span>{achievement.description}</span>
+        {unlocked
+          ? <small>UNLOCKED {fmtUnlockDate(achievement.unlockedAt)}</small>
+          : (
+            <div className="achv-bd-mini" aria-hidden="true">
+              <i style={{ width: `${Math.round(achievement.progress)}%` }} />
+            </div>
+          )}
       </div>
-      <div className="achv-mini-track" aria-hidden="true">
-        <span style={{ width: `${progress}%` }} />
-      </div>
-      <p className="achv-streak-meta">
-        {note} <span>Best {best}</span>
-      </p>
-    </article>
-  );
-}
-
-function NextTargetCard({ achievement }: { achievement: AchievementItem }) {
-  const rarityClass = getRarityClass(achievement.rarity as AchievementRarity);
-  return (
-    <article className={`achv-target-card achv-rarity-${rarityClass}`}>
-      <div className="achv-target-icon">
-        <AchievementIcon name={achievement.icon} size={18} />
-      </div>
-      <div className="achv-target-body">
-        <div className="achv-target-topline">
-          <span>{achievement.category}</span>
-          <strong>{Math.round(achievement.progress)}%</strong>
-        </div>
-        <h3>{achievement.label}</h3>
-        <p>{achievement.description}</p>
-        <div className="achv-target-track">
-          <span style={{ width: `${achievement.progress}%` }} />
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function AchievementBadge({ achievement }: { achievement: AchievementItem }) {
-  const rarityClass = getRarityClass(achievement.rarity as AchievementRarity);
-  const unlockedDate = formatUnlockedDate(achievement.unlockedAt);
-
-  return (
-    <article className={`achv-badge achv-rarity-${rarityClass} ${achievement.unlocked ? 'is-unlocked' : 'is-locked'}`}>
-      <div className="achv-badge-top">
-        <div className="achv-badge-icon-wrap">
-          <AchievementIcon name={achievement.icon} />
-        </div>
-        <span className="achv-rarity-pill">{rarityClass}</span>
-      </div>
-      <h3 className="achv-badge-title">{achievement.label}</h3>
-      <p className="achv-badge-desc">{achievement.description}</p>
-      <footer className="achv-badge-foot">
-        <div className="achv-badge-progress">
-          <span style={{ width: `${achievement.progress}%` }} />
-        </div>
-        <span className="achv-unlocked-date">
-          {achievement.unlocked && unlockedDate ? `Unlocked ${unlockedDate}` : `${Math.round(achievement.progress)}% complete`}
-        </span>
-      </footer>
     </article>
   );
 }
 
 export default function Achievements() {
-  const { stats, achievements, unlockedCount, totalCount, loading } = useAchievements();
-  const [category, setCategory] = useState<AchievementCategory | 'all'>('all');
-  const [showLocked, setShowLocked] = useState(true);
+  const { stats, achievements, unlockedCount, totalCount } = useAchievements();
+  const entries = useFlyxaStore(state => state.entries);
 
-  const visibleAchievements = useMemo(() => {
-    const filtered = achievements.filter(achievement => {
-      if (category !== 'all' && achievement.category !== category) return false;
-      if (!showLocked && !achievement.unlocked) return false;
-      return true;
-    });
-
-    return [
-      ...filtered.filter(achievement => achievement.unlocked),
-      ...filtered.filter(achievement => !achievement.unlocked),
-    ];
-  }, [achievements, category, showLocked]);
+  const journal = useMemo(() => journalStreaks(
+    entries
+      .filter(entry => entry.trades.length > 0 || Boolean(entry.dailyReflection?.post?.trim()))
+      .map(entry => entry.date)
+  ), [entries]);
 
   const nextTargets = useMemo(
     () => achievements
-      .filter(achievement => !achievement.unlocked)
+      .filter(achievement => !achievement.unlocked && achievement.progress > 0)
       .sort((a, b) => b.progress - a.progress)
       .slice(0, 3),
     [achievements],
   );
 
-  const progress = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
-  const progressLabel = `${Math.round(progress)}%`;
+  const grouped = useMemo(() => GROUPS
+    .map(group => {
+      const items = achievements.filter(achievement => achievement.category === group.value);
+      const ordered = [
+        ...items.filter(item => item.unlocked),
+        ...items.filter(item => !item.unlocked).sort((a, b) => b.progress - a.progress),
+      ];
+      return { ...group, items: ordered, unlocked: items.filter(item => item.unlocked).length };
+    })
+    .filter(group => group.items.length > 0), [achievements]);
 
-  const focusContent = useMemo(() => {
-    const { currentWinStreak, currentDisciplineStreak, currentGreenDayStreak } = stats;
-    const d = currentDisciplineStreak;
-    const w = currentWinStreak;
-    const g = currentGreenDayStreak;
+  const progressPct = totalCount > 0 ? Math.round((unlockedCount / totalCount) * 100) : 0;
 
-    if (d > 0 && d >= w && d >= g) {
-      return {
-        heading: `${d} disciplined ${d === 1 ? 'entry' : 'entries'} in a row`,
-        body: 'Process is your edge right now. One more clean session extends it — focus on plan adherence, not the P&L.',
-        icon: <ShieldCheck size={26} />,
-      };
-    }
-    if (w > 0 && w >= g) {
-      return {
-        heading: `${w} win run`,
-        body: "Execution is clicking. Stay size-appropriate and let the edge play out — don't force entries to keep the streak alive.",
-        icon: <Flame size={26} />,
-      };
-    }
-    if (g > 0) {
-      return {
-        heading: `${g} green ${g === 1 ? 'day' : 'days'} running`,
-        body: 'Daily consistency is building. Protect it by sticking to your risk limits — a clean loss beats a blown day.',
-        icon: <TrendingUp size={26} />,
-      };
-    }
-    return {
-      heading: 'Build the first run',
-      body: 'Start with process, not outcome. One session with full plan adherence and a completed journal is the first brick.',
-      icon: <Trophy size={26} />,
-    };
-  }, [stats]);
-
-  void focusContent;
+  const streakCells = [
+    {
+      label: 'Journal streak',
+      value: journal.current,
+      unit: journal.current === 1 ? 'day' : 'days',
+      best: journal.best,
+      stake: journal.current > 0 ? 'log today to keep it' : 'log a session to start one',
+    },
+    {
+      label: 'Rule-clean trades',
+      value: stats.currentDisciplineStreak,
+      unit: 'in a row',
+      best: stats.bestDisciplineStreak,
+      stake: 'plan-tagged entries',
+    },
+    {
+      label: 'Green sessions',
+      value: stats.currentGreenDayStreak,
+      unit: 'in a row',
+      best: stats.bestGreenDayStreak,
+      stake: 'net-positive days',
+    },
+    {
+      label: 'Win streak',
+      value: stats.currentWinStreak,
+      unit: stats.currentWinStreak === 1 ? 'trade' : 'trades',
+      best: stats.bestWinStreak,
+      stake: 'consecutive winners',
+    },
+  ];
 
   return (
     <div className="achv-page animate-fade-in">
-      <header className="achv-hero">
-        <div className="achv-hero-copy">
-          <span className="achv-kicker">Performance record</span>
-          <h1>Streaks &amp; Achievements</h1>
-          <p>
-            Process streaks, execution milestones, and earned consistency markers from your trading history.
-          </p>
+
+      {/* ── Header ── */}
+      <header className="achv-hd">
+        <div>
+          <h1>Streaks &amp; achievements</h1>
+          <p>Process streaks, execution milestones, and earned consistency markers from your trading history.</p>
         </div>
-        <div className="achv-hero-score">
-          <span>Unlocked</span>
-          <strong>{unlockedCount}<small>/{totalCount}</small></strong>
-          <div className="achv-hero-track">
-            <span style={{ width: `${progress}%` }} />
-          </div>
-          <p>{progressLabel} complete</p>
+        <div className="achv-prog">
+          <b>{unlockedCount}<span> / {totalCount}</span></b>
+          <div className="achv-prog-bar"><i style={{ width: `${progressPct}%` }} /></div>
+          <small>{progressPct}% COMPLETE</small>
         </div>
       </header>
 
-      <section className="achv-targets" aria-label="Next achievements">
-        <div className="achv-section-row">
-          <h2 className="achv-section-title">Closest Targets</h2>
-          <ArrowUpRight size={14} />
-        </div>
-        {nextTargets.length > 0 ? (
-          nextTargets.map(achievement => <NextTargetCard key={achievement.key} achievement={achievement} />)
-        ) : (
-          <div className="achv-target-empty">All visible targets are complete.</div>
-        )}
-      </section>
-
-      <section className="achv-section">
-        <div className="achv-section-row">
-          <h2 className="achv-section-title">Live Streaks</h2>
-        </div>
-        {loading ? (
-          <div className="achv-streak-grid achv-streak-grid-loading">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="achv-skeleton" />
-            ))}
+      {/* ── Live streaks: a data strip, not trophies ── */}
+      <div className="achv-streaks">
+        {streakCells.map(cell => (
+          <div key={cell.label} className={`achv-stk${cell.value > 0 ? ' live' : ''}`}>
+            <span className="achv-lbl">{cell.label}</span>
+            <div className="achv-stk-v"><b>{cell.value}</b><span>{cell.unit}</span></div>
+            <small>Best <b>{cell.best}</b> · {cell.stake}</small>
           </div>
-        ) : (
-          <div className="achv-streak-grid">
-            <StreakCard
-              label="Win streak"
-              value={stats.currentWinStreak}
-              best={stats.bestWinStreak}
-              icon={<Flame size={15} />}
-              tone="green"
-              note="Outcome momentum"
-            />
-            <StreakCard
-              label="Best run"
-              value={stats.bestWinStreak}
-              best={stats.bestWinStreak}
-              icon={<Zap size={15} />}
-              tone="blue"
-              note="Peak execution"
-            />
-            <StreakCard
-              label="Discipline"
-              value={stats.currentDisciplineStreak}
-              best={stats.bestDisciplineStreak}
-              icon={<ShieldCheck size={15} />}
-              tone="purple"
-              note="Plan compliance"
-            />
-            <StreakCard
-              label="Green days"
-              value={stats.currentGreenDayStreak}
-              best={stats.bestGreenDayStreak}
-              icon={<TrendingUp size={15} />}
-              tone="amber"
-              note="Daily net positive"
-            />
-          </div>
-        )}
-      </section>
+        ))}
+      </div>
 
-      <section className="achv-section">
-        <div className="achv-toolbar">
-          <div>
-            <h2 className="achv-section-title">Achievement Board</h2>
-            <p className="achv-section-sub">Earned items are listed first. Locked items show current progress.</p>
+      {/* ── Closest to unlock ── */}
+      {nextTargets.length > 0 && (
+        <div className="achv-chase">
+          <div className="achv-chase-hd">
+            <b>Closest to unlock</b>
+            <span>BASED ON CURRENT PROGRESS</span>
           </div>
-          <button
-            type="button"
-            className="achv-chip achv-chip-toggle"
-            onClick={() => setShowLocked(value => !value)}
-          >
-            {showLocked ? 'Hide locked' : 'Show locked'}
-          </button>
-        </div>
-
-        <div className="achv-filters">
-          {CATEGORIES.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              className={`achv-chip ${category === option.value ? 'is-active' : ''}`}
-              onClick={() => setCategory(option.value)}
-            >
-              {option.label}
-            </button>
+          {nextTargets.map(achievement => (
+            <div key={achievement.key} className="achv-ch">
+              <div className="achv-ch-t">
+                <b>{achievement.label}</b>
+                <span>{achievement.description}</span>
+              </div>
+              <div className="achv-ch-bar"><i style={{ width: `${Math.round(achievement.progress)}%` }} /></div>
+              <div className="achv-ch-pct">
+                {Math.round(achievement.progress)}%
+                <small>{100 - Math.round(achievement.progress)}% TO GO</small>
+              </div>
+            </div>
           ))}
         </div>
+      )}
 
-        {loading ? (
-          <div className="achv-grid">
-            {Array.from({ length: 10 }).map((_, index) => (
-              <div key={index} className="achv-skeleton achv-skeleton-badge" />
+      {/* ── Grouped badge sections ── */}
+      {grouped.map(group => (
+        <section key={group.value} className="achv-grp">
+          <div className="achv-grp-hd">
+            <span className="achv-lbl strong">{group.label}</span>
+            <span>{group.unlocked} of {group.items.length}</span>
+          </div>
+          <div className="achv-badges">
+            {group.items.map(achievement => (
+              <BadgeCard key={achievement.key} achievement={achievement} />
             ))}
           </div>
-        ) : visibleAchievements.length === 0 ? (
-          <div className="achv-empty">
-            <Trophy size={28} />
-            <p>No achievements in this category yet.</p>
-          </div>
-        ) : (
-          <div className="achv-grid">
-            {visibleAchievements.map(achievement => (
-              <AchievementBadge key={achievement.key} achievement={achievement} />
-            ))}
-          </div>
-        )}
-      </section>
+        </section>
+      ))}
     </div>
   );
 }

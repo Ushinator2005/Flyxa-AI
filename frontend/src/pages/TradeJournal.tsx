@@ -586,8 +586,8 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
       </div>
       {item.source === 'manual' ? (
         <div style={{ display: 'flex', gap: 4 }}>
-          <button type="button" onClick={() => updateManualRule(item.label, 'ok')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--border)'}`, background: item.state === 'ok' ? 'var(--green-dim)' : 'transparent', color: item.state === 'ok' ? 'var(--green)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Pass</button>
-          <button type="button" onClick={() => updateManualRule(item.label, 'fail')} style={{ padding: '4px 7px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--border)'}`, background: item.state === 'fail' ? 'var(--red-dim)' : 'transparent', color: item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)', fontSize: 9, cursor: 'pointer' }}>Break</button>
+          <button type="button" onClick={() => updateManualRule(item.label, 'ok')} style={{ padding: '4px 8px', borderRadius: 4, border: `1px solid ${item.state === 'ok' ? 'var(--green)' : 'var(--border)'}`, background: item.state === 'ok' ? 'var(--green)' : 'transparent', color: item.state === 'ok' ? '#161310' : 'var(--txt-3)', fontSize: 9, fontWeight: item.state === 'ok' ? 600 : 400, cursor: 'pointer', transition: 'background .1s, color .1s' }}>Pass</button>
+          <button type="button" onClick={() => updateManualRule(item.label, 'fail')} style={{ padding: '4px 8px', borderRadius: 4, border: `1px solid ${item.state === 'fail' ? 'var(--red)' : 'var(--border)'}`, background: item.state === 'fail' ? 'var(--red)' : 'transparent', color: item.state === 'fail' ? '#161310' : 'var(--txt-3)', fontSize: 9, fontWeight: item.state === 'fail' ? 600 : 400, cursor: 'pointer', transition: 'background .1s, color .1s' }}>Break</button>
         </div>
       ) : (
         <span style={{ color: item.state === 'ok' ? 'var(--green)' : item.state === 'fail' ? 'var(--red)' : 'var(--txt-3)', fontSize: 9, fontWeight: 700 }}>
@@ -603,7 +603,15 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>Rule Verification</span>
         {passedCount > 0 && (
-          <span style={{ padding: '2px 8px', borderRadius: 3, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>{passedCount} passed</span>
+          <button
+            type="button"
+            onClick={() => setShowPassed(v => !v)}
+            title={showPassed ? 'Hide passed checks' : 'Show passed checks'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 3, border: 'none', background: 'var(--green-dim)', color: 'var(--green)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+          >
+            {passedCount} passed
+            <span style={{ fontSize: 8, lineHeight: 1 }}>{showPassed ? '▲' : '▼'}</span>
+          </button>
         )}
         {broken.length > 0 && (
           <span style={{ padding: '2px 8px', borderRadius: 3, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>{broken.length} broken</span>
@@ -612,23 +620,10 @@ function RuleComplianceBlock({ entry, rules, onMutateEntry }: {
       {/* ── Rule rows ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10 }}>
         {visibleRows.map(item => <RuleRow key={item.ruleId} item={item} />)}
-        {!showPassed && passedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowPassed(true)}
-            style={{ fontSize: 10, color: 'var(--txt-3)', background: 'none', border: '1px dashed var(--border)', borderRadius: 5, padding: '6px 10px', cursor: 'pointer', textAlign: 'left' }}
-          >
-            Show {passedCount} passed check{passedCount !== 1 ? 's' : ''}
-          </button>
-        )}
-        {showPassed && passedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowPassed(false)}
-            style={{ fontSize: 10, color: 'var(--txt-3)', background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'left' }}
-          >
-            Hide passed checks
-          </button>
+        {!showPassed && visibleRows.length === 0 && passedCount > 0 && (
+          <span style={{ fontSize: 10.5, color: 'var(--txt-3)', padding: '2px 2px' }}>
+            <span style={{ color: 'var(--green)' }}>✓</span> Every check held this session.
+          </span>
         )}
         {evaluations.length === 0 && (
           <span style={{ fontSize: 11, color: 'var(--txt-3)', padding: '4px 0' }}>No rules configured</span>
@@ -746,7 +741,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
               <div style={{ display:'flex', gap:3 }}>
                 {biasOptions.map(o => (
                   <button key={o.v} type="button" onClick={() => update({ bias: dr.bias === o.v ? null : o.v })}
-                    style={{ padding:'3px 8px', fontSize:9, borderRadius:4, border:`1px solid ${dr.bias===o.v?'var(--amber-border)':'var(--app-border)'}`, background:dr.bias===o.v?'var(--amber-dim)':'transparent', color:dr.bias===o.v?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600 }}>
+                    style={{ padding:'4px 9px', fontSize:9.5, borderRadius:4, border:`1px solid ${dr.bias===o.v?'var(--amber)':'var(--app-border)'}`, background:dr.bias===o.v?'var(--amber)':'transparent', color:dr.bias===o.v?'#161310':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600, transition:'background .1s, color .1s' }}>
                     {o.label}
                   </button>
                 ))}
@@ -757,7 +752,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
               <div style={{ display:'flex', gap:3 }}>
                 {newsOptions.map(o => (
                   <button key={o.v} type="button" onClick={() => update({ newsRisk: dr.newsRisk === o.v ? null : o.v })}
-                    style={{ padding:'3px 8px', fontSize:9, borderRadius:4, border:`1px solid ${dr.newsRisk===o.v?(o.v==='clear'?'var(--green-border)':o.v==='avoid'?'var(--red-border)':'var(--amber-border)'):'var(--app-border)'}`, background:dr.newsRisk===o.v?(o.v==='clear'?'var(--green-dim)':o.v==='avoid'?'var(--red-dim)':'var(--amber-dim)'):'transparent', color:dr.newsRisk===o.v?(o.v==='clear'?'var(--green)':o.v==='avoid'?'var(--red)':'var(--amber)'):'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600 }}>
+                    style={{ padding:'4px 9px', fontSize:9.5, borderRadius:4, border:`1px solid ${dr.newsRisk===o.v?(o.v==='clear'?'var(--green)':o.v==='avoid'?'var(--red)':'var(--amber)'):'var(--app-border)'}`, background:dr.newsRisk===o.v?(o.v==='clear'?'var(--green)':o.v==='avoid'?'var(--red)':'var(--amber)'):'transparent', color:dr.newsRisk===o.v?'#161310':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600, transition:'background .1s, color .1s' }}>
                     {o.label}
                   </button>
                 ))}
@@ -983,7 +978,7 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
           <div style={{ display:'flex', gap:4, marginBottom: pe.hesitated ? 8 : 0 }}>
             {[true,false].map(v => (
               <button key={String(v)} type="button" onClick={() => update({ hesitated: pe.hesitated === v ? null : v })}
-                style={{ padding:'3px 10px', fontSize:10, borderRadius:4, border:`1px solid ${pe.hesitated===v?'var(--amber-border)':'var(--app-border)'}`, background:pe.hesitated===v?'var(--amber-dim)':'transparent', color:pe.hesitated===v?'var(--amber)':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600 }}>
+                style={{ padding:'4px 10px', fontSize:10, borderRadius:4, border:`1px solid ${pe.hesitated===v?'var(--amber)':'var(--app-border)'}`, background:pe.hesitated===v?'var(--amber)':'transparent', color:pe.hesitated===v?'#161310':'var(--app-text-subtle)', cursor:'pointer', fontFamily:'var(--font-sans)', fontWeight:600, transition:'background .1s, color .1s' }}>
                 {v ? 'YES' : 'NO'}
               </button>
             ))}
@@ -1397,8 +1392,8 @@ function TradeJournalCard({
                   return (
                     <button key={f.id} type="button" onClick={() => { toggleFlag(f.id); }}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', fontSize: 11, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: checked ? 'var(--red)' : 'var(--txt-2)' }}>
-                      <span style={{ width: 12, height: 12, borderRadius: 2, border: `1px solid ${checked ? 'var(--red-border)' : 'var(--border)'}`, background: checked ? 'var(--red-dim)' : 'transparent', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {checked && <span style={{ fontSize: 8, color: 'var(--red)', lineHeight: 1 }}>✕</span>}
+                      <span style={{ width: 12, height: 12, borderRadius: 2, border: `1px solid ${checked ? 'var(--red)' : 'var(--border)'}`, background: checked ? 'var(--red)' : 'transparent', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {checked && <span style={{ fontSize: 8, color: '#161310', fontWeight: 700, lineHeight: 1 }}>✕</span>}
                       </span>
                       {f.label}
                     </button>
@@ -3108,8 +3103,8 @@ function TradeListSection({
                             });
                           }}
                         >
-                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--border)'}`, background: selectedTradeIds.has(trade.id) ? 'var(--amber-dim)' : 'transparent', flexShrink: 0 }}>
-                            {selectedTradeIds.has(trade.id) && <span style={{ fontSize: 9, color: 'var(--amber)', lineHeight: 1 }}>✓</span>}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, border: `1px solid ${selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'var(--border)'}`, background: selectedTradeIds.has(trade.id) ? 'var(--amber)' : 'transparent', flexShrink: 0 }}>
+                            {selectedTradeIds.has(trade.id) && <span style={{ fontSize: 9, color: '#161310', fontWeight: 700, lineHeight: 1 }}>✓</span>}
                           </span>
                         </button>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>#{tradeIdx + 1}</span>
@@ -3192,7 +3187,7 @@ function TradeListSection({
                                     key={dir}
                                     type="button"
                                     onClick={() => { if (trade.direction !== dir) mutateTradeFields(trade.id, { direction: dir }); }}
-                                    style={{ padding: '4px 9px', fontSize: 9, fontWeight: 700, borderRadius: 4, cursor: 'pointer', border: `1px solid ${trade.direction === dir ? (dir === 'LONG' ? 'var(--green-border)' : 'var(--red-border)') : 'var(--border)'}`, background: trade.direction === dir ? (dir === 'LONG' ? 'var(--green-dim)' : 'var(--red-dim)') : 'transparent', color: trade.direction === dir ? (dir === 'LONG' ? 'var(--green)' : 'var(--red)') : 'var(--txt-3)' }}
+                                    style={{ padding: '4px 9px', fontSize: 9, fontWeight: 700, borderRadius: 4, cursor: 'pointer', border: `1px solid ${trade.direction === dir ? (dir === 'LONG' ? 'var(--green)' : 'var(--red)') : 'var(--border)'}`, background: trade.direction === dir ? (dir === 'LONG' ? 'var(--green)' : 'var(--red)') : 'transparent', color: trade.direction === dir ? '#161310' : 'var(--txt-3)', transition: 'background .1s, color .1s' }}
                                   >
                                     {dir}
                                   </button>

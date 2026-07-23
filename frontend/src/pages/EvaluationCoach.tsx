@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ShieldCheck, Trophy } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account, Trade } from '../store/types.js';
@@ -142,13 +142,17 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
   const floors = floorSeries && floorSeries.length === points.length && floorSeries.every(v => Number.isFinite(v))
     ? floorSeries
     : null;
-  const W = 340, H = 84, PAD = 6;
+  // Taller viewBox to match the enlarged .ec-spark render height — a squat
+  // viewBox stretched vertically fattens every stroke.
+  const W = 340, H = 164, PAD = 10;
   const lo = Math.min(...points, ...(floors ?? [floor]));
   const hi = Math.max(...points, target);
   const span = hi - lo || 1;
   const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = (v: number) => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
   const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+  // Soft amber fill between the balance line and the MLL — the buffer, visualized.
+  const fillPath = `${path} L${x(points.length - 1).toFixed(1)} ${y(floor).toFixed(1)} L${x(0).toFixed(1)} ${y(floor).toFixed(1)} Z`;
   // Step path: the MLL holds through each day and ratchets as a day settles.
   const floorPath = floors
     ? floors.map((v, i) => i === 0
@@ -167,13 +171,13 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
     position: 'absolute',
     right: 8,
     fontFamily: 'var(--font-mono)',
-    fontSize: 8.5,
+    fontSize: 9.5,
     fontWeight: 500,
     letterSpacing: '0.07em',
     color,
     background: 'var(--app-panel)',
     padding: '0 4px',
-    lineHeight: '11px',
+    lineHeight: '13px',
     pointerEvents: 'none',
   });
 
@@ -186,21 +190,22 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
     <div>
       <div style={{ position: 'relative' }}>
         <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
-          <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />
+          <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".38" strokeDasharray="3 5" strokeWidth="1" />
           {floorPath
-            ? <path d={floorPath} fill="none" stroke="var(--red)" strokeOpacity=".65" strokeDasharray="3 4" strokeWidth="1" />
-            : <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".55" strokeDasharray="3 4" strokeWidth="1" />}
-          <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-          <circle cx={x(points.length - 1)} cy={y(last)} r="2.6" fill="var(--amber)" />
+            ? <path d={floorPath} fill="none" stroke="var(--red)" strokeOpacity=".45" strokeDasharray="3 5" strokeWidth="1" />
+            : <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".4" strokeDasharray="3 5" strokeWidth="1" />}
+          <path d={fillPath} fill="rgba(245,158,11,0.05)" stroke="none" />
+          <path d={path} fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={x(points.length - 1)} cy={y(last)} r="3" fill="var(--amber)" />
         </svg>
         {/* Line labels pinned to the lines they describe. The balance label
             drops out when it would sit on top of the target/floor labels —
             e.g. a passed run finishing right at target. */}
         <span style={{ ...labelStyle('var(--green)'), top: `calc(${pct(target)}% + 2px)` }}>
-          TARGET {money(target)}
+          {money(target)}
         </span>
         <span style={{ ...labelStyle('var(--red)'), top: `calc(${pct(floor)}% - 13px)` }}>
-          MLL {money(floor)}
+          {money(floor)}
         </span>
         {Math.abs(pct(last) - pct(target)) > 16 && Math.abs(pct(last) - pct(floor)) > 16 && (
           <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
@@ -276,6 +281,7 @@ function EmptyEvaluation() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function EvaluationCoach() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const accounts = useFlyxaStore(state => state.accounts);
   const entries = useFlyxaStore(state => state.entries);
@@ -527,6 +533,12 @@ export default function EvaluationCoach() {
 
   // ── Path-to-pass context ───────────────────────────────────────
   const allAlerts = [...alerts, ...behavioralWarnings];
+  // Resolved checklist row: the leaks card reads as a checklist, not a lone
+  // warning, when the daily budget is actually being respected.
+  const dailyRespectSessions = dailyLimit > 0 ? [...byDayMap.values()].filter(pnl => pnl > -dailyLimit).length : 0;
+  const dailyOkRow = dailyLimit > 0 && byDayMap.size > 0 && dailyRespectSessions === byDayMap.size && !allAlerts.some(a => /daily/i.test(a.title))
+    ? `${dailyRespectSessions} of ${byDayMap.size} session${byDayMap.size !== 1 ? 's' : ''} closed inside the ${money(dailyLimit)} daily budget.`
+    : null;
   const remainingMinDays = Math.max(0, progress.minimumTradingDays - progress.tradingDays);
   const paceHeadline = progress.targetRemaining <= 0
     ? 'Target reached'
@@ -540,10 +552,6 @@ export default function EvaluationCoach() {
     : sessionsLeft !== null
       ? `Based on your current ${money(avgDailyPnl)}/session average.`
       : `Current average is ${money(avgDailyPnl)}/session, so there is no reliable pass pace yet.`;
-  const avgWin = (() => {
-    const wins = accountTrades.filter(trade => tradeNet(trade) > 0);
-    return wins.length ? wins.reduce((sum, trade) => sum + tradeNet(trade), 0) / wins.length : 0;
-  })();
   const avgLossAbs = (() => {
     const losses = accountTrades.filter(trade => tradeNet(trade) < 0);
     return losses.length ? Math.abs(losses.reduce((sum, trade) => sum + tradeNet(trade), 0) / losses.length) : 0;
@@ -574,19 +582,6 @@ export default function EvaluationCoach() {
   const planAdherencePct = planLogged.length
     ? Math.round((planLogged.filter(trade => trade.reflection?.followedPlan === true).length / planLogged.length) * 100)
     : null;
-  const violationCount = accountTrades.reduce((sum, trade) => sum + (trade.performanceViolations?.length ?? 0), 0);
-  const criticalViolationCount = accountTrades.reduce(
-    (sum, trade) => sum + (trade.performanceViolations?.filter(item => item.severity === 'critical').length ?? 0),
-    0,
-  );
-  const behavioralFlagCount = accountTrades.reduce((sum, trade) => sum + (trade.behavioralFlags?.length ?? 0), 0);
-  const processHealth = (() => {
-    if (planAdherencePct === null && violationCount === 0 && behavioralFlagCount === 0) return 'Not enough tags';
-    if ((planAdherencePct ?? 100) >= 80 && criticalViolationCount === 0) return 'Clean enough to scale carefully';
-    if ((planAdherencePct ?? 100) >= 60 && criticalViolationCount === 0) return 'Trade smaller until rules tighten';
-    return 'Protect the account first';
-  })();
-
   // ── Probability drivers ────────────────────────────────────────
   const probabilityDrivers = [
     { label: 'Target progress', value: progress.probabilityFactors.targetScore },
@@ -705,260 +700,215 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
   return (
     <div className="ec-page" data-tour-id="evaluation-overview">
 
-      {/* ── Account header strip ────────────────────────────────────── */}
-      <div className="ec-strip">
-        <div className="ec-strip-left">
-          <div ref={acctDropRef} className="ec-acct-drop">
-            <button type="button" className="ec-acct-trigger" onClick={() => setAcctDropOpen(o => !o)}>
-              <span className="ec-acct-dot" style={{ background: triggerColor }} />
-              <span className="ec-acct-trigger-name">{selected.name}</span>
-              <ChevronDown size={11} />
-            </button>
-            {acctDropOpen && (
-              <div className="ec-acct-menu">
-                {dropEval.map(({ account }) => <DropRow key={account.id} account={account} />)}
-                {dropPassed.length > 0 && (<><div className="ec-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
-                {dropBlown.length > 0 && (<><div className="ec-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
-              </div>
-            )}
-          </div>
-          {firmMeta && <p className="ec-acct-meta">{firmMeta}</p>}
-        </div>
-
-        <div className="ec-strip-right" style={{ gap: 34 }}>
-          <div className="ec-bal-block">
-            <span className="ec-bal-label">Balance</span>
-            <div className="ec-bal-row">
-              <span className={`ec-bal-val${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>{money(progress.currentBalance)}</span>
-              {progress.netPnl !== 0 && (
-                <span className={`ec-bal-delta${progress.netPnl >= 0 ? ' pos' : ' neg'}`}>
-                  {progress.netPnl > 0 ? '+' : ''}{money(progress.netPnl)}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="ec-bal-block" title={progress.floorLocked
-            ? 'The MLL has stopped trailing — it no longer rises with new highs. The account is closed if balance touches this.'
-            : progress.trailingStopsAt !== null
-              ? `${ddTypeLabel} MLL — rises with your balance highs and locks at ${money(progress.trailingStopsAt)}. The account is closed if balance touches this.`
-              : `${ddTypeLabel} MLL — the account is closed if balance touches this.`}
-          >
-            <span className="ec-bal-label">MLL{progress.floorLocked ? ' · locked' : ''}</span>
-            <div className="ec-bal-row">
-              <span className="ec-bal-val neg">{money(progress.drawdownFloor)}</span>
-              <span className="ec-bal-delta" style={{ color: 'var(--txt-3, var(--app-text-subtle))' }}>
-                {money(progress.currentBalance - progress.drawdownFloor)} room
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Alert bar ───────────────────────────────────────────────── */}
       {/* ── Body ────────────────────────────────────────────────────── */}
       <div className="ec-body">
 
-        {/* ── Hero: pass probability + equity path ──────────────────── */}
+        {/* ── Page header: account + vitals in one meta row ──────────── */}
+        <div className="ec-evhd">
+          <div>
+            <div ref={acctDropRef} className="ec-acct-drop">
+              <button type="button" className="ec-acct-trigger ec-acct-trigger--h1" onClick={() => setAcctDropOpen(o => !o)}>
+                <span className="ec-acct-dot" style={{ background: triggerColor }} />
+                <span className="ec-acct-trigger-name">{selected.name}</span>
+                <ChevronDown size={13} />
+              </button>
+              {acctDropOpen && (
+                <div className="ec-acct-menu">
+                  {dropEval.map(({ account }) => <DropRow key={account.id} account={account} />)}
+                  {dropPassed.length > 0 && (<><div className="ec-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
+                  {dropBlown.length > 0 && (<><div className="ec-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
+                </div>
+              )}
+            </div>
+            <div className="ec-evhd-meta">
+              {firmMeta && <><span>{firmMeta}</span><em>·</em></>}
+              <span>Balance <i>{money(progress.currentBalance)}</i></span>
+              <em>·</em>
+              <span>Target <i>{money(targetBalance)}</i></span>
+              <em>·</em>
+              <span title={progress.floorLocked
+                ? 'The MLL has stopped trailing. The account is closed if balance touches this.'
+                : `${ddTypeLabel} MLL. The account is closed if balance touches this.`}
+              >
+                MLL <i>{money(progress.drawdownFloor)}{progress.floorLocked ? ' locked' : ''}</i>
+              </span>
+              <em>·</em>
+              <span>Day {progress.tradingDays}</span>
+            </div>
+          </div>
+          <span className="ec-phase" style={{ ['--phase-dot' as never]: probColor, color: probColor }}>
+            {paceNegative ? 'AT RISK' : 'ON TRACK'}
+          </span>
+        </div>
+
+        {/* ── Hero: pass probability + drivers | equity path ─────────── */}
         <div className="ec-hero">
-          <div className="ec-hero-stat">
+          <div className="ec-prob">
             <span className="ec-metric-lbl">Pass probability</span>
-            <strong className="ec-hero-num" style={{ color: probColor }}>
-              {progress.passProbability}<span className="ec-hero-pct">%</span>
-            </strong>
-            <span className="ec-hero-status" style={{ color: probColor }}>{probLabel}</span>
-            <span className="ec-hero-weak">Weakest driver: {weakestDriver?.label ?? '—'}</span>
+            <div className="ec-prob-big" style={{ color: probColor }}>
+              <b>{progress.passProbability}</b><span>%</span>
+            </div>
+            <span className="ec-prob-verdict" style={{ color: probColor }}>{probLabel}</span>
+            <div className="ec-prob-bar"><i style={{ width: `${progress.passProbability}%`, background: probColor }} /></div>
+            <div className="ec-drv">
+              {probabilityDrivers.map(driver => (
+                <div key={driver.label} className={`ec-drv-r${driver === weakestDriver ? ' weak' : ''}`}>
+                  {driver.label}
+                  <b>{Math.round(driver.value)}%</b>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="ec-hero-chart">
             <div className="ec-hero-chart-head">
               <span className="ec-metric-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
-                <span style={{ color: 'var(--red)' }}>{money(progress.currentBalance - progress.drawdownFloor)} above the {money(progress.drawdownFloor)} MLL</span>
-                {' · '}
-                {progress.targetRemaining <= 0
-                  ? <span style={{ color: 'var(--green)' }}>target reached</span>
-                  : <span style={{ color: 'var(--green)' }}>{money(progress.targetRemaining)} to target</span>}
+                {money(progress.currentBalance - progress.drawdownFloor)} above MLL ·{' '}
+                <b>{progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`}</b>
               </span>
             </div>
             {equityPoints.length >= 2
               ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} floorSeries={mllSeries} dates={equityDates} />
               : <p className="ec-no-data">No sessions recorded yet — the balance line starts with your first trade.</p>}
           </div>
-          {dayDates.length > 0 && (
-            <div className="ec-hero-days">
-              <span className="ec-metric-lbl" style={{ marginBottom: 0 }}>Recent sessions</span>
-              <div className="ec-hero-days-dots">
-                {[...dayDates].slice(0, 15).reverse().map(d => {
-                  const pnl = byDayMap.get(d) ?? 0;
-                  return <span key={d} className={`ec-day-dot${pnl >= 0 ? ' pos' : ' neg'}`} title={`${d} · ${money(pnl)}`} />;
-                })}
+        </div>
+
+        {/* ── Ledger strip: the four numbers that decide the eval ────── */}
+        <div className="ec-metric-grid">
+          <div className="ec-metric-card">
+            <span className="ec-metric-lbl">Profit needed</span>
+            <strong className="ec-metric-val">{money(progress.targetRemaining)}</strong>
+            <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>
+            <span className="ec-metric-sub">{targetProgressPct}% of {money(target)} target</span>
+          </div>
+
+          <div
+            className="ec-metric-card"
+            title={progress.drawdownType === 'static'
+              ? 'Static — the MLL never moves.'
+              : progress.floorLocked
+                ? 'Locked — the MLL has stopped trailing.'
+                : `${ddTypeLabel === 'EOD trailing' ? 'Rises with end-of-day balance highs' : 'Rises with every new balance high'}.`}
+          >
+            <span className="ec-metric-lbl">Room above MLL</span>
+            <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(progress.drawdownRemaining)}</strong>
+            <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%` }} /></div>
+            <span className="ec-metric-sub">
+              {drawdownUsedPct}% of buffer used{!progress.floorLocked && progress.trailingStopsAt !== null ? ` · locks at ${money(progress.trailingStopsAt)}` : ''}
+            </span>
+          </div>
+
+          {dailyLimit > 0 ? (
+            <div className="ec-metric-card">
+              <span className="ec-metric-lbl">Daily budget left</span>
+              <strong className="ec-metric-val" style={dailyRemainingPct < 35 ? { color: 'var(--red)' } : undefined}>{money(dailyRemaining ?? 0)}</strong>
+              <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%` }} /></div>
+              <span className="ec-metric-sub">{dailyUsedPct}% used · {money(progress.dailyPnl)} today</span>
+            </div>
+          ) : (
+            <div className="ec-metric-card">
+              <span className="ec-metric-lbl">Trading days</span>
+              <strong className="ec-metric-val">
+                {progress.tradingDays}
+                {progress.minimumTradingDays > 0 && <span className="ec-metric-denom">/{progress.minimumTradingDays}</span>}
+              </strong>
+              <div className="ec-metric-track">
+                {progress.minimumTradingDays > 0 && (
+                  <div className="ec-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%` }} />
+                )}
               </div>
+              <span className="ec-metric-sub">
+                {progress.minimumTradingDays > 0
+                  ? daysMet ? 'Minimum day requirement met' : `${progress.minimumTradingDays - progress.tradingDays} more day${s(progress.minimumTradingDays - progress.tradingDays)} required`
+                  : 'No minimum day requirement'}
+              </span>
             </div>
           )}
+
+          <div className="ec-metric-card">
+            <span className="ec-metric-lbl">Pace to target</span>
+            <strong className="ec-metric-val">{paceHeadline}</strong>
+            <span className="ec-metric-sub">{paceDetail}</span>
+          </div>
         </div>
 
-        {/* Top zone: evaluation health metrics */}
-        <div className="ec-top-zone">
-          <div className="ec-metric-grid">
-
-            {/* Profit needed */}
-            <div className="ec-metric-card">
-              <span className="ec-metric-lbl">Profit needed</span>
-              <strong className="ec-metric-val">{money(progress.targetRemaining)}</strong>
-              <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>
-              <span className="ec-metric-sub">
-                {targetProgressPct}% of {money(target)} target · balance {money(progress.currentBalance)}
-              </span>
-            </div>
-
-            {/* Drawdown buffer — red only when the buffer is actually thin */}
-            <div className="ec-metric-card">
-              <span className="ec-metric-lbl">Room above MLL</span>
-              <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(progress.drawdownRemaining)}</strong>
-              <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%` }} /></div>
-              <span className="ec-metric-sub">
-                MLL {money(progress.drawdownFloor)} · {drawdownUsedPct}% of {money(maxDrawdown)} used
-              </span>
-              <span className="ec-metric-sub">
-                {progress.drawdownType === 'static'
-                  ? 'Static — the MLL never moves.'
-                  : progress.floorLocked
-                    ? 'Locked — the MLL has stopped trailing.'
-                    : `${ddTypeLabel === 'EOD trailing' ? 'Rises with end-of-day balance highs' : 'Rises with every new balance high'}${progress.trailingStopsAt !== null ? `, locks at ${money(progress.trailingStopsAt)}` : ''}.`}
-              </span>
-            </div>
-
-            {/* Daily budget / trading days */}
-            {dailyLimit > 0 ? (
-              <div className="ec-metric-card">
-                <span className="ec-metric-lbl">Daily budget left</span>
-                <strong className="ec-metric-val" style={dailyRemainingPct < 35 ? { color: 'var(--red)' } : undefined}>{money(dailyRemaining ?? 0)}</strong>
-                <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${dailyRemainingPct}%` }} /></div>
-                <span className="ec-metric-sub">
-                  {dailyUsedPct}% used · {money(progress.dailyPnl)} today
-                </span>
-              </div>
-            ) : (
-              <div className="ec-metric-card">
-                <span className="ec-metric-lbl">Trading days</span>
-                <strong className="ec-metric-val">
-                  {progress.tradingDays}
-                  {progress.minimumTradingDays > 0 && <span className="ec-metric-denom">/{progress.minimumTradingDays}</span>}
-                </strong>
-                <div className="ec-metric-track">
-                  {progress.minimumTradingDays > 0 && (
-                    <div className="ec-metric-fill" style={{ width: `${Math.min(100, (progress.tradingDays / progress.minimumTradingDays) * 100)}%` }} />
-                  )}
-                </div>
-                <span className="ec-metric-sub">
-                  {progress.minimumTradingDays > 0
-                    ? daysMet ? 'Minimum day requirement met' : `${progress.minimumTradingDays - progress.tradingDays} more day${progress.minimumTradingDays - progress.tradingDays === 1 ? '' : 's'} required`
-                    : 'No minimum day requirement'}
-                </span>
-              </div>
-            )}
+        {/* ── The directive: one branded callout, not a shouting headline ── */}
+        <section className="ec-dir">
+          <img src="/logo.svg" alt="" className="ec-dir-glyph" />
+          <div className="ec-dir-body">
+            <span className="ec-metric-lbl">Next session strategy</span>
+            <p className={missionLoading ? 'loading' : undefined}>{missionDisplay}</p>
           </div>
-
-        </div>
-
-        {/* Path to pass — the AI directive IS the headline; the stats below
-            are the evidence for it */}
-        <section className="ec-strategy-card">
-          <div className="ec-strategy-head">
-            <div>
-              <span className="ec-strategy-kicker">Path to pass · next session strategy</span>
-              <h2 className={missionLoading ? 'loading' : undefined}>{missionDisplay}</h2>
-            </div>
-          </div>
-
-          <div className="ec-strategy-grid">
-            <div className="ec-strategy-item">
-              <span>Pace to target</span>
-              <strong>{paceHeadline}</strong>
-              <small>{paceDetail}</small>
-            </div>
-            <div className="ec-strategy-item">
-              <span>Session risk cap</span>
-              <strong>{suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'Stand down'}</strong>
-              <small>
-                {dailyLimit > 0
-                  ? `${money(dailyRemaining ?? 0)} daily room · ${money(progress.drawdownRemaining)} buffer.`
-                  : `${money(progress.drawdownRemaining)} drawdown buffer.`}
-              </small>
-            </div>
-            <div className="ec-strategy-item">
-              <span>Plan adherence</span>
-              <strong>{planAdherencePct !== null ? `${planAdherencePct}%` : '—'}</strong>
-              <small>
-                {planAdherencePct !== null
-                  ? `${processHealth}. ${violationCount} rule break${s(violationCount)} · ${behavioralFlagCount} behavior flag${s(behavioralFlagCount)}.`
-                  : 'Tag rule checks to tighten the pass model.'}
-              </small>
-            </div>
-            <div className="ec-strategy-item">
-              <span>Average trade</span>
-              <strong>{avgWin > 0 ? `${money(avgWin)} win` : '—'}</strong>
-              <small>{avgLossAbs > 0 ? `${money(avgLossAbs)} avg loss` : 'No average loss yet'} · Main leak: {primaryLeak ?? 'none detected'}.</small>
-            </div>
-          </div>
-
+          <button type="button" className="ec-dir-ask" onClick={() => navigate('/flyxa-ai/ask')}>
+            Ask Flyxa
+          </button>
         </section>
 
         {/* Bottom two-up: risk leaks beside the debrief */}
         <div className="ec-bottom-two">
-          {allAlerts.length > 0 && (
+          {(allAlerts.length > 0 || dailyOkRow) && (
             <div className="ec-alerts-card" ref={alertsRef}>
               <div className="ec-card-hdr">
                 <span className="ec-card-hdr-title">Risk leaks to fix</span>
-                <span className="ec-card-badge">{allAlerts.length}</span>
+                <span className={`ec-leak-cnt${allAlerts.length === 0 ? ' clear' : ''}`}>
+                  {allAlerts.length > 0 ? `${allAlerts.length} OPEN` : 'ALL CLEAR'}
+                </span>
               </div>
-              {allAlerts.map((alert, i) => (
-                <div key={alert.id} className={`ec-alert-item${i === allAlerts.length - 1 ? ' last' : ''}`}>
-                  <span className="ec-alert-idx">{String(i + 1).padStart(2, '0')}</span>
-                  <div className="ec-alert-content">
-                    <p className="ec-alert-item-title">
+              {allAlerts.map(alert => (
+                <div key={alert.id} className="ec-leak">
+                  <div className="ec-leak-t">
+                    <b>
                       {alert.severity === 'critical' && <span className="ec-alert-severity critical">Critical · </span>}
                       {alert.title}
-                    </p>
-                    <p className="ec-alert-item-body">{alert.message}</p>
-                    <p className="ec-alert-item-fix">→ {alert.action}</p>
+                    </b>
+                    <p>{alert.message}</p>
+                    <span className="ec-leak-fix">FIX → {alert.action}</span>
                   </div>
                 </div>
               ))}
+              {dailyOkRow && (
+                <div className="ec-leak ok">
+                  <div className="ec-leak-t">
+                    <b>Daily loss limit respected</b>
+                    <p>{dailyOkRow}</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Session debrief — auto-saves */}
           <div className="ec-debrief-card">
             <div className="ec-card-hdr">
-              <div>
-                <span className="ec-card-hdr-title">Session debrief</span>
-                <p className="ec-debrief-sub">Auto-saves and feeds tomorrow&apos;s coaching directive.</p>
-              </div>
-              {debriefStatus !== 'idle' && (
+              <span className="ec-card-hdr-title">Session debrief</span>
+              {debriefStatus !== 'idle' ? (
                 <span className={`ec-debrief-status${debriefStatus === 'saved' ? ' saved' : ''}`}>
                   {debriefStatus === 'saving' ? 'Saving…' : 'Saved'}
                 </span>
+              ) : (
+                <span className="ec-metric-lbl" style={{ marginBottom: 0 }}>Feeds tomorrow's coaching</span>
               )}
             </div>
-            <div className="ec-debrief-body">
-              {recentJournalReflections.length > 0 && (
-                <div className="ec-debrief-journal">
-                  <span className="ec-debrief-journal-label">From your journal</span>
-                  {recentJournalReflections.map(r => (
-                    <div key={r.date} className="ec-debrief-journal-entry">
-                      <span className="ec-debrief-journal-date">{new Date(r.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                      <p className="ec-debrief-journal-text">{r.post}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {recentJournalReflections.length > 0 && (
+              <div className="ec-jq">
+                <span className="ec-jq-d">
+                  {new Date(recentJournalReflections[0].date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                </span>
+                <p>&ldquo;{recentJournalReflections[0].post}&rdquo;</p>
+              </div>
+            )}
+            <div className="ec-deb-in">
               <textarea
                 className="ec-debrief-textarea"
                 placeholder={recentJournalReflections.length > 0 ? 'Anything to flag for tomorrow\'s coaching…' : 'What happened in today\'s session? What will you do differently?'}
                 value={debriefWhat}
                 onChange={e => { setDebriefWhat(e.target.value); debriefEditedRef.current = true; }}
-                rows={5}
+                rows={4}
               />
+              <div className="ec-deb-rmeta">
+                <span>FLYXA READS THIS · IT SHAPES YOUR NEXT DIRECTIVE</span>
+                <span>AUTOSAVES</span>
+              </div>
             </div>
           </div>
         </div>

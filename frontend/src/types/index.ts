@@ -295,4 +295,6 @@ export interface AppPreferences {
   };
   // Which market's hours drive the header clock and pre-session timing.
   marketClock?: 'equities' | 'futures' | 'forex';
+  // Time display across the header clock and news wire: 12-hour or 24-hour.
+  clockFormat?: '12h' | '24h';
 }
