@@ -589,7 +589,7 @@ export default function Auth() {
 
               {!checkMode && (
                 <p style={{ margin: '16px 0 0', fontSize: 11, color: 'var(--app-text-subtle)' }}>
-                  No spam. Just one email when your seat opens.
+                  An email will be sent when a seat is open.
                 </p>
               )}
 
@@ -801,7 +801,7 @@ export default function Auth() {
             )}
 
             <p className="auth-privacy-note">
-              {tab === 'login' ? 'Private by default · Beta access only' : 'No spam. Just one email when your access is ready.'}
+              {tab === 'login' ? 'Private by default · Beta access only' : 'An email will be sent when a seat is open.'}
             </p>
             <p className="auth-privacy-note" style={{ marginTop: 6 }}>
               By continuing you agree to our{' '}
