@@ -420,12 +420,13 @@ function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
+// Mapped onto the themed design tokens so the canvas follows light/dark mode.
 const themeVars = {
-  '--d0': '#0e0d0d', '--d1': '#141312', '--d2': '#1a1917',
-  '--d3': '#201f1d', '--d4': '#27251f',
-  '--b0': 'rgba(255,255,255,0.07)', '--b1': 'rgba(255,255,255,0.12)',
-  '--t0': '#e8e3dc', '--t1': '#8a8178', '--t2': '#5c5751',
-  '--acc': '#f59e0b', '--grn': '#22d68a', '--red': '#f05252',
+  '--d0': 'var(--color-bg)', '--d1': 'var(--color-bg-muted)', '--d2': 'var(--color-panel)',
+  '--d3': 'var(--color-panel-raised)', '--d4': 'var(--color-panel-raised)',
+  '--b0': 'var(--color-border)', '--b1': 'var(--color-border)',
+  '--t0': 'var(--color-text)', '--t1': 'var(--color-text-muted)', '--t2': 'var(--color-text-subtle)',
+  '--acc': 'var(--color-amber)', '--grn': 'var(--color-green)', '--red': 'var(--color-red)',
 } as CSSProperties;
 
 export default function FlyxaAIAsk() {

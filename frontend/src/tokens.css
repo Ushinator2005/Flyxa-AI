@@ -120,6 +120,13 @@ html[data-theme='light'] {
   --color-text:         #18120e;
   --color-text-muted:   #3d3632;
   --color-text-subtle:  #706560;
+
+  /* Legacy aliases that were hard-coded as white/dark rgba (they never flipped).
+     Higher specificity than the :root alias block below, so these win. */
+  --app-toggle-hover:   rgba(0, 0, 0, 0.05);
+  --surface:            rgba(0, 0, 0, 0.035);
+  --surface-3:          rgba(0, 0, 0, 0.06);
+  --muted:              rgba(24, 18, 14, 0.55);
 }
 
 /* ── Legacy aliases ─────────────────────────────────────────────

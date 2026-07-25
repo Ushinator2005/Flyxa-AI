@@ -5,6 +5,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Dashboard Daily P&L heatmap cell tints. Rich fills on the dark theme; soft
+   mint / salmon on light so the calendar matches the lighter light-mode look. */
+.hm-pos-3 { background-color: rgba(6, 95, 70, 0.60); }
+.hm-pos-2 { background-color: rgba(4, 120, 87, 0.40); }
+.hm-pos-1 { background-color: rgba(6, 78, 59, 0.40); }
+.hm-neg-3 { background-color: rgba(153, 27, 27, 0.60); }
+.hm-neg-2 { background-color: rgba(185, 28, 28, 0.40); }
+.hm-neg-1 { background-color: rgba(127, 29, 29, 0.40); }
+html[data-theme='light'] .hm-pos-3 { background-color: rgba(52, 211, 153, 0.40); }
+html[data-theme='light'] .hm-pos-2 { background-color: rgba(52, 211, 153, 0.24); }
+html[data-theme='light'] .hm-pos-1 { background-color: rgba(52, 211, 153, 0.12); }
+html[data-theme='light'] .hm-neg-3 { background-color: rgba(248, 113, 113, 0.34); }
+html[data-theme='light'] .hm-neg-2 { background-color: rgba(248, 113, 113, 0.20); }
+html[data-theme='light'] .hm-neg-1 { background-color: rgba(248, 113, 113, 0.11); }
+
 @keyframes page-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }

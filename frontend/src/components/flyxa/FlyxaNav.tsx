@@ -1,14 +1,14 @@
 import { NavLink } from 'react-router-dom';
 
 const colors = {
-  d0: '#0e0d0d',
-  d1: '#141312',
-  d2: '#1a1917',
-  b0: 'rgba(255,255,255,0.07)',
-  t0: '#e8e3dc',
-  t1: '#8a8178',
-  t2: '#5c5751',
-  acc: '#f59e0b',
+  d0: 'var(--color-bg)',
+  d1: 'var(--color-bg-muted)',
+  d2: 'var(--color-panel)',
+  b0: 'var(--color-border)',
+  t0: 'var(--color-text)',
+  t1: 'var(--color-text-muted)',
+  t2: 'var(--color-text-subtle)',
+  acc: 'var(--color-amber)',
 };
 
 const NAV_ITEMS = [

@@ -12,13 +12,14 @@ import { useAppSettings, ALL_ACCOUNTS_ID } from '../../contexts/AppSettingsConte
 import useFlyxaStore from '../../store/flyxaStore.js';
 
 function getCellBg(pnl: number | undefined): string {
+  // Theme-aware tints defined in index.css: rich on dark, soft on light.
   if (pnl === undefined) return '';
-  if (pnl > 200) return 'bg-emerald-800/60';
-  if (pnl > 50) return 'bg-emerald-700/40';
-  if (pnl > 0) return 'bg-emerald-900/40';
-  if (pnl < -200) return 'bg-red-800/60';
-  if (pnl < -50) return 'bg-red-700/40';
-  if (pnl < 0) return 'bg-red-900/40';
+  if (pnl > 200) return 'hm-pos-3';
+  if (pnl > 50) return 'hm-pos-2';
+  if (pnl > 0) return 'hm-pos-1';
+  if (pnl < -200) return 'hm-neg-3';
+  if (pnl < -50) return 'hm-neg-2';
+  if (pnl < 0) return 'hm-neg-1';
   return 'bg-slate-600/10'; // exactly $0 breakeven — neutral, not red
 }
 
