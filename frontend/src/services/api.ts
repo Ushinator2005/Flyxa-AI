@@ -507,9 +507,28 @@ export const subscriptionApi = {
   openPortal: () => api.post<{ url: string }>('/api/subscription/portal', {}),
 };
 
+export interface WaitlistStanding {
+  position: number | null;
+  aheadOfYou: number | null;
+  referralCode: string | null;
+  referralUrl: string | null;
+  referralCount: number;
+  boostPer: number;
+}
+
 export const waitlistApi = {
-  join: (email: string, source: string) =>
-    api.post<{ ok: boolean; already: boolean }>('/api/waitlist', { email, source }),
+  join: (email: string, source: string, ref?: string | null) =>
+    api.post<{ ok: boolean; already: boolean } & WaitlistStanding>('/api/waitlist', { email, source, ref: ref || undefined }),
+  count: () => api.get<{ count: number | null }>('/api/waitlist/count'),
+  standing: (email: string) =>
+    api.get<WaitlistStanding>(`/api/waitlist/standing?email=${encodeURIComponent(email)}`),
+  referrer: (code: string) =>
+    api.get<{ name: string }>(`/api/waitlist/referrer/${encodeURIComponent(code)}`),
+  adminReferrals: () =>
+    api.get<{
+      totals: { total: number; real: number; invited: number; redeemed: number; viaReferral: number; base: number; boostPer: number };
+      topReferrers: Array<{ code: string; email: string | null; referrals: number; position: number | null }>;
+    }>('/api/waitlist/admin/referrals'),
   inviteInfo: (token: string) =>
     api.get<{ email: string }>(`/api/waitlist/invite/${encodeURIComponent(token)}`),
   redeemInvite: (token: string, password: string) =>

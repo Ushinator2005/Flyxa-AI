@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, GripVertical, Monitor, Palette, Pencil, Plus, RotateCcw, Scan, Search, ShieldCheck, Star, Tag, Trash2, Upload, User, Wallet, X, DollarSign } from 'lucide-react';
 import ColorPickerField from '../components/common/ColorPicker.js';
 import { SectionPanel } from '../components/ds/SectionPanel.js';
+import WaitlistReferralsPanel from '../components/settings/WaitlistReferralsPanel.js';
 import DatePicker from '../components/common/DatePicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
@@ -2135,6 +2136,7 @@ export default function Settings() {
         </SectionPanel>
         {/* Founder-only tooling — meaningless (and confusing) for invited users. */}
         {user?.email?.toLowerCase() === 'ushinator2005@gmail.com' && (
+        <>
         <div style={{ marginTop: 12 }}>
           <SectionPanel
             title="Eval capture"
@@ -2185,6 +2187,8 @@ export default function Settings() {
             )}
           </SectionPanel>
         </div>
+        <WaitlistReferralsPanel />
+        </>
         )}
       </section>
 

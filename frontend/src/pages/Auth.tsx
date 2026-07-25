@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Check, Copy, Gift, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { waitlistApi } from '../services/api.js';
 import ThemeToggle from '../components/common/ThemeToggle.js';
@@ -26,14 +26,53 @@ export default function Auth() {
   // Private beta: the second tab collects waitlist emails instead of creating
   // accounts. New signups are also disabled in Supabase Auth settings, so
   // existing beta accounts keep working and nobody else gets in.
-  const [tab, setTab] = useState<'login' | 'waitlist'>('login');
-  const [email, setEmail] = useState('');
+  // A /r/<code> link lands here as ?ref=<code>; carry it into the signup so it
+  // can be attributed, and open straight to the waitlist form. A ?check=1 link
+  // (from the confirmation email) opens the waitlist in "check your spot" mode.
+  const [referralRef] = useState(() => new URLSearchParams(window.location.search).get('ref'));
+  const [checkParam] = useState(() => new URLSearchParams(window.location.search).get('check') === '1');
+  const [tab, setTab] = useState<'login' | 'waitlist'>(referralRef || checkParam ? 'waitlist' : 'login');
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email')?.trim().toLowerCase() ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
+  const [waitlistCount, setWaitlistCount] = useState<number | null>(null);
+  const [standing, setStanding] = useState<{
+    position: number | null;
+    aheadOfYou: number | null;
+    referralCode: string | null;
+    referralUrl: string | null;
+    referralCount: number;
+    boostPer: number;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  // "Check your spot": the same email field, but a read-only lookup instead of
+  // a signup, so returning traders can see their live position and referrals.
+  const [checkMode, setCheckMode] = useState(checkParam);
+  // When arriving via a referral link, resolve who referred them so the join
+  // view can say so. Falls back to a generic label if the lookup fails.
+  const [referrerName, setReferrerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!referralRef) return;
+    let cancelled = false;
+    waitlistApi.referrer(referralRef)
+      .then(({ name }) => { if (!cancelled && name) setReferrerName(name); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [referralRef]);
+
+  // Live waitlist size for the social-proof line.
+  useEffect(() => {
+    let cancelled = false;
+    waitlistApi.count()
+      .then(({ count }) => { if (!cancelled && typeof count === 'number') setWaitlistCount(count); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Invite redemption — the only way to create an account. The token arrives
   // as ?invite=... from the seat-open email; the backend resolves it to an
@@ -95,11 +134,27 @@ export default function Auth() {
     if (tab === 'login') {
       const { error } = await signIn(email, password);
       if (error) setError(error);
+    } else if (checkMode) {
+      try {
+        const resp = await waitlistApi.standing(email);
+        setStanding(resp);
+        setSuccess('here');
+      } catch {
+        setError("We couldn't find that email on the waitlist. Join above to grab a spot.");
+      }
     } else {
       try {
-        const { already } = await waitlistApi.join(email, 'app-auth');
-        setSuccess(already
-          ? "You're already on the list — we'll email you when your spot opens."
+        const resp = await waitlistApi.join(email, 'app-auth', referralRef);
+        setStanding({
+          position: resp.position,
+          aheadOfYou: resp.aheadOfYou,
+          referralCode: resp.referralCode,
+          referralUrl: resp.referralUrl,
+          referralCount: resp.referralCount ?? 0,
+          boostPer: resp.boostPer ?? 3,
+        });
+        setSuccess(resp.already
+          ? "You're already on the list. We'll email you when your spot opens."
           : "You're on the list. We'll email you when your spot opens.");
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not join the waitlist. Try again.');
@@ -135,6 +190,18 @@ export default function Auth() {
       setSuccess('Password reset email sent. Check your inbox.');
     }
     setLoading(false);
+  };
+
+  const handleCopyReferral = async () => {
+    if (!standing?.referralUrl) return;
+    try {
+      await navigator.clipboard.writeText(standing.referralUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (insecure context / permissions) — leave the link
+      // visible for a manual copy.
+    }
   };
 
   // Invite redemption screen — same one-column composition as the waitlist.
@@ -301,113 +368,248 @@ export default function Auth() {
             subtitleClassName="text-[12px] tracking-[0.6em]"
           />
 
-          <p style={{
-            margin: '52px 0 0',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            fontWeight: 500,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            color: 'var(--accent)',
-          }}>
-            Private beta · invite only
-          </p>
-
-          <h1 style={{
-            margin: '16px 0 12px',
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(2rem, 4vw, 2.7rem)',
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.1,
-            color: 'var(--app-text)',
-          }}>
-            Join the waitlist.
-          </h1>
-
-          <p style={{ margin: '0 0 30px', fontSize: 14, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 400 }}>
-            A small group of traders has access today. Leave your email and
-            your invite arrives when a seat opens.
-          </p>
-
           {success ? (
-            <div className="auth-alert auth-alert--success" style={{ width: '100%', maxWidth: 460, justifyContent: 'center' }}>
-              <CheckCircle2 size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>{success}</span>
-            </div>
-          ) : (
-            <form
-              onSubmit={handleSubmit}
-              style={{
-                display: 'flex',
-                width: '100%',
-                maxWidth: 460,
-                height: 52,
-                border: `1px solid ${emailFocused ? 'var(--accent)' : 'var(--app-border)'}`,
-                borderRadius: 11,
-                overflow: 'hidden',
-                backgroundColor: 'var(--app-panel-strong)',
-                transition: 'border-color 0.15s',
-              }}
-            >
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onFocus={() => setEmailFocused(true)}
-                onBlur={() => setEmailFocused(false)}
-                placeholder="you@example.com"
-                required
-                autoComplete="email"
-                aria-label="Email"
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  border: 'none',
-                  outline: 'none',
-                  background: 'transparent',
-                  padding: '0 18px',
-                  fontSize: 14,
-                  color: 'var(--app-text)',
-                }}
-              />
+            /* ── Confirmation — same centered composition as the join view ── */
+            <>
+              <p style={{
+                margin: '52px 0 0',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                fontWeight: 500,
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: 'var(--accent)',
+              }}>
+                <Check size={12} style={{ color: 'var(--color-green)' }} />
+                You're on the list
+              </p>
+
+              <h1 style={{
+                margin: '16px 0 12px',
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(2rem, 4vw, 2.7rem)',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+                color: 'var(--app-text)',
+              }}>
+                {checkMode ? "Here's your spot." : 'Seat reserved.'}
+              </h1>
+
+              <p style={{ margin: '0 0 34px', fontSize: 14, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 430 }}>
+                Invites go out in order. We'll email <b style={{ color: 'var(--app-text)', fontWeight: 600 }}>{email}</b> when it's your turn. One email, nothing else.
+              </p>
+
+              {standing?.position != null && (
+                <div style={{ marginBottom: 34, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--app-text-subtle)' }}>
+                    Your position
+                  </p>
+                  <div style={{ position: 'relative', display: 'inline-block', margin: '12px 0 0' }}>
+                    <span style={{ display: 'block', fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(3rem, 10vw, 4rem)', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-0.02em', color: 'var(--accent)' }}>
+                      #{standing.position.toLocaleString()}
+                    </span>
+                    <span style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: 10, fontSize: 15, color: 'var(--app-text-muted)', whiteSpace: 'nowrap' }}>
+                      in line
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {standing?.referralUrl && (
+                <div style={{ width: '100%', maxWidth: 460 }}>
+                  <p style={{ margin: '0 0 8px', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--app-text-subtle)' }}>
+                    Move up the line
+                  </p>
+                  <p style={{ margin: '0 auto 14px', fontSize: 13.5, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 420 }}>
+                    Every trader who joins with your link moves you up <b style={{ color: 'var(--app-text)', fontWeight: 600 }}>{standing.boostPer} places</b>.
+                    {standing.referralCount > 0 && ` ${standing.referralCount} joined so far.`}
+                  </p>
+                  <div style={{ display: 'flex', width: '100%', height: 52, border: '1px solid var(--app-border)', borderRadius: 11, overflow: 'hidden', backgroundColor: 'var(--app-panel-strong)' }}>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', padding: '0 18px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--app-text-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {standing.referralUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                    </div>
+                    <button type="button" onClick={handleCopyReferral} style={{ flexShrink: 0, border: 'none', backgroundColor: 'var(--accent)', color: '#0e0d0d', fontWeight: 700, fontSize: 13.5, padding: '0 22px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                      {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy link</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <button
-                type="submit"
-                disabled={loading}
+                type="button"
+                onClick={() => { setTab('login'); setError(''); setSuccess(''); setStanding(null); setCheckMode(false); }}
+                style={{ marginTop: 40, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
+              >
+                Back to Flyxa
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{
+                margin: '52px 0 0',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                fontWeight: 500,
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: 'var(--accent)',
+              }}>
+                Private beta · invite only
+              </p>
+
+              <h1 style={{
+                margin: '16px 0 12px',
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(2rem, 4vw, 2.7rem)',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+                color: 'var(--app-text)',
+              }}>
+                {checkMode ? 'Check your spot.' : 'Join the waitlist.'}
+              </h1>
+
+              <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.7, color: 'var(--app-text-muted)', maxWidth: 400 }}>
+                {checkMode
+                  ? "Enter the email you signed up with to see your place in line and how many referrals you have."
+                  : referralRef
+                    ? "A friend saved you a spot in line. Leave your email and your invite arrives when a seat opens."
+                    : "A small group of traders has access today. Leave your email and your invite arrives when a seat opens."}
+              </p>
+
+              {referralRef && !checkMode && (
+                <div style={{
+                  margin: '0 0 24px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  border: '1px solid var(--app-border)',
+                  background: 'var(--app-panel)',
+                  fontSize: 12.5,
+                  color: 'var(--app-text-muted)',
+                }}>
+                  <Gift size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                  {referrerName
+                    ? <span>Referred by <b style={{ color: 'var(--app-text)', fontWeight: 600 }}>{referrerName}</b></span>
+                    : <span>You were referred by a friend</span>}
+                </div>
+              )}
+
+              {(() => {
+                if (waitlistCount == null || waitlistCount < 1) return null;
+                const label = waitlistCount >= 25 ? `${Math.floor(waitlistCount / 5) * 5}+` : String(waitlistCount);
+                return (
+                  <p style={{
+                    margin: '6px 0 32px',
+                    display: 'inline-flex',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    fontSize: 16,
+                    color: 'var(--app-text-muted)',
+                  }}>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 28,
+                      fontWeight: 700,
+                      letterSpacing: '-0.02em',
+                      color: 'var(--app-text)',
+                    }}>
+                      {label}
+                    </span>
+                    traders already on the waitlist
+                  </p>
+                );
+              })()}
+
+              <form
+                onSubmit={handleSubmit}
                 style={{
-                  flexShrink: 0,
-                  border: 'none',
-                  backgroundColor: 'var(--accent)',
-                  color: '#0e0d0d',
-                  fontWeight: 700,
-                  fontSize: 13.5,
-                  padding: '0 28px',
-                  cursor: 'pointer',
+                  display: 'flex',
+                  width: '100%',
+                  maxWidth: 460,
+                  height: 52,
+                  border: `1px solid ${emailFocused ? 'var(--accent)' : 'var(--app-border)'}`,
+                  borderRadius: 11,
+                  overflow: 'hidden',
+                  backgroundColor: 'var(--app-panel-strong)',
+                  transition: 'border-color 0.15s',
                 }}
               >
-                {loading ? '…' : 'Join waitlist'}
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  placeholder="you@example.com"
+                  required
+                  autoComplete="email"
+                  aria-label="Email"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    padding: '0 18px',
+                    fontSize: 14,
+                    color: 'var(--app-text)',
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    flexShrink: 0,
+                    border: 'none',
+                    backgroundColor: 'var(--accent)',
+                    color: '#0e0d0d',
+                    fontWeight: 700,
+                    fontSize: 13.5,
+                    padding: '0 28px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {loading ? '…' : checkMode ? 'Check spot' : 'Join waitlist'}
+                </button>
+              </form>
+
+              {error && (
+                <div className="auth-alert auth-alert--error" style={{ width: '100%', maxWidth: 460, marginTop: 10 }}>
+                  <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {!checkMode && (
+                <p style={{ margin: '16px 0 0', fontSize: 11, color: 'var(--app-text-subtle)' }}>
+                  No spam. Just one email when your seat opens.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => { setCheckMode(m => !m); setError(''); setSuccess(''); }}
+                style={{ marginTop: checkMode ? 22 : 18, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
+              >
+                {checkMode ? 'First time here? Join the waitlist' : 'Already joined? Check your spot'}
               </button>
-            </form>
+
+              <button
+                type="button"
+                onClick={() => { setTab('login'); setError(''); setSuccess(''); }}
+                style={{ marginTop: 18, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
+              >
+                Have an account? Sign in
+              </button>
+            </>
           )}
-
-          {error && (
-            <div className="auth-alert auth-alert--error" style={{ width: '100%', maxWidth: 460, marginTop: 10 }}>
-              <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <p style={{ margin: '16px 0 0', fontSize: 11, color: 'var(--app-text-subtle)' }}>
-            No spam. One email when your seat opens — that's it.
-          </p>
-
-          <button
-            type="button"
-            onClick={() => { setTab('login'); setError(''); setSuccess(''); }}
-            style={{ marginTop: 40, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--app-text-muted)', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}
-          >
-            Have an account? Sign in
-          </button>
         </div>
       </div>
     );
@@ -599,7 +801,7 @@ export default function Auth() {
             )}
 
             <p className="auth-privacy-note">
-              {tab === 'login' ? 'Private by default · Beta access only' : 'No spam — one email when your access is ready.'}
+              {tab === 'login' ? 'Private by default · Beta access only' : 'No spam. Just one email when your access is ready.'}
             </p>
             <p className="auth-privacy-note" style={{ marginTop: 6 }}>
               By continuing you agree to our{' '}

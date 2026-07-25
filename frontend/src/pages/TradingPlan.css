@@ -1694,3 +1694,8 @@
   gap: 6px;
   flex-shrink: 0;
 }
+
+/* Rules redesign: stack the record grid below ~1080px so the rail keeps width */
+@media (max-width: 1080px) {
+  .tp-record-grid { grid-template-columns: 1fr !important; }
+}

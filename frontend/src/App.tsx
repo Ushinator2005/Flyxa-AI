@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext.js';
 import Layout from './components/layout/Layout.js';
 import LoadingSpinner from './components/common/LoadingSpinner.js';
@@ -42,6 +42,14 @@ function RouteFallback() {
       <LoadingSpinner size="md" />
     </div>
   );
+}
+
+// Referral entry point: /r/<code> carries the code to the waitlist screen as
+// ?ref=<code> so the signup can be attributed to whoever shared the link.
+function ReferralRedirect() {
+  const { code } = useParams();
+  const clean = (code ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
+  return <Navigate to={clean ? `/auth?ref=${encodeURIComponent(clean)}` : '/auth'} replace />;
 }
 
 function PasswordRecoveryModal() {
@@ -394,6 +402,7 @@ export default function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+          <Route path="/r/:code" element={<ReferralRedirect />} />
           <Route path="/landing" element={<Navigate to={user ? '/' : '/auth'} replace />} />
           <Route path="/terms" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />

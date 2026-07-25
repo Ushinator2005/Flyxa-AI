@@ -183,6 +183,27 @@ html[data-theme='light'] {
   --text:               var(--color-text);
   --muted:              rgba(232, 227, 220, 0.55);
 
+  /* Flyxa AI section palette. The AI pages (FlyxaAI, Ask, Weekly report,
+     Patterns, Pre/Post session) reference these via var() with hardcoded
+     dark fallbacks — undefined here, they rendered a warmer/darker parallel
+     palette that didn't match the app and broke in light mode. Mapped to the
+     real themed tokens, the whole section now matches everything else. */
+  --d0:   var(--color-bg);
+  --d1:   var(--color-panel);
+  --d2:   var(--color-panel-raised);
+  --d3:   var(--color-panel-soft);
+  --d4:   var(--color-panel-raised);
+  --b0:   var(--color-border);
+  --b1:   var(--color-border);
+  --t0:   var(--color-text);
+  --t1:   var(--color-text-muted);
+  --t2:   var(--color-text-subtle);
+  --acc:  var(--color-amber);
+  --amb:  var(--color-amber);
+  --blu:  var(--color-amber);
+  --grn:  var(--color-green);
+  --mono: var(--font-mono);
+
   /* serif kept for any legacy usage; map to editorial stack */
   --font-serif-display: var(--font-editorial);
 }
