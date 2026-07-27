@@ -161,7 +161,7 @@ interface AppSettingsContextValue {
   selectedAccountId: string;
   defaultTradeAccountId: string;
   setSelectedAccountId: (accountId: string) => void;
-  addAccount: (account: Omit<TradingAccount, 'id' | 'createdAt'>) => void;
+  addAccount: (account: Omit<TradingAccount, 'id' | 'createdAt'>) => string;
   updateAccount: (accountId: string, updates: Partial<Omit<TradingAccount, 'id' | 'createdAt'>>) => void;
   deleteAccount: (accountId: string) => void;
   setDefaultAccount: (accountId: string | null) => void;
@@ -544,6 +544,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         if (error) console.error('[Accounts] Failed to save new account:', error.message);
       });
     }
+    return nextAccount.id;
   }, [user]);
 
   const updateAccount = useCallback((accountId: string, updates: Partial<Omit<TradingAccount, 'id' | 'createdAt'>>) => {

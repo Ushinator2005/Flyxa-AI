@@ -31,6 +31,9 @@ export interface EvaluationTemplate {
   path?: 'standard' | 'no_activation_fee' | 'custom';
   activationFee?: number;
   monthlyPrice?: number;
+  /** Purchase price and how it is charged (subscription vs one-time). */
+  priceAmount?: number;
+  priceCadence?: 'monthly' | 'one-time';
   optionalDailyLossLimit?: number | null;
   responsibleTradingDiscount?: number;
   responsibleTradingBenefit?: string;
@@ -136,6 +139,8 @@ export function ruleRecordToTemplate(rule: PropFirmRuleRecord): EvaluationTempla
     path: rule.path,
     activationFee: rule.activationFee,
     monthlyPrice: rule.monthlyPrice,
+    priceAmount: rule.monthlyPrice,
+    priceCadence: 'monthly',
     version: rule.version,
     status: rule.status,
     effectiveFrom: rule.effectiveFrom,
@@ -304,6 +309,8 @@ function catalogProgramToTemplate(firm: CatalogFirm, program: CatalogProgram): E
     path: 'custom',
     activationFee: program.activationFee ?? undefined,
     monthlyPrice: monthly,
+    priceAmount: program.price?.amount ?? undefined,
+    priceCadence: program.price?.cadence === 'monthly' ? 'monthly' : program.price?.cadence === 'one-time' ? 'one-time' : undefined,
     status: 'verified',
     verifiedAt: firm.scrapedAt,
     sourceUrl: program.sourceUrls?.[0],

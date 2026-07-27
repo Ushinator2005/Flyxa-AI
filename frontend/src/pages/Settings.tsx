@@ -15,6 +15,7 @@ import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
+import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
 import { normalizeConfluenceKey, normalizeConfluenceTag } from '../utils/confluenceTags.js';
 import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
 import { CALENDAR_CACHE_KEY, LEGACY_CALENDAR_CACHE_KEYS } from '../utils/calendarCache.js';
@@ -684,6 +685,16 @@ export default function Settings() {
     deleteConfluenceOption,
   } = useAppSettings();
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [billingOffer, setBillingOffer] = useState<{
+    accountId: string;
+    accountName: string;
+    firm: string;
+    sizeLabel: string;
+    status: TradingAccountStatus;
+    template?: EvaluationTemplate;
+  } | null>(null);
+  const storeBillingAccounts = useFlyxaStore(state => state.billingAccounts) as StoreBillingAccount[];
+  const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [payoutTarget, setPayoutTarget] = useState<string | null>(null);
   const [payoutDate, setPayoutDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1140,7 +1151,7 @@ export default function Settings() {
     const dailyLossLimit = newAccount.dailyLossMode === 'purchase_fixed'
       ? selectedTemplate?.optionalDailyLossLimit ?? 0
       : selectedTemplate?.dailyLossLimit ?? 0;
-    addAccount({
+    const newAccountId = addAccount({
       name: newAccount.name.trim(),
       broker: newAccount.broker.trim(),
       type: newAccount.type,
@@ -1168,7 +1179,59 @@ export default function Settings() {
       ruleVerifiedAt: selectedTemplate?.verifiedAt,
       ruleSourceUrl: selectedTemplate?.sourceUrl,
     });
+    const firm = newAccount.broker.trim();
+    if (firm && firm !== 'Other') {
+      setBillingOffer({
+        accountId: newAccountId,
+        accountName: newAccount.name.trim(),
+        firm,
+        sizeLabel: Number.isFinite(parsedBalance) && parsedBalance > 0 ? `${parsedBalance / 1000}K` : 'Custom',
+        status: newAccount.status,
+        template: selectedTemplate,
+      });
+    }
     closeAddAccountModal();
+  }
+
+  function addOfferToBilling() {
+    if (!billingOffer) return;
+    const template = billingOffer.template;
+    const listPrice = template?.priceAmount ?? template?.monthlyPrice ?? 0;
+    const cadenceNote = template?.priceCadence === 'monthly'
+      ? 'Monthly subscription; add renewal months as separate entries.'
+      : '';
+    const entry: StoreBillingAccount = {
+      id: `billing-${crypto.randomUUID()}`,
+      sourceAccountId: billingOffer.accountId,
+      entryKind: 'account',
+      firm: billingOffer.firm,
+      accountType: template?.program ?? 'Evaluation',
+      size: billingOffer.sizeLabel,
+      listPrice,
+      discountCode: '',
+      discountPct: 0,
+      actualPrice: listPrice,
+      purchaseDate: new Date().toISOString().slice(0, 10),
+      status: billingOffer.status === 'Funded' || billingOffer.status === 'Live'
+        ? 'Funded'
+        : billingOffer.status === 'Passed' ? 'Passed'
+        : billingOffer.status === 'Blown' ? 'Blown'
+        : 'Eval 1',
+      payoutReceived: 0,
+      payouts: [],
+      notes: [
+        `Added from Settings account: ${billingOffer.accountName}`,
+        listPrice === 0 ? 'Add the purchase price to complete billing.' : '',
+        cadenceNote,
+      ].filter(Boolean).join(' '),
+      pricingPath: billingOffer.firm === 'Topstep' ? (template?.path === 'no_activation_fee' ? 'no_activation_fee' : 'standard') : undefined,
+      activationFee: template?.activationFee,
+      firmRuleVersionId: template?.id,
+      ruleVerifiedAt: template?.verifiedAt,
+      ruleSourceUrl: template?.sourceUrl,
+    };
+    hydrateSharedData({ billingAccounts: [entry, ...storeBillingAccounts] });
+    setBillingOffer(null);
   }
 
   function handleSessionTimeChange(session: SessionTimeKey, field: 'start' | 'end', value: string) {
@@ -3609,6 +3672,59 @@ export default function Settings() {
                 style={{ fontSize: '12px', padding: '7px 14px' }}
               >
                 Save Account
+              </button>
+            </div>
+          </div>
+        </div>
+        , document.body
+      )}
+
+      {billingOffer && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+          <button
+            type="button"
+            aria-label="Dismiss billing prompt"
+            onClick={() => setBillingOffer(null)}
+            className="absolute inset-0 bg-black/70"
+          />
+          <div
+            style={{
+              position: 'relative',
+              width: 'min(440px, 100%)',
+              borderRadius: '10px',
+              border: `1px solid ${BORDER}`,
+              background: S1,
+              boxShadow: '0 28px 80px rgba(2,6,23,0.5)',
+              padding: '18px',
+            }}
+          >
+            <p style={{ fontSize: '15px', fontWeight: 600, color: T1 }}>Track this account in Billing?</p>
+            <p style={{ marginTop: '6px', fontSize: '12px', color: T3, lineHeight: 1.6 }}>
+              Add {billingOffer.firm} {billingOffer.sizeLabel} to the Billing ledger to track its cost, resets, and ROI.
+              {billingOffer.template?.priceAmount != null && (
+                <> Purchase price {moneyValue(billingOffer.template.priceAmount)}
+                  {billingOffer.template.priceCadence === 'monthly' ? '/month' : ''} will be pre-filled.</>
+              )}
+              {billingOffer.template && billingOffer.template.priceAmount == null && (
+                <> No verified price for this program — you can add the cost in Billing.</>
+              )}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBillingOffer(null)}
+                className="btn-secondary"
+                style={{ fontSize: '12px', padding: '7px 14px' }}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={addOfferToBilling}
+                className="settings-primary-action"
+                style={{ fontSize: '12px', padding: '7px 14px' }}
+              >
+                Add to Billing
               </button>
             </div>
           </div>
