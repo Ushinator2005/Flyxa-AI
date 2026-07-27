@@ -6,6 +6,7 @@ import { saveStoreStatePatchNow, flushSupabaseStoreNow } from '../store/supabase
 import { pushToast } from '../store/toastStore.js';
 import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
+import { useDailyJournalStreak } from '../utils/journalStreak.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import './TradingPlan.css';
 
@@ -119,9 +120,16 @@ export default function TradingPlan() {
 
   const planReport = useMemo(() => {
     const today = new Date();
-    const ago = new Date(today);
-    ago.setDate(ago.getDate() - 30);
-    const bounds: [string, string] = [ago.toISOString().slice(0, 10), today.toISOString().slice(0, 10)];
+    // Walk back to the 30th trading day (weekends excluded) so the window
+    // covers exactly the 30 weekday cells shown in the discipline heatmap.
+    const start = new Date(today);
+    let weekdays = 0;
+    while (weekdays < 30) {
+      const dow = start.getDay();
+      if (dow !== 0 && dow !== 6) weekdays += 1;
+      if (weekdays < 30) start.setDate(start.getDate() - 1);
+    }
+    const bounds: [string, string] = [start.toISOString().slice(0, 10), today.toISOString().slice(0, 10)];
     return buildPlanAdherenceReport(journalEntries, riskRules, { bounds });
   }, [journalEntries, riskRules]);
 
@@ -150,25 +158,32 @@ export default function TradingPlan() {
 
   const daySeries = useMemo(() => {
     const byDate = new Map(planReport.daily.map(day => [day.date, day]));
-    const series: DisciplineDay[] = [];
-    const today = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
+    const todayKey = new Date().toISOString().slice(0, 10);
+    // Walk back collecting the last 30 trading days (markets are closed on
+    // weekends, so Sat/Sun never count toward daily discipline).
+    const weekdays: Date[] = [];
+    const cursor = new Date();
+    while (weekdays.length < 30) {
+      const dow = cursor.getDay();
+      if (dow !== 0 && dow !== 6) weekdays.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    weekdays.reverse(); // oldest first
+    const series: DisciplineDay[] = weekdays.map(d => {
       const key = d.toISOString().slice(0, 10);
       const report = byDate.get(key);
       const checked = report ? report.evaluations.filter(ev => ev.state !== 'unchecked') : [];
       const passed = checked.filter(ev => ev.state === 'ok').length;
-      series.push({
+      return {
         date: key,
         label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         pct: checked.length > 0 ? Math.round((passed / checked.length) * 100) : null,
         passed,
         checkedCount: checked.length,
         failed: checked.length - passed,
-        isToday: i === 0,
-      });
-    }
+        isToday: key === todayKey,
+      };
+    });
     return series;
   }, [planReport]);
 
@@ -213,18 +228,8 @@ export default function TradingPlan() {
     return map;
   }, [dayEvalMap]);
 
-  const cleanStreaks = useMemo(() => {
-    const checked = daySeries.filter(day => day.pct !== null);
-    let best = 0, run = 0;
-    for (const day of checked) {
-      if (day.failed === 0) { run += 1; best = Math.max(best, run); } else run = 0;
-    }
-    let current = 0;
-    for (let i = checked.length - 1; i >= 0; i--) {
-      if (checked[i].failed === 0) current += 1; else break;
-    }
-    return { current, best };
-  }, [daySeries]);
+  // Mirror the Daily Journal streak so the two never disagree.
+  const journalStreak = useDailyJournalStreak();
 
   const resetPlan = () => useFlyxaStore.getState().updateRiskRules(DEFAULT_STRUCTURED_RULES);
 
@@ -630,19 +635,14 @@ export default function TradingPlan() {
 
           {/* Right rail — three uniform cards */}
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* Clean streak */}
+            {/* Journal streak — same figure as the Daily Journal page */}
             <div style={{ ...card, padding: '16px 20px' }}>
-              <span style={{ ...lbl, display: 'block', marginBottom: 12 }}>Clean streak</span>
+              <span style={{ ...lbl, display: 'block', marginBottom: 12 }}>Journal streak</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <b style={{ fontFamily: 'var(--font-mono)', fontSize: 30, fontWeight: 500, color: cleanStreaks.current > 0 ? 'var(--amber)' : 'var(--txt-3)' }}>{cleanStreaks.current}</b>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-2)' }}>day{cleanStreaks.current !== 1 ? 's' : ''}</span>
+                <b style={{ fontFamily: 'var(--font-mono)', fontSize: 30, fontWeight: 500, color: journalStreak > 0 ? 'var(--amber)' : 'var(--txt-3)' }}>{journalStreak}</b>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-2)' }}>day{journalStreak !== 1 ? 's' : ''}</span>
               </div>
-              <small style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', marginTop: 8, lineHeight: 1.6 }}>Consecutive verified days with every rule held</small>
-              <div style={{ display: 'flex', gap: 18, marginTop: 13, paddingTop: 12, borderTop: '1px solid var(--app-border)', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--txt-3)' }}>
-                <span>BEST <b style={{ color: 'var(--txt)', fontWeight: 500 }}>{cleanStreaks.best}</b></span>
-                <span>PERFECT <b style={{ color: 'var(--txt)', fontWeight: 500 }}>{planReport.perfectDays}</b></span>
-                <span>BROKEN <b style={{ color: 'var(--txt)', fontWeight: 500 }}>{planReport.brokenDays}</b></span>
-              </div>
+              <small style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', marginTop: 8, lineHeight: 1.6 }}>Consecutive days journaled</small>
             </div>
 
             {/* The damage */}

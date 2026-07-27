@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { journalApi } from '../services/api.js';
+import { computeDailyJournalStreak } from '../utils/journalStreak.js';
 import { JournalEntry } from '../types/index.js';
 import Modal from '../components/common/Modal.js';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
@@ -183,27 +184,6 @@ function getEntryContent(entry: JournalEntry) {
 function formatEntryDate(date: string, pattern: string) {
   const parsed = parseISO(date);
   return Number.isNaN(parsed.getTime()) ? (date || 'Unknown date') : format(parsed, pattern);
-}
-
-function localDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function shiftDateKey(dateKey: string, days: number) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  if (!year || !month || !day) return dateKey;
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + days);
-  return localDateKey(date);
-}
-
-function normalizeBackupDate(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : null;
 }
 
 function normalizeJournalMood(value: unknown): string | null {
@@ -588,26 +568,7 @@ export default function Journal() {
     return Array.from(bucket.entries());
   }, [filtered]);
 
-  const journalStreak = useMemo(() => {
-    const writtenDates = new Set(
-      entries
-        .filter(entry => getEntryContent(entry).length > 0)
-        .map(entry => normalizeBackupDate(entry.date))
-        .filter((date): date is string => Boolean(date))
-    );
-
-    const today = localDateKey(new Date());
-    const yesterday = shiftDateKey(today, -1);
-    let cursor = writtenDates.has(today) ? today : writtenDates.has(yesterday) ? yesterday : '';
-    let streak = 0;
-
-    while (cursor && writtenDates.has(cursor)) {
-      streak += 1;
-      cursor = shiftDateKey(cursor, -1);
-    }
-
-    return streak;
-  }, [entries]);
+  const journalStreak = useMemo(() => computeDailyJournalStreak(entries), [entries]);
   const selectedWordCount = selected ? wordCount(getEntryContent(selected)) : 0;
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
