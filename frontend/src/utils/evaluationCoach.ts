@@ -1,4 +1,5 @@
 import type { Account, Trade } from '../store/types.js';
+import bundledCatalog from '../data/prop-firm-catalog.json';
 
 // How the maximum-loss-limit (MLL) floor moves:
 //   static             — fixed at startingBalance − maxDrawdown, never moves.
@@ -219,6 +220,117 @@ export const TOPSTEP_RULES: PropFirmRuleRecord[] = [
 ];
 
 const TOPSTEP_TEMPLATES = TOPSTEP_RULES.map(ruleRecordToTemplate);
+
+// ── Multi-firm catalog (scraped from official firm sources) ─────────────
+// The bundled JSON ships with the app; the backend serves the same catalog
+// from /api/prop-firm-rules so rules can be refreshed without a redeploy
+// (see primeCatalogTemplates below).
+
+export interface CatalogProgram {
+  program: string;
+  path: string | null;
+  accountSize: number | null;
+  price: { amount: number | null; cadence: string | null } | null;
+  activationFee: number | null;
+  resetFee: number | null;
+  profitTarget: number | null;
+  maxDrawdown: { amount: number | null; type: string | null; details?: string | null } | null;
+  dailyLossLimit: { amount: number | null; mandatory?: boolean | null } | null;
+  consistencyRule: { pct: number | null; details?: string | null } | null;
+  minTradingDays: number | null;
+  maxContracts: { minis: number | null; micros: number | null } | null;
+  scalingRules?: string | null;
+  tradingRestrictions?: string | null;
+  payoutRules?: string | null;
+  sourceUrls?: string[];
+}
+
+export interface CatalogFirm {
+  firm: string;
+  website: string;
+  scrapedAt: string;
+  programs: CatalogProgram[];
+  generalNotes?: string;
+  payoutPolicy?: string;
+}
+
+function catalogSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function catalogDrawdownType(type: string | null | undefined): DrawdownType {
+  if (type === 'intraday-trailing') return 'intraday_trailing';
+  if (type === 'static') return 'static';
+  return 'eod_trailing';
+}
+
+function catalogProgramToTemplate(firm: CatalogFirm, program: CatalogProgram): EvaluationTemplate | null {
+  const accountSize = program.accountSize;
+  const profitTarget = program.profitTarget;
+  const drawdownAmount = program.maxDrawdown?.amount;
+  // Only variants usable as evaluation templates: funded-stage records
+  // (XFA, PRO+, Live, …) have no size or target and are skipped.
+  if (!accountSize || !profitTarget || !drawdownAmount) return null;
+
+  const pathLabel = (program.path ?? '').trim();
+  const drawdownDetails = program.maxDrawdown?.details ?? '';
+  // Most firms lock the trailing MLL at the starting balance; several lock at
+  // starting balance + $100 and say so in the scraped drawdown details.
+  const trailingStopsAt = /\+\s*\$?100\b/.test(drawdownDetails) ? accountSize + 100 : accountSize;
+  const dll = program.dailyLossLimit;
+  const mandatoryDll = dll?.mandatory !== false;
+  const consistencyPct = program.consistencyRule?.pct ?? null;
+  const monthly = program.price?.cadence === 'monthly' ? program.price?.amount ?? undefined : undefined;
+  const priceNote = program.price?.amount != null
+    ? `${program.price.cadence === 'monthly' ? 'Subscription' : 'One-time price'}: $${program.price.amount.toLocaleString()}${program.price.cadence === 'monthly' ? '/month' : ''}.`
+    : '';
+
+  return {
+    id: `${catalogSlug(firm.firm)}-${catalogSlug(program.program)}-${accountSize}-v1`,
+    firm: firm.firm,
+    program: program.program,
+    label: `${firm.firm} ${program.program} ${accountSize / 1000}K`,
+    accountSize,
+    profitTarget,
+    dailyLossLimit: mandatoryDll ? dll?.amount ?? 0 : 0,
+    optionalDailyLossLimit: mandatoryDll ? null : dll?.amount ?? null,
+    maxDrawdown: drawdownAmount,
+    minimumTradingDays: program.minTradingDays ?? 0,
+    maxContracts: program.maxContracts?.minis ?? 0,
+    maxMicros: program.maxContracts?.micros ?? undefined,
+    consistencyLimitPct: consistencyPct,
+    drawdownType: catalogDrawdownType(program.maxDrawdown?.type),
+    trailingStopsAt,
+    path: 'custom',
+    activationFee: program.activationFee ?? undefined,
+    monthlyPrice: monthly,
+    status: 'verified',
+    verifiedAt: firm.scrapedAt,
+    sourceUrl: program.sourceUrls?.[0],
+    secondarySourceUrls: program.sourceUrls?.slice(1),
+    note: [pathLabel, priceNote, drawdownDetails].filter(Boolean).join(' '),
+  };
+}
+
+export function catalogFirmsToTemplates(firms: CatalogFirm[]): EvaluationTemplate[] {
+  return firms
+    // Topstep templates come from TOPSTEP_RULES above (richer pricing-path data
+    // that Billing depends on); skip the catalog copy to avoid duplicates.
+    .filter(firm => firm.firm !== 'Topstep')
+    .flatMap(firm => firm.programs
+      .map(program => catalogProgramToTemplate(firm, program))
+      .filter((template): template is EvaluationTemplate => template !== null));
+}
+
+let dynamicCatalogTemplates: EvaluationTemplate[] = catalogFirmsToTemplates(
+  (bundledCatalog as { firms: CatalogFirm[] }).firms,
+);
+
+/** Replace the bundled catalog templates with server-provided ones. */
+export function primeCatalogTemplates(firms: CatalogFirm[]): void {
+  const templates = catalogFirmsToTemplates(firms);
+  if (templates.length) dynamicCatalogTemplates = templates;
+}
 
 const STARTER_TEMPLATES: EvaluationTemplate[] = [
   ...TOPSTEP_TEMPLATES,
@@ -859,7 +971,10 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
 
 export function getEvaluationTemplates(): EvaluationTemplate[] {
   const legacyTopstepIds = new Set(['topstep-50k', 'topstep-100k', 'topstep-150k']);
-  return STARTER_TEMPLATES.filter(template => !legacyTopstepIds.has(template.id));
+  return [
+    ...STARTER_TEMPLATES.filter(template => !legacyTopstepIds.has(template.id)),
+    ...dynamicCatalogTemplates,
+  ];
 }
 
 function normalized(value: string): string {

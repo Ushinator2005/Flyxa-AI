@@ -4429,9 +4429,9 @@
 .rv2-tbl-hd span { font-family: var(--font-mono); font-size: 10px; color: var(--app-text-subtle); letter-spacing: 1px; }
 .rv2-thead, .rv2-trow {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 92px 64px 64px 74px 92px 104px;
+  grid-template-columns: 36px minmax(120px, 1fr) 72px 52px 48px 56px 82px 92px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 20px;
 }
 .rv2-thead { padding-top: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--app-border); }
@@ -4462,7 +4462,7 @@
 .rv2-who { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .rv2-nm { min-width: 0; }
 .rv2-nm b { display: block; font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--app-text); letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rv2-nm span { font-size: 10px; color: var(--app-text-subtle); }
+.rv2-nm span { display: block; font-size: 10px; color: var(--app-text-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rv2-yt { font-size: 8.5px; letter-spacing: 1px; color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 4px; padding: 2px 6px; flex: none; }
 .rv2-l5 { display: flex; gap: 4px; }
 .rv2-l5 i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }

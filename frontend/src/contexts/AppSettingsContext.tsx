@@ -13,7 +13,8 @@ import {
 } from '../utils/tradingAccounts.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { Account } from '../store/types.js';
-import { supabase } from '../services/api.js';
+import { supabase, propFirmRulesApi } from '../services/api.js';
+import { primeCatalogTemplates } from '../utils/evaluationCoach.js';
 import { normalizeConfluenceTag, normalizeConfluenceTags } from '../utils/confluenceTags.js';
 
 export { ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID } from '../utils/tradingAccounts.js';
@@ -444,6 +445,15 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     updateScannerColors(preferences.scannerColors);
   }, [preferences.scannerColors, updateScannerColors]);
+
+  // Refresh prop-firm rule templates from the backend catalog; the bundled
+  // copy stays in place if the request fails.
+  useEffect(() => {
+    if (!user?.id) return;
+    propFirmRulesApi.getCatalog()
+      .then(response => primeCatalogTemplates(response.firms))
+      .catch(() => {});
+  }, [user?.id]);
 
   const validAccountIds = useMemo(() => new Set(accounts.map(account => account.id)), [accounts]);
   const accountById = useMemo(

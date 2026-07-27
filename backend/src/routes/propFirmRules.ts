@@ -3,8 +3,23 @@ import { authMiddleware } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types/index';
 import { supabase } from '../services/supabase';
 import { mapRuleRow, TOPSTEP_RULES } from '../services/propFirmRules';
+import { getPropFirmCatalog } from '../services/propFirmCatalog';
 
 const router = Router();
+
+// Full multi-firm catalog (all firms, all program variants), scraped from
+// official firm sources. Optional ?firm= filters to a single firm.
+router.get('/catalog', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const firm = typeof req.query.firm === 'string' && req.query.firm.trim()
+    ? req.query.firm.trim()
+    : undefined;
+  const catalog = getPropFirmCatalog(firm);
+  return res.json({
+    generatedAt: catalog.generatedAt,
+    firms: catalog.firms,
+    source: 'bundled-catalog',
+  });
+});
 
 router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {

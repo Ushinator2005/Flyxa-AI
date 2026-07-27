@@ -576,4 +576,9 @@ export const propFirmRulesApi = {
     fallback: boolean;
     note?: string;
   }>('/api/prop-firm-rules?firm=Topstep'),
+  getCatalog: (firm?: string) => api.get<{
+    generatedAt: string;
+    firms: import('../utils/evaluationCoach.js').CatalogFirm[];
+    source: string;
+  }>(`/api/prop-firm-rules/catalog${firm ? `?firm=${encodeURIComponent(firm)}` : ''}`),
 };

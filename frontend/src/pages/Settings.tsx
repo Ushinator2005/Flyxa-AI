@@ -16,11 +16,55 @@ import useFlyxaStore from '../store/flyxaStore.js';
 import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import { normalizeConfluenceKey, normalizeConfluenceTag } from '../utils/confluenceTags.js';
-import { getEvaluationTemplates } from '../utils/evaluationCoach.js';
+import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
 import { CALENDAR_CACHE_KEY, LEGACY_CALENDAR_CACHE_KEYS } from '../utils/calendarCache.js';
 import { MARKET_CLOCK_OPTIONS } from '../utils/marketHours.js';
 
 const ACCOUNT_TYPES: TradingAccountType[] = ['Futures', 'Forex', 'Stocks'];
+
+// ── Prop-firm evaluation templates (multi-firm catalog) ────────────────
+function firmTemplates(firm: string): EvaluationTemplate[] {
+  return getEvaluationTemplates().filter(template => template.firm === firm);
+}
+
+function templateFirmNames(): string[] {
+  return Array.from(new Set(getEvaluationTemplates().map(template => template.firm)))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function isTemplateEval(account: { broker: string; status: string }): boolean {
+  return account.status === 'Eval' && firmTemplates(account.broker).length > 0;
+}
+
+function firmPrograms(firm: string): string[] {
+  return Array.from(new Set(firmTemplates(firm).map(template => template.program ?? ''))).filter(Boolean);
+}
+
+function programSizes(firm: string, program: string): number[] {
+  return Array.from(new Set(
+    firmTemplates(firm)
+      .filter(template => !program || template.program === program)
+      .map(template => template.accountSize),
+  )).sort((a, b) => a - b);
+}
+
+function templateTargetBalance(firm: string, program: string, accountSize: number): string {
+  const template = resolveEvaluationTemplate(firm, program, accountSize, 'standard');
+  return template ? String(template.accountSize + template.profitTarget) : '';
+}
+
+function resolveEvaluationTemplate(
+  firm: string,
+  program: string,
+  accountSize: number,
+  path: 'standard' | 'no_activation_fee',
+): EvaluationTemplate | undefined {
+  const candidates = firmTemplates(firm).filter(template => (
+    (!program || template.program === program) && template.accountSize === accountSize
+  ));
+  if (firm === 'Topstep') return candidates.find(template => template.path === path) ?? candidates[0];
+  return candidates[0];
+}
 const DEFAULT_ACCOUNT_COLOR = '#3b82f6';
 const DEFAULT_TIMEZONE = 'America/New_York';
 const ACCOUNT_STATUSES: TradingAccountStatus[] = ['Eval', 'Funded', 'Live', 'Passed', 'Blown'];
@@ -1090,14 +1134,8 @@ export default function Settings() {
     if (!newAccount.name.trim()) return;
     const parsedBalance = parseFloat(newAccount.startingBalance);
     const parsedTarget = parseFloat(newAccount.targetBalance);
-    const isTopstepEvaluation = newAccount.status === 'Eval'
-      && newAccount.broker.trim().toLowerCase() === 'topstep';
-    const selectedTemplate = isTopstepEvaluation
-      ? getEvaluationTemplates().find(template => (
-        template.firm === 'Topstep'
-        && template.accountSize === parsedBalance
-        && template.path === newAccount.evaluationPath
-      ))
+    const selectedTemplate = isTemplateEval(newAccount)
+      ? resolveEvaluationTemplate(newAccount.broker, newAccount.evaluationProgram, parsedBalance, newAccount.evaluationPath)
       : undefined;
     const dailyLossLimit = newAccount.dailyLossMode === 'purchase_fixed'
       ? selectedTemplate?.optionalDailyLossLimit ?? 0
@@ -1109,12 +1147,14 @@ export default function Settings() {
       status: newAccount.status,
       color: DEFAULT_ACCOUNT_COLOR,
       startingBalance: Number.isFinite(parsedBalance) && parsedBalance > 0 ? parsedBalance : undefined,
-      targetBalance: selectedTemplate
-        ? selectedTemplate.accountSize + selectedTemplate.profitTarget
-        : Number.isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : undefined,
+      targetBalance: Number.isFinite(parsedTarget) && parsedTarget > 0
+        ? parsedTarget
+        : selectedTemplate ? selectedTemplate.accountSize + selectedTemplate.profitTarget : undefined,
       firmRuleVersionId: selectedTemplate?.id,
       evaluationProgram: selectedTemplate?.program,
-      evaluationPath: selectedTemplate?.path === 'no_activation_fee' ? 'no_activation_fee' : selectedTemplate ? 'standard' : undefined,
+      evaluationPath: selectedTemplate?.path === 'no_activation_fee'
+        ? 'no_activation_fee'
+        : selectedTemplate?.path === 'standard' ? 'standard' : undefined,
       dailyLossMode: selectedTemplate ? newAccount.dailyLossMode : undefined,
       dailyLossLimit,
       maxDrawdown: selectedTemplate?.maxDrawdown,
@@ -3375,21 +3415,24 @@ export default function Settings() {
                 <StyledSelect
                   value={newAccount.broker}
                   onChange={value => {
-                    const isTopstep = value === 'Topstep';
+                    const firstTemplate = firmTemplates(value)[0];
                     setNewAccount(current => ({
                       ...current,
                       broker: value,
-                      type: isTopstep ? 'Futures' : current.type,
-                      status: isTopstep ? 'Eval' : current.status,
-                      startingBalance: isTopstep ? '50000' : current.startingBalance,
+                      type: firstTemplate ? 'Futures' : current.type,
+                      status: firstTemplate ? 'Eval' : current.status,
+                      evaluationProgram: firstTemplate?.program ?? current.evaluationProgram,
+                      startingBalance: firstTemplate ? String(firstTemplate.accountSize) : current.startingBalance,
+                      targetBalance: firstTemplate ? String(firstTemplate.accountSize + firstTemplate.profitTarget) : current.targetBalance,
+                      evaluationPath: value === 'Topstep' ? current.evaluationPath : 'standard',
+                      dailyLossMode: 'none',
                     }));
                   }}
                 >
                   <option value="">Select firm</option>
-                  <option value="Topstep">Topstep</option>
-                  <option value="Apex Trader Funding">Apex Trader Funding</option>
-                  <option value="MyFundedFutures">MyFundedFutures</option>
-                  <option value="FTMO">FTMO</option>
+                  {[...templateFirmNames(), 'Apex Trader Funding', 'FTMO']
+                    .sort((a, b) => a.localeCompare(b))
+                    .map(firm => <option key={firm} value={firm}>{firm}</option>)}
                   <option value="Other">Other / broker account</option>
                 </StyledSelect>
               </label>
@@ -3412,62 +3455,88 @@ export default function Settings() {
                 />
               </label>
 
-              {newAccount.broker === 'Topstep' && newAccount.status === 'Eval' && (
+              {isTemplateEval(newAccount) && (
                 <>
                   <label>
                     <FieldLabel>Program</FieldLabel>
-                    <StyledSelect value={newAccount.evaluationProgram} onChange={value => setNewAccount(current => ({ ...current, evaluationProgram: value }))}>
-                      <option value="Trading Combine">Trading Combine</option>
+                    <StyledSelect
+                      value={newAccount.evaluationProgram}
+                      onChange={value => {
+                        const sizes = programSizes(newAccount.broker, value);
+                        setNewAccount(current => ({
+                          ...current,
+                          evaluationProgram: value,
+                          startingBalance: sizes.length ? String(sizes[0]) : current.startingBalance,
+                          targetBalance: sizes.length
+                            ? templateTargetBalance(current.broker, value, sizes[0]) || current.targetBalance
+                            : current.targetBalance,
+                        }));
+                      }}
+                    >
+                      {firmPrograms(newAccount.broker).map(program => <option key={program} value={program}>{program}</option>)}
                     </StyledSelect>
                   </label>
 
-                  <label>
-                    <FieldLabel>Pricing path</FieldLabel>
-                    <StyledSelect value={newAccount.evaluationPath} onChange={value => setNewAccount(current => ({ ...current, evaluationPath: value as 'standard' | 'no_activation_fee' }))}>
-                      <option value="standard">Standard � $149 activation</option>
-                      <option value="no_activation_fee">No Activation Fee</option>
-                    </StyledSelect>
-                  </label>
+                  {newAccount.broker === 'Topstep' && (
+                    <label>
+                      <FieldLabel>Pricing path</FieldLabel>
+                      <StyledSelect value={newAccount.evaluationPath} onChange={value => setNewAccount(current => ({ ...current, evaluationPath: value as 'standard' | 'no_activation_fee' }))}>
+                        <option value="standard">Standard � $149 activation</option>
+                        <option value="no_activation_fee">No Activation Fee</option>
+                      </StyledSelect>
+                    </label>
+                  )}
 
                   <label>
                     <FieldLabel>Account size</FieldLabel>
-                    <StyledSelect value={newAccount.startingBalance} onChange={value => setNewAccount(current => ({ ...current, startingBalance: value }))}>
-                      <option value="50000">$50,000</option>
-                      <option value="100000">$100,000</option>
-                      <option value="150000">$150,000</option>
+                    <StyledSelect
+                      value={newAccount.startingBalance}
+                      onChange={value => setNewAccount(current => ({
+                        ...current,
+                        startingBalance: value,
+                        targetBalance: templateTargetBalance(current.broker, current.evaluationProgram, Number(value)) || current.targetBalance,
+                      }))}
+                    >
+                      {programSizes(newAccount.broker, newAccount.evaluationProgram).map(size => (
+                        <option key={size} value={String(size)}>{moneyValue(size)}</option>
+                      ))}
                     </StyledSelect>
                   </label>
 
-                  <label>
-                    <FieldLabel>Fixed daily loss limit</FieldLabel>
-                    <StyledSelect value={newAccount.dailyLossMode} onChange={value => setNewAccount(current => ({ ...current, dailyLossMode: value as 'none' | 'purchase_fixed' }))}>
-                      <option value="none">Not added at purchase</option>
-                      <option value="purchase_fixed">Added at purchase</option>
-                    </StyledSelect>
-                  </label>
+                  {resolveEvaluationTemplate(newAccount.broker, newAccount.evaluationProgram, Number(newAccount.startingBalance), newAccount.evaluationPath)?.optionalDailyLossLimit != null && (
+                    <label>
+                      <FieldLabel>Fixed daily loss limit</FieldLabel>
+                      <StyledSelect value={newAccount.dailyLossMode} onChange={value => setNewAccount(current => ({ ...current, dailyLossMode: value as 'none' | 'purchase_fixed' }))}>
+                        <option value="none">Not added at purchase</option>
+                        <option value="purchase_fixed">Added at purchase</option>
+                      </StyledSelect>
+                    </label>
+                  )}
                 </>
               )}
 
-              {!(newAccount.broker === 'Topstep' && newAccount.status === 'Eval') && <label>
+              <label>
                 <FieldLabel>Starting balance ($)</FieldLabel>
                 <input
                   type="number"
                   min="0"
                   step="1000"
+                  readOnly={isTemplateEval(newAccount)}
                   style={{
                     ...tableInputStyle,
                     background: S2,
                     border: `1px solid ${BORDER}`,
                     borderRadius: '6px',
                     padding: '10px 12px',
+                    opacity: isTemplateEval(newAccount) ? 0.7 : 1,
                   }}
                   placeholder="e.g. 100000"
                   value={newAccount.startingBalance}
                   onChange={e => setNewAccount(current => ({ ...current, startingBalance: e.target.value }))}
                 />
-              </label>}
+              </label>
 
-              {!(newAccount.broker === 'Topstep' && newAccount.status === 'Eval') && <label>
+              <label>
                 <FieldLabel>Target balance ($)</FieldLabel>
                 <input
                   type="number"
@@ -3484,17 +3553,32 @@ export default function Settings() {
                   value={newAccount.targetBalance}
                   onChange={e => setNewAccount(current => ({ ...current, targetBalance: e.target.value }))}
                 />
-              </label>}
+              </label>
             </div>
 
-            {newAccount.broker === 'Topstep' && newAccount.status === 'Eval' && (() => {
-              const template = getEvaluationTemplates().find(item => item.firm === 'Topstep'
-                && item.accountSize === Number(newAccount.startingBalance)
-                && item.path === newAccount.evaluationPath);
+            {isTemplateEval(newAccount) && (() => {
+              const template = resolveEvaluationTemplate(
+                newAccount.broker,
+                newAccount.evaluationProgram,
+                Number(newAccount.startingBalance),
+                newAccount.evaluationPath,
+              );
               if (!template) return null;
               const configuredDailyLoss = newAccount.dailyLossMode === 'purchase_fixed'
                 ? template.optionalDailyLossLimit
-                : null;
+                : template.dailyLossLimit || null;
+              const drawdownLabel = template.drawdownType === 'static' ? 'static MLL'
+                : template.drawdownType === 'intraday_trailing' ? 'intraday trailing MLL'
+                : 'EOD trailing MLL';
+              const ruleParts = [
+                `${moneyValue(template.profitTarget)} target`,
+                `${moneyValue(template.maxDrawdown)} ${drawdownLabel}`,
+                template.maxContracts ? `${template.maxContracts} contracts` : null,
+                template.maxMicros ? `${template.maxMicros} micros` : null,
+                template.consistencyLimitPct != null ? `${template.consistencyLimitPct}% consistency` : 'no consistency rule',
+                template.minimumTradingDays ? `minimum ${template.minimumTradingDays} days` : 'no minimum days',
+                configuredDailyLoss ? `${moneyValue(configuredDailyLoss)} daily loss limit` : null,
+              ].filter(Boolean);
               return (
                 <div style={{ marginTop: 14, padding: '12px 14px', border: `1px solid ${BORDER}`, background: S2, borderRadius: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
@@ -3502,10 +3586,9 @@ export default function Settings() {
                     <span style={{ fontSize: 9, color: '#34d399' }}>Verified {template.verifiedAt ? new Date(template.verifiedAt).toLocaleDateString() : ''}</span>
                   </div>
                   <p style={{ margin: '8px 0 0', fontSize: 10, color: T3, lineHeight: 1.6 }}>
-                    {moneyValue(template.profitTarget)} target � {moneyValue(template.maxDrawdown)} trailing MLL � {template.maxContracts} contracts � {template.maxMicros} micros � {template.consistencyLimitPct}% consistency � minimum {template.minimumTradingDays} days
-                    {configuredDailyLoss ? ` � ${moneyValue(configuredDailyLoss)} fixed daily loss limit` : ''}
+                    {ruleParts.join(' · ')}
                   </p>
-                  {template.sourceUrl && <a href={template.sourceUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 7, color: '#60a5fa', fontSize: 9 }}>Check official Topstep source</a>}
+                  {template.sourceUrl && <a href={template.sourceUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 7, color: '#60a5fa', fontSize: 9 }}>Check official {template.firm} source</a>}
                 </div>
               );
             })()}
