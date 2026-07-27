@@ -435,7 +435,11 @@ export default function FlyxaAIAsk() {
   const { trades } = useTrades();
   const { preferences } = useAppSettings();
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<AIReply[]>([]);
+  // Chat history is persisted in the store (and synced to Supabase), so past
+  // questions and answers survive navigation and reloads.
+  const history = useFlyxaStore(state => state.askHistory);
+  const addAskHistoryEntry = useFlyxaStore(state => state.addAskHistoryEntry);
+  const clearAskHistory = useFlyxaStore(state => state.clearAskHistory);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -560,15 +564,17 @@ export default function FlyxaAIAsk() {
         question: trimmed,
         stats,
       });
-      setHistory(prev => [{ question: trimmed, reply, sampleSize }, ...prev]);
+      addAskHistoryEntry({ id: crypto.randomUUID(), question: trimmed, reply, sampleSize, createdAt: new Date().toISOString() });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      setHistory(prev => [{
+      addAskHistoryEntry({
+        id: crypto.randomUUID(),
         question: trimmed,
         reply: msg,
         sampleSize,
         error: true,
-      }, ...prev]);
+        createdAt: new Date().toISOString(),
+      });
     } finally {
       setLoading(false);
     }
@@ -578,7 +584,7 @@ export default function FlyxaAIAsk() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitQuestion(input); }
   };
 
-  const clearHistory = () => setHistory([]);
+  const clearHistory = () => clearAskHistory();
 
   return (
     <div
@@ -921,8 +927,8 @@ export default function FlyxaAIAsk() {
             )}
 
             {/* Response history */}
-            {history.map((r, i) => (
-              <ResponseCard key={i} r={r} onNavigate={navigate} />
+            {history.map((r) => (
+              <ResponseCard key={r.id} r={r} onNavigate={navigate} />
             ))}
             <div ref={historyEndRef} />
           </div>

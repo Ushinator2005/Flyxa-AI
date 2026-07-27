@@ -361,6 +361,7 @@ export default function Analytics() {
   const [period, setPeriod] = useState<PeriodKey>('1M');
   const [periodOffset, setPeriodOffset] = useState<number>(0);
   const [timeWindow, setTimeWindow] = useState<TimeWindowMins>(30);
+  const [showAllConfluences, setShowAllConfluences] = useState(false);
   const today = useMemo(() => new Date(), []);
 
   const handlePeriodChange = (key: PeriodKey) => {
@@ -1474,6 +1475,45 @@ export default function Analytics() {
               {weakestConfluences.length > 0
                 ? weakestConfluences.map((row, i) => ledgerRow(row, i + 1, false))
                 : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
+
+              {confluenceRows.length > strongestConfluences.length + weakestConfluences.length && (() => {
+                const allSorted = [...confluenceRows].sort((a, b) => b.netPnL - a.netPnL);
+                const allMaxAbs = Math.max(1, ...allSorted.map(row => Math.abs(row.netPnL)));
+                const fullRow = (row: typeof allSorted[0], rank: number) => {
+                  const positive = row.netPnL >= 0;
+                  return (
+                    <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) minmax(90px, 220px) 100px', gap: 16, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--app-border)' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: 'var(--app-text-subtle)' }}>{String(rank).padStart(2, '0')}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--app-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden', display: 'flex', justifyContent: positive ? 'flex-start' : 'flex-end' }}>
+                        <div style={{ width: `${Math.max(2, (Math.abs(row.netPnL) / allMaxAbs) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9 }} />
+                      </div>
+                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap', color: positive ? DASHBOARD_GREEN : DASHBOARD_RED }}>{formatSignedCurrency(row.netPnL)}</span>
+                    </div>
+                  );
+                };
+                return (
+                  <>
+                    {showAllConfluences && (
+                      <>
+                        <p style={{ margin: '16px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: 'var(--app-text-subtle)' }}>ALL CONFLUENCES</p>
+                        {allSorted.map((row, i) => fullRow(row, i + 1))}
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowAllConfluences(v => !v)}
+                      style={{ marginTop: 14, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '8px 0', borderTop: '1px solid var(--app-border)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--app-text-muted)' }}
+                    >
+                      {showAllConfluences ? 'Show less' : `See all ${confluenceRows.length} confluences`}
+                      <span style={{ display: 'inline-block', transition: 'transform 0.15s', transform: showAllConfluences ? 'rotate(180deg)' : 'none', fontSize: 9 }}>▾</span>
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           );
         })()}

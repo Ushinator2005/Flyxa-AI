@@ -509,7 +509,7 @@ export default function TradingPlan() {
                   </button>
                 ) : (
                   <div style={{ display: 'flex', gap: 16, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '1px', color: 'var(--txt-3)' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--amber)', opacity: .9 }} />ALL HELD</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--green)', opacity: .9 }} />RULES FOLLOWED</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--red)', opacity: .75 }} />BREAK</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }} />NO TRADE</span>
                   </div>
@@ -521,9 +521,9 @@ export default function TradingPlan() {
                   const ruleState = chartRuleId ? ruleStateByDate.get(chartRuleId)?.get(day.date) : undefined;
                   let bg = 'rgba(255,255,255,0.06)';
                   if (chartRuleId) {
-                    bg = ruleState === 'ok' ? 'var(--amber)' : ruleState === 'fail' ? 'var(--red)' : 'rgba(255,255,255,0.06)';
+                    bg = ruleState === 'ok' ? 'var(--green)' : ruleState === 'fail' ? 'var(--red)' : 'rgba(255,255,255,0.06)';
                   } else if (day.pct !== null) {
-                    bg = day.failed === 0 ? 'var(--amber)' : 'var(--red)';
+                    bg = day.failed === 0 ? 'var(--green)' : 'var(--red)';
                   }
                   const opacity = chartRuleId
                     ? (ruleState === 'ok' ? 0.9 : ruleState === 'fail' ? 0.6 : 1)

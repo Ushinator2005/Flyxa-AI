@@ -92,6 +92,7 @@ interface FlyxaStateData {
   preSessionHistory: Record<string, PreSessionData>;
   chartHistory: ChartHistoryRecord[];
   aiReflections: AiReflection[];
+  askHistory: AskHistoryEntry[];
   oathItems: Array<{ id: string; label: string }> | null;
 }
 
@@ -101,6 +102,17 @@ export interface AiReflection {
   answer: string;
   timeframe: string;
   periodLabel: string;
+  createdAt: string;
+}
+
+// Saved Flyxa AI "Ask" conversation turns, newest first. Persisted so the
+// chat history survives navigation and reloads.
+export interface AskHistoryEntry {
+  id: string;
+  question: string;
+  reply: string;
+  sampleSize: number;
+  error?: boolean;
   createdAt: string;
 }
 
@@ -145,6 +157,8 @@ export interface FlyxaStore extends FlyxaStateData {
   setPreSessionForDate: (date: string, data: PreSessionData) => void;
   setChartHistory: (records: ChartHistoryRecord[]) => void;
   addAiReflection: (reflection: AiReflection) => void;
+  addAskHistoryEntry: (entry: AskHistoryEntry) => void;
+  clearAskHistory: () => void;
   setOathItems: (items: Array<{ id: string; label: string }> | null) => void;
   resetAllData: () => void;
 }
@@ -501,6 +515,7 @@ export function getInitialState(): FlyxaStateData {
     preSessionHistory: {},
     chartHistory: [],
     aiReflections: [],
+    askHistory: [],
     oathItems: null,
   };
 }
@@ -936,6 +951,12 @@ const useFlyxaStore = create<FlyxaStore>()(
         aiReflections: [reflection, ...state.aiReflections].slice(0, 50),
       })),
 
+      addAskHistoryEntry: (entry) => set((state) => ({
+        askHistory: [entry, ...state.askHistory].slice(0, 100),
+      })),
+
+      clearAskHistory: () => set(() => ({ askHistory: [] })),
+
       setEntries: (entries, options = {}) => {
         set((state) => {
           const accountId = state.activeAccountId || DEFAULT_ACCOUNT_ID;
@@ -1093,6 +1114,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             preSessionHistory: payload.preSessionHistory ?? state.preSessionHistory,
             chartHistory: payload.chartHistory ?? state.chartHistory,
             aiReflections: payload.aiReflections ?? state.aiReflections,
+            askHistory: payload.askHistory ?? state.askHistory,
             oathItems: payload.oathItems ?? state.oathItems,
           };
           return syncAchievements(merged, { notify: false });
@@ -1167,6 +1189,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             : base.riskRulesUpdatedAt,
           checklist: removeLegacyDefaults(persisted.checklist ?? base.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
           aiReflections: persisted.aiReflections ?? base.aiReflections,
+          askHistory: persisted.askHistory ?? base.askHistory,
           // Prefer non-empty moods/titles: if Supabase blob has none (e.g. older save that predates
           // the field) keep whatever is already in base (may have been hydrated from localStorage).
           journalMoods: (persisted.journalMoods && Object.keys(persisted.journalMoods).length > 0)
@@ -1213,6 +1236,7 @@ const useFlyxaStore = create<FlyxaStore>()(
           riskRulesUpdatedAt: typeof state.riskRulesUpdatedAt === 'string' ? state.riskRulesUpdatedAt : initial.riskRulesUpdatedAt,
           checklist: removeLegacyDefaults(state.checklist ?? initial.checklist, LEGACY_DEFAULT_CHECKLIST_IDS),
           aiReflections: state.aiReflections ?? initial.aiReflections,
+          askHistory: state.askHistory ?? initial.askHistory,
           billingAccounts: (state.billingAccounts ?? []).map((account) => ({
             ...account,
             roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
@@ -1253,6 +1277,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         preSessionHistory: state.preSessionHistory,
         chartHistory: state.chartHistory,
         aiReflections: state.aiReflections,
+        askHistory: state.askHistory,
         oathItems: state.oathItems,
       }),
     }
