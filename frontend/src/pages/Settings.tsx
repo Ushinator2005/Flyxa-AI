@@ -685,6 +685,7 @@ export default function Settings() {
     deleteConfluenceOption,
   } = useAppSettings();
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [accountsExpanded, setAccountsExpanded] = useState(false);
   const [billingOffer, setBillingOffer] = useState<{
     accountId: string;
     accountName: string;
@@ -1320,6 +1321,7 @@ export default function Settings() {
     if (!rawHash) return;
 
     const sectionKey = rawHash === 'add-account' ? 'accounts' : rawHash;
+    if (sectionKey === 'accounts') setAccountsExpanded(true);
     const sectionRef =
       sectionKey === 'profile' ? profileRef
       : sectionKey === 'general' ? generalRef
@@ -2302,6 +2304,24 @@ export default function Settings() {
           title="Trading accounts"
           subtitle="Manage the trading accounts available across the dashboard and journal."
           right={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setAccountsExpanded(current => !current)}
+              className="btn-secondary"
+              style={{
+                height: '34px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                padding: '0 12px',
+                flexShrink: 0,
+              }}
+            >
+              {accountsExpanded ? 'Hide' : `Show ${accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived).length}`}
+              <ChevronDown size={13} style={{ transform: accountsExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            </button>
             <button
               type="button"
               data-tour-id="settings-add-account"
@@ -2328,8 +2348,31 @@ export default function Settings() {
               <Plus size={13} />
               Add Account
             </button>
+            </div>
           }
         >
+          {!accountsExpanded ? (
+            <button
+              type="button"
+              onClick={() => setAccountsExpanded(true)}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                background: 'transparent',
+                border: 'none',
+                padding: '4px',
+                fontSize: '12px',
+                color: T3,
+                cursor: 'pointer',
+              }}
+            >
+              {(() => {
+                const active = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived);
+                const archived = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && account.archived);
+                return `${active.length} account${active.length === 1 ? '' : 's'}${archived.length ? ` · ${archived.length} archived` : ''} — click to show`;
+              })()}
+            </button>
+          ) : (<>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ minWidth: 680 }}>
           {/* Table header */}
@@ -2931,6 +2974,7 @@ export default function Settings() {
               ))}
             </div>
           )}
+          </>)}
         </SectionPanel>
       </section>
 

@@ -114,6 +114,8 @@ interface ParsedCsvRow {
 type ViewMode = 'table' | 'pipeline';
 
 const STATUS_OPTIONS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 'Blown', 'Reset'];
+// 'Eval 2' stays valid for legacy/imported entries but is no longer selectable.
+const SELECTABLE_STATUS_OPTIONS: AccountStatus[] = ['Eval 1', 'Funded', 'Passed', 'Blown', 'Reset'];
 const OUTCOME_OPTIONS: EvaluationOutcome[] = ['Unknown', 'Not passed', 'Passed', 'Funded'];
 
 const PIPELINE_COLS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 'Blown'];
@@ -1766,7 +1768,7 @@ export default function Billing() {
                   <span className="billing-filter-label">Status</span>
                   <select className="billing-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                     <option value="All">All</option>
-                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    {SELECTABLE_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </label>
               </>
@@ -2317,7 +2319,7 @@ export default function Billing() {
 
               {/* List price */}
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>List Price (before discount)</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>List Price</label>
                 <div style={{ position: 'relative' }}>
                   <span aria-hidden="true" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>$</span>
                   <input className="billing-modal-field billing-number-sharp" type="number" min={0} step="0.01" value={Number.isFinite(form.listPrice) ? form.listPrice : 0} onChange={e => setFormField('listPrice', Math.max(0, toNumber(e.target.value, 0)))} style={{ textAlign: 'right', paddingLeft: 28 }} />
@@ -2332,20 +2334,6 @@ export default function Billing() {
                 </p>
               </div>
 
-              {/* Discount */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Discount Code</label>
-                  <input className="billing-modal-field" value={form.discountCode} onChange={e => setFormField('discountCode', e.target.value.toUpperCase())} placeholder="e.g. APEX20" />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Discount %</label>
-                  <div style={{ position: 'relative' }}>
-                    <input className="billing-modal-field billing-number-sharp" type="number" min={0} max={100} step="0.1" value={Number.isFinite(form.discountPct) ? form.discountPct : 0} onChange={e => setFormField('discountPct', clampPercentage(toNumber(e.target.value, 0)))} style={{ paddingRight: 30 }} />
-                    <span aria-hidden="true" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>%</span>
-                  </div>
-                </div>
-              </div>
               <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Actual price paid</span>
                 <span className="billing-number-sharp" style={{ fontSize: 16, color: 'var(--txt)' }}>
@@ -2370,7 +2358,7 @@ export default function Billing() {
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Phase / Status</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
-                  {STATUS_OPTIONS.map(status => (
+                  {SELECTABLE_STATUS_OPTIONS.map(status => (
                     <button
                       key={status}
                       type="button"
