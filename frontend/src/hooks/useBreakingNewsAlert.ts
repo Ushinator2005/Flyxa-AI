@@ -111,7 +111,10 @@ export function useBreakingNewsAlert(
     const id = window.setInterval(check, CHECK_INTERVAL_MS);
     return () => {
       window.clearInterval(id);
-      cleanupRef.current?.();
+      // Deliberately do NOT run cleanupRef here: the notification lives in a
+      // global store and must survive unmounts — React StrictMode's dev
+      // double-mount would otherwise dismiss it the instant it appears.
+      // cleanupRef only fires when a NEWER headline replaces the current one.
     };
   }, [onAlert]);
 }

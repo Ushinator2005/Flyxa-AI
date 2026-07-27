@@ -30,7 +30,9 @@ export const useToastStore = create<ToastState>((set) => ({
   pushToast: (toast) => {
     if (shouldSuppressToast()) return '';
     const id = crypto.randomUUID();
-    const durationMs = toast.durationMs ?? 5000;
+    // null means persistent — only substitute the default when the caller
+    // omitted the field entirely (`?? 5000` would swallow null too).
+    const durationMs = toast.durationMs === undefined ? 5000 : toast.durationMs;
     set((state) => ({ toasts: [...state.toasts, { ...toast, durationMs, id }] }));
     if (durationMs !== null) {
       window.setTimeout(() => {
