@@ -13,6 +13,7 @@ import {
   answerTradeDataQuery,
 } from '../services/claude';
 import { filterNewsItemsCached } from '../services/newsFilterCache';
+import { archiveClassifiedNews } from '../services/newsArchive';
 import { buildServerTradeContext } from '../services/tradeContext';
 import { analyzeChartImage } from '../services/gemini';
 import { AuthenticatedRequest, Trade } from '../types/index';
@@ -394,6 +395,8 @@ router.post('/filter-news', authMiddleware, async (req: AuthenticatedRequest, re
       return;
     }
     const items = await filterNewsItemsCached(headlines.slice(0, 40));
+    // Persist the classifications so archive search knows impact/breaking.
+    archiveClassifiedNews(items);
     res.json({ items });
   } catch (err) {
     next(err);

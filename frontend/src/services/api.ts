@@ -353,6 +353,11 @@ export const marketDataApi = {
   },
   getRssNews: () =>
     api.get<Array<{ headline: string; source: string; timestamp: string; summary?: string; url?: string }>>('/api/market-data/rss-news'),
+  searchNewsArchive: (q: string, limit = 50) =>
+    api.get<{
+      items: Array<{ headline: string; source: string; url: string | null; impact: string | null; is_breaking: boolean; published_at: string }>;
+      available: boolean;
+    }>(`/api/market-data/news-archive?q=${encodeURIComponent(q)}&limit=${limit}`),
   getEconCalendar: (from: string, to: string) =>
     api.get<Array<Record<string, unknown>>>(`/api/market-data/econ-calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 };

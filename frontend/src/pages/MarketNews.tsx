@@ -22,6 +22,7 @@ import {
   zonedWallTimeToDate,
 } from '../utils/calendarTime.js';
 import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
+import { DEFAULT_HOT_KEYWORDS, buildHotRegex, normalizeHotKeywords, parseHotKeywords } from '../utils/newsKeywords.js';
 
 const PAGE_BG = 'var(--app-panel)';
 const S1 = 'var(--app-panel)';
@@ -47,8 +48,9 @@ const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY as string | undefined;
 const NEWS_API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3001';
 
 // Instant risk classification for live-pushed headlines — no waiting for the
-// AI filter. Anything matching gets BREAKING treatment the second it lands.
-const HOT_NEWS_RE = /\b(trump|white house|biden|tariff|sanction|war|invasion|strike|missile|nuclear|attack|explosion|emergency|fed\b|fomc|powell|rate (cut|hike)|cpi|ppi|nfp|payrolls|inflation|halt|crash|default)\b/i;
+// AI filter. Anything matching the user's breaking-keyword list (Sources
+// panel; defaults in utils/newsKeywords.ts) gets BREAKING treatment the
+// second it lands.
 const POLYGON_KEY = import.meta.env.VITE_POLYGON_KEY as string | undefined;
 // X posts need a funded X developer account (~$360/mo at current pricing).
 // Locked in the UI until that ever makes sense — flip this to re-enable.
@@ -112,6 +114,7 @@ interface SourcePrefs {
   economicCalendar: boolean;
   calendarCurrencies: string[];
   aiFilter: boolean;
+  hotKeywords: string[];
 }
 
 function normalizeXUsernameInput(value: string): string {
@@ -223,7 +226,7 @@ function writeCalendarCache(result: CalendarResult, timeZone: string, currencies
 }
 
 function readSourcePrefs(): SourcePrefs {
-  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, rss: true, xUsernames: '', xAccounts: [], economicCalendar: true, calendarCurrencies: ['USD'], aiFilter: true };
+  const defaults: SourcePrefs = { finnhub: true, polygon: false, x: true, rss: true, xUsernames: '', xAccounts: [], economicCalendar: true, calendarCurrencies: ['USD'], aiFilter: true, hotKeywords: [...DEFAULT_HOT_KEYWORDS] };
   try {
     const raw = localStorage.getItem(SOURCES_KEY);
     if (!raw) return defaults;
@@ -240,6 +243,7 @@ function readSourcePrefs(): SourcePrefs {
       xAccounts,
       economicCalendar: parsed.economicCalendar ?? defaults.economicCalendar,
       aiFilter: parsed.aiFilter ?? defaults.aiFilter,
+      hotKeywords: parsed.hotKeywords === undefined ? defaults.hotKeywords : normalizeHotKeywords(parsed.hotKeywords),
     };
   } catch {
     return defaults;
@@ -609,8 +613,8 @@ async function fetchForexFactoryCalendar(
 // the AI filter is skipped or returns nothing (raw fallback mode).
 const MED_NEWS_RE = /\b(oil|crude|opec|earnings|stocks?|shares|indexes?|market|yields?|treasury|dollar|euro|gold|bitcoin|gdp|jobs|unemployment|blockade|ceasefire|troops|houthis?|iran|china|recession|deficit|bond)\b/i;
 
-function keywordImpact(headline: string): ImpactLevel {
-  if (HOT_NEWS_RE.test(headline)) return 'high';
+function keywordImpact(headline: string, hotRe: RegExp | null): ImpactLevel {
+  if (hotRe?.test(headline)) return 'high';
   if (MED_NEWS_RE.test(headline)) return 'medium';
   return 'low';
 }
@@ -621,11 +625,11 @@ function maxImpact(a: ImpactLevel, b: ImpactLevel): ImpactLevel {
   return IMPACT_ORDER[a] >= IMPACT_ORDER[b] ? a : b;
 }
 
-function rawToNewsItem(raw: RawHeadline): NewsFilterItem {
+function rawToNewsItem(raw: RawHeadline, hotRe: RegExp | null): NewsFilterItem {
   return {
     headline: raw.headline,
     summary: raw.summary || '',
-    impact: keywordImpact(raw.headline),
+    impact: keywordImpact(raw.headline, hotRe),
     category: 'Other',
     marketImpact: { es: 'neutral', nq: 'neutral' },
     isBreaking: false,
@@ -1368,6 +1372,14 @@ function SourcesPanel({
 }) {
   const xAccounts = prefs.xAccounts;
   const enabledCount = xAccounts.filter(account => account.enabled).length;
+  // Local draft so typing a keyword list doesn't rewrite prefs per keystroke.
+  const [keywordsDraft, setKeywordsDraft] = useState(prefs.hotKeywords.join(', '));
+  const [keywordsOpen, setKeywordsOpen] = useState(false);
+  useEffect(() => { setKeywordsDraft(prefs.hotKeywords.join(', ')); }, [prefs.hotKeywords]);
+  const commitKeywords = () => {
+    const parsed = parseHotKeywords(keywordsDraft);
+    onChange({ ...prefs, hotKeywords: parsed });
+  };
 
   return (
     <section style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, marginTop: 14 }}>
@@ -1391,7 +1403,7 @@ function SourcesPanel({
       </p>
       <div style={{ padding: '0 14px', display: 'grid', gap: 7 }}>
         {([
-          { key: 'rss', label: 'Live Wire', note: 'Tree News push · ForexLive · CNBC · FXStreet · Investing.com' },
+          { key: 'rss', label: 'Live Wire', note: 'Tree News push · ForexLive · MarketWatch · CNBC · FXStreet · Investing.com · Fed · BLS' },
           { key: 'finnhub', label: 'Finnhub', note: 'Requires VITE_FINNHUB_KEY' },
           { key: 'x', label: 'X accounts', note: 'Not available yet' },
           { key: 'economicCalendar', label: 'Economic Calendar', note: '' },
@@ -1442,6 +1454,58 @@ function SourcesPanel({
             </label>
           );
         })}
+      </div>
+
+      {/* Breaking keywords — the instant-BREAKING trigger list. Headlines
+          matching any of these go red the moment they land, before the AI
+          filter returns. */}
+      <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, padding: '10px 14px 0' }}>
+        <button
+          type="button"
+          onClick={() => setKeywordsOpen(open => !open)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          }}
+        >
+          <span style={{ fontSize: 11.5, color: T1 }}>Breaking keywords</span>
+          <span style={{ fontSize: 8.5, color: T3, fontFamily: MONO, letterSpacing: '0.08em' }}>
+            {prefs.hotKeywords.length === 0 ? 'OFF' : `${prefs.hotKeywords.length} TERMS`} {keywordsOpen ? '▾' : '▸'}
+          </span>
+        </button>
+        {keywordsOpen && (
+          <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+            <textarea
+              value={keywordsDraft}
+              onChange={event => setKeywordsDraft(event.target.value)}
+              onBlur={commitKeywords}
+              rows={4}
+              spellCheck={false}
+              placeholder="fed, cpi, tariff, opec…"
+              style={{
+                width: '100%', resize: 'vertical', borderRadius: 6,
+                border: `1px solid ${BORDER}`, background: S2, color: T1,
+                fontSize: 11, fontFamily: MONO, lineHeight: 1.6, padding: '8px 10px',
+                outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 9.5, color: T3, lineHeight: 1.5 }}>
+                Comma-separated. Matching headlines turn red instantly, ahead of the AI filter.
+              </span>
+              <button
+                type="button"
+                onClick={() => onChange({ ...prefs, hotKeywords: [...DEFAULT_HOT_KEYWORDS] })}
+                style={{
+                  flexShrink: 0, background: 'none', border: `1px solid ${BORDER}`, borderRadius: 5,
+                  color: T2, fontSize: 9.5, padding: '3px 8px', cursor: 'pointer',
+                }}
+              >
+                Reset defaults
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {X_SOURCE_ENABLED && (
         <div style={{ marginTop: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 10, padding: '10px 14px 0' }}>
@@ -1737,9 +1801,59 @@ export default function MarketNews() {
     low: true,
   });
   const [prefs, setPrefs] = useState<SourcePrefs>(readSourcePrefs);
+  // The SSE handler lives in a []-dep effect; a ref keeps its keyword regex
+  // current without tearing the socket down on every prefs edit.
+  const hotRegexRef = useRef<RegExp | null>(buildHotRegex(prefs.hotKeywords));
+  useEffect(() => { hotRegexRef.current = buildHotRegex(prefs.hotKeywords); }, [prefs.hotKeywords]);
   const [xAccountDraft, setXAccountDraft] = useState('');
   const [xAccountsModalOpen, setXAccountsModalOpen] = useState(false);
   const [query, setQuery] = useState('');
+  // Archive search — a query also hits the server-side headline archive so
+  // results reach past the ~60-item live tape ("what did Powell say Tuesday").
+  const [archiveResults, setArchiveResults] = useState<NewsFilterItem[]>([]);
+  const [archiveState, setArchiveState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) {
+      setArchiveResults([]);
+      setArchiveState('idle');
+      return;
+    }
+    setArchiveState('loading');
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const { items: rows, available } = await marketDataApi.searchNewsArchive(q, 80);
+        if (cancelled) return;
+        if (!available) {
+          setArchiveResults([]);
+          setArchiveState('unavailable');
+          return;
+        }
+        setArchiveResults(rows.map(row => ({
+          headline: row.headline,
+          summary: '',
+          impact: row.impact === 'high' || row.impact === 'medium' || row.impact === 'low' ? row.impact : 'low',
+          category: 'Archive',
+          marketImpact: { es: 'neutral', nq: 'neutral' },
+          isBreaking: row.is_breaking,
+          source: row.source,
+          timestamp: row.published_at,
+          url: row.url ?? undefined,
+        })));
+        setArchiveState('ready');
+      } catch {
+        if (!cancelled) {
+          setArchiveResults([]);
+          setArchiveState('unavailable');
+        }
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
   const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1793,6 +1907,7 @@ export default function MarketNews() {
       }
       lastBatchKeyRef.current = batchKey;
 
+      const hotRe = buildHotRegex(prefs.hotKeywords);
       let finalItems: NewsFilterItem[] = [];
       let rawFallback = false;
       if (prefs.aiFilter) {
@@ -1801,20 +1916,20 @@ export default function MarketNews() {
           if (filtered.length > 0) {
             finalItems = filtered;
           } else {
-            finalItems = deduped.slice(0, 40).map(rawToNewsItem);
+            finalItems = deduped.slice(0, 40).map(item => rawToNewsItem(item, hotRe));
             rawFallback = true;
           }
         } catch {
-          finalItems = deduped.slice(0, 40).map(rawToNewsItem);
+          finalItems = deduped.slice(0, 40).map(item => rawToNewsItem(item, hotRe));
           rawFallback = true;
         }
       } else {
-        finalItems = deduped.slice(0, 40).map(rawToNewsItem);
+        finalItems = deduped.slice(0, 40).map(item => rawToNewsItem(item, hotRe));
       }
 
       // Keyword floor on top of the AI's call — a war or Fed headline never
       // renders as noise, even when the AI underrates or skips it.
-      finalItems = finalItems.map(item => ({ ...item, impact: maxImpact(item.impact, keywordImpact(item.headline)) }));
+      finalItems = finalItems.map(item => ({ ...item, impact: maxImpact(item.impact, keywordImpact(item.headline, hotRe)) }));
 
       // Tape ordering: strict chronology, newest first. Impact shows as
       // color on the row, never as position — a tape that reorders lies.
@@ -1898,7 +2013,7 @@ export default function MarketNews() {
         try {
           const raw = JSON.parse(event.data) as { headline?: string; source?: string; timestamp?: string; summary?: string; url?: string };
           if (!raw.headline) return;
-          const hot = HOT_NEWS_RE.test(raw.headline);
+          const hot = hotRegexRef.current?.test(raw.headline) ?? false;
           const live: NewsFilterItem = {
             headline: raw.headline,
             summary: raw.summary ?? raw.headline,
@@ -2002,6 +2117,12 @@ export default function MarketNews() {
   }, [filter, items, query]);
 
   const topBreaking = useMemo(() => items.find(item => item.isBreaking), [items]);
+
+  // Archive matches not already on the live tape — rendered below it.
+  const archiveOnly = useMemo(() => {
+    const liveKeys = new Set(items.map(item => item.headline.slice(0, 100)));
+    return archiveResults.filter(item => !liveKeys.has(item.headline.slice(0, 100)));
+  }, [archiveResults, items]);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useEffect(() => {
@@ -2221,6 +2342,29 @@ export default function MarketNews() {
               );
             })}
           </div>
+
+          {/* Archive results — server-side history search below the live tape. */}
+          {query.trim().length >= 3 && (
+            <div style={{ borderTop: `1px solid ${BORDER}` }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px 6px',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+              }}>
+                <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 500, letterSpacing: '0.12em', color: COBALT }}>
+                  FROM THE ARCHIVE
+                </span>
+                <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', color: T3 }}>
+                  {archiveState === 'loading' ? 'searching…'
+                    : archiveState === 'unavailable' ? 'unavailable — apply migration 026'
+                    : `${archiveOnly.length} older match${archiveOnly.length === 1 ? '' : 'es'}`}
+                </span>
+                <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
+              </div>
+              {archiveState === 'ready' && archiveOnly.map((item, index) => (
+                <NewsCard key={`archive-${item.headline}-${index}`} item={item} />
+              ))}
+            </div>
+          )}
           </div>
         </main>
 

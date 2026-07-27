@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { supabase } from '../services/supabase';
 import { getTreeNewsItems, onTreeNewsItem } from '../services/treeNews';
+import { archiveNewsItems, searchNewsArchive } from '../services/newsArchive';
 import { AuthenticatedRequest } from '../types/index';
 
 const router = Router();
@@ -1056,6 +1057,12 @@ const RSS_FEEDS: Array<{ source: string; url: string }> = [
   { source: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114' },
   { source: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
   { source: 'Investing.com', url: 'https://www.investing.com/rss/news_25.rss' },
+  // Bulletins wire — MarketWatch's fastest-headline feed (Dow Jones).
+  { source: 'MarketWatch', url: 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines' },
+  // Primary sources — the release IS the news for FOMC statements, CPI/NFP
+  // prints, and Treasury actions. Slow-moving feeds, but zero-spin.
+  { source: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/press_all.xml' },
+  { source: 'BLS', url: 'https://www.bls.gov/feed/news_release.rss' },
 ];
 // Just under the news page's 60-second refresh loop, so every client tick can
 // get a fresh batch. Polling this fast stays polite because fetchRssFeed uses
@@ -1148,6 +1155,7 @@ router.get('/rss-news', authMiddleware, async (_req: Request, res: Response, nex
 
     if (items.length > 0) {
       rssNewsCache = { fetchedAt: Date.now(), items };
+      archiveNewsItems(items);
     }
     return res.json(mergeWithTreeNews(items));
   } catch (error) {
@@ -1169,6 +1177,26 @@ function mergeWithTreeNews(rssItems: XNewsItem[]): XNewsItem[] {
 // the screen in seconds instead of on the next polling tick.
 // EventSource can't send an Authorization header, so the Supabase JWT rides
 // as a query param and is verified the same way authMiddleware does it.
+// Every pushed Tree News headline lands in the archive the moment it
+// arrives, regardless of whether any client is connected.
+onTreeNewsItem(item => archiveNewsItems([item]));
+
+// Searchable headline history. Fail-open: if migration 026 hasn't been
+// applied yet, returns an empty list with available:false instead of a 500.
+router.get('/news-archive', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await searchNewsArchive({
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      from: typeof req.query.from === 'string' ? req.query.from : undefined,
+      to: typeof req.query.to === 'string' ? req.query.to : undefined,
+      limit: Number(req.query.limit) || undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/news-stream', async (req: Request, res: Response) => {
   const token = String(req.query.token ?? '').trim();
   if (!token) return res.status(401).json({ error: 'Token required' });
