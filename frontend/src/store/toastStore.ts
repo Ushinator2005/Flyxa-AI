@@ -7,6 +7,12 @@ export interface ToastItem {
   message: string;
   tone: ToastTone;
   durationMs: number | null;
+  /** Breaking-news treatment: solid red, pulsing, dismissed only by click. */
+  emphasis?: boolean;
+  /** Small label above the message (e.g. "BREAKING · Reuters · 2 min ago"). */
+  kicker?: string;
+  /** Navigate here when the toast body is clicked (also dismisses it). */
+  href?: string;
 }
 
 interface ToastState {

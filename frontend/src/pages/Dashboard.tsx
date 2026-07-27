@@ -12,7 +12,6 @@ import { format } from 'date-fns';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings, ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID } from '../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { useHighImpactAlerts } from '../hooks/useHighImpactAlerts.js';
 import {
   buildAnalyticsSummary,
   buildRecentTrades,
@@ -24,12 +23,10 @@ import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
 import { getMarketTiming } from '../utils/marketHours.js';
 import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
-import { useBreakingNewsAlert } from '../hooks/useBreakingNewsAlert.js';
 import { isLivePreSession } from '../utils/sessionLifecycle.js';
 
 // ── Design tokens ────────────────────────────────────────────────
 const COBALT      = '#60a5fa';
-const COBALT_DIM  = 'rgba(96,165,250,0.12)';
 const AMBER       = '#f59e0b';
 const AMBER_DIM   = 'rgba(245,158,11,0.12)';
 const GREEN       = '#34d399';
@@ -150,8 +147,7 @@ export default function Dashboard() {
   }, []);
   const storeAccounts = useFlyxaStore(state => state.accounts);
 
-  // Fire bottom-right toast notifications when high-impact events are imminent.
-  useHighImpactAlerts(preferences?.timezone ?? 'America/New_York');
+  // High-impact event toasts are mounted app-wide in Layout.
 
   // Pre-session brief prompt — shows daily until dismissed or started.
   const todayKey = format(new Date(), 'yyyy-MM-dd');
@@ -166,16 +162,8 @@ export default function Dashboard() {
     setPreSessionDismissed(true);
   }, [todayKey]);
 
-  // Breaking news bubble — persists until user dismisses it.
-  const [newsBubble, setNewsBubble] = useState<{ text: string; source: string; timestamp: string } | null>(null);
-  const handleNewsAlert = useCallback(
-    (headline: { text: string; source: string; timestamp: string }) => {
-      setNewsBubble(headline);
-      return () => setNewsBubble(null);
-    },
-    [],
-  );
-  useBreakingNewsAlert(handleNewsAlert);
+  // Breaking news now surfaces app-wide as a persistent red toast (see
+  // useBreakingNewsToast in Layout) instead of a dashboard-only bubble.
 
   // Live clock for countdown timers — ticks every second.
   // Read today's high-impact calendar events from the local cache.
@@ -1131,72 +1119,6 @@ export default function Dashboard() {
       </div>
 
       {/* ── Breaking news bubble ─────────────────────────────────── */}
-      {newsBubble && (() => {
-        const ageMs   = Date.now() - new Date(newsBubble.timestamp).getTime();
-        const ageMins = Math.round(ageMs / 60_000);
-        const ageLabel = ageMins < 1 ? 'just now' : ageMins === 1 ? '1 min ago' : `${ageMins} min ago`;
-        return (
-          <div
-            role="alert"
-            aria-live="assertive"
-            style={{
-              position: 'fixed',
-              bottom: 24,
-              right: 24,
-              zIndex: 190,
-              width: 380,
-              maxWidth: 'calc(100vw - 48px)',
-              background: 'var(--app-panel)',
-              border: `1px solid ${COBALT}`,
-              borderRadius: 8,
-              boxShadow: `0 0 0 1px ${COBALT_DIM}, 0 12px 36px rgba(0,0,0,0.45)`,
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            }}
-          >
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%', background: COBALT, flexShrink: 0,
-                  boxShadow: `0 0 6px ${COBALT}`,
-                }} />
-                <span style={{
-                  fontSize: 11, fontWeight: 600,
-                  color: COBALT, fontFamily: SANS,
-                }}>
-                  Breaking News
-                </span>
-                <span style={{ fontSize: 10, color: T3, fontFamily: MONO }}>{ageLabel}</span>
-              </div>
-              <button
-                type="button"
-                aria-label="Dismiss news alert"
-                onClick={() => setNewsBubble(null)}
-                style={{
-                  border: 'none', background: 'transparent', cursor: 'pointer',
-                  color: T3, padding: 2, lineHeight: 0, flexShrink: 0,
-                }}
-              >
-                ✕
-              </button>
-            </div>
-            {/* Headline */}
-            <p style={{
-              margin: 0, fontSize: 13, fontWeight: 500, color: T1,
-              fontFamily: SANS, lineHeight: 1.45,
-            }}>
-              {newsBubble.text}
-            </p>
-            {/* Source */}
-            <p style={{ margin: 0, fontSize: 11, color: T3, fontFamily: MONO }}>
-              via {newsBubble.source}
-            </p>
-          </div>
-        );
-      })()}
     </div>
   );
 }

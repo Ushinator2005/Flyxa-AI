@@ -10,11 +10,19 @@ import UsernamePrompt from '../common/UsernamePrompt.js';
 import ErrorBoundary from '../common/ErrorBoundary.js';
 import GlobalMessagesPanel from '../messages/GlobalMessagesPanel.js';
 import { useRisk } from '../../contexts/RiskContext.js';
-import { useEvaluationAgent } from '../../hooks/useEvaluationAgent.js';
+import { useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { useRivalStatsSync } from '../../hooks/useRivalStatsSync.js';
+import { useBreakingNewsToast } from '../../hooks/useBreakingNewsToast.js';
+import { useHighImpactAlerts } from '../../hooks/useHighImpactAlerts.js';
 
 export default function Layout() {
-  useEvaluationAgent();
+  // Notification policy: only high-impact news (econ calendar + breaking
+  // headlines) and achievement unlocks pop toasts. Coaching and risk state
+  // stay on their own pages/banners. Mounted here so news alerts fire on
+  // every page, not just the Dashboard.
+  const { preferences } = useAppSettings();
+  useHighImpactAlerts(preferences?.timezone ?? 'America/New_York');
+  useBreakingNewsToast();
   useRivalStatsSync();
   const { riskLevel, dailyStatus } = useRisk();
   const location = useLocation();

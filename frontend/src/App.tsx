@@ -1,12 +1,10 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext.js';
 import Layout from './components/layout/Layout.js';
 import LoadingSpinner from './components/common/LoadingSpinner.js';
 import ToastStack from './components/common/Toast.js';
 import useFlyxaStore from './store/flyxaStore.js';
-import { useDailyLossUsed } from './store/selectors.js';
-import { pushToast } from './store/toastStore.js';
 import { useBackgroundNewsPoller } from './hooks/useBackgroundNewsPoller.js';
 import FlyxaLogo from './components/common/FlyxaLogo.js';
 import { Check, AlertCircle } from 'lucide-react';
@@ -231,9 +229,6 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
-  const hasWarned80 = useRef(false);
-  const hasWarnedHit = useRef(false);
-  const dailyLoss = useDailyLossUsed();
   const isTradeCheckRoute = location.pathname === '/trade-check';
 
   // Browser extension bridge — receives chart captures from the Flyxa Chrome
@@ -359,35 +354,6 @@ export default function App() {
     window.localStorage.setItem('flyxa_store_migrated_v1', '1');
   }, [hydrateSharedData, user]);
 
-
-  useEffect(() => {
-    if (dailyLoss.limit <= 0 || isTradeCheckRoute) return;
-
-    if (dailyLoss.pct >= 100 && !hasWarnedHit.current) {
-      pushToast({
-        tone: 'red',
-        durationMs: null,
-        message: `Daily loss limit reached - stop trading for today`,
-      });
-      hasWarnedHit.current = true;
-      hasWarned80.current = true;
-      return;
-    }
-
-    if (dailyLoss.pct >= 80 && !hasWarned80.current) {
-      pushToast({
-        tone: 'red',
-        durationMs: null,
-        message: `Daily loss limit: 80% used - ${dailyLoss.remaining.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })} remaining`,
-      });
-      hasWarned80.current = true;
-    }
-
-    if (dailyLoss.pct < 80) {
-      hasWarned80.current = false;
-      hasWarnedHit.current = false;
-    }
-  }, [dailyLoss.limit, dailyLoss.pct, dailyLoss.remaining, isTradeCheckRoute]);
 
   if (loading) {
     return (

@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { supabase } from '../services/api.js';
 import type { Goal } from '../types/goals.js';
 import type { Goal as StoreGoal } from '../store/types.js';
-import { pushToast } from '../store/toastStore.js';
 
 export type { Goal, GoalStep, GoalStatus } from '../types/goals.js';
 
@@ -61,7 +60,6 @@ export function useGoals() {
   const updateGoalInStore = useFlyxaStore((state) => state.updateGoal);
   const deleteGoalFromStore = useFlyxaStore((state) => state.deleteGoal);
   const hydrateSharedData = useFlyxaStore((state) => state.hydrateSharedData);
-  const notifiedGoalsRef = useRef<Set<string>>(new Set());
   const syncedRef = useRef<string | null>(null);
 
   // Reset sync flag when user changes so re-login triggers a fresh sync
@@ -127,21 +125,6 @@ export function useGoals() {
         }
       });
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    goals.forEach((goal) => {
-      const completedBySteps = goal.steps.length > 0 && goal.steps.every((step) => step.done);
-      const completed = goal.status === 'Achieved' || completedBySteps;
-      if (completed && !notifiedGoalsRef.current.has(goal.id)) {
-        notifiedGoalsRef.current.add(goal.id);
-        pushToast({
-          tone: 'amber',
-          durationMs: 4000,
-          message: `Goal achieved: ${goal.title}`,
-        });
-      }
-    });
-  }, [goals]);
 
   const addGoal = (goal: Goal) => {
     addGoalToStore(goal as unknown as StoreGoal);
