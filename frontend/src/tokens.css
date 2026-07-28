@@ -108,6 +108,19 @@
 
 }
 
+/* ── Midnight mode overrides — true-black terminal look ─────── */
+html[data-theme='midnight'] {
+  --color-bg:           #000000;
+  --color-bg-muted:     #030303;
+  --color-panel:        #070707;
+  --color-panel-raised: #0c0c0c;
+  --color-panel-soft:   rgba(5, 5, 5, 0.92);
+  /* Pure black needs slightly stronger borders for panel definition. */
+  --color-border:       rgba(255, 255, 255, 0.10);
+  --color-border-sub:   rgba(255, 255, 255, 0.06);
+  --color-text:         #ece8e1;
+}
+
 /* ── Light mode overrides ───────────────────────────────────── */
 html[data-theme='light'] {
   --color-bg:           #f4f1ec;

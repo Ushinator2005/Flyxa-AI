@@ -13,10 +13,11 @@ import { useRivals } from '../hooks/useRivals.js';
 import { useSubscription } from '../hooks/useSubscription.js';
 import { accountApi, supabase } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { clearCurrentUserStoreCache, flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
+import { clearCurrentUserStoreCache, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
 import { TradingAccountStatus, TradingAccountType } from '../types/index.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
 import { normalizeConfluenceKey, normalizeConfluenceTag } from '../utils/confluenceTags.js';
+import { recoverMissingTradesFromLocalBackup } from '../utils/browserRecovery.js';
 import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evaluationCoach.js';
 import { CALENDAR_CACHE_KEY, LEGACY_CALENDAR_CACHE_KEYS } from '../utils/calendarCache.js';
 import { MARKET_CLOCK_OPTIONS } from '../utils/marketHours.js';
@@ -685,7 +686,7 @@ export default function Settings() {
     deleteConfluenceOption,
   } = useAppSettings();
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
-  const [accountsExpanded, setAccountsExpanded] = useState(false);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [billingOffer, setBillingOffer] = useState<{
     accountId: string;
     accountName: string;
@@ -863,54 +864,22 @@ export default function Settings() {
 
   async function handleRecoverFromLocalCache() {
     if (!user?.id) return;
-    const safeEntries = readLocalSafeBackupEntries(user.id);
-    if (safeEntries.length === 0) {
+    if (readLocalSafeBackupEntries(user.id).length === 0) {
       setImportFeedback({ ok: false, msg: 'No local browser backup found.' });
       setTimeout(() => setImportFeedback(null), 4000);
       return;
     }
 
-    // Build a map of current entries by ID for fast lookup
-    const currentById = new Map(journalEntries.map(e => [e.id, e]));
-    let tradesRecovered = 0;
-    let daysRecovered = 0;
-
-    // Deep merge: for each entry in the safe backup, either add it wholesale
-    // (if missing from store) or merge its trades into the existing entry.
-    const merged = [...journalEntries] as typeof journalEntries;
-
-    for (const safeRaw of safeEntries) {
-      const safeEntry = safeRaw as unknown as typeof journalEntries[number];
-      const existing = currentById.get(safeEntry.id);
-
-      if (!existing) {
-        // Whole day is missing � add it
-        merged.push(safeEntry);
-        daysRecovered++;
-        tradesRecovered += Array.isArray(safeEntry.trades) ? safeEntry.trades.length : 0;
-      } else {
-        // Day exists but may have fewer trades � merge trade-level
-        const existingTradeIds = new Set(existing.trades.map((t: { id: string }) => t.id));
-        const newTrades = (Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
-          .filter((t: { id: string }) => !existingTradeIds.has(t.id));
-        if (newTrades.length > 0) {
-          const idx = merged.findIndex(e => e.id === existing.id);
-          if (idx !== -1) {
-            merged[idx] = { ...merged[idx], trades: [...merged[idx].trades, ...newTrades] } as typeof merged[number];
-          }
-          tradesRecovered += newTrades.length;
-        }
-      }
-    }
+    // Shared with the automatic on-load recovery; tombstone-aware so deleted
+    // trades and days are never resurrected.
+    const { tradesRecovered, daysRecovered } = await recoverMissingTradesFromLocalBackup(user.id);
 
     if (tradesRecovered === 0 && daysRecovered === 0) {
-      setImportFeedback({ ok: true, msg: 'Already up to date � no missing trades found.' });
+      setImportFeedback({ ok: true, msg: 'Already up to date — no missing trades found.' });
       setTimeout(() => setImportFeedback(null), 4000);
       return;
     }
 
-    setEntries(merged, { notifyAchievements: false });
-    await flushSupabaseStoreNow();
     const parts: string[] = [];
     if (tradesRecovered > 0) parts.push(`${tradesRecovered} trade${tradesRecovered !== 1 ? 's' : ''}`);
     if (daysRecovered > 0) parts.push(`${daysRecovered} day${daysRecovered !== 1 ? 's' : ''}`);
@@ -1321,7 +1290,6 @@ export default function Settings() {
     if (!rawHash) return;
 
     const sectionKey = rawHash === 'add-account' ? 'accounts' : rawHash;
-    if (sectionKey === 'accounts') setAccountsExpanded(true);
     const sectionRef =
       sectionKey === 'profile' ? profileRef
       : sectionKey === 'general' ? generalRef
@@ -1894,10 +1862,11 @@ export default function Settings() {
               </span>
               <WorkspaceSelect
                 value={theme}
-                onChange={v => setTheme(v as 'dark' | 'light')}
+                onChange={v => setTheme(v as 'dark' | 'light' | 'midnight')}
               >
-                <option value="dark">Dark</option>
+                <option value="dark">Default</option>
                 <option value="light">Light</option>
+                <option value="midnight">Midnight</option>
               </WorkspaceSelect>
             </label>
 
@@ -2304,24 +2273,6 @@ export default function Settings() {
           title="Trading accounts"
           subtitle="Manage the trading accounts available across the dashboard and journal."
           right={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={() => setAccountsExpanded(current => !current)}
-              className="btn-secondary"
-              style={{
-                height: '34px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '12px',
-                padding: '0 12px',
-                flexShrink: 0,
-              }}
-            >
-              {accountsExpanded ? 'Hide' : `Show ${accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived).length}`}
-              <ChevronDown size={13} style={{ transform: accountsExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-            </button>
             <button
               type="button"
               data-tour-id="settings-add-account"
@@ -2348,31 +2299,8 @@ export default function Settings() {
               <Plus size={13} />
               Add Account
             </button>
-            </div>
           }
         >
-          {!accountsExpanded ? (
-            <button
-              type="button"
-              onClick={() => setAccountsExpanded(true)}
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                background: 'transparent',
-                border: 'none',
-                padding: '4px',
-                fontSize: '12px',
-                color: T3,
-                cursor: 'pointer',
-              }}
-            >
-              {(() => {
-                const active = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && !account.archived);
-                const archived = accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID && account.archived);
-                return `${active.length} account${active.length === 1 ? '' : 's'}${archived.length ? ` · ${archived.length} archived` : ''} — click to show`;
-              })()}
-            </button>
-          ) : (<>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ minWidth: 680 }}>
           {/* Table header */}
@@ -2879,13 +2807,30 @@ export default function Settings() {
             Add another account
           </button>
 
-          {/* Archived accounts */}
+          {/* Archived accounts — collapsed by default to keep the section compact */}
           {accounts.some(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived) && (
             <div style={{ marginTop: '20px', borderTop: `1px solid ${BSUB}`, paddingTop: '16px' }}>
-              <p style={{ fontSize: '11px', fontWeight: 600, color: T2, marginBottom: '10px' }}>
-                Archived accounts
-              </p>
-              {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived).map(account => (
+              <button
+                type="button"
+                onClick={() => setArchivedExpanded(current => !current)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  marginBottom: archivedExpanded ? '10px' : 0,
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: T2,
+                  cursor: 'pointer',
+                }}
+              >
+                Archived accounts ({accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived).length})
+                <ChevronDown size={12} style={{ transform: archivedExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+              </button>
+              {archivedExpanded && accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && a.archived).map(account => (
                 <div key={account.id} style={{ marginBottom: '6px' }}>
                   <div
                     style={{
@@ -2974,7 +2919,6 @@ export default function Settings() {
               ))}
             </div>
           )}
-          </>)}
         </SectionPanel>
       </section>
 

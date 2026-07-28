@@ -138,7 +138,7 @@ export default function SessionStatusBar() {
         gap: 10,
         padding: '0 14px',
         height: 36,
-        backgroundColor: '#0e0d0d',
+        backgroundColor: 'var(--app-bg)',
         borderBottom: '1px solid rgba(245,158,11,0.12)',
         flexShrink: 0,
         overflowX: 'auto',

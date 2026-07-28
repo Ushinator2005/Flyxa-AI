@@ -183,10 +183,10 @@ describe('evaluation coach', () => {
   });
 
   it('carries the officially verified Take Profit Trader drawdowns', () => {
-    const templates = getEvaluationTemplates();
-    expect(templates.find(t => t.id === 'tpt-75k')?.maxDrawdown).toBe(2_500);
-    expect(templates.find(t => t.id === 'tpt-100k')?.maxDrawdown).toBe(3_000);
-    expect(templates.find(t => t.id === 'tpt-100k')?.trailingStopsAt).toBe(100_000);
+    const templates = getEvaluationTemplates().filter(t => t.firm === 'TakeProfitTrader');
+    expect(templates.find(t => t.accountSize === 75_000)?.maxDrawdown).toBe(2_500);
+    expect(templates.find(t => t.accountSize === 100_000)?.maxDrawdown).toBe(3_000);
+    expect(templates.find(t => t.accountSize === 100_000)?.trailingStopsAt).toBe(100_000);
   });
 
   it('builds an MLL series aligned to trading days for the equity chart', () => {

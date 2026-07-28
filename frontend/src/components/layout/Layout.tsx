@@ -14,6 +14,7 @@ import { useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { useRivalStatsSync } from '../../hooks/useRivalStatsSync.js';
 import { useBreakingNewsToast } from '../../hooks/useBreakingNewsToast.js';
 import { useHighImpactAlerts } from '../../hooks/useHighImpactAlerts.js';
+import { useAutoBrowserRecovery } from '../../hooks/useAutoBrowserRecovery.js';
 
 export default function Layout() {
   // Notification policy: only high-impact news (econ calendar + breaking
@@ -24,6 +25,7 @@ export default function Layout() {
   useHighImpactAlerts(preferences?.timezone ?? 'America/New_York');
   useBreakingNewsToast();
   useRivalStatsSync();
+  useAutoBrowserRecovery();
   const { riskLevel, dailyStatus } = useRisk();
   const location = useLocation();
   const isJournalWorkspace = location.pathname === '/scanner' || location.pathname === '/market-news';

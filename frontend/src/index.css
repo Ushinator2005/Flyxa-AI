@@ -1483,10 +1483,11 @@ html[data-theme='light'] .border-green-500\/15 {
   }
 }
 
-/* Remap hardcoded Tailwind slate classes to warm charcoal in dark mode */
+/* Remap hardcoded Tailwind slate classes to warm charcoal in dark mode
+   (uses tokens so Midnight's true-black surfaces flow through too) */
 html:not([data-theme='light']) .bg-slate-950,
 html:not([data-theme='light']) .bg-slate-900 {
-  background-color: #141312 !important;
+  background-color: var(--color-bg-muted) !important;
 }
 
 html:not([data-theme='light']) .bg-slate-900\/30,
@@ -1498,7 +1499,7 @@ html:not([data-theme='light']) .bg-slate-900\/85 {
 
 html:not([data-theme='light']) .bg-slate-800,
 html:not([data-theme='light']) .bg-slate-800\/70 {
-  background-color: #1a1917 !important;
+  background-color: var(--color-panel) !important;
 }
 
 html:not([data-theme='light']) .bg-slate-800\/50,

@@ -976,12 +976,18 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
   },
 ];
 
+// The picker only offers verified templates: the Topstep combine presets plus
+// the scraped multi-firm catalog. The older hand-written presets (Apex, FTMO,
+// TradeDay, spaced-name duplicates, …) in STARTER_TEMPLATES stay resolvable
+// via getLegacyTemplateById for accounts that saved their ids before the
+// catalog landed, but no longer appear in dropdowns.
 export function getEvaluationTemplates(): EvaluationTemplate[] {
-  const legacyTopstepIds = new Set(['topstep-50k', 'topstep-100k', 'topstep-150k']);
-  return [
-    ...STARTER_TEMPLATES.filter(template => !legacyTopstepIds.has(template.id)),
-    ...dynamicCatalogTemplates,
-  ];
+  return [...TOPSTEP_TEMPLATES, ...dynamicCatalogTemplates];
+}
+
+function getLegacyTemplateById(id: string | undefined): EvaluationTemplate | undefined {
+  if (!id) return undefined;
+  return STARTER_TEMPLATES.find(template => template.id === id);
 }
 
 function normalized(value: string): string {
@@ -990,7 +996,8 @@ function normalized(value: string): string {
 
 export function inferEvaluationTemplate(account: Account): EvaluationTemplate {
   const templates = getEvaluationTemplates();
-  const configured = templates.find(template => template.id === account.evaluationTemplateId);
+  const configured = templates.find(template => template.id === account.evaluationTemplateId)
+    ?? getLegacyTemplateById(account.evaluationTemplateId);
   if (configured) return configured;
   if (account.evaluationTemplateId?.startsWith('topstep-')) {
     const legacy = templates.find(template => template.firm === 'Topstep' && template.accountSize === account.size);
@@ -1003,6 +1010,9 @@ export function inferEvaluationTemplate(account: Account): EvaluationTemplate {
   ))
     ?? firmMatches.find(template => template.accountSize === account.size)
     ?? firmMatches[0]
+    // Unknown firm: fall back to the generic static-drawdown template so the
+    // account's own limits drive the math, not an arbitrary firm's rules.
+    ?? getLegacyTemplateById('custom-evaluation')
     ?? templates[templates.length - 1];
 }
 
