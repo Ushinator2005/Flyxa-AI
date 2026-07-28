@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flyxa · You're on the list</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Manrope:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0A0908;--panel:#131211;--panel2:#191715;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--text:#EDEAE4;--muted:rgba(255,255,255,0.5);--faint:rgba(255,255,255,0.3);--accent:#FF6B2B;--green:#30D158;--sans:'Manrope',system-ui,sans-serif;--mono:'DM Mono',monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:44px 24px;overflow-x:hidden;}
+a{color:var(--accent);text-decoration:none;}a:hover{color:#ff8d55;}
+body::before{content:'';position:fixed;inset:-20%;background:linear-gradient(rgba(255,255,255,0.022) 1px,transparent 1px) 0 0/100% 46px,linear-gradient(90deg,rgba(255,255,255,0.022) 1px,transparent 1px) 0 0/46px 100%;animation:drift 32s linear infinite;pointer-events:none;}
+body::after{content:'';position:fixed;top:-180px;left:50%;width:760px;height:520px;transform:translateX(-50%);background:radial-gradient(ellipse at center,rgba(255,107,43,0.09),transparent 68%);pointer-events:none;}
+@keyframes drift{to{transform:translate(46px,46px);}}
+.wrap{width:100%;max-width:452px;position:relative;z-index:1;}
+.brand{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:30px;opacity:0;animation:up .6s cubic-bezier(.2,.7,.2,1) .05s both;}
+.brand img{width:27px;height:27px;object-fit:contain;}
+.brand b{font-family:'Space Grotesk',var(--sans);font-size:20px;font-weight:700;letter-spacing:-0.4px;}
+@keyframes up{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;opacity:0;animation:up .7s cubic-bezier(.2,.7,.2,1) .16s both;}
+.top{padding:28px 28px 26px;}
+/* ticked chip: the check draws itself in */
+.chip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);border:1px solid var(--border2);border-radius:6px;padding:4px 10px 4px 8px;margin-bottom:18px;}
+.chip svg{width:11px;height:11px;flex:none;}
+.chip path{stroke:var(--green);stroke-width:2.4;fill:none;stroke-linecap:round;stroke-dasharray:16;stroke-dashoffset:16;animation:tick .5s ease .6s forwards;}
+@keyframes tick{to{stroke-dashoffset:0;}}
+h1{font-size:27px;font-weight:700;letter-spacing:-0.7px;line-height:1.15;}
+.top p{font-size:13.5px;line-height:1.65;color:var(--muted);margin-top:10px;}
+.top p b{color:var(--text);font-weight:600;}
+/* position — big number counts down into place */
+.pos{border-top:1px solid var(--border);display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:20px 28px 22px;}
+.lbl{font-family:var(--mono);font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:9px;}
+.pos .v{display:flex;align-items:baseline;gap:8px;}
+.pos .v b{font-family:var(--mono);font-size:34px;font-weight:500;letter-spacing:-1px;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1;}
+.pos .v span{font-family:var(--mono);font-size:11.5px;color:var(--muted);}
+.pos .ahead{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:0.4px;padding-bottom:4px;}
+/* referral */
+.ref{border-top:1px solid var(--border);background:var(--panel2);padding:20px 28px 22px;}
+.ref p{font-size:13px;color:var(--muted);line-height:1.6;}
+.ref p b{color:var(--text);font-weight:600;}
+.row{display:flex;gap:8px;margin-top:12px;}
+input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:11px 13px;font-family:var(--mono);font-size:11.5px;color:var(--muted);outline:none;}
+button{background:var(--accent);border:none;border-radius:9px;color:#151312;font-size:13px;font-weight:700;padding:11px 18px;cursor:pointer;white-space:nowrap;transition:background .2s,transform .12s;min-width:104px;}
+button:hover{background:#ff7d42;}
+button:active{transform:translateY(1px);}
+button.ok{background:var(--green);color:#0B1F10;}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 28px;border-top:1px solid var(--border);flex-wrap:wrap;}
+.foot span{font-family:var(--mono);font-size:9.5px;letter-spacing:0.6px;color:var(--faint);}
+.foot a{font-size:12.5px;font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><img src="assets/flyxa-glyph.png" alt=""><b>Flyxa</b></div>
+  <div class="card">
+    <div class="top">
+      <span class="chip"><svg viewBox="0 0 14 14"><path d="M2.5 7.4l3 3 6-6.4"/></svg>You're on the list</span>
+      <h1>Seat reserved.</h1>
+      <p>Invites go out in order. We'll email <b id="em">you@email.com</b> when it's your turn. One email, nothing else.</p>
+    </div>
+    <div class="pos">
+      <div><span class="lbl">Your position</span><div class="v"><b id="p">…</b><span>in line</span></div></div>
+      <span class="ahead" id="ah">&nbsp;</span>
+    </div>
+    <div class="ref">
+      <span class="lbl">Move up the line</span>
+      <p>Every trader who joins with your link moves you up <b>3 places</b>.</p>
+      <div class="row">
+        <input id="lk" value="flyxa.app/r/ushi-11" readonly>
+        <button id="cp">Copy link</button>
+      </div>
+    </div>
+    <div class="foot">
+      <span>PRIVATE BETA · INVITE ONLY</span>
+      <a href="Waitlist.html">Back to Flyxa</a>
+    </div>
+  </div>
+</div>
+<script>
+// email from the join page
+const q=new URLSearchParams(location.search).get('e');
+if(q) document.getElementById('em').textContent=q;
+// position counts down into place, then the "ahead of you" line fades in
+(function(){const el=document.getElementById('p'),ah=document.getElementById('ah'),t=11;let n=64;
+  const id=setInterval(()=>{n-=Math.max(1,Math.ceil((n-t)/5));if(n<=t){n=t;clearInterval(id);ah.textContent='10 ahead of you';ah.style.transition='opacity .5s';}el.textContent=n;},55);
+  ah.style.opacity=0;setTimeout(()=>ah.style.opacity=1,1100);})();
+document.getElementById('cp').addEventListener('click',e=>{
+  const b=e.currentTarget,i=document.getElementById('lk');
+  i.select();try{navigator.clipboard.writeText(i.value);}catch(_){}
+  b.textContent='Copied ✓';b.classList.add('ok');
+  setTimeout(()=>{b.textContent='Copy link';b.classList.remove('ok');},1800);
+});
+</script>
+</body>
+</html>

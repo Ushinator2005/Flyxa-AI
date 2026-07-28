@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flyxa · Privacy Policy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Manrope:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0C0B0A;--panel:#141311;--text:#EDEAE4;--body:rgba(255,255,255,0.62);--muted:rgba(255,255,255,0.42);--border:rgba(255,255,255,0.08);--accent:#FF6B2B;--sans:'Manrope',system-ui,sans-serif;--mono:'DM Mono',monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+a{color:var(--accent);text-decoration:none;}a:hover{color:#ff8d55;}
+nav{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:10px;padding:18px 48px;background:rgba(12,11,10,0.85);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);}
+nav img{width:30px;height:30px;object-fit:contain;}
+nav b{font-family:'Space Grotesk',var(--sans);font-size:19px;font-weight:700;letter-spacing:-0.5px;}
+nav .back{margin-left:auto;font-size:13px;font-weight:600;color:var(--muted);transition:color .2s;}
+nav .back:hover{color:var(--text);}
+header{max-width:1080px;margin:0 auto;padding:72px 40px 0;}
+.hd-top{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-bottom:36px;}
+.hd-meta{display:flex;border-top:1px solid var(--border);}
+.hd-meta div{padding:14px 28px 16px 0;margin-right:28px;border-right:1px solid var(--border);}
+.hd-meta div:last-child{border-right:none;}
+.hd-meta b{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;font-weight:400;}
+.hd-meta span{font-family:var(--mono);font-size:12px;color:var(--text);}
+.hd-sub{font-size:14.5px;color:var(--body);margin-top:14px;max-width:560px;line-height:1.65;}
+.tag{font-family:var(--mono);font-size:10px;letter-spacing:2.2px;text-transform:uppercase;color:var(--accent);margin-bottom:16px;}
+h1{font-family:var(--sans);font-size:clamp(30px,3.6vw,40px);font-weight:700;letter-spacing:-0.8px;line-height:1.1;}
+.upd{font-family:var(--mono);font-size:10.5px;letter-spacing:1px;color:var(--muted);padding-bottom:8px;white-space:nowrap;}
+.wrap{max-width:1080px;margin:0 auto;padding:56px 40px 120px;display:grid;grid-template-columns:230px 1fr;gap:64px;align-items:start;}
+.toc{position:sticky;top:96px;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 140px);overflow:auto;}
+.toc-h{font-family:var(--mono);font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
+.toc a{display:flex;gap:10px;font-size:12px;font-weight:500;color:var(--muted);padding:5px 0;transition:color .15s;}
+.toc a i{font-style:normal;font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.22);width:20px;flex:none;padding-top:1px;}
+.toc a:hover{color:var(--text);}
+.toc a:hover i{color:var(--accent);}
+.toc a.on{color:var(--text);}
+.toc a.on i{color:var(--accent);}
+.toc a{border-left:1px solid transparent;padding-left:12px;margin-left:-13px;}
+.toc a.on{border-left-color:var(--accent);}
+.toc{border-left:1px solid var(--border);padding-left:12px;}
+article{max-width:640px;}
+article>p.lede{font-size:15px;line-height:1.75;color:rgba(255,255,255,0.75);margin-bottom:14px;}
+section{padding:34px 0;border-bottom:1px solid var(--border);scroll-margin-top:86px;}
+section:last-of-type{border-bottom:none;}
+h2{display:flex;align-items:baseline;gap:16px;font-size:17.5px;font-weight:700;letter-spacing:-0.2px;margin-bottom:16px;}
+h2 i{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--accent);letter-spacing:1px;flex:none;width:30px;position:relative;}
+h2 i::after{content:'';position:absolute;left:0;bottom:-4px;width:18px;height:1px;background:var(--accent);opacity:.5;}
+h3{font-size:13.5px;font-weight:700;color:var(--text);margin:18px 0 6px;}
+p,li{font-size:14.5px;line-height:1.75;color:var(--body);}
+p+p{margin-top:10px;}
+ul{list-style:none;margin-top:6px;}
+li{padding:9px 0;border-bottom:1px dashed rgba(255,255,255,0.06);display:flex;gap:12px;}
+li:last-child{border-bottom:none;}
+li::before{content:'◆';color:var(--accent);font-size:7px;padding-top:7px;flex:none;}
+strong{color:var(--text);font-weight:600;}
+.callout{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:0 10px 10px 0;padding:16px 20px;margin:14px 0;font-size:13.5px;line-height:1.7;color:var(--body);}
+footer{border-top:1px solid var(--border);padding:28px 48px;display:flex;align-items:center;gap:14px;}
+footer span{font-family:var(--mono);font-size:11px;color:var(--muted);}
+footer a{font-size:12.5px;font-weight:600;margin-left:auto;}
+@media(max-width:860px){.wrap{grid-template-columns:1fr;gap:34px;}.toc{position:static;flex-direction:row;flex-wrap:wrap;gap:12px;max-height:none;}.toc-h{display:none;}header{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<nav><img src="assets/flyxa-glyph.png" alt="Flyxa"><b>Flyxa</b><a class="back" href="Landing Page.html">← Back to flyxa.app</a></nav>
+<header>
+  <div class="hd-top">
+    <div><div class="tag">Legal</div><h1>Privacy policy</h1><p class="hd-sub">How Flyxa collects, uses, and protects your data, and the commitments we make to you.</p></div>
+  </div>
+  <div class="hd-meta">
+    <div><b>Effective date</b><span>22 July 2026</span></div>
+    <div><b>Version</b><span>1.0</span></div>
+    <div><b>Applies to</b><span>All Flyxa services</span></div>
+    <div><b>Contact</b><span><a href="mailto:team@flyxa.app">team@flyxa.app</a></span></div>
+  </div>
+</header>
+<div class="wrap">
+  <aside class="toc"><div class="toc-h">On this page</div><a href="#scope"><i>01</i>Scope of this policy</a>
+    <a href="#collect"><i>02</i>Information we collect</a>
+    <a href="#cookies"><i>03</i>Cookies and similar technologies</a>
+    <a href="#use"><i>04</i>How we use your information</a>
+    <a href="#ai"><i>05</i>AI processing of your data</a>
+    <a href="#legal"><i>06</i>Legal bases for processing</a>
+    <a href="#sharing"><i>07</i>Sharing and service providers</a>
+    <a href="#retention"><i>08</i>Data retention</a>
+    <a href="#security"><i>09</i>Security</a>
+    <a href="#transfers"><i>10</i>International data transfers</a>
+    <a href="#rights"><i>11</i>Your rights</a>
+    <a href="#marketing"><i>12</i>Marketing choices</a>
+    <a href="#children"><i>13</i>Children</a>
+    <a href="#changes"><i>14</i>Changes to this policy</a>
+    <a href="#contact"><i>15</i>Contact us</a></aside>
+  <article>
+    <p class="lede">This policy applies to all Flyxa products and services. It explains what data we collect, the purposes we use it for, and the rights available to you. If anything is unclear, contact us at <a href="mailto:team@flyxa.app">team@flyxa.app</a>.</p>
+    <section id="scope"><h2><i>01</i>Scope of this policy</h2><p>This Privacy Policy applies to all products, websites, and services operated by Flyxa ("Flyxa", "we", "us"). It describes how we collect, use, store, and disclose personal information, and the rights available to you. It applies whether you hold a free or paid account, are on our waitlist, or are simply visiting our website.</p></section>
+    <section id="collect"><h2><i>02</i>Information we collect</h2><h3>Information you provide</h3><ul>
+<li><span><strong>Account information</strong>: your email address and authentication credentials, collected when you create an account or join the waitlist.</span></li>
+<li><span><strong>Trading data</strong>: screenshots, trade records, journal entries, notes, and rule configurations you submit to the service.</span></li>
+<li><span><strong>Payment information</strong>: processed by our payment provider; we do not store full card numbers.</span></li>
+<li><span><strong>Communications</strong>: the contents of messages you send to our support channels.</span></li></ul>
+<h3>Information collected automatically</h3><ul>
+<li><span><strong>Usage information</strong>: features accessed, pages viewed, and interaction events, used to maintain and improve the service.</span></li>
+<li><span><strong>Device and log data</strong>: IP address, browser type, operating system, and timestamps, collected for security and diagnostics.</span></li></ul></section>
+    <section id="cookies"><h2><i>03</i>Cookies and similar technologies</h2><p>We use a small number of cookies and similar technologies to keep you signed in, remember preferences, and measure aggregate usage of our website. We do not use third-party advertising cookies. You can control cookies through your browser settings; disabling essential cookies may prevent parts of the service from functioning.</p></section>
+    <section id="use"><h2><i>04</i>How we use your information</h2><ul>
+<li><span>To provide and operate the service: importing trades, scoring your process, and generating analytical insights for your account.</span></li>
+<li><span>To secure the service, including fraud prevention, abuse detection, and account authentication.</span></li>
+<li><span>To process payments and manage subscriptions.</span></li>
+<li><span>To send transactional communications regarding your account, billing, and material changes to our terms or this policy.</span></li>
+<li><span>To send product updates and announcements, only where you have expressly opted in. You may withdraw consent at any time via the unsubscribe link in any such email.</span></li>
+<li><span>To analyse aggregated, de-identified usage patterns to improve product performance and reliability.</span></li></ul></section>
+    <section id="ai"><h2><i>05</i>AI processing of your data</h2><p>Flyxa uses machine-learning models to read trade screenshots, score your execution, and identify behavioural patterns in your journal.</p>
+<div class="callout"><strong>Your data trains nothing but your own insights.</strong> Content you submit is processed solely to generate outputs for your account. We do not use your trading data, journal entries, or screenshots to train models applied to other users, and we contractually prohibit third-party model providers from retaining or training on your data.</div></section>
+    <section id="legal"><h2><i>06</i>Legal bases for processing</h2><p>Where the GDPR or similar laws apply, we process personal data on the following bases: <strong>performance of a contract</strong> (providing the service you signed up for); <strong>legitimate interests</strong> (securing and improving the service, in ways that do not override your rights); <strong>consent</strong> (optional marketing communications, which you may withdraw at any time); and <strong>legal obligation</strong> (tax, accounting, and lawful requests).</p></section>
+    <section id="sharing"><h2><i>07</i>Sharing and service providers</h2><p>We do not sell personal data. We disclose personal information only in the following limited circumstances:</p><ul>
+<li><span><strong>Service providers</strong>: vetted vendors that host infrastructure, process payments, or deliver email on our behalf, bound by contractual confidentiality and data-protection obligations, and only to the extent necessary to perform their function.</span></li>
+<li><span><strong>Legal requirements</strong>: where disclosure is required by law, regulation, or a valid legal process, or is necessary to protect the rights, safety, or property of Flyxa or others.</span></li>
+<li><span><strong>Business transfers</strong>: in connection with a merger, acquisition, or sale of assets, in which case this policy will continue to apply to your data and you will be notified of any change of controller.</span></li></ul>
+<p>We never disclose your trading history to brokers, proprietary trading firms, or other traders, and we do not use your journal content for advertising or profiling.</p></section>
+    <section id="retention"><h2><i>08</i>Data retention</h2><ul>
+<li><span><strong>Account and trading data</strong>: retained for as long as your account remains active.</span></li>
+<li><span><strong>Deleted accounts</strong>: all associated personal data is permanently erased within 30 days of a confirmed deletion request, except where longer retention is required by law (e.g. tax and accounting records).</span></li>
+<li><span><strong>Backups</strong>: encrypted backups are rotated on a fixed schedule; deleted data ages out of backups within 90 days.</span></li>
+<li><span><strong>Waitlist data</strong>: if you join the waitlist but never create an account, we retain your email only until launch communications conclude, or until you unsubscribe, whichever is earlier.</span></li></ul></section>
+    <section id="security"><h2><i>09</i>Security</h2><p>All data is encrypted in transit using TLS 1.2 or higher and encrypted at rest using industry-standard algorithms. Access to production systems is restricted to authorised personnel, protected by multi-factor authentication, and logged for audit purposes. We review our security posture regularly and remediate identified vulnerabilities on prioritised timelines.</p>
+<p>No method of transmission or storage is perfectly secure. In the event of a data breach affecting your personal information, we will notify you and the relevant supervisory authority without undue delay, as required by applicable law (including the Notifiable Data Breaches scheme under the Privacy Act 1988).</p></section>
+    <section id="transfers"><h2><i>10</i>International data transfers</h2><p>Our infrastructure providers may store or process data in jurisdictions other than your own. Where personal data is transferred internationally, we ensure appropriate safeguards are in place, such as standard contractual clauses or an adequacy decision covering the receiving jurisdiction.</p></section>
+    <section id="rights"><h2><i>11</i>Your rights</h2><p>Subject to applicable law (including the Australian Privacy Act 1988 and, where applicable, the GDPR), you have the right to:</p><ul>
+<li><span><strong>Access</strong>: obtain a copy of the personal data we hold about you.</span></li>
+<li><span><strong>Correction</strong>: request correction of inaccurate or incomplete data.</span></li>
+<li><span><strong>Deletion</strong>: request permanent deletion of your account and associated data.</span></li>
+<li><span><strong>Portability</strong>: export your data in a structured, machine-readable format from account settings.</span></li>
+<li><span><strong>Objection and restriction</strong>: object to, or request restriction of, certain processing activities.</span></li>
+<li><span><strong>Withdraw consent</strong>: where processing is based on consent, withdraw it at any time without affecting prior processing.</span></li>
+<li><span><strong>Complaint</strong>: lodge a complaint with your data-protection authority (in Australia, the Office of the Australian Information Commissioner; in the EU/UK, your local supervisory authority).</span></li></ul>
+<p>To exercise any of these rights, use account settings or contact <a href="mailto:team@flyxa.app">team@flyxa.app</a>. We verify all requests and respond within 30 days.</p></section>
+    <section id="marketing"><h2><i>12</i>Marketing choices</h2><p>We send marketing emails only with your express opt-in. Every marketing email includes a one-click unsubscribe. Unsubscribing does not affect transactional emails necessary to operate your account (billing receipts, security notices, material policy changes).</p></section>
+    <section id="children"><h2><i>13</i>Children</h2><p>The service is not directed to individuals under 18, and we do not knowingly collect personal information from them. If we become aware that such information has been collected, we will delete it promptly.</p></section>
+    <section id="changes"><h2><i>14</i>Changes to this policy</h2><p>We may update this policy from time to time. The "Last updated" date above will always reflect the current version. Material changes will be notified to account holders by email with reasonable advance notice. Continued use of the service after the effective date constitutes acceptance of the updated policy.</p></section>
+    <section id="contact"><h2><i>15</i>Contact us</h2><p>For questions regarding this policy or our data practices, contact our privacy team at <a href="mailto:team@flyxa.app">team@flyxa.app</a>. We aim to respond to all privacy enquiries within two business days.</p></section>
+  </article>
+</div>
+<footer><span>© 2026 Flyxa · The AI trading journal</span><a href="Terms.html">Terms of service →</a></footer>
+<script>
+(function(){
+  var links=[].slice.call(document.querySelectorAll('.toc a'));
+  var secs=links.map(function(a){return document.querySelector(a.getAttribute('href'));});
+  function spy(){
+    var y=window.scrollY+120,cur=0;
+    secs.forEach(function(s,i){ if(s && s.offsetTop<=y) cur=i; });
+    links.forEach(function(a,i){ a.classList.toggle('on', i===cur); });
+  }
+  window.addEventListener('scroll', spy, {passive:true}); spy();
+})();
+</script>
+</body>
+</html>

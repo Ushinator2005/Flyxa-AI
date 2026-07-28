@@ -205,8 +205,19 @@ function PasswordRecoveryModal() {
   );
 }
 
+// The marketing site is ship-ready static HTML served verbatim from
+// public/landing/ (per its design handoff — not a React page). Escaping the
+// SPA requires a hard navigation, not a router <Navigate>.
+function StaticLandingRedirect() {
+  useEffect(() => {
+    window.location.replace('/landing/index.html');
+  }, []);
+  return null;
+}
+
 function ProtectedRoute() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -216,7 +227,12 @@ function ProtectedRoute() {
     );
   }
 
-  if (!user) return <Navigate to="/auth" replace />;
+  if (!user) {
+    // Logged-out visitors hitting the root see the marketing landing page;
+    // deep links into the app still go to sign-in.
+    if (location.pathname === '/') return <StaticLandingRedirect />;
+    return <Navigate to="/auth" replace />;
+  }
   return <Outlet />;
 }
 
@@ -369,7 +385,7 @@ export default function App() {
         <Routes>
           <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
           <Route path="/r/:code" element={<ReferralRedirect />} />
-          <Route path="/landing" element={<Navigate to={user ? '/' : '/auth'} replace />} />
+          <Route path="/landing" element={<StaticLandingRedirect />} />
           <Route path="/terms" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
 

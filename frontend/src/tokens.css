@@ -134,6 +134,24 @@ html[data-theme='light'] {
   --color-text-muted:   #3d3632;
   --color-text-subtle:  #706560;
 
+  /* Fluorescent accents — light mode runs vivid, saturated signal colors
+     instead of the dark theme's softened pastels. */
+  --color-amber:        #ff9100;
+  --color-amber-dim:    rgba(255, 145, 0, 0.16);
+  --color-amber-border: rgba(255, 145, 0, 0.42);
+  --color-green:        #00c853;
+  --color-green-dim:    rgba(0, 230, 118, 0.20);
+  --color-green-border: rgba(0, 200, 83, 0.45);
+  --color-red:          #ff1744;
+  --color-red-dim:      rgba(255, 23, 68, 0.15);
+  --color-red-border:   rgba(255, 23, 68, 0.40);
+  --color-blue:         #2979ff;
+  --color-blue-dim:     rgba(41, 121, 255, 0.14);
+  --color-blue-border:  rgba(41, 121, 255, 0.36);
+  --color-purple:       #c026d3;
+  --color-purple-dim:   rgba(192, 38, 211, 0.12);
+  --color-purple-border: rgba(192, 38, 211, 0.32);
+
   /* Legacy aliases that were hard-coded as white/dark rgba (they never flipped).
      Higher specificity than the :root alias block below, so these win. */
   --app-toggle-hover:   rgba(0, 0, 0, 0.05);

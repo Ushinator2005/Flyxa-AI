@@ -13,12 +13,13 @@
 .hm-neg-3 { background-color: rgba(153, 27, 27, 0.60); }
 .hm-neg-2 { background-color: rgba(185, 28, 28, 0.40); }
 .hm-neg-1 { background-color: rgba(127, 29, 29, 0.40); }
-html[data-theme='light'] .hm-pos-3 { background-color: rgba(52, 211, 153, 0.40); }
-html[data-theme='light'] .hm-pos-2 { background-color: rgba(52, 211, 153, 0.24); }
-html[data-theme='light'] .hm-pos-1 { background-color: rgba(52, 211, 153, 0.12); }
-html[data-theme='light'] .hm-neg-3 { background-color: rgba(248, 113, 113, 0.34); }
-html[data-theme='light'] .hm-neg-2 { background-color: rgba(248, 113, 113, 0.20); }
-html[data-theme='light'] .hm-neg-1 { background-color: rgba(248, 113, 113, 0.11); }
+/* Fluorescent calendar tints for light mode */
+html[data-theme='light'] .hm-pos-3 { background-color: rgba(0, 230, 118, 0.52); }
+html[data-theme='light'] .hm-pos-2 { background-color: rgba(0, 230, 118, 0.32); }
+html[data-theme='light'] .hm-pos-1 { background-color: rgba(0, 230, 118, 0.16); }
+html[data-theme='light'] .hm-neg-3 { background-color: rgba(255, 23, 68, 0.40); }
+html[data-theme='light'] .hm-neg-2 { background-color: rgba(255, 23, 68, 0.24); }
+html[data-theme='light'] .hm-neg-1 { background-color: rgba(255, 23, 68, 0.12); }
 
 @keyframes page-fade-in {
   from { opacity: 0; }
@@ -314,6 +315,28 @@ html[data-theme='light'] .hm-neg-1 { background-color: rgba(248, 113, 113, 0.11)
     top: 20px;
     right: 20px;
     z-index: 20;
+  }
+
+  .auth-back-link {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--app-border);
+    background: var(--app-panel-soft);
+    color: var(--app-text-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .auth-back-link:hover {
+    color: var(--app-text);
   }
 
   /* ── Page layout ── */
@@ -1316,59 +1339,59 @@ html[data-theme='light'] .hover\:border-slate-400:hover {
   border-color: #a09890 !important;
 }
 
-/* ── Lighter, warmer red/green for light mode ──────────────────────────── */
+/* ── Fluorescent red/green for light mode ──────────────────────────────── */
 
 html[data-theme='light'] .text-red-400 {
-  color: #c84b54 !important;
+  color: #f01440 !important;
 }
 html[data-theme='light'] .text-red-500 {
-  color: #b83d46 !important;
+  color: #d50032 !important;
 }
 html[data-theme='light'] .text-red-300 {
-  color: #d9626a !important;
+  color: #e3103c !important;
 }
 
 html[data-theme='light'] .text-emerald-400,
 html[data-theme='light'] .text-green-400 {
-  color: #1f9162 !important;
+  color: #00a04a !important;
 }
 html[data-theme='light'] .text-emerald-500,
 html[data-theme='light'] .text-green-500 {
-  color: #197a52 !important;
+  color: #008f43 !important;
 }
 html[data-theme='light'] .text-emerald-300,
 html[data-theme='light'] .text-green-300 {
-  color: #2eaa77 !important;
+  color: #00913f !important;
 }
 
 html[data-theme='light'] .bg-red-500\/10 {
-  background-color: rgba(185, 60, 70, 0.08) !important;
+  background-color: rgba(255, 23, 68, 0.10) !important;
 }
 html[data-theme='light'] .bg-red-500\/5 {
-  background-color: rgba(185, 60, 70, 0.05) !important;
+  background-color: rgba(255, 23, 68, 0.06) !important;
 }
 html[data-theme='light'] .border-red-500\/20 {
-  border-color: rgba(185, 60, 70, 0.18) !important;
+  border-color: rgba(255, 23, 68, 0.30) !important;
 }
 html[data-theme='light'] .border-red-500\/15 {
-  border-color: rgba(185, 60, 70, 0.13) !important;
+  border-color: rgba(255, 23, 68, 0.22) !important;
 }
 
 html[data-theme='light'] .bg-emerald-500\/10,
 html[data-theme='light'] .bg-green-500\/10 {
-  background-color: rgba(22, 130, 88, 0.08) !important;
+  background-color: rgba(0, 230, 118, 0.12) !important;
 }
 html[data-theme='light'] .bg-emerald-500\/5,
 html[data-theme='light'] .bg-green-500\/5 {
-  background-color: rgba(22, 130, 88, 0.05) !important;
+  background-color: rgba(0, 230, 118, 0.07) !important;
 }
 html[data-theme='light'] .border-emerald-500\/20,
 html[data-theme='light'] .border-green-500\/20 {
-  border-color: rgba(22, 130, 88, 0.18) !important;
+  border-color: rgba(0, 200, 83, 0.32) !important;
 }
 html[data-theme='light'] .border-emerald-500\/15,
 html[data-theme='light'] .border-green-500\/15 {
-  border-color: rgba(22, 130, 88, 0.13) !important;
+  border-color: rgba(0, 200, 83, 0.24) !important;
 }
 
 @keyframes goal-shimmer {

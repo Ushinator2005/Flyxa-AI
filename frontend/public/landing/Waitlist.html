@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flyxa · Join the waitlist</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Manrope:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0A0908;--panel:#131211;--panel2:#191715;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--text:#EDEAE4;--muted:rgba(255,255,255,0.5);--faint:rgba(255,255,255,0.3);--accent:#FF6B2B;--green:#30D158;--sans:'Manrope',system-ui,sans-serif;--mono:'DM Mono',monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:44px 24px;}
+a{color:var(--accent);text-decoration:none;}a:hover{color:#ff8d55;}
+.wrap{width:100%;max-width:412px;}
+.brand{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:32px;opacity:0;animation:up .6s cubic-bezier(.2,.7,.2,1) .05s both;}
+.brand img{width:26px;height:26px;object-fit:contain;}
+.brand b{font-family:'Space Grotesk',var(--sans);font-size:19px;font-weight:700;letter-spacing:-0.4px;}
+@keyframes up{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;opacity:0;animation:up .7s cubic-bezier(.2,.7,.2,1) .16s both;}
+.top{padding:30px 30px 28px;}
+.chip{display:inline-flex;align-items:center;font-family:var(--mono);font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;margin-bottom:18px;}
+h1{font-size:25px;font-weight:700;letter-spacing:-0.6px;line-height:1.2;}
+.top p{font-size:13.5px;line-height:1.7;color:var(--muted);margin-top:11px;}
+form{border-top:1px solid var(--border);background:var(--panel2);padding:22px 30px 24px;}
+.lbl{font-family:var(--mono);font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:10px;}
+.row{display:flex;gap:8px;}
+input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:12px 14px;font-family:var(--sans);font-size:13.5px;color:var(--text);outline:none;transition:border-color .2s;}
+input::placeholder{color:var(--faint);}
+input:focus{border-color:var(--accent);}
+button{background:var(--accent);border:none;border-radius:9px;color:#151312;font-size:13.5px;font-weight:700;padding:12px 20px;cursor:pointer;white-space:nowrap;transition:background .2s,transform .12s;display:inline-flex;align-items:center;gap:8px;}
+button:hover{background:#ff7d42;}
+button:active{transform:translateY(1px);}
+button .ar{transition:transform .2s;}
+button:hover .ar{transform:translateX(3px);}
+form .fine{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:12px;letter-spacing:0.4px;}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 30px;border-top:1px solid var(--border);flex-wrap:wrap;}
+.foot .cnt{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.foot .cnt b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums;}
+.foot a{font-size:12.5px;font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><img src="assets/flyxa-glyph.png" alt=""><b>Flyxa</b></div>
+  <div class="card">
+    <div class="top">
+      <span class="chip">Private beta · invite only</span>
+      <h1>Join the waitlist.</h1>
+      <p>A small group of traders has access today. Leave your email and your invite arrives when a seat opens.</p>
+    </div>
+    <form id="wf">
+      <span class="lbl">Email</span>
+      <div class="row">
+        <input id="em" type="email" placeholder="you@email.com" required>
+        <button type="submit">Join <span class="ar">→</span></button>
+      </div>
+      <div class="fine">ONE EMAIL WHEN YOUR SEAT OPENS · NOTHING ELSE</div>
+    </form>
+    <div class="foot">
+      <span class="cnt"><b id="q">1,284</b> traders in line</span>
+      <a href="#">Already invited? Sign in</a>
+    </div>
+  </div>
+</div>
+<script>
+(function(){const el=document.getElementById('q'),t=1284;let n=1200;const id=setInterval(()=>{n+=Math.ceil((t-n)/8);if(n>=t){n=t;clearInterval(id);}el.textContent=n.toLocaleString();},50);})();
+document.getElementById('wf').addEventListener('submit',e=>{
+  e.preventDefault();
+  const v=document.getElementById('em').value.trim();
+  if(v) location.href='Waitlist Confirmation.html?e='+encodeURIComponent(v);
+});
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Check, Copy, Gift, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Check, Copy, Gift, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { waitlistApi } from '../services/api.js';
 import ThemeToggle from '../components/common/ThemeToggle.js';
@@ -31,7 +31,12 @@ export default function Auth() {
   // (from the confirmation email) opens the waitlist in "check your spot" mode.
   const [referralRef] = useState(() => new URLSearchParams(window.location.search).get('ref'));
   const [checkParam] = useState(() => new URLSearchParams(window.location.search).get('check') === '1');
-  const [tab, setTab] = useState<'login' | 'waitlist'>(referralRef || checkParam ? 'waitlist' : 'login');
+  const [tab, setTab] = useState<'login' | 'waitlist'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    // Landing-page CTAs land here with ?tab=waitlist (and optionally ?email=).
+    if (params.get('tab') === 'waitlist' || params.get('email')) return 'waitlist';
+    return referralRef || checkParam ? 'waitlist' : 'login';
+  });
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email')?.trim().toLowerCase() ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -208,6 +213,9 @@ export default function Auth() {
   if (inviteToken) {
     return (
       <div className="auth-shell">
+        <a className="auth-back-link" href="/landing/index.html" aria-label="Back to landing page">
+          <ArrowLeft size={14} /> Back
+        </a>
         <div className="auth-theme-toggle">
           <ThemeToggle compact />
         </div>
@@ -355,6 +363,9 @@ export default function Auth() {
   if (tab === 'waitlist') {
     return (
       <div className="auth-shell">
+        <a className="auth-back-link" href="/landing/index.html" aria-label="Back to landing page">
+          <ArrowLeft size={14} /> Back
+        </a>
         <div className="auth-theme-toggle">
           <ThemeToggle compact />
         </div>
@@ -617,6 +628,9 @@ export default function Auth() {
 
   return (
     <div className="auth-shell">
+      <a className="auth-back-link" href="/landing/index.html" aria-label="Back to landing page">
+        <ArrowLeft size={14} /> Back
+      </a>
       <div className="auth-theme-toggle">
         <ThemeToggle compact />
       </div>
