@@ -10,6 +10,21 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <script>
+      // Logged-out visitors to the root get the marketing page before the SPA
+      // even boots (no flash). Supabase keeps its session in localStorage as
+      // sb-<ref>-auth-token; presence means "probably signed in" and the app
+      // boots normally — ProtectedRoute remains the authoritative fallback.
+      (function () {
+        try {
+          if (location.pathname !== '/') return;
+          var signedIn = Object.keys(localStorage).some(function (k) {
+            return k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1;
+          });
+          if (!signedIn) location.replace('/landing/index.html');
+        } catch (e) { /* storage blocked — let the SPA decide */ }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

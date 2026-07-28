@@ -1290,6 +1290,7 @@ export default function Settings() {
     if (!rawHash) return;
 
     const sectionKey = rawHash === 'add-account' ? 'accounts' : rawHash;
+    if (rawHash === 'add-account') setShowAddAccountModal(true);
     const sectionRef =
       sectionKey === 'profile' ? profileRef
       : sectionKey === 'general' ? generalRef

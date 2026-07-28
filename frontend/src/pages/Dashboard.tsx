@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Minus,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X, ChevronDown,
+  Landmark,
 } from 'lucide-react';
 import { Btn, Badge, PageHeader, SectionPanel, EmptyState } from '../components/ds/index.js';
 import {
@@ -629,6 +630,44 @@ export default function Dashboard() {
             </div>
           );
         })()}
+
+        {/* Account setup prompt — evaluation tracking, balances and targets
+            all hang off an account, so surface it before the trade nudges. */}
+        {accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && !a.archived).length === 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'stretch', gap: 0,
+            borderRadius: 7, flexShrink: 0, overflow: 'hidden',
+            border: `1px solid ${BORDER}`, background: S1,
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '10px 18px', borderRight: `1px solid ${BORDER}`, flexShrink: 0, minWidth: 92, color: AMBER,
+            }}>
+              <Landmark size={20} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 600, color: T1, margin: 0 }}>
+                  Set up your trading account
+                </p>
+                <p style={{ fontSize: 11, color: T3, margin: '2px 0 0' }}>
+                  Pick your prop firm and account size — rules, balances and evaluation tracking come pre-configured.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', paddingRight: 12, flexShrink: 0 }}>
+              <button
+                onClick={() => navigate('/settings#add-account')}
+                style={{
+                  padding: '7px 16px', borderRadius: 6, border: 'none',
+                  background: AMBER, color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                Add account
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Pre-session brief prompt — the market clock is the argument.
             Focal countdown cell + message + Begin; no alert styling. */}
