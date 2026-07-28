@@ -323,7 +323,7 @@ const STEPS: TourStep[] = [
   {
     id: 'risk-rules-tab',
     targetId: 'risk-rules-framework',
-    path: '/trading-plan',
+    path: '/rules',
     title: 'Rules',
     body: 'Your risk rules are the locked operating system Flyxa uses to score plan adherence and flag process drift.',
     action: 'Open Rules',
@@ -331,9 +331,9 @@ const STEPS: TourStep[] = [
   {
     id: 'trading-plan-record',
     targetId: 'trading-plan-core',
-    path: '/trading-plan',
+    path: '/rules',
     title: 'The record',
-    body: 'Below the rulebook sits the record: one bar per day — amber when every rule held, red when one broke — plus a per-rule breakdown of how consistently you follow each one.',
+    body: 'Below the rulebook sits the record: one bar per day, green when every rule held, red when one broke, plus a per-rule breakdown of how consistently you follow each one.',
     action: 'Next',
   },
   {

@@ -406,7 +406,8 @@ export default function App() {
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/achievements" element={<Achievements />} />
               <Route path="/backtest" element={<Backtest />} />
-              <Route path="/trading-plan" element={<TradingPlan />} />
+              <Route path="/rules" element={<TradingPlan />} />
+              <Route path="/trading-plan" element={<Navigate to="/rules" replace />} />
               <Route path="/billing" element={<Billing />} />
               <Route path="/evaluation-coach" element={<EvaluationCoach />} />
               <Route path="/chart" element={<Navigate to="/backtest" replace />} />

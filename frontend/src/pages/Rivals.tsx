@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Bell, Check, ChevronDown, Clock3, LockKeyhole,
-  MessageCircle, Plus, Share2, X,
+  Bell, Bookmark, Check, ChevronDown, Clock3, Download,
+  MessageCircle, Plus, Share2, Trophy, X,
 } from 'lucide-react';
+import FlyxaLogo from '../components/common/FlyxaLogo.js';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
 import type { RivalRequestResponse, SharedTradeRecord } from '../services/api.js';
@@ -16,19 +18,18 @@ import ScreenshotImportModal from '../components/scanner/ScreenshotImportModal.j
 import '../components/rivals/rivals.css';
 
 type League = PrivateLeague;
-type FormDot = { tone: 'win' | 'loss' | 'empty'; label: string };
 
 const PERIODS: Array<{ value: LeaderboardPeriod; label: string }> = [
-  { value: 'week', label: 'This week' },
-  { value: 'month', label: '30 days' },
+  { value: 'week', label: '7D' },
+  { value: 'month', label: '30D' },
   { value: 'season', label: 'Season' },
-  { value: 'allTime', label: 'All time' },
+  { value: 'allTime', label: 'All' },
 ];
 
 const MODES: Array<{ value: LeaderboardMetric; label: string; help?: string }> = [
   { value: 'netPnl', label: 'Net P&L' },
+  { value: 'winRate', label: 'Win rate' },
   { value: 'consistency', label: 'Consistency' },
-  { value: 'riskAdjusted', label: 'Risk adjusted', help: 'Net P&L divided by max drawdown. 1x is okay, 2x is strong, 4x+ is elite.' },
   { value: 'processScore', label: 'Process' },
 ];
 
@@ -73,11 +74,45 @@ function metricValue(rival: Rival, metric: LeaderboardMetric, period: Leaderboar
   return rival.mascot.stats.backtestSessions;
 }
 
-function formatMetricValue(value: number, metric: LeaderboardMetric): string {
-  if (metric === 'netPnl') return formatCurrency(value);
-  if (metric === 'riskAdjusted') return `${value.toFixed(2)}x`;
-  if (metric === 'journalStreak') return `${Math.round(value)}d`;
-  return `${Math.round(value)}`;
+// Leaderboard palette — matches the reference board exactly.
+const LB = {
+  card: '#141416', cardHi: '#191919', border: 'rgba(255,255,255,0.07)', borderHi: 'rgba(255,255,255,0.12)',
+  text: '#f2f1ef', muted: '#8b8a90', subtle: '#57555b',
+  amber: '#f5a623', green: '#4ade80', red: '#f26d6d',
+  rowYou: 'rgba(245,166,35,0.06)',
+};
+
+function seasonCountdown(): { d: string; h: string; m: string } {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  let ms = Math.max(0, end.getTime() - now.getTime());
+  const d = Math.floor(ms / 86400000); ms -= d * 86400000;
+  const h = Math.floor(ms / 3600000); ms -= h * 3600000;
+  const m = Math.floor(ms / 60000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return { d: pad(d), h: pad(h), m: pad(m) };
+}
+
+// A flavour tier derived from the trader's strongest attribute.
+function tierFor(rival: Rival, period: LeaderboardPeriod): string {
+  const s = getPeriodStats(rival, period);
+  const process = rival.mascot.stats.processScore ?? 0;
+  if (s.winRate >= 55 && s.netPnl > 0) return 'Apex';
+  if (process >= 65 || s.ruleAdherence >= 80) return 'Disciplined';
+  if (s.consistency >= 55) return 'Consistent';
+  if (s.netPnl < 0) return 'Grinding';
+  return 'Contender';
+}
+
+function winsLosses(rival: Rival, period: LeaderboardPeriod): [number, number] {
+  const s = getPeriodStats(rival, period);
+  const wins = Math.round(s.tradeCount * (s.winRate / 100));
+  return [wins, Math.max(0, s.tradeCount - wins)];
+}
+
+function avgRText(rival: Rival, period: LeaderboardPeriod): string {
+  const r = getPeriodStats(rival, period).avgR ?? rival.mascot.stats.avgR ?? null;
+  return r == null ? '—' : r.toFixed(2);
 }
 
 function formatMetricGap(value: number, metric: LeaderboardMetric): string {
@@ -103,43 +138,6 @@ function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, 
   return previousRank - currentRank;
 }
 
-function dateToLocalIso(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function isMarketDay(date: Date): boolean {
-  const day = date.getDay();
-  return day >= 1 && day <= 5;
-}
-
-function recentMarketDates(): string[] {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const dates: string[] = [];
-  const cursor = new Date(now);
-  while (dates.length < 5) {
-    if (isMarketDay(cursor)) dates.push(dateToLocalIso(cursor));
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  return dates.reverse();
-}
-
-function getFormDots(rival: Rival): FormDot[] {
-  const stats = getPeriodStats(rival, 'allTime');
-  const byDate = new Map((stats.dailyPnl ?? []).map(day => [day.date, day.pnl]));
-  return recentMarketDates().map((date) => {
-    const pnl = byDate.get(date);
-    if (pnl === undefined) return { tone: 'empty', label: `${date}: no trades` };
-    if (pnl > 0) return { tone: 'win', label: `${date}: winning day ${formatCurrency(pnl)}` };
-    if (pnl < 0) return { tone: 'loss', label: `${date}: losing day ${formatCurrency(pnl)}` };
-    return { tone: 'empty', label: `${date}: breakeven day` };
-  });
-}
-
 function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
   const stats = getPeriodStats(rival, period);
   if (stats.tradeCount === 0) return 'No logged trades yet — the table moves when the journal fills.';
@@ -155,6 +153,8 @@ export default function Rivals() {
   const [period, setPeriod] = useState<LeaderboardPeriod>('season');
   const [metric, setMetric] = useState<LeaderboardMetric>('netPnl');
   const [selectedRivalId, setSelectedRivalId] = useState<string | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const navigate = useNavigate();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [activeChatRival, setActiveChatRival] = useState<Rival | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -263,22 +263,46 @@ export default function Rivals() {
     setLeagueBuilderOpen(false);
   }
 
+  const countdown = seasonCountdown();
+  const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: '#161616', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+  const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#0a0a0c', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
+  const btnIcon: CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 9, background: '#161616', border: `1px solid ${LB.border}`, color: LB.muted, cursor: 'pointer' };
+  const kicker: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: LB.subtle };
+
   return (
-    <div className="rv2-page">
+    <div className="rv2-page" style={{ color: LB.text }}>
 
       {/* ── Header ── */}
-      <header className="rv2-hd" data-tour-id="rivals-header">
-        <div>
-          <h1>Leaderboard</h1>
-          <p>Compare verified P&amp;L, consistency, and process with your trading circle.</p>
+      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, padding: '4px 2px 22px' }}>
+        <div style={{ display: 'flex', gap: 18, minWidth: 0 }}>
+          <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 12, background: '#191919', border: `1px solid ${LB.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <FlyxaLogo size={28} showWordmark={false} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
+              {activeLeague?.name ?? 'The Trading Pit'}
+            </h1>
+            <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
+              Private league · <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> traders · Verified P&amp;L only. Compare consistency, process and edge with your circle.
+            </p>
+          </div>
         </div>
-        <div className="rv2-acts">
-          <button className="rv2-btn" type="button" onClick={() => setLeagueBuilderOpen(open => !open)}>
-            <LockKeyhole size={13} /> Private league
-          </button>
-          <button className="rv2-btn primary" type="button" onClick={() => setIsAddOpen(true)}>
-            <Plus size={13} /> Add rival
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 14, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12, color: LB.muted, whiteSpace: 'nowrap' }}>
+            Season resets in
+            {[countdown.d, countdown.h, countdown.m].map((v, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+                {i > 0 && <span style={{ color: LB.subtle }}>:</span>}
+                <span style={{ minWidth: 24, textAlign: 'center', padding: '3px 6px', borderRadius: 6, background: '#191919', border: `1px solid ${LB.border}`, fontFamily: 'var(--font-mono)', fontSize: 12, color: LB.text }}>{v}</span>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <button type="button" title="Bookmark league" style={btnIcon}><Bookmark size={15} /></button>
+            <button type="button" onClick={() => navigate('/scanner')} style={btnGhost}><Download size={13} /> Verify my P&amp;L</button>
+            <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
+            <button type="button" onClick={() => setIsAddOpen(true)} style={btnPrimary}>Invite traders</button>
+          </div>
         </div>
       </header>
 
@@ -314,92 +338,128 @@ export default function Rivals() {
         </section>
       )}
 
-      {/* ── Controls: one row, no nested bars ── */}
-      <div className="rv2-ctl" data-tour-id="rivals-controls">
-        <div className="rv2-ctl-grp">
-          <span className="rv2-lbl">Rank by</span>
-          <div className="rv2-seg">
-            {MODES.map(mode => (
-              <button type="button" key={mode.value} title={mode.help} className={metric === mode.value ? 'on' : ''} onClick={() => setMetric(mode.value)}>
-                {mode.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="rv2-ctl-grp">
-          {leagues.length > 0 && (
-            <div className="rv2-seg">
-              <button type="button" className={activeLeagueId === 'all' ? 'on' : ''} onClick={() => setActiveLeagueId('all')}>All rivals</button>
-              {leagues.map(league => (
-                <button key={league.id} type="button" className={activeLeagueId === league.id ? 'on' : ''} onClick={() => setActiveLeagueId(league.id)}>{league.name}</button>
-              ))}
-            </div>
-          )}
-          <div className="rv2-seg">
-            {PERIODS.map(item => (
-              <button type="button" key={item.value} className={period === item.value ? 'on' : ''} onClick={() => setPeriod(item.value)}>{item.label}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Standings table + selected trader rail ── */}
-      <div className="rv2-grid">
-        <div className="rv2-tbl" data-tour-id="rivals-standings">
-          <div className="rv2-tbl-hd">
-            <b>{activeLeague?.name ?? 'Standings'}</b>
-          </div>
-          <div className="rv2-thead" aria-hidden="true">
-            <span>#</span><span>Trader</span><span>Last 5</span>
-            <span className="r">Trades</span><span className="r">Win</span><span className="r">Avg R</span>
-            <span className="r">Consist</span><span className="r">{metricLabel}</span>
-          </div>
-          {ranked.map((rival, index) => {
-            const stats = getPeriodStats(rival, period);
-            const position = index + 1;
-            const isSelected = selectedRival.id === rival.id;
-            const formDots = getFormDots(rival);
-            const rivalValue = metricValue(rival, metric, period);
+      {/* ── Controls: rank-by tabs + period filters ── */}
+      <div data-tour-id="rivals-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', margin: '2px 0 18px' }}>
+        <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
+          {MODES.map(mode => {
+            const on = metric === mode.value;
             return (
-              <button
-                key={rival.id}
-                type="button"
-                aria-pressed={isSelected}
-                className={['rv2-trow', rival.isMe ? 'you' : '', isSelected ? 'sel' : ''].filter(Boolean).join(' ')}
-                onClick={() => setSelectedRivalId(rival.id)}
-              >
-                <span className={`rv2-rank${position === 1 ? ' first' : ''}`}>{position}</span>
-                <div className="rv2-who">
-                  <RivalAvatar rival={rival} />
-                  <div className="rv2-nm">
-                    <b>{rival.displayName}</b>
-                    <span>@{rival.username}</span>
-                  </div>
-                  {rival.isMe && <span className="rv2-yt">YOU</span>}
-                </div>
-                <div className="rv2-l5" title="Last 5 market days: green = winning day, red = losing day, hollow = no trades.">
-                  {formDots.map((dot, dotIndex) => <i key={`${rival.id}-${dotIndex}`} className={dot.tone === 'win' ? 'w' : dot.tone === 'loss' ? 'l' : ''} title={dot.label} />)}
-                </div>
-                <span className="rv2-num r">{stats.tradeCount}</span>
-                <span className="rv2-num r">{stats.winRate}%</span>
-                <span className="rv2-num r">{stats.avgR == null ? '—' : `${stats.avgR.toFixed(2)}R`}</span>
-                <div className="rv2-consist">
-                  <span className="rv2-cb"><i style={{ width: `${Math.max(0, Math.min(100, stats.consistency))}%` }} /></span>
-                  <span className="rv2-num">{stats.consistency}</span>
-                </div>
-                <span className={`rv2-pnl${metric === 'netPnl' ? (rivalValue > 0 ? ' pos' : rivalValue < 0 ? ' neg' : '') : ''}`}>
-                  {formatMetricValue(rivalValue, metric)}
-                </span>
+              <button type="button" key={mode.value} title={mode.help} onClick={() => setMetric(mode.value)}
+                style={{ padding: '7px 15px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: on ? LB.amber : 'transparent', color: on ? '#0a0a0c' : LB.muted }}>
+                {mode.label}
               </button>
             );
           })}
-          <button type="button" className="rv2-add-row" onClick={() => setIsAddOpen(true)}>
-            <Plus size={12} /> Add a rival to the board
-          </button>
         </div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {leagues.length > 0 && (
+            <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
+              {[{ id: 'all', name: 'All' }, ...leagues.map(l => ({ id: l.id, name: l.name }))].map(l => {
+                const on = activeLeagueId === l.id;
+                return <button type="button" key={l.id} onClick={() => setActiveLeagueId(l.id)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? '#26262a' : 'transparent', color: on ? LB.text : LB.muted }}>{l.name}</button>;
+              })}
+            </div>
+          )}
+          <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
+            {PERIODS.map(item => {
+              const on = period === item.value;
+              return <button type="button" key={item.value} onClick={() => setPeriod(item.value)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? '#26262a' : 'transparent', color: on ? LB.text : LB.muted }}>{item.label}</button>;
+            })}
+          </div>
+          <button type="button" onClick={() => { setSelectedRivalId(currentUser.id); setInspectorOpen(true); }} style={{ ...btnGhost, height: 38 }}>Show my place</button>
+        </div>
+      </div>
 
-        {/* ── Right rail: the selected trader, made actionable ── */}
-        <aside className="rv2-me" data-tour-id="rivals-detail">
+      {/* ── Podium: top three ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, marginBottom: 16 }}>
+        {ranked.slice(0, 3).map((rival, i) => {
+          const s = getPeriodStats(rival, period);
+          const trophyColor = i === 0 ? '#f5c451' : i === 1 ? '#c6c8cf' : '#cd8b5b';
+          const podStat = (label: string, value: string, color?: string) => (
+            <div style={{ minWidth: 0 }}>
+              <div style={kicker}>{label}</div>
+              <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: color ?? LB.text }}>{value}</div>
+            </div>
+          );
+          return (
+            <div key={rival.id} style={{ background: LB.card, border: `1px solid ${rival.isMe ? LB.borderHi : LB.border}`, borderRadius: 14, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <RivalAvatar rival={rival} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <b style={{ fontSize: 15, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
+                      {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: LB.muted }}>@{rival.username}</div>
+                  </div>
+                </div>
+                <Trophy size={20} color={trophyColor} strokeWidth={1.6} />
+              </div>
+              <div style={{ marginTop: 15, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: LB.text }}>
+                <span style={{ color: LB.amber, fontSize: 10 }}>◆</span> {tierFor(rival, period)}
+              </div>
+              <div style={{ marginTop: 16, display: 'flex', gap: 26 }}>
+                {podStat('Net P&L', formatCurrency(s.netPnl), s.netPnl > 0 ? LB.green : s.netPnl < 0 ? LB.red : LB.text)}
+                {podStat('Win rate', `${Math.round(s.winRate)}%`)}
+                {podStat('Avg R', avgRText(rival, period))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Standings table (full width) ── */}
+      <div style={{ background: LB.card, border: `1px solid ${LB.border}`, borderRadius: 14, overflow: 'hidden' }} data-tour-id="rivals-standings">
+        {(() => {
+          const cols = '52px minmax(0, 1fr) 150px 110px 110px 130px';
+          return (
+            <>
+              <div style={{ ...kicker, display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', padding: '12px 22px', borderBottom: `1px solid ${LB.border}` }}>
+                <span>Place</span><span>Trader</span><span>Season W - L</span><span>Win rate</span><span>Avg R</span>
+                <span style={{ textAlign: 'right' }}>Net P&amp;L</span>
+              </div>
+              {ranked.map((rival, index) => {
+                const s = getPeriodStats(rival, period);
+                const [w, l] = winsLosses(rival, period);
+                return (
+                  <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
+                    style={{ width: '100%', display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', textAlign: 'left', padding: '14px 22px', borderTop: index === 0 ? 'none' : `1px solid ${LB.border}`, borderLeft: rival.isMe ? `2px solid ${LB.amber}` : '2px solid transparent', background: rival.isMe ? LB.rowYou : 'transparent', color: LB.text, cursor: 'pointer', font: 'inherit' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: index === 0 ? LB.amber : LB.muted }}>{index + 1}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <RivalAvatar rival={rival} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <b style={{ fontSize: 13.5, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
+                          {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: LB.muted }}>@{rival.username}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.text, display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ borderBottom: `2px solid ${LB.green}`, paddingBottom: 2 }}>{w}</span>
+                      <span style={{ color: LB.subtle }}>-</span>
+                      <span>{l}</span>
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.text }}>{Math.round(s.winRate)}%</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.text }}>{avgRText(rival, period)}</span>
+                    <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500, color: s.netPnl > 0 ? LB.green : s.netPnl < 0 ? LB.red : LB.text }}>{formatCurrency(s.netPnl)}</span>
+                  </button>
+                );
+              })}
+              <button type="button" onClick={() => setIsAddOpen(true)} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '15px 0', borderTop: `1px solid ${LB.border}`, background: 'transparent', border: 'none', color: LB.muted, fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.04em', cursor: 'pointer' }}>
+                <Plus size={13} /> Add a rival to the board
+              </button>
+            </>
+          );
+        })()}
+      </div>
+
+      {/* ── Inspector drawer (opens on row click / Show my place) ── */}
+      {inspectorOpen && (
+        <div onClick={() => setInspectorOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end' }}>
+          <aside className="rv2-me" data-tour-id="rivals-detail" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: 'min(380px, 92vw)', height: '100%', overflowY: 'auto', borderRadius: 0 }}>
+            <button type="button" onClick={() => setInspectorOpen(false)} aria-label="Close" style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: '50%', border: `1px solid ${LB.border}`, background: '#161616', color: LB.muted, cursor: 'pointer', zIndex: 2 }}>✕</button>
           <div className="rv2-me-hd">
             <RivalAvatar rival={selectedRival} large />
             <div className="rv2-nm">
@@ -584,8 +644,9 @@ export default function Rivals() {
               )}
             </div>
           )}
-        </aside>
-      </div>
+          </aside>
+        </div>
+      )}
 
       <AddRivalModal open={isAddOpen} onClose={() => setIsAddOpen(false)} onSubmit={username => addRival(username)} />
       <RivalChatPanel open={chatOpen} rival={activeChatRival} myUserId={profile?.userId ?? null} onClose={() => setChatOpen(false)} />

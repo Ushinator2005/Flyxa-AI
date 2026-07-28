@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
-import QRCode from 'react-qr-code';
 import { C } from '../../utils/theme.js';
-
-// The public site this card recruits for. Set it and the QR + URL block
-// appears in the footer automatically; leave empty to omit.
-const SHARE_URL = '';
-const SHARE_URL_LABEL = SHARE_URL.replace(/^https?:\/\//, '');
 
 // Social share card for a finished session — Flyxa-branded, exported as PNG.
 // Deliberately speaks the app's language (warm dark, mono figures, single
@@ -19,13 +13,15 @@ function petalTransform(rotation: number, scale: number): string {
   return `rotate(${rotation} 50 50) translate(${offset} ${offset}) scale(${scale})`;
 }
 
-function Mark({ size }: { size: number }) {
+function Mark({ size, solid }: { size: number; solid?: string }) {
+  const accent = solid ?? C.acc;
+  const light = solid ?? C.t0;
   return (
     <svg viewBox="0 0 100 100" width={size} height={size} fill="none" aria-hidden="true">
-      <path d={PETAL_PATH} fill={C.acc} transform={petalTransform(0, 1)} />
-      <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(-90, 0.82)} />
-      <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(90, 0.88)} />
-      <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(180, 0.64)} />
+      <path d={PETAL_PATH} fill={accent} transform={petalTransform(0, 1)} />
+      <path d={PETAL_PATH} fill={light} transform={petalTransform(-90, 0.82)} />
+      <path d={PETAL_PATH} fill={light} transform={petalTransform(90, 0.88)} />
+      <path d={PETAL_PATH} fill={light} transform={petalTransform(180, 0.64)} />
     </svg>
   );
 }
@@ -79,7 +75,7 @@ export default function SessionShareCard({ open, onClose, data }: {
     const el = cardRef.current;
     if (!el) return null;
     try {
-      const dataUrl = await toPng(el, { cacheBust: true, pixelRatio: 3, backgroundColor: C.d0 });
+      const dataUrl = await toPng(el, { cacheBust: true, pixelRatio: 3, backgroundColor: '#0b0a0a' });
       const blob = await (await fetch(dataUrl)).blob();
       return { dataUrl, blob };
     } catch {
@@ -197,103 +193,70 @@ export default function SessionShareCard({ open, onClose, data }: {
           ✕
         </button>
 
-        {/* ── The card (this exact DOM gets exported at 3×) ── */}
+        {/* ── The card (this exact DOM gets exported at 3×) ──
+             Fixed dark + amber palette so the export looks identical whatever
+             theme the app is in. */}
         <div
           ref={cardRef}
           style={{
-            width: 640, maxWidth: '100%', boxSizing: 'border-box',
-            backgroundColor: C.d0,
-            border: `1px solid ${C.b1}`, borderRadius: 14,
-            overflow: 'hidden', position: 'relative',
-            display: 'flex', flexDirection: 'column',
+            width: 780, maxWidth: '100%', boxSizing: 'border-box', aspectRatio: '16 / 9',
+            display: 'flex', borderRadius: 16, overflow: 'hidden', backgroundColor: '#0b0a0a',
           }}
         >
-          {/* Brand signature line */}
-          <div style={{ height: 3, backgroundColor: C.acc }} />
-
-          {/* Watermark petal — static, barely-there */}
-          <svg viewBox="0 0 100 100" width={300} height={300} fill="none" aria-hidden="true"
-            style={{ position: 'absolute', right: -70, bottom: -80, opacity: 0.045 }}>
-            <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(0, 1)} />
-            <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(-90, 0.82)} />
-            <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(90, 0.88)} />
-            <path d={PETAL_PATH} fill={C.t0} transform={petalTransform(180, 0.64)} />
-          </svg>
-
-          <div style={{ padding: '22px 28px 24px', display: 'flex', flexDirection: 'column', flex: 1, position: 'relative' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <Mark size={28} />
-                <span style={{ marginLeft: 10, fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}>
-                  Flyxa
-                </span>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, fontFamily: 'monospace', fontSize: 9, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.t2 }}>
-                  Session recap
-                </p>
-                <p style={{ margin: '3px 0 0', fontSize: 12, color: C.t1 }}>{data.dateLabel}</p>
-              </div>
+          {/* Left — amber brand panel */}
+          <div style={{
+            width: '33%', backgroundColor: '#f59e0b', color: '#0e0d0d',
+            padding: '30px 26px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <Mark size={30} solid="#0e0d0d" />
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, letterSpacing: '0.01em' }}>FLYXA</span>
             </div>
+            <div>
+              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.72 }}>
+                Session recap
+              </p>
+              <p style={{ margin: '8px 0 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500 }}>{data.dateLabel}</p>
+            </div>
+          </div>
 
-            {/* Hero P&L */}
-            <div style={{ marginTop: 38, marginBottom: 34 }}>
-              <p style={{ margin: 0, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.t2 }}>
+          {/* Right — dark result panel */}
+          <div style={{ flex: 1, minWidth: 0, backgroundColor: '#0b0a0a', color: '#e8e3dc', padding: '30px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#6f695f' }}>
                 Net P&L
               </p>
               <p style={{
-                margin: '8px 0 0', fontFamily: 'monospace', fontWeight: 700,
-                fontSize: maskAmount ? 44 : 54, lineHeight: 1, letterSpacing: '-0.02em',
-                color: maskAmount ? C.t1 : pnlColor,
+                margin: '12px 0 0', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700,
+                fontSize: 'clamp(44px, 8vw, 72px)', lineHeight: 1, letterSpacing: '-0.02em',
+                color: maskAmount ? '#8a8178' : pnlColor,
               }}>
                 {maskAmount ? '✱✱✱✱' : fmtMoney(data.netPnl)}
               </p>
             </div>
 
-            {/* Stats strip */}
-            <div style={{ display: 'flex', borderTop: `1px solid ${C.b0}`, marginTop: 'auto' }}>
-              {stats.map((stat, index) => (
-                <div key={stat.label} style={{
-                  flex: 1, padding: '13px 16px 0',
-                  borderLeft: index === 0 ? 'none' : `1px solid ${C.b0}`,
-                  paddingLeft: index === 0 ? 0 : 16,
-                }}>
-                  <p style={{ margin: 0, fontSize: 8.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.t2 }}>
-                    {stat.label}
-                  </p>
-                  <p style={{ margin: '5px 0 0', fontFamily: 'monospace', fontSize: 19, fontWeight: 700, color: stat.color ?? C.t0 }}>
-                    {stat.value}
+            <div>
+              <div style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.09)', marginBottom: 18 }} />
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 18 }}>
+                <div style={{ display: 'flex', gap: 34 }}>
+                  {stats.slice(0, 3).map(stat => (
+                    <div key={stat.label}>
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6f695f' }}>
+                        {stat.label}
+                      </p>
+                      <p style={{ margin: '8px 0 0', fontFamily: 'var(--font-mono)', fontSize: 19, fontWeight: 500, color: stat.color ?? '#e8e3dc' }}>
+                        {stat.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500, color: '#e8e3dc' }}>@{data.username}</p>
+                  <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6f695f' }}>
+                    Journals with Flyxa
                   </p>
                 </div>
-              ))}
-            </div>
-
-            {/* Footer — the recruitment block */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginTop: 24, paddingTop: 12, borderTop: `1px solid ${C.b0}` }}>
-              <div>
-                <p style={{ margin: 0, fontFamily: 'monospace', fontSize: 11.5, color: C.t0, fontWeight: 600 }}>@{data.username}</p>
-                <p style={{ margin: '3px 0 0', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2 }}>
-                  Journals with Flyxa
-                </p>
               </div>
-              {SHARE_URL ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: C.t0 }}>{SHARE_URL_LABEL}</p>
-                    <p style={{ margin: '3px 0 0', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2 }}>
-                      Trading intelligence
-                    </p>
-                  </div>
-                  <div style={{ backgroundColor: '#ffffff', borderRadius: 6, padding: 4, lineHeight: 0 }}>
-                    <QRCode value={SHARE_URL} size={46} bgColor="#ffffff" fgColor="#0e0d0d" />
-                  </div>
-                </div>
-              ) : (
-                <span style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2 }}>
-                  Trading intelligence · flyxa
-                </span>
-              )}
             </div>
           </div>
         </div>

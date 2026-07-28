@@ -7,6 +7,7 @@ import { pushToast } from '../store/toastStore.js';
 import { DEFAULT_STRUCTURED_RULES, normalizeRiskRule } from '../utils/tradingRules.js';
 import { buildPlanAdherenceReport } from '../utils/planAdherence.js';
 import { useDailyJournalStreak } from '../utils/journalStreak.js';
+import StreakFlame from '../components/common/StreakFlame.js';
 import { lookupContract } from '../constants/futuresContracts.js';
 import './TradingPlan.css';
 
@@ -75,10 +76,6 @@ export default function TradingPlan() {
 
   const [pendingContracts, setPendingContracts] = useState<Record<string, { symbol: string; max: string }>>({});
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  // Record interactivity: click a day cell to see its rule verdicts; click a
-  // ledger rule to replay that single rule's history on the heatmap.
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [chartRuleId, setChartRuleId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
   const firstRulesMountRef = useRef(true);
@@ -202,24 +199,6 @@ export default function TradingPlan() {
     return map;
   }, [planReport]);
 
-  const ruleStateByDate = useMemo(() => {
-    const map = new Map<string, Map<string, 'ok' | 'fail'>>();
-    for (const day of planReport.daily) {
-      for (const ev of day.evaluations) {
-        if (ev.state === 'unchecked') continue;
-        if (!map.has(ev.ruleId)) map.set(ev.ruleId, new Map());
-        map.get(ev.ruleId)!.set(day.date, ev.state === 'ok' ? 'ok' : 'fail');
-      }
-    }
-    return map;
-  }, [planReport]);
-
-  const ruleLabelById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const rule of riskRules) map.set(rule.id, rule.label);
-    return map;
-  }, [riskRules]);
-
   // Today's per-rule verification, driving the rulebook status column.
   const todayRuleStates = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -303,10 +282,8 @@ export default function TradingPlan() {
         <div className="tp-header-main">
           <div>
             <h1 className="tp-title">Rules</h1>
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 7, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)' }}>
-              <span><i style={{ fontStyle: 'normal', color: 'var(--txt)' }}>{activeRuleCount}</i> rule{activeRuleCount !== 1 ? 's' : ''} in force</span>
-              {planReport.pct !== null && <><span style={{ opacity: .5 }}>·</span><span>held to <i style={{ fontStyle: 'normal', color: 'var(--txt)' }}>{planReport.pct}%</i> over 30 days</span></>}
-              {todayStats.checkedCount > 0 && <><span style={{ opacity: .5 }}>·</span><span><i style={{ fontStyle: 'normal', color: 'var(--txt)' }}>{todayStats.passed} of {todayStats.checkedCount}</i> held today</span></>}
+            <div style={{ marginTop: 7, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)' }}>
+              <i style={{ fontStyle: 'normal', color: 'var(--txt)' }}>{activeRuleCount}</i> rule{activeRuleCount !== 1 ? 's' : ''} in force
             </div>
           </div>
           <div className="tp-actions" style={{ alignItems: 'center' }}>
@@ -500,172 +477,85 @@ export default function TradingPlan() {
 
         </section>
 
-        {/* ── The record — heatmap + by-rule + rail ── */}
-        <section className="tp-record-grid" data-tour-id="trading-plan-core" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 14, alignItems: 'start' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+        {/* ── The record — discipline streak + unified rule table ── */}
+        <section data-tour-id="trading-plan-core" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-            {/* Daily discipline heatmap */}
-            <div style={{ ...card, padding: '18px 20px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-                <span style={lbl}>Daily discipline · 30D</span>
-                {chartRuleId ? (
-                  <button type="button" onClick={() => setChartRuleId(null)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid rgba(245,158,11,0.5)', borderRadius: 5, background: 'rgba(245,158,11,0.12)', color: 'var(--amber)', padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
-                    {ruleLabelById.get(chartRuleId) ?? 'Rule'} · ✕
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', gap: 16, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '1px', color: 'var(--txt-3)' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--green)', opacity: .9 }} />RULES FOLLOWED</span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--red)', opacity: .75 }} />BREAK</span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }} />NO TRADE</span>
-                  </div>
-                )}
+          {/* Discipline summary: journal fire streak + adherence headline */}
+          <div style={{ ...card, padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+              <div>
+                <span style={{ ...lbl, display: 'block', marginBottom: 11 }}>Rule discipline streak</span>
+                <StreakFlame streak={journalStreak} />
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(30, 1fr)', gap: 4 }}>
-                {daySeries.map(day => {
-                  const ruleState = chartRuleId ? ruleStateByDate.get(chartRuleId)?.get(day.date) : undefined;
-                  let bg = 'rgba(255,255,255,0.06)';
-                  if (chartRuleId) {
-                    bg = ruleState === 'ok' ? 'var(--green)' : ruleState === 'fail' ? 'var(--red)' : 'rgba(255,255,255,0.06)';
-                  } else if (day.pct !== null) {
-                    bg = day.failed === 0 ? 'var(--green)' : 'var(--red)';
-                  }
-                  const opacity = chartRuleId
-                    ? (ruleState === 'ok' ? 0.9 : ruleState === 'fail' ? 0.6 : 1)
-                    : (day.pct === null ? 1 : day.failed === 0 ? 0.9 : 0.6);
-                  const clickable = day.pct !== null;
-                  return (
-                    <span
-                      key={day.date}
-                      onClick={clickable ? () => setSelectedDay(current => (current === day.date ? null : day.date)) : undefined}
-                      title={chartRuleId
-                        ? `${day.label} · ${ruleState === 'ok' ? 'held' : ruleState === 'fail' ? 'broken' : 'not checked'}`
-                        : clickable ? `${day.label} · ${day.failed === 0 ? 'all rules held' : `${day.failed} break${day.failed !== 1 ? 's' : ''}`} — click for detail` : `${day.label} · no verified session`}
-                      style={{
-                        aspectRatio: '1', borderRadius: 3, background: bg, opacity,
-                        outline: day.isToday ? '1px solid rgba(255,255,255,0.5)' : selectedDay === day.date ? '1px solid var(--txt)' : 'none',
-                        outlineOffset: 1,
-                        cursor: clickable ? 'pointer' : 'default',
-                        transition: 'background .2s, opacity .2s',
-                      }}
-                    />
-                  );
-                })}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--txt-3)' }}>
-                <span>{daySeries[0].label.toUpperCase()}</span>
-                <span>{daySeries[15].label.toUpperCase()}</span>
-                <span>{daySeries[29].label.toUpperCase()}</span>
-              </div>
-
-              {selectedDay && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--app-border)', display: 'flex', alignItems: 'center', gap: '6px 14px', flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 500, letterSpacing: '0.08em', color: 'var(--txt)' }}>
-                    {daySeries.find(day => day.date === selectedDay)?.label?.toUpperCase() ?? selectedDay}
-                  </span>
-                  {(dayEvalMap.get(selectedDay) ?? []).map(ev => (
-                    <span key={ev.ruleId} style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.05em', color: ev.state === 'ok' ? 'var(--green)' : 'var(--red)' }}>
-                      {ev.state === 'ok' ? '✓' : '✗'} {ruleLabelById.get(ev.ruleId) ?? 'Rule'}
-                    </span>
-                  ))}
-                  {(dayEvalMap.get(selectedDay) ?? []).length === 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--txt-3)' }}>No rule checks that day.</span>}
-                  <button type="button" onClick={() => setSelectedDay(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--txt-3)', fontSize: 11, cursor: 'pointer', padding: '0 2px' }} aria-label="Clear selected day">✕</button>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 22, marginTop: 14, paddingTop: 13, borderTop: '1px solid var(--app-border)', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--txt-3)', flexWrap: 'wrap' }}>
-                <span>30D ADHERENCE <b style={{ color: adherenceColor, fontWeight: 500 }}>{planReport.pct !== null ? `${planReport.pct}%` : '—'}</b></span>
-                <span><b style={{ color: 'var(--red)', fontWeight: 500 }}>{totalBreaks} break{totalBreaks !== 1 ? 's' : ''}</b> · {checkedDays.length} traded day{checkedDays.length !== 1 ? 's' : ''}</span>
-                <span>TODAY <b style={{ color: 'var(--txt)', fontWeight: 500 }}>{todayStats.checkedCount > 0 ? `${todayStats.passed} of ${todayStats.checkedCount} held` : 'not verified'}</b></span>
+              <div style={{ paddingLeft: 22, borderLeft: '1px solid var(--app-border)' }}>
+                <span style={lbl}>Held · 30D</span>
+                <b style={{ display: 'block', marginTop: 9, fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 500, lineHeight: 1, color: adherenceColor }}>{planReport.pct !== null ? `${planReport.pct}%` : '—'}</b>
               </div>
             </div>
-
-            {/* By rule — worst first */}
-            <div style={card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 20px', borderBottom: '1px solid var(--app-border)' }}>
-                <b style={{ fontSize: 13.5, fontWeight: 600 }}>By rule</b>
-                <span style={{ ...lbl, color: 'var(--txt-3)' }}>Worst first · click to replay on chart</span>
-              </div>
-              {(() => {
-                const rows = riskRules
-                  .filter(rule => rule.enabled !== false && (rule.kind ?? 'manual') !== 'manual')
-                  .map(rule => ({ rule, stats: ruleStatsMap.get(rule.id) }))
-                  .sort((a, b) => (a.stats?.pct ?? 101) - (b.stats?.pct ?? 101));
-                if (rows.length === 0) {
-                  return <p style={{ margin: 0, padding: '16px 20px', fontSize: 12, color: 'var(--txt-3)' }}>No auto-checked rules are enabled — turn rules on above and stats appear here.</p>;
-                }
-                return rows.map(({ rule, stats }, rowIndex) => {
-                  const pct = stats && stats.checked > 0 ? (stats.pct ?? 0) : null;
-                  const worst = rowIndex === 0 && pct !== null && pct < ADHERENCE_TARGET;
-                  const chartActive = chartRuleId === rule.id;
-                  return (
-                    <div
-                      key={rule.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setChartRuleId(current => (current === rule.id ? null : rule.id))}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setChartRuleId(current => (current === rule.id ? null : rule.id)); } }}
-                      style={{
-                        display: 'grid', gridTemplateColumns: 'minmax(150px, 220px) minmax(0, 1fr) 64px 110px', gap: 18, alignItems: 'center',
-                        padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.05)',
-                        borderLeft: chartActive ? '2px solid var(--amber)' : '2px solid transparent',
-                        background: chartActive ? 'rgba(245,158,11,0.05)' : 'transparent', cursor: 'pointer',
-                        transition: 'background .12s, border-color .12s',
-                      }}
-                    >
-                      <span style={{ minWidth: 0, fontSize: 13, fontWeight: 600, letterSpacing: '-0.1px', color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rule.label}</span>
-                      <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                        <span style={{ display: 'block', height: '100%', borderRadius: 2, width: `${pct ?? 0}%`, background: worst ? 'var(--red)' : 'var(--amber)', opacity: worst ? 0.8 : 1 }} />
-                      </div>
-                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: worst ? 'var(--red)' : 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{pct !== null ? `${pct}%` : '—'}</span>
-                      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.4px', color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>
-                        {stats && stats.checked > 0 ? `${stats.failed} BRK · ${stats.checked} CHK` : 'NO DATA'}
-                      </span>
-                    </div>
-                  );
-                });
-              })()}
+            <div style={{ display: 'flex', gap: 26, fontFamily: 'var(--font-mono)', color: 'var(--txt-3)' }}>
+              {[
+                { k: 'BREAKS', v: String(totalBreaks), c: totalBreaks > 0 ? 'var(--red)' : 'var(--txt)' },
+                { k: 'TRADED DAYS', v: String(checkedDays.length), c: 'var(--txt)' },
+                { k: 'TODAY', v: todayStats.checkedCount > 0 ? `${todayStats.passed}/${todayStats.checkedCount}` : '—', c: 'var(--txt)' },
+              ].map(m => (
+                <span key={m.k} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 9, letterSpacing: '0.1em' }}>{m.k}</span>
+                  <b style={{ color: m.c, fontWeight: 500, fontSize: 15 }}>{m.v}</b>
+                </span>
+              ))}
             </div>
-
-            <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)', lineHeight: 1.5 }}>
-              Stats evaluate past sessions against your current rule values — tightening a rule today changes how old sessions score.
-            </p>
           </div>
 
-          {/* Right rail — three uniform cards */}
-          <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* Journal streak — same figure as the Daily Journal page */}
-            <div style={{ ...card, padding: '16px 20px' }}>
-              <span style={{ ...lbl, display: 'block', marginBottom: 12 }}>Journal streak</span>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <b style={{ fontFamily: 'var(--font-mono)', fontSize: 30, fontWeight: 500, color: journalStreak > 0 ? 'var(--amber)' : 'var(--txt-3)' }}>{journalStreak}</b>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-2)' }}>day{journalStreak !== 1 ? 's' : ''}</span>
-              </div>
-              <small style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-3)', marginTop: 8, lineHeight: 1.6 }}>Consecutive days journaled</small>
+          {/* Unified by-rule table: adherence + breaks + cost */}
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 20px', borderBottom: '1px solid var(--app-border)' }}>
+              <b style={{ fontSize: 13.5, fontWeight: 600 }}>By rule</b>
+              <span style={{ ...lbl, color: 'var(--txt-3)' }}>Worst first</span>
             </div>
+            {(() => {
+              const cols = 'minmax(150px, 1fr) minmax(120px, 220px) 66px 96px';
+              const costByRule = new Map(planReport.brokenRules.map(r => [r.ruleId, r.lossWhenBroken] as const));
+              const rows = riskRules
+                .filter(rule => rule.enabled !== false && (rule.kind ?? 'manual') !== 'manual')
+                .map(rule => ({ rule, stats: ruleStatsMap.get(rule.id) }))
+                .sort((a, b) => (a.stats?.pct ?? 101) - (b.stats?.pct ?? 101));
+              if (rows.length === 0) {
+                return <p style={{ margin: 0, padding: '16px 20px', fontSize: 12, color: 'var(--txt-3)' }}>No auto-checked rules are enabled. Turn rules on above and stats appear here.</p>;
+              }
+              return (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 16, padding: '9px 20px', borderBottom: '1px solid var(--app-border)', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
+                    <span>Rule</span>
+                    <span>Adherence</span>
+                    <span style={{ textAlign: 'right' }}>Breaks</span>
+                    <span style={{ textAlign: 'right' }}>Cost</span>
+                  </div>
+                  {rows.map(({ rule, stats }, i) => {
+                    const pct = stats && stats.checked > 0 ? (stats.pct ?? 0) : null;
+                    const worst = i === 0 && pct !== null && pct < ADHERENCE_TARGET;
+                    const cost = costByRule.get(rule.id) ?? 0;
+                    return (
+                      <div key={rule.id} style={{ display: 'grid', gridTemplateColumns: cols, gap: 16, alignItems: 'center', padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <span style={{ minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rule.label}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <div style={{ flex: 1, minWidth: 0, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                            <span style={{ display: 'block', height: '100%', borderRadius: 2, width: `${pct ?? 0}%`, background: worst ? 'var(--red)' : 'var(--green)', opacity: worst ? 0.85 : 0.9 }} />
+                          </div>
+                          <span style={{ flexShrink: 0, width: 34, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: worst ? 'var(--red)' : 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{pct !== null ? `${pct}%` : '—'}</span>
+                        </div>
+                        <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: stats && stats.failed > 0 ? 'var(--red)' : 'var(--txt-3)', fontVariantNumeric: 'tabular-nums' }}>{stats && stats.checked > 0 ? stats.failed : '—'}</span>
+                        <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: cost > 0 ? 'var(--red)' : 'var(--txt-3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{cost > 0 ? `−$${Math.round(cost).toLocaleString()}` : '—'}</span>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
+          </div>
 
-            {/* The damage */}
-            <div style={{ ...card, padding: '16px 20px' }}>
-              <span style={{ ...lbl, display: 'block', marginBottom: 12 }}>The damage · 30D</span>
-              <div style={{ padding: '0 0 10px' }}>
-                <b style={{ fontSize: 12.5, fontWeight: 600, display: 'block' }}>Most broken</b>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--txt-2)', display: 'block', marginTop: 3 }}>
-                  {planReport.mostBrokenRule
-                    ? <>{planReport.mostBrokenRule.label} — <em style={{ fontStyle: 'normal', color: 'var(--red)' }}>{planReport.mostBrokenRule.failed}×</em></>
-                    : 'No rule breaks in the last 30 days.'}
-                </span>
-              </div>
-              {planReport.mostExpensiveRule && planReport.mostExpensiveRule.lossWhenBroken > 0 && (
-                <div style={{ padding: '10px 0 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <b style={{ fontSize: 12.5, fontWeight: 600, display: 'block' }}>Costliest when broken</b>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--txt-2)', display: 'block', marginTop: 3 }}>
-                    {planReport.mostExpensiveRule.label} — <em style={{ fontStyle: 'normal', color: 'var(--red)' }}>−${Math.round(planReport.mostExpensiveRule.lossWhenBroken).toLocaleString()}</em> lost on break days
-                  </span>
-                </div>
-              )}
-            </div>
-          </aside>
+          <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)', lineHeight: 1.5 }}>
+            Stats evaluate past sessions against your current rule values. Tightening a rule today changes how old sessions score.
+          </p>
         </section>
       </main>
     </div>

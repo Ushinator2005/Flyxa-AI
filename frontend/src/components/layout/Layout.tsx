@@ -31,7 +31,7 @@ export default function Layout() {
   const isJournalWorkspace = location.pathname === '/scanner' || location.pathname === '/market-news';
   const isFullBleed = location.pathname === '/chart'
     || location.pathname === '/backtest'
-    || location.pathname === '/trading-plan'
+    || location.pathname === '/rules'
     || location.pathname === '/billing'
     || location.pathname === '/evaluation-coach'
     || location.pathname === '/market-news'

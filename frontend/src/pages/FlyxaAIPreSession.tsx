@@ -932,7 +932,7 @@ export default function FlyxaAIPreSession() {
                     <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Today&apos;s risk limits</h2>
                     <p style={{ fontSize: 11, color: C.t2 }}>These are the terms of today's session. Accept them before you trade them.</p>
                   </div>
-                  <button type="button" onClick={() => navigate('/trading-plan')}
+                  <button type="button" onClick={() => navigate('/rules')}
                     style={{ fontSize: 11, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
                     edit rules →
                   </button>
@@ -946,9 +946,9 @@ export default function FlyxaAIPreSession() {
                     return (
                       <div style={{ padding: '24px 16px', textAlign: 'center' }}>
                         <p style={{ fontSize: 12, color: C.t2, marginBottom: 10 }}>No active risk rules.</p>
-                        <button type="button" onClick={() => navigate('/trading-plan')}
+                        <button type="button" onClick={() => navigate('/rules')}
                           style={{ fontSize: 11, color: C.acc, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                          Set up rules in Trading Plan →
+                          Set up rules in Rules →
                         </button>
                       </div>
                     );

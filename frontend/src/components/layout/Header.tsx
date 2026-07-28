@@ -27,7 +27,7 @@ const pageNames: Record<string, string> = {
   '/journal': 'Daily Journal',
   '/chart': 'Backtest',
   '/backtest': 'Backtest',
-  '/trading-plan': 'Rules',
+  '/rules': 'Rules',
   '/psychology': 'Psychology Tracker',
   '/goals': 'Goals',
   '/rivals': 'Rivals',

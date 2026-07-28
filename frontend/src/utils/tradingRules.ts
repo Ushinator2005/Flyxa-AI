@@ -94,6 +94,10 @@ export function evaluateTradeRules(
       return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `Trade ${tradeIndex + 1} of ${Math.round(value)} allowed.` };
     }
     if (rule.kind === 'max_contracts') {
+      // No contract size recorded = can't verify, not a break.
+      if (!Number.isFinite(trade.contracts) || trade.contracts <= 0) {
+        return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'No contract size recorded for this trade.' };
+      }
       const limits = rule.contractLimits;
       if (limits && Object.keys(limits).length > 0) {
         const sym = trade.symbol.toUpperCase();
@@ -108,6 +112,11 @@ export function evaluateTradeRules(
     }
     if (rule.kind === 'min_rr') {
       if (value === null) return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'Set a valid minimum R:R.' };
+      // No planned R:R recorded = can't verify, not a break. Otherwise a trade
+      // logged without an R:R would wrongly count as a rule violation.
+      if (!Number.isFinite(trade.rr) || trade.rr <= 0) {
+        return { ruleId: rule.id, label: rule.label, state: 'unchecked', source: 'automatic', detail: 'No planned R:R recorded for this trade.' };
+      }
       const passed = trade.rr >= value;
       return { ruleId: rule.id, label: rule.label, state: passed ? 'ok' : 'fail', source: 'automatic', detail: `${trade.rr.toFixed(2)}R planned; minimum ${value.toFixed(2)}R.` };
     }
