@@ -3,6 +3,7 @@ import type { JournalEntry as DailyJournalEntry } from '../types/index.js';
 import type { LeaderboardPeriod, RivalPeriodStats } from '../types/rivals.js';
 import type { RiskRule } from '../store/types.js';
 import { getEntriesRuleAdherence, getEntryRuleAdherence } from './tradingRules.js';
+import { averageRR } from './riskReward.js';
 
 export function mean(values: number[]): number {
   if (values.length === 0) return 0;
@@ -237,10 +238,7 @@ export function computePeriodStats(trades: Trade[], bounds?: [string, string]): 
   });
   const winLoss = filtered.filter(t => t.result === 'win' || t.result === 'loss');
   const wins = filtered.filter(t => t.pnl - (t.commission ?? 0) > 0).length;
-  const tradesWithRR = winLoss.filter(t => typeof t.rr === 'number' && isFinite(t.rr) && t.rr !== 0);
-  const avgR = tradesWithRR.length > 0
-    ? Math.round((tradesWithRR.reduce((sum, t) => sum + t.rr, 0) / tradesWithRR.length) * 100) / 100
-    : null;
+  const avgR = averageRR(winLoss);
   const evaluated = filtered.filter(t => t.reflection?.followedPlan != null);
   const greenDays = [...daily.values()].filter(v => v > 0).length;
   const netPnl = Math.round(cumulative * 100) / 100;

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import useFlyxaStore from './flyxaStore.js';
 import { computeAchievementProgress, computeJournalStreak } from './achievements.js';
 import type { Achievement, JournalEntry, Trade } from './types.js';
+import { averageRR } from '../utils/riskReward.js';
 
 function withoutDeletedTrades(
   entries: JournalEntry[],
@@ -74,7 +75,7 @@ export const useDashboardStats = () => {
     return {
       netPnL: trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
       winRate: trades.length ? (wins.length / Math.max(1, wins.length + losses.length)) * 100 : 0,
-      avgRR: trades.length ? trades.reduce((sum, trade) => sum + trade.rr, 0) / trades.length : 0,
+      avgRR: averageRR(trades) ?? 0,
       totalTrades: trades.length,
       todayTrades,
       todayPnL: todayTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
@@ -125,7 +126,7 @@ export const useSetupPerformance = () => {
       symbol,
       trades: symbolTrades.length,
       winRate: (symbolTrades.filter((trade) => trade.result === 'win').length / Math.max(1, symbolTrades.length)) * 100,
-      avgRR: symbolTrades.reduce((sum, trade) => sum + trade.rr, 0) / Math.max(1, symbolTrades.length),
+      avgRR: averageRR(symbolTrades) ?? 0,
       totalPnL: symbolTrades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0),
     }));
   }, [trades]);

@@ -24,31 +24,32 @@ export async function recoverMissingTradesFromLocalBackup(userId: string): Promi
   const deletedEntryDates = new Set(state.deletedEntryDates ?? []);
 
   const currentById = new Map(journalEntries.map(entry => [entry.id, entry]));
+  // A trade is only "missing" if its id exists NOWHERE in the journal.
+  // Checking per-day would resurrect trades the user moved to another day
+  // (the backup still lists them under the old date).
+  const allTradeIds = new Set(journalEntries.flatMap(entry => entry.trades.map(trade => trade.id)));
   const merged = [...journalEntries];
 
   for (const safeRaw of safeEntries) {
     const safeEntry = safeRaw as unknown as JournalEntry;
     if (!safeEntry?.id || deletedEntryDates.has(safeEntry.date)) continue;
-    const safeTrades = (Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
-      .filter(trade => trade?.id && !deletedTradeIds.has(trade.id));
+    const missingTrades = (Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
+      .filter(trade => trade?.id && !deletedTradeIds.has(trade.id) && !allTradeIds.has(trade.id));
+    if (missingTrades.length === 0) continue;
     const existing = currentById.get(safeEntry.id);
 
     if (!existing) {
-      if (safeTrades.length === 0) continue;
-      merged.push({ ...safeEntry, trades: safeTrades });
+      merged.push({ ...safeEntry, trades: missingTrades });
       result.daysRecovered++;
-      result.tradesRecovered += safeTrades.length;
+      result.tradesRecovered += missingTrades.length;
     } else {
-      const existingTradeIds = new Set(existing.trades.map(trade => trade.id));
-      const newTrades = safeTrades.filter(trade => !existingTradeIds.has(trade.id));
-      if (newTrades.length > 0) {
-        const index = merged.findIndex(entry => entry.id === existing.id);
-        if (index !== -1) {
-          merged[index] = { ...merged[index], trades: [...merged[index].trades, ...newTrades] };
-          result.tradesRecovered += newTrades.length;
-        }
+      const index = merged.findIndex(entry => entry.id === existing.id);
+      if (index !== -1) {
+        merged[index] = { ...merged[index], trades: [...merged[index].trades, ...missingTrades] };
+        result.tradesRecovered += missingTrades.length;
       }
     }
+    missingTrades.forEach(trade => allTradeIds.add(trade.id));
   }
 
   if (result.tradesRecovered === 0 && result.daysRecovered === 0) return result;

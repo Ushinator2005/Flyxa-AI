@@ -6,6 +6,7 @@ import { lookupContract } from '../constants/futuresContracts.js';
 import { normalizeConfluenceTags } from './confluenceTags.js';
 import { normalizeBehavioralFlags } from './behavioralFlags.js';
 import { evaluateEntryRules, manualRules, summarizeRuleEvaluations } from './tradingRules.js';
+import { averageRR } from './riskReward.js';
 
 export type RuleState = 'ok' | 'fail' | 'unchecked';
 export type EmotionState = 'neutral' | 'green' | 'amber' | 'red';
@@ -397,7 +398,7 @@ export function computeEntryStats(entry: JournalEntry, riskRules: RiskRule[] = [
   const losses = entry.trades.filter(trade => trade.result === 'loss').length;
   const tradeCount = entry.trades.length;
   const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
-  const avgRR = tradeCount ? entry.trades.reduce((sum, trade) => sum + trade.rr, 0) / tradeCount : 0;
+  const avgRR = averageRR(entry.trades) ?? 0;
   // Use full evaluation (auto + manual) when riskRules are provided so that
   // automatic rule violations affect the grade, not just manual confirmations.
   let okCount: number;

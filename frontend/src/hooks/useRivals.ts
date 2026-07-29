@@ -8,6 +8,7 @@ import { journalApi, rivalsApi, type RivalProfileResponse, type RivalRequestResp
 import type { BacktestSession } from '../store/types.js';
 import type { JournalEntry as DailyJournalEntry } from '../types/index.js';
 import type { MascotStats } from '../types/rivals.js';
+import { averageRR } from '../utils/riskReward.js';
 import {
   computeDailyJournalStreak, computeDailyJournalScore,
   computeTradingJournalScore, computeRuleFollowingScore, computeProcessScore,
@@ -222,10 +223,7 @@ export function useRivals() {
     const allTrades = entries.flatMap(entry => entry.trades).filter(t => t.result === 'win' || t.result === 'loss');
     const winTrades = allTrades.filter(t => t.result === 'win');
     const winRate = allTrades.length > 0 ? Math.round((winTrades.length / allTrades.length) * 100) : null;
-    const tradesWithRR = allTrades.filter(t => typeof t.rr === 'number' && isFinite(t.rr) && t.rr !== 0);
-    const avgR = tradesWithRR.length > 0
-      ? Math.round((tradesWithRR.reduce((sum, t) => sum + t.rr, 0) / tradesWithRR.length) * 100) / 100
-      : null;
+    const avgR = averageRR(allTrades);
     const netPnl = Math.round(
       entries.flatMap(entry => entry.trades)
         .reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0) * 100
