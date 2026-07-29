@@ -4,7 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg?v=4" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Flyxa - Trading Intelligence</title>
+    <title>Flyxa · Pass the eval. Keep the account.</title>
+    <meta name="description" content="Pass your prop-firm eval and keep the funded account. Flyxa reads every trade you take and catches the tilt, revenge entries, and rule breaks that blow prop accounts before they cost you the funded." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Flyxa" />
+    <meta property="og:title" content="Flyxa · Pass the eval. Keep the account." />
+    <meta property="og:description" content="Pass your prop-firm eval and keep the funded account. Flyxa reads every trade you take and catches the tilt, revenge entries, and rule breaks that blow prop accounts before they cost you the funded." />
+    <meta property="og:image" content="https://www.flyxa.app/landing/assets/trade-scan.png" />
+    <meta property="og:url" content="https://www.flyxa.app" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Flyxa · Pass the eval. Keep the account." />
+    <meta name="twitter:description" content="Catches the tilt, revenge entries, and rule breaks that blow prop accounts — before they cost you the funded." />
+    <meta name="twitter:image" content="https://www.flyxa.app/landing/assets/trade-scan.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
@@ -21,7 +32,7 @@
           var signedIn = Object.keys(localStorage).some(function (k) {
             return k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1;
           });
-          if (!signedIn) location.replace('/landing/index.html');
+          if (!signedIn) location.replace('/landing/');
         } catch (e) { /* storage blocked — let the SPA decide */ }
       })();
     </script>

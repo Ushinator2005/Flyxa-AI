@@ -210,7 +210,7 @@ function PasswordRecoveryModal() {
 // SPA requires a hard navigation, not a router <Navigate>.
 function StaticLandingRedirect() {
   useEffect(() => {
-    window.location.replace('/landing/index.html');
+    window.location.replace('/landing/');
   }, []);
   return null;
 }
