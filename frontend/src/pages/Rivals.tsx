@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Bell, Bookmark, Check, ChevronDown, Clock3, Download,
+  Bell, Check, ChevronDown, Clock3,
   MessageCircle, Plus, Share2, Trophy, X,
 } from 'lucide-react';
 import FlyxaLogo from '../components/common/FlyxaLogo.js';
@@ -154,7 +153,6 @@ export default function Rivals() {
   const [metric, setMetric] = useState<LeaderboardMetric>('netPnl');
   const [selectedRivalId, setSelectedRivalId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const navigate = useNavigate();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [activeChatRival, setActiveChatRival] = useState<Rival | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -266,7 +264,6 @@ export default function Rivals() {
   const countdown = seasonCountdown();
   const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: '#161616', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
   const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#0a0a0c', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
-  const btnIcon: CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 9, background: '#161616', border: `1px solid ${LB.border}`, color: LB.muted, cursor: 'pointer' };
   const kicker: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: LB.subtle };
 
   return (
@@ -280,7 +277,7 @@ export default function Rivals() {
           </div>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
-              {activeLeague?.name ?? 'The Trading Pit'}
+              {activeLeague?.name ?? 'Rivals'}
             </h1>
             <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
               Private league · <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> traders · Verified P&amp;L only. Compare consistency, process and edge with your circle.
@@ -298,8 +295,6 @@ export default function Rivals() {
             ))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <button type="button" title="Bookmark league" style={btnIcon}><Bookmark size={15} /></button>
-            <button type="button" onClick={() => navigate('/scanner')} style={btnGhost}><Download size={13} /> Verify my P&amp;L</button>
             <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
             <button type="button" onClick={() => setIsAddOpen(true)} style={btnPrimary}>Invite traders</button>
           </div>

@@ -1,4 +1,7 @@
-.rivals-page {
+/* Variable scope covers both page generations: the legacy .rivals-page root
+   and the redesigned .rv2-page root (modals/banners reuse these tokens). */
+.rivals-page,
+.rv2-page {
   /* Layering: page sits on the app background like every other page;
      cards lift one step (panel), nested elements one more (raised). */
   --rv-bg: var(--app-bg);
@@ -1761,14 +1764,19 @@
 
 .rv-modal button {
   width: 100%;
-  border-radius: 6px;
-  border: 1px solid var(--rv-blue-border);
-  background: var(--rv-blue-dim);
-  color: var(--rv-blue);
-  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: var(--rv-amber);
+  color: #101010;
+  height: 38px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.rv-modal button:hover:not(:disabled) {
+  opacity: 0.88;
 }
 
 .rv-modal button:disabled {
