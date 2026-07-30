@@ -4490,17 +4490,18 @@
 .rvc-rung:first-child { border-top: 0; }
 .rvc-rung:hover { background: color-mix(in srgb, var(--app-panel) 45%, transparent); }
 
-/* Big ghosted rank numeral — the through-line for the whole ladder.
-   Display face (Syne), not the editorial serif. */
+/* Rank numeral — thin, tabular, receding. It marks position; the name and
+   the number are the focus, not this. */
 .rvc-rung-num {
-  font-family: var(--font-display);
-  font-weight: 800;
-  line-height: 0.8;
+  font-family: var(--font-sans);
+  font-weight: 300;
+  line-height: 0.9;
   text-align: center;
   color: var(--app-text-subtle);
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  font-size: 40px;
+  opacity: 0.65;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 32px;
 }
 
 .rvc-rung-name { font-size: 15px; font-weight: 600; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -4508,30 +4509,40 @@
 .rvc-rung-pnl { font-family: var(--font-mono); font-weight: 500; font-size: 19px; font-variant-numeric: tabular-nums; text-align: right; }
 .rvc-rung-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 
-/* #1 — emphasized as the TOP ROW of the ladder, not a detached card. */
+/* #1 — the top row, emphasised with restraint: a hair more space, a whisper
+   of warmth, a thin edge. No heavy fill. */
 .rvc-rung--champ {
-  padding-top: 24px;
-  padding-bottom: 24px;
-  background:
-    radial-gradient(140% 120% at 0% 0%, rgba(245,158,11,0.07), transparent 55%);
-  border-radius: 14px;
+  padding-top: 22px;
+  padding-bottom: 22px;
 }
 .rvc-rung--champ::before {
   content: '';
-  position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, var(--amber), color-mix(in srgb, var(--amber) 30%, transparent));
+  position: absolute; left: 0; top: 16px; bottom: 16px; width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--amber), transparent);
+  opacity: 0.7;
 }
-.rvc-rung--champ .rvc-rung-num { font-size: 60px; color: color-mix(in srgb, var(--amber) 42%, var(--app-text-subtle)); }
-.rvc-rung--champ .rvc-rung-name { font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; }
-.rvc-rung--champ .rvc-rung-pnl { font-size: 30px; letter-spacing: -0.01em; }
+.rvc-rung--champ .rvc-rung-num { font-size: 42px; color: var(--amber); opacity: 0.55; }
+.rvc-rung--champ .rvc-rung-name { font-size: 17px; font-weight: 600; }
+.rvc-rung--champ .rvc-rung-pnl { font-size: 28px; letter-spacing: -0.01em; }
 
-/* The "YOU" row — always findable. */
-.rvc-rung--you { background: color-mix(in srgb, var(--amber) 5%, transparent); }
+/* The champion marker — quiet lettered mark, not a crown. */
+.rvc-champmark {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-gold, #f6c343) 88%, var(--app-text));
+}
+.rvc-streak { font-size: 11.5px; color: var(--app-text-subtle); }
+
+/* The "YOU" row — always findable, quietly. */
+.rvc-rung--you { background: color-mix(in srgb, var(--amber) 4%, transparent); }
 .rvc-rung--you::after {
   content: '';
-  position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px;
-  background: var(--amber); opacity: 0.55; border-radius: 2px;
+  position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px;
+  background: var(--amber); opacity: 0.4; border-radius: 2px;
 }
 .rvc-rung--champ.rvc-rung--you::after { display: none; }
 
@@ -4539,9 +4550,6 @@
   font-family: var(--font-mono); font-size: 8.5px; font-weight: 700; letter-spacing: 0.09em;
   padding: 2px 6px; border-radius: 4px; border: 1px solid var(--amber); color: var(--amber);
 }
-.rvc-flame { color: var(--amber); }
-.rvc-flame--pulse { animation: rvc-flick 1.6s ease-in-out infinite; transform-origin: center bottom; }
-@keyframes rvc-flick { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.14); opacity: 0.85; } }
 .rvc-move { display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
 .rvc-dot { color: var(--app-text-subtle); margin: 0 6px; }
 
@@ -4571,49 +4579,44 @@
 .rvc-bench { font-size: 13px; color: var(--app-text-muted); padding: 4px 2px; line-height: 1.6; }
 .rvc-bench b { color: var(--app-text); font-weight: 600; }
 
-/* ── Activity: a social-style feed — avatars, sentence copy, airy ── */
-.rvc-feed-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 6px; }
-.rvc-feed-title { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--app-text); }
-.rvc-feed-showall {
+/* ── Recent: a calm footnote, not a live ticker ───────────────── */
+.rvc-recent-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--app-text-subtle);
+  margin-bottom: 4px;
+}
+.rvc-recent { display: flex; flex-direction: column; }
+.rvc-recent-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 2px;
+  font-size: 13px;
+  color: var(--app-text-muted);
+  line-height: 1.5;
+}
+.rvc-recent-row b { color: var(--app-text-muted); font-weight: 600; }
+.rvc-recent-text { flex: 1; min-width: 0; }
+.rvc-recent-when {
+  font-size: 11.5px;
+  color: var(--app-text-subtle);
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 14px;
+  opacity: 0.8;
+}
+.rvc-showall {
+  align-self: flex-start;
+  margin-top: 6px;
   background: none; border: 0; cursor: pointer;
-  font-size: 12.5px; color: var(--app-text-subtle);
+  font-size: 12px; color: var(--app-text-subtle);
   transition: color 0.15s ease;
 }
-.rvc-feed-showall:hover { color: var(--amber); }
-.rvc-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: rvc-live 1.8s ease-out infinite; }
-@keyframes rvc-live {
-  0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
-  70% { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
-  100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
-}
-.rvc-feed { display: flex; flex-direction: column; }
-.rvc-feed-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 2px;
-  font-size: 13.5px; color: var(--app-text-muted); line-height: 1.5;
-  animation: rvc-slide 0.4s ease both;
-}
-.rvc-feed-row + .rvc-feed-row { border-top: 1px solid var(--border-sub, rgba(255,255,255,0.045)); }
-.rvc-feed-row b { color: var(--app-text); font-weight: 600; }
-/* A slim tone rail on the avatar signals the event type without a mono tick. */
-.rvc-feed-av {
-  position: relative;
-  flex-shrink: 0;
-  padding-left: 9px;
-}
-.rvc-feed-av::before {
-  content: '';
-  position: absolute; left: 0; top: 3px; bottom: 3px; width: 2px; border-radius: 2px;
-}
-.rvc-feed-av--gain::before { background: var(--green); }
-.rvc-feed-av--loss::before { background: var(--red); }
-.rvc-feed-av--rank::before { background: var(--amber); }
-.rvc-feed-av--neutral::before { background: var(--app-text-subtle); }
-.rvc-feed-text { flex: 1; min-width: 0; }
-.rvc-feed-when { font-size: 12px; color: var(--app-text-subtle); white-space: nowrap; margin-left: auto; padding-left: 12px; }
-@keyframes rvc-slide { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.rvc-showall:hover { color: var(--app-text-muted); }
 
 .rvc-verified { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--green); }
 
@@ -4622,10 +4625,10 @@
 
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 760px) {
-  .rvc-rung { grid-template-columns: 46px 1fr auto; gap: 12px; }
-  .rvc-rung-num { font-size: 34px; }
-  .rvc-rung--champ .rvc-rung-num { font-size: 46px; }
-  .rvc-rung--champ .rvc-rung-pnl { font-size: 24px; }
+  .rvc-rung { grid-template-columns: 40px 1fr auto; gap: 12px; }
+  .rvc-rung-num { font-size: 27px; }
+  .rvc-rung--champ .rvc-rung-num { font-size: 34px; }
+  .rvc-rung--champ .rvc-rung-pnl { font-size: 23px; }
   .rvc-rung-pnl { font-size: 16px; }
   .rvc-cd { grid-template-columns: 1fr; gap: 22px; }
   .rvc-cd-col + .rvc-cd-col::before { display: none; }
@@ -4637,7 +4640,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rvc-crown--bob, .rvc-flame--pulse, .rvc-live-dot, .rvc-feed-row, .rvc-fade { animation: none !important; }
+  .rvc-fade { animation: none !important; }
   .rvc-track-fill { transition: none !important; }
   .rvc-rung:hover { background: none; }
 }

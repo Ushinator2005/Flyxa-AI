@@ -244,23 +244,6 @@ function heroStat(stats: RivalPeriodStats, rival: Rival, metric: LeaderboardMetr
   return { value: formatCurrency(stats.netPnl), tone: stats.netPnl > 0 ? 'up' : stats.netPnl < 0 ? 'down' : 'neutral', label: 'Net P&L' };
 }
 
-// Crafted marks — no emoji in the UI.
-function Crown({ size = 22, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size * 0.78} viewBox="0 0 28 22" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M2.6 8.1 L7.8 13.6 L13.6 3.4 L19.4 13.6 L24.6 8.1 L22.7 18.4 Q22.4 19.6 21.1 19.6 L6.1 19.6 Q4.8 19.6 4.5 18.4 Z" />
-      <circle cx="2.6" cy="6.6" r="2.1" /><circle cx="13.6" cy="2.4" r="2.1" /><circle cx="24.6" cy="6.6" r="2.1" />
-    </svg>
-  );
-}
-function Flame({ size = 12, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size * 1.28} viewBox="0 0 14 18" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M7 0 C9 4 12.5 5.2 11.4 10.4 A5 5 0 1 1 2 9.6 C1.8 12 3.2 7.8 4.4 8.6 C3.6 4.8 5.4 2.6 7 0 Z" />
-    </svg>
-  );
-}
-
 export default function Rivals() {
   const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
   const { trades: allMyTrades } = useTrades();
@@ -544,10 +527,9 @@ export default function Rivals() {
                   <span className="rvc-rung-num">{rank}</span>
                   <div style={{ minWidth: 0 }}>
                     {isChamp && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <Crown size={18} className="rvc-crown rvc-crown--bob" />
-                        <span className="rvc-eyebrow" style={{ color: 'var(--color-gold, #f6c343)' }}>Champion</span>
-                        {streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, color: LB.amber }}><Flame size={11} className="rvc-flame rvc-flame--pulse" />{streak}-day run</span>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 9 }}>
+                        <span className="rvc-champmark">Champion</span>
+                        {streak >= 2 && <span className="rvc-streak">{streak}-day streak</span>}
                       </div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -555,7 +537,6 @@ export default function Rivals() {
                       <span className="rvc-rung-name">{rival.displayName}</span>
                       <Check size={isChamp ? 13 : 11} strokeWidth={3} color={LB.green} aria-label="Verified" />
                       {rival.isMe && <span className="rvc-you">YOU</span>}
-                      {!isChamp && streak >= 2 && <Flame size={11} className="rvc-flame rvc-flame--pulse" />}
                     </div>
                     <div className="rvc-rung-sub">
                       {Math.round(s.winRate)}% win<span className="rvc-dot">·</span>{avgRText(rival, period)}R avg
@@ -616,30 +597,25 @@ export default function Rivals() {
         </div>
       )}
 
-      {/* ── Activity: a social-style feed — avatars, sentence copy, airy ── */}
+      {/* ── Recent: a calm footnote — restrained type, quiet timestamps ── */}
       {hasRivals && activity.length > 0 && (() => {
-        const shown = activityExpanded ? activity : activity.slice(0, 4);
+        const shown = activityExpanded ? activity : activity.slice(0, 3);
         return (
-          <div className="rvc-fade" style={{ marginTop: 30 }}>
-            <div className="rvc-feed-head">
-              <span className="rvc-feed-title">
-                <span className="rvc-live-dot" /> Live
-              </span>
-              {activity.length > 4 && (
-                <button type="button" className="rvc-feed-showall" onClick={() => setActivityExpanded(v => !v)}>
-                  {activityExpanded ? 'Show less' : 'Show all activity'}
-                </button>
-              )}
-            </div>
-            <div className="rvc-feed">
+          <div className="rvc-fade" style={{ marginTop: 34 }}>
+            <div className="rvc-recent-head">Recent</div>
+            <div className="rvc-recent">
               {shown.map(ev => (
-                <div key={ev.id} className="rvc-feed-row">
-                  <span className={`rvc-feed-av rvc-feed-av--${ev.tone}`}><RivalAvatar rival={ev.rival} /></span>
-                  <span className="rvc-feed-text">{ev.text}</span>
-                  <span className="rvc-feed-when">{ev.when}</span>
+                <div key={ev.id} className="rvc-recent-row">
+                  <span className="rvc-recent-text">{ev.text}</span>
+                  <span className="rvc-recent-when">{ev.when}</span>
                 </div>
               ))}
             </div>
+            {activity.length > 3 && (
+              <button type="button" className="rvc-showall" onClick={() => setActivityExpanded(v => !v)}>
+                {activityExpanded ? 'Show less' : 'Show all'}
+              </button>
+            )}
           </div>
         );
       })()}
