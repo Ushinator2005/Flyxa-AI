@@ -30,12 +30,23 @@ export async function recoverMissingTradesFromLocalBackup(userId: string): Promi
   const allTradeIds = new Set(journalEntries.flatMap(entry => entry.trades.map(trade => trade.id)));
   const merged = [...journalEntries];
 
+  const currentDates = new Set(journalEntries.map(entry => entry.date));
+
   for (const safeRaw of safeEntries) {
     const safeEntry = safeRaw as unknown as JournalEntry;
     if (!safeEntry?.id || deletedEntryDates.has(safeEntry.date)) continue;
     const missingTrades = (Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
       .filter(trade => trade?.id && !deletedTradeIds.has(trade.id) && !allTradeIds.has(trade.id));
-    if (missingTrades.length === 0) continue;
+    if (missingTrades.length === 0) {
+      // Intentional blank days ("wanted to trade, took none") count as real
+      // content — restore the day itself if it vanished without a tombstone.
+      if (safeEntry.isBlankDay && !currentById.has(safeEntry.id) && !currentDates.has(safeEntry.date)) {
+        merged.push({ ...safeEntry, trades: [] });
+        currentDates.add(safeEntry.date);
+        result.daysRecovered++;
+      }
+      continue;
+    }
     const existing = currentById.get(safeEntry.id);
 
     if (!existing) {
