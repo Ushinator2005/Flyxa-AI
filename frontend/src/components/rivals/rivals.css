@@ -4469,82 +4469,69 @@
 .rvc-period button:hover { color: var(--app-text-muted); }
 .rvc-period button.on { color: var(--app-text); background: var(--app-panel-strong); }
 
-/* ── Podium: asymmetric — champion has real mass ──────────────── */
-.rvc-podium {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  gap: 28px;
-  align-items: stretch;
-}
-.rvc-numeral {
-  font-family: var(--font-editorial);
-  font-weight: 400;
-  line-height: 0.8;
-  color: var(--app-text-subtle);
-  font-feature-settings: 'lnum' 1;
-}
-
-/* Champion — the one heavy frame. */
-.rvc-champ {
-  position: relative;
-  text-align: left; font: inherit; cursor: pointer;
-  border-radius: 18px;
-  border: 1px solid var(--amber-border);
-  background:
-    radial-gradient(120% 90% at 100% 0%, rgba(245,158,11,0.10), transparent 55%),
-    var(--app-panel);
-  padding: 26px 28px 24px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.rvc-champ::before {
-  content: '';
-  position: absolute; top: 0; left: 28px; right: 28px; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--amber), transparent);
-  opacity: 0.8;
-}
-.rvc-champ-num {
-  position: absolute;
-  top: 6px; right: 20px;
-  font-size: 128px;
-  color: color-mix(in srgb, var(--amber) 14%, transparent);
-  pointer-events: none;
-  user-select: none;
-}
+/* ── Ranked ladder: one column, 1 → 2 → 3, top to bottom ──────── */
+.rvc-ladder { display: flex; flex-direction: column; }
 .rvc-crown { color: var(--color-gold, #f6c343); filter: drop-shadow(0 2px 5px rgba(246,195,67,0.45)); }
 .rvc-crown--bob { animation: rvc-bob 3.6s ease-in-out infinite; }
 @keyframes rvc-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
-.rvc-champ-pnl {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 46px;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.rvc-champ-sub { font-size: 13px; color: var(--app-text-muted); }
-.rvc-champ-sub b { color: var(--app-text); font-weight: 600; }
-.rvc-dot { color: var(--app-text-subtle); margin: 0 7px; }
-
-/* Runners — #2 / #3 stacked, borderless, hairline-separated. */
-.rvc-runners { display: flex; flex-direction: column; justify-content: center; }
-.rvc-runner {
+.rvc-rung {
+  position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 64px 1fr auto;
   align-items: center;
-  gap: 16px;
-  padding: 20px 4px;
+  gap: 18px;
+  padding: 18px 16px 18px 6px;
   text-align: left; font: inherit; cursor: pointer;
   background: none; border: 0;
-  transition: transform 0.16s ease;
+  border-top: 1px solid var(--app-border);
+  transition: background 0.16s ease;
 }
-.rvc-runner:hover { transform: translateX(3px); }
-.rvc-runner + .rvc-runner { border-top: 1px solid var(--app-border); }
-.rvc-runner-num { font-size: 42px; width: 40px; text-align: center; }
-.rvc-runner-pnl { font-family: var(--font-mono); font-weight: 500; font-size: 18px; font-variant-numeric: tabular-nums; }
-.rvc-runner-sub { font-size: 12px; color: var(--app-text-muted); margin-top: 2px; }
+.rvc-rung:first-child { border-top: 0; }
+.rvc-rung:hover { background: color-mix(in srgb, var(--app-panel) 45%, transparent); }
+
+/* Big ghosted serif rank numeral — the through-line for the whole ladder. */
+.rvc-rung-num {
+  font-family: var(--font-editorial);
+  font-weight: 400;
+  line-height: 0.8;
+  text-align: center;
+  color: var(--app-text-subtle);
+  font-feature-settings: 'lnum' 1;
+  font-size: 44px;
+}
+
+.rvc-rung-name { font-size: 15px; font-weight: 600; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rvc-rung-sub { font-size: 12px; color: var(--app-text-muted); margin-top: 3px; }
+.rvc-rung-pnl { font-family: var(--font-mono); font-weight: 500; font-size: 19px; font-variant-numeric: tabular-nums; text-align: right; }
+.rvc-rung-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+/* #1 — emphasized as the TOP ROW of the ladder, not a detached card. */
+.rvc-rung--champ {
+  padding-top: 24px;
+  padding-bottom: 24px;
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(245,158,11,0.07), transparent 55%);
+  border-radius: 14px;
+}
+.rvc-rung--champ::before {
+  content: '';
+  position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--amber), color-mix(in srgb, var(--amber) 30%, transparent));
+}
+.rvc-rung--champ .rvc-rung-num { font-size: 60px; color: color-mix(in srgb, var(--amber) 42%, var(--app-text-subtle)); }
+.rvc-rung--champ .rvc-rung-name { font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; }
+.rvc-rung--champ .rvc-rung-pnl { font-size: 30px; letter-spacing: -0.01em; }
+
+/* The "YOU" row — always findable. */
+.rvc-rung--you { background: color-mix(in srgb, var(--amber) 5%, transparent); }
+.rvc-rung--you::after {
+  content: '';
+  position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px;
+  background: var(--amber); opacity: 0.55; border-radius: 2px;
+}
+.rvc-rung--champ.rvc-rung--you::after { display: none; }
 
 .rvc-you {
   font-family: var(--font-mono); font-size: 8.5px; font-weight: 700; letter-spacing: 0.09em;
@@ -4554,6 +4541,7 @@
 .rvc-flame--pulse { animation: rvc-flick 1.6s ease-in-out infinite; transform-origin: center bottom; }
 @keyframes rvc-flick { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.14); opacity: 0.85; } }
 .rvc-move { display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.rvc-dot { color: var(--app-text-subtle); margin: 0 6px; }
 
 /* ── Chase & Defend — bare, split by a vertical hairline ──────── */
 .rvc-cd {
@@ -4581,23 +4569,40 @@
 .rvc-bench { font-size: 13px; color: var(--app-text-muted); padding: 4px 2px; line-height: 1.6; }
 .rvc-bench b { color: var(--app-text); font-weight: 600; }
 
-/* ── Activity: bare feed, hairline rows ───────────────────────── */
-.rvc-feed-head { display: flex; align-items: center; gap: 9px; padding: 4px 2px 2px; }
+/* ── Activity: a designed feed on a light contained surface ───── */
+.rvc-feed-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 8px; }
+.rvc-feed-title { display: inline-flex; align-items: center; gap: 9px; }
+.rvc-feed-showall {
+  background: none; border: 0; cursor: pointer;
+  font-size: 12px; color: var(--app-text-subtle);
+  transition: color 0.15s ease;
+}
+.rvc-feed-showall:hover { color: var(--amber); }
 .rvc-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: rvc-live 1.8s ease-out infinite; }
 @keyframes rvc-live {
   0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
   70% { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
   100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
 }
+.rvc-feed-surface {
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-panel) 55%, transparent);
+  border: 1px solid var(--border-sub, rgba(255,255,255,0.05));
+  padding: 4px 14px;
+}
 .rvc-feed-row {
-  display: flex; align-items: center; gap: 11px;
-  padding: 12px 2px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 0;
   font-size: 13px; color: var(--app-text-muted);
-  border-top: 1px solid var(--app-border);
   animation: rvc-slide 0.4s ease both;
 }
+.rvc-feed-row + .rvc-feed-row { border-top: 1px solid var(--border-sub, rgba(255,255,255,0.04)); }
 .rvc-feed-row b { color: var(--app-text); font-weight: 600; }
-.rvc-feed-tick { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.rvc-feed-tick { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.rvc-feed-when { font-family: var(--font-mono); font-size: 10.5px; color: var(--app-text-subtle); white-space: nowrap; }
 @keyframes rvc-slide { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
 
 .rvc-verified { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--green); }
@@ -4607,9 +4612,11 @@
 
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 760px) {
-  .rvc-podium { grid-template-columns: 1fr; gap: 8px; }
-  .rvc-champ-pnl { font-size: 38px; }
-  .rvc-champ-num { font-size: 96px; }
+  .rvc-rung { grid-template-columns: 46px 1fr auto; gap: 12px; }
+  .rvc-rung-num { font-size: 34px; }
+  .rvc-rung--champ .rvc-rung-num { font-size: 46px; }
+  .rvc-rung--champ .rvc-rung-pnl { font-size: 24px; }
+  .rvc-rung-pnl { font-size: 16px; }
   .rvc-cd { grid-template-columns: 1fr; gap: 22px; }
   .rvc-cd-col + .rvc-cd-col::before { display: none; }
   .rvc-cd-col + .rvc-cd-col { border-top: 1px solid var(--app-border); padding-top: 18px; }
@@ -4622,7 +4629,7 @@
 @media (prefers-reduced-motion: reduce) {
   .rvc-crown--bob, .rvc-flame--pulse, .rvc-live-dot, .rvc-feed-row, .rvc-fade { animation: none !important; }
   .rvc-track-fill { transition: none !important; }
-  .rvc-runner:hover, .rvc-champ:hover { transform: none; }
+  .rvc-rung:hover { background: none; }
 }
 
 .rv2-lbl {

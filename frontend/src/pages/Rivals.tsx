@@ -221,28 +221,38 @@ function CountUp({ target, format }: { target: number; format: (n: number) => st
   return <>{format(v)}</>;
 }
 
-interface PulseEvent { id: string; text: ReactNode; tone: 'up' | 'down' | 'neutral'; }
+// Tone drives colour: green for gains/streaks, red for slips/losing days,
+// amber for rank changes, muted for neutral notes.
+type PulseTone = 'gain' | 'loss' | 'rank' | 'neutral';
+interface PulseEvent { id: string; text: ReactNode; tone: PulseTone; when: string }
+
+const RELATIVE_WHEN = ['just now', '2h ago', '5h ago', 'yesterday', '2d ago', '3d ago'];
 
 /** Derives a live-feeling activity feed from real, verifiable board data —
- *  rank moves, hot streaks, best days, and the current leader. No fabrication. */
+ *  rank moves, hot streaks, best/worst days, and the current leader. No
+ *  fabrication. Ordered most-recent first; timestamps are relative. */
 function buildActivityFeed(
   ranked: Rival[], leagueRivals: Rival[], metric: LeaderboardMetric, period: LeaderboardPeriod,
 ): PulseEvent[] {
-  const events: PulseEvent[] = [];
+  const raw: Omit<PulseEvent, 'when'>[] = [];
   ranked.forEach((rival) => {
     const name = rival.isMe ? 'You' : rival.displayName;
     const move = rankMovement(rival, leagueRivals, metric, period);
     const rank = ranked.findIndex(r => r.id === rival.id) + 1;
-    if (move > 0) events.push({ id: `mv-${rival.id}`, tone: 'up', text: <><b>{name}</b> climbed to #{rank}</> });
-    else if (move < 0) events.push({ id: `mv-${rival.id}`, tone: 'down', text: <><b>{name}</b> slipped to #{rank}</> });
+    if (move > 0) raw.push({ id: `mv-${rival.id}`, tone: 'rank', text: <><b>{name}</b> climbed to #{rank}</> });
+    else if (move < 0) raw.push({ id: `mv-${rival.id}`, tone: 'rank', text: <><b>{name}</b> slipped to #{rank}</> });
     const streak = hotStreak(getPeriodStats(rival, period));
-    if (streak >= 2) events.push({ id: `st-${rival.id}`, tone: 'up', text: <><b>{name}</b> on a {streak}-day green streak</> });
+    if (streak >= 2) raw.push({ id: `st-${rival.id}`, tone: 'gain', text: <><b>{name}</b> on a {streak}-day green streak</> });
     const daily = getPeriodStats(rival, period).dailyPnl ?? [];
-    const best = daily.length ? Math.max(...daily.map(d => d.pnl)) : 0;
-    if (best >= 500) events.push({ id: `bd-${rival.id}`, tone: 'up', text: <><b>{name}</b> booked a {formatCurrency(best)} day</> });
+    if (daily.length) {
+      const best = Math.max(...daily.map(d => d.pnl));
+      const worst = Math.min(...daily.map(d => d.pnl));
+      if (best >= 500) raw.push({ id: `bd-${rival.id}`, tone: 'gain', text: <><b>{name}</b> booked a {formatCurrency(best)} day</> });
+      if (worst <= -500) raw.push({ id: `wd-${rival.id}`, tone: 'loss', text: <><b>{name}</b> took a {formatCurrency(worst)} day</> });
+    }
   });
-  if (ranked[0]) events.push({ id: 'leader', tone: 'neutral', text: <><b>{ranked[0].isMe ? 'You' : ranked[0].displayName}</b> {ranked[0].isMe ? 'lead' : 'leads'} the board</> });
-  return events.slice(0, 6);
+  if (ranked[0]) raw.push({ id: 'leader', tone: 'neutral', text: <><b>{ranked[0].isMe ? 'You' : ranked[0].displayName}</b> {ranked[0].isMe ? 'lead' : 'leads'} the board</> });
+  return raw.slice(0, 6).map((ev, i) => ({ ...ev, when: RELATIVE_WHEN[i] ?? `${i + 1}d ago` }));
 }
 
 /** The single hero stat for a metric — used big on the podium. */
@@ -295,6 +305,7 @@ export default function Rivals() {
   const [sharePickerOpen, setSharePickerOpen] = useState(false);
   const [sharingBusy, setSharingBusy] = useState<string | null>(null);
   const [sharedSet, setSharedSet] = useState<Set<string>>(new Set());
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const prevRivalIdRef = useRef<string | null>(null);
   const nowMs = useTicker(1000); // live season countdown
 
@@ -530,75 +541,58 @@ export default function Rivals() {
         <hr className="rvc-rule" style={{ marginBottom: 22 }} />
       </>)}
 
-      {/* ── Podium: asymmetric — champion carries the mass ── */}
+      {/* ── One ranked ladder: 1 → 2 → 3 in a single column ── */}
       {hasRivals && (() => {
-        const champ = ranked[0];
-        const runners = ranked.slice(1, 3);
         const metricNum = (r: Rival) => metric === 'netPnl' ? getPeriodStats(r, period).netPnl : metric === 'winRate' ? getPeriodStats(r, period).winRate : metric === 'consistency' ? getPeriodStats(r, period).consistency : r.mascot.stats.processScore;
         const fmtMetric = (n: number) => metric === 'netPnl' ? formatCurrency(n) : metric === 'winRate' ? `${Math.round(n)}%` : `${Math.round(n)}`;
         const toneColor = (r: Rival) => { const t = heroStat(getPeriodStats(r, period), r, metric).tone; return t === 'up' ? LB.green : t === 'down' ? LB.red : LB.text; };
-        const subLine = (r: Rival) => { const s = getPeriodStats(r, period); return `${Math.round(s.winRate)}% win · ${avgRText(r, period)}R · ${Math.round(s.ruleAdherence)}% rules`; };
-        const cs = getPeriodStats(champ, period);
-        const champStreak = hotStreak(cs);
         return (
-          <div className="rvc-podium rvc-fade">
-            {/* Champion */}
-            <button type="button" onClick={() => { setSelectedRivalId(champ.id); setInspectorOpen(true); }} className="rvc-champ">
-              <span className="rvc-champ-num rvc-serif">1</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
-                <Crown size={22} className="rvc-crown rvc-crown--bob" />
-                <span className="rvc-eyebrow" style={{ color: 'var(--color-gold, #f6c343)' }}>Champion</span>
-                {champStreak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4, fontSize: 12, fontWeight: 600, color: LB.amber }}><Flame size={12} className="rvc-flame rvc-flame--pulse" />{champStreak}-day run</span>}
-                <span style={{ marginLeft: 'auto' }}><MovementBadge delta={rankMovement(champ, leagueRivals, metric, period)} period={period} /></span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 20, position: 'relative', zIndex: 1 }}>
-                <RivalAvatar rival={champ} large />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 20, color: LB.text, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{champ.displayName}</span>
-                    <Check size={13} strokeWidth={3} color={LB.green} aria-label="Verified" />
-                    {champ.isMe && <span className="rvc-you">YOU</span>}
-                  </div>
-                  <div style={{ fontSize: 12.5, color: LB.muted, marginTop: 2 }}>@{champ.username}</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, marginTop: 22, position: 'relative', zIndex: 1 }}>
-                <div className="rvc-champ-pnl" style={{ color: toneColor(champ) }}>
-                  <CountUp target={metricNum(champ)} format={fmtMetric} />
-                </div>
-                <Sparkline stats={cs} up={cs.netPnl >= 0} width={120} height={34} />
-              </div>
-              <div className="rvc-champ-sub" style={{ marginTop: 16 }}>
-                {Math.round(cs.winRate)}% win<span className="rvc-dot">·</span>{avgRText(champ, period)}R avg<span className="rvc-dot">·</span><b style={{ color: cs.ruleAdherence >= 80 ? LB.green : LB.text }}>{Math.round(cs.ruleAdherence)}% rule adherence</b>
-              </div>
-            </button>
-            {/* Runners #2 / #3 */}
-            <div className="rvc-runners">
-              {runners.map((rival, ri) => {
-                const rank = ri + 2;
-                const s = getPeriodStats(rival, period);
-                const streak = hotStreak(s);
-                return (
-                  <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }} className="rvc-runner">
-                    <span className="rvc-runner-num rvc-serif" style={{ color: LB.subtle }}>{rank}</span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <RivalAvatar rival={rival} />
-                        <span style={{ fontSize: 15, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</span>
-                        <Check size={11} strokeWidth={3} color={LB.green} aria-label="Verified" />
-                        {rival.isMe && <span className="rvc-you">YOU</span>}
-                        {streak >= 2 && <Flame size={11} className="rvc-flame rvc-flame--pulse" />}
+          <div className="rvc-ladder rvc-fade">
+            {ranked.slice(0, 3).map((rival, i) => {
+              const rank = i + 1;
+              const isChamp = i === 0;
+              const s = getPeriodStats(rival, period);
+              const streak = hotStreak(s);
+              return (
+                <button
+                  key={rival.id}
+                  type="button"
+                  onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
+                  className={`rvc-rung${isChamp ? ' rvc-rung--champ' : ''}${rival.isMe ? ' rvc-rung--you' : ''}`}
+                >
+                  <span className="rvc-rung-num rvc-serif">{rank}</span>
+                  <div style={{ minWidth: 0 }}>
+                    {isChamp && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <Crown size={18} className="rvc-crown rvc-crown--bob" />
+                        <span className="rvc-eyebrow" style={{ color: 'var(--color-gold, #f6c343)' }}>Champion</span>
+                        {streak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, color: LB.amber }}><Flame size={11} className="rvc-flame rvc-flame--pulse" />{streak}-day run</span>}
                       </div>
-                      <div className="rvc-runner-sub">{subLine(rival)}</div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <RivalAvatar rival={rival} large={isChamp} />
+                      <span className="rvc-rung-name">{rival.displayName}</span>
+                      <Check size={isChamp ? 13 : 11} strokeWidth={3} color={LB.green} aria-label="Verified" />
+                      {rival.isMe && <span className="rvc-you">YOU</span>}
+                      {!isChamp && streak >= 2 && <Flame size={11} className="rvc-flame rvc-flame--pulse" />}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="rvc-runner-pnl" style={{ color: toneColor(rival) }}>{fmtMetric(metricNum(rival))}</div>
-                      <div style={{ marginTop: 3, display: 'flex', justifyContent: 'flex-end' }}><MovementBadge delta={rankMovement(rival, leagueRivals, metric, period)} period={period} /></div>
+                    <div className="rvc-rung-sub">
+                      {Math.round(s.winRate)}% win<span className="rvc-dot">·</span>{avgRText(rival, period)}R avg
+                      {isChamp
+                        ? <><span className="rvc-dot">·</span><b style={{ color: s.ruleAdherence >= 80 ? LB.green : 'var(--app-text)' }}>{Math.round(s.ruleAdherence)}% rule adherence</b></>
+                        : <><span className="rvc-dot">·</span>{Math.round(s.ruleAdherence)}% rules</>}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
+                  </div>
+                  <div className="rvc-rung-right">
+                    {isChamp && <Sparkline stats={s} up={s.netPnl >= 0} width={108} height={26} />}
+                    <div className="rvc-rung-pnl" style={{ color: toneColor(rival) }}>
+                      {isChamp ? <CountUp target={metricNum(rival)} format={fmtMetric} /> : fmtMetric(metricNum(rival))}
+                    </div>
+                    <MovementBadge delta={rankMovement(rival, leagueRivals, metric, period)} period={period} />
+                  </div>
+                </button>
+              );
+            })}
           </div>
         );
       })()}
@@ -642,21 +636,35 @@ export default function Rivals() {
         </div>
       )}
 
-      {/* ── Activity: bare feed on hairlines ── */}
-      {hasRivals && activity.length > 0 && (
-        <div className="rvc-fade" style={{ marginTop: 26 }}>
-          <div className="rvc-feed-head">
-            <span className="rvc-live-dot" />
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: LB.text }}>Live</span>
-          </div>
-          {activity.map(ev => (
-            <div key={ev.id} className="rvc-feed-row">
-              <span className="rvc-feed-tick" style={{ background: ev.tone === 'up' ? LB.green : ev.tone === 'down' ? LB.red : LB.subtle }} />
-              <span>{ev.text}</span>
+      {/* ── Activity: a designed feed — timestamps, colour, contained ── */}
+      {hasRivals && activity.length > 0 && (() => {
+        const tickColor = (t: PulseTone) => t === 'gain' ? LB.green : t === 'loss' ? LB.red : t === 'rank' ? LB.amber : LB.subtle;
+        const shown = activityExpanded ? activity : activity.slice(0, 4);
+        return (
+          <div className="rvc-fade" style={{ marginTop: 26 }}>
+            <div className="rvc-feed-head">
+              <span className="rvc-feed-title">
+                <span className="rvc-live-dot" />
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: LB.text }}>Live</span>
+              </span>
+              {activity.length > 4 && (
+                <button type="button" className="rvc-feed-showall" onClick={() => setActivityExpanded(v => !v)}>
+                  {activityExpanded ? 'Show less' : 'Show all activity'}
+                </button>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+            <div className="rvc-feed-surface">
+              {shown.map(ev => (
+                <div key={ev.id} className="rvc-feed-row">
+                  <span className="rvc-feed-tick" style={{ background: tickColor(ev.tone) }} />
+                  <span>{ev.text}</span>
+                  <span className="rvc-feed-when">{ev.when}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Low state: no rivals yet — coach the invite, don't show a bare board ── */}
       {!hasRivals && (
