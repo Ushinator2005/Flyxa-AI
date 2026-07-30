@@ -4,21 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flyxa · Pass the eval. Keep the account.</title>
-<meta name="description" content="Pass your prop-firm eval and keep the funded account. Flyxa reads every trade you take and catches the tilt, revenge entries, and rule breaks that blow prop accounts before they cost you the funded.">
+<meta name="description" content="Flyxa reads every trade you take and catches the tilt, revenge entries, and rule breaks that blow prop accounts — before they cost you the funded.">
 <link rel="icon" href="assets/flyxa-glyph.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/flyxa-glyph.png">
 <meta name="theme-color" content="#0A0908">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Flyxa">
-<meta property="og:title" content="Flyxa · Pass the eval. Keep the account.">
-<meta property="og:description" content="Pass your prop-firm eval and keep the funded account. Flyxa reads every trade you take and catches the tilt, revenge entries, and rule breaks that blow prop accounts before they cost you the funded.">
-<meta property="og:image" content="https://www.flyxa.app/landing/assets/trade-scan.png">
-<meta property="og:url" content="https://www.flyxa.app/landing/index.html">
-<link rel="canonical" href="https://www.flyxa.app/landing/index.html">
+<meta property="og:title" content="Flyxa · The AI trading journal that reads you back">
+<meta property="og:description" content="Drop a screenshot. Flyxa journals the trade in ~15 seconds, grades your process, and shows you which habit is costing you money.">
+<meta property="og:image" content="assets/trade-scan.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Flyxa · Pass the eval. Keep the account.">
-<meta name="twitter:description" content="Catches the tilt, revenge entries, and rule breaks that blow prop accounts — before they cost you the funded.">
-<meta name="twitter:image" content="https://www.flyxa.app/landing/assets/trade-scan.png">
+<meta name="twitter:title" content="Flyxa · The AI trading journal that reads you back">
+<meta name="twitter:description" content="Journals a trade in ~15 seconds. Grades your process. Finds the habit costing you money.">
+<meta name="twitter:image" content="assets/trade-scan.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Manrope:wght@300;400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
@@ -2478,10 +2476,124 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
 .plat-eg-rule{font-family:var(--sans);font-size:13px;font-weight:600;color:rgba(23,21,15,0.8);white-space:nowrap;}
 .plat-eg-bar{flex:1;height:3px;background:rgba(23,21,15,0.09);overflow:hidden;min-width:80px;}
 .plat-eg-bar i{display:block;height:100%;width:0;background:#1f7a45;transition:width 1.1s cubic-bezier(.2,.7,.2,1) .3s;}
-.plat-strip.in .plat-eg-bar i{width:58%;}
 .plat-eg-val{font-size:11px;color:rgba(23,21,15,0.55);font-variant-numeric:tabular-nums;white-space:nowrap;}
 .plat-eg-state{font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;color:#1f7a45;background:rgba(31,122,69,0.09);padding:3px 8px;border-radius:3px;}
 @media(max-width:720px){.plat-eg{flex-wrap:wrap;gap:10px;}}
+/* Clickable firm tabs + rules panel */
+.plat-row span{cursor:pointer;}
+.plat-row span.act{color:#17150F;}
+.plat-row span.act::before{transform:scaleX(1);}
+.plat-panel{padding:24px 4px 0;transition:opacity .22s ease,transform .22s ease;}
+.plat-panel.swap{opacity:0;transform:translateY(6px);}
+.plat-plan{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+.plat-plan b{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:1.3px;text-transform:uppercase;color:rgba(23,21,15,0.62);}
+.plat-progs{display:flex;gap:8px;flex-wrap:wrap;}
+.plat-prog{border:1px solid rgba(23,21,15,0.22);background:transparent;padding:6px 13px;border-radius:999px;font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;color:rgba(23,21,15,0.55);transition:all .18s ease;}
+.plat-prog:hover{border-color:#17150F;color:#17150F;}
+.plat-prog.act{background:#17150F;color:#F1EDE5;border-color:#17150F;}
+@keyframes prIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.plat-rule{background:#F1EDE5;padding:15px 17px;animation:prIn .5s cubic-bezier(.2,.7,.2,1) backwards;}
+.plat-rules{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:rgba(23,21,15,0.12);border:1px solid rgba(23,21,15,0.12);}
+.plat-rule b{display:block;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;color:rgba(23,21,15,0.5);margin-bottom:9px;}
+.plat-rule strong{display:block;font-family:var(--sans);font-size:20px;font-weight:700;letter-spacing:-0.4px;color:#17150F;font-variant-numeric:tabular-nums;line-height:1.1;}
+.plat-rule em{display:block;font-style:normal;font-family:var(--mono);font-size:10px;color:rgba(23,21,15,0.5);margin-top:4px;}
+.plat-eg-state.warn{color:#B87A00;background:rgba(184,122,0,0.12);}
+/* Scroll entrance for rule presets */
+.plat-strip .plat-row span{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .55s cubic-bezier(.2,.7,.2,1),color .2s ease;}
+.plat-strip.in .plat-row span{opacity:1;transform:translateY(0);}
+.plat-strip.in .plat-row span:nth-child(2){transition-delay:70ms;}
+.plat-strip.in .plat-row span:nth-child(3){transition-delay:140ms;}
+.plat-strip.in .plat-row span:nth-child(4){transition-delay:210ms;}
+.plat-strip.in .plat-row span:nth-child(5){transition-delay:280ms;}
+.plat-strip.in .plat-row span:nth-child(6){transition-delay:350ms;}
+.plat-strip.in .plat-row span:nth-child(7){transition-delay:420ms;}
+.plat-strip .plat-hd,.plat-strip .plat-plan,.plat-strip .plat-eg{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1);}
+.plat-strip.in .plat-hd,.plat-strip.in .plat-plan,.plat-strip.in .plat-eg{opacity:1;transform:none;}
+.plat-strip.in .plat-plan{transition-delay:.4s;}
+.plat-strip.in .plat-eg{transition-delay:.9s;}
+.plat-strip:not(.in) .plat-rule{opacity:0;animation:none;}
+@media (prefers-reduced-motion:reduce){.plat-strip .plat-row span,.plat-strip .plat-hd,.plat-strip .plat-plan,.plat-strip .plat-eg{opacity:1;transform:none;transition:none;}.plat-strip:not(.in) .plat-rule{opacity:1;}}
+@media(max-width:900px){.plat-rules{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:560px){.plat-rules{grid-template-columns:1fr 1fr;}}
+/* Prop rules + funded path sections */
+#prop{background:#F1EDE5;padding:92px 72px 84px;position:relative;}
+#prop .plat-strip{margin:0 auto;}
+#funded{background:var(--dark);padding:110px 72px 100px;overflow:hidden;position:relative;}
+#funded::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 50% 55% at 74% 35%,rgba(48,209,88,0.05),transparent 62%);pointer-events:none;}
+.fp-inner{position:relative;z-index:1;max-width:1160px;margin:0 auto;}
+.fp-grid{display:grid;grid-template-columns:1fr 1.05fr;gap:72px;align-items:center;}
+.fp-big{display:flex;align-items:baseline;font-family:var(--sans);font-weight:800;color:var(--text-d);letter-spacing:-3px;font-size:clamp(64px,6vw,92px);line-height:0.9;font-variant-numeric:tabular-nums;}
+.fp-big i{font-style:normal;font-size:0.35em;letter-spacing:-1px;color:var(--muted-d);margin-left:8px;}
+.fp-big{cursor:default;}
+.fp-kg{transition:color .6s ease 1.6s;}
+#funded.go .fp-kg{color:var(--text-d);font-weight:600;}
+.fp-live{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:8px;vertical-align:1px;animation:fpPulse 2s ease-out infinite;}
+#funded.go .fp-chart[data-hl] svg>:not(defs){opacity:.13;transition:opacity .3s ease;}
+#funded.go .fp-chart[data-hl="target"] svg .hlt,#funded.go .fp-chart[data-hl="floor"] svg .hlf,#funded.go .fp-chart[data-hl="days"] svg .hld,#funded.go .fp-chart[data-hl="rules"] svg .hlc,#funded.go .fp-chart[data-hl="now"] svg .hln{opacity:1;transition:opacity .3s ease;}
+.fp-big-lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted-d);margin-top:14px;}
+.fp-chart{margin-top:30px;}
+.fp-chart svg{display:block;width:100%;height:auto;overflow:visible;font-family:var(--mono);}
+.fp-glab{font-size:9px;letter-spacing:0.8px;fill:rgba(255,255,255,0.3);text-transform:uppercase;}
+.fp-glab.t{fill:rgba(255,255,255,0.6);}
+.fp-glab.r{fill:rgba(255,110,100,0.7);}
+.fp-glab.g{fill:var(--green);font-size:11px;letter-spacing:0.4px;}
+.fp-gridln{stroke:rgba(255,255,255,0.05);stroke-width:1;}
+.fp-target-ln{stroke:rgba(255,255,255,0.32);stroke-width:1;stroke-dasharray:5 6;opacity:0;transition:opacity .8s ease .2s;}
+#funded.go .fp-target-ln{opacity:1;}
+.fp-floor-ln{fill:none;stroke:rgba(255,69,58,0.45);stroke-width:1;stroke-dasharray:3 5;}
+.fp-eq-path{fill:none;stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;filter:drop-shadow(0 3px 10px rgba(48,209,88,0.3));}
+.fp-area{opacity:0;transition:opacity 1.2s ease 1.7s;}
+#funded.go .fp-area{opacity:1;}
+.fp-dot{fill:#0b0b0b;stroke:var(--green);stroke-width:1.5;opacity:0;}
+#funded.go .fp-dot{opacity:1;transition:opacity .4s ease var(--d);}
+.fp-now-halo{fill:rgba(48,209,88,0.25);transform-box:fill-box;transform-origin:center;animation:fpHalo 2s ease-out infinite;}
+@keyframes fpHalo{0%{transform:scale(.4);opacity:.9;}70%,100%{transform:scale(1.6);opacity:0;}}
+.fp-now-c{fill:var(--green);}
+.fp-endlab{opacity:0;transition:opacity .6s ease 2.4s;}
+#funded.go .fp-endlab{opacity:1;}
+.fp-strip{display:flex;margin-top:20px;border-top:1px solid var(--border-d);}
+.fp-strip>div{position:relative;flex:1;padding:16px 12px 14px 0;opacity:0;transform:translateY(10px);transition:background .25s ease;}
+.fp-strip>div::before{content:'';position:absolute;top:-1px;left:0;height:2px;width:var(--v);background:var(--green);box-shadow:0 0 8px rgba(48,209,88,0.35);transform:scaleX(0);transform-origin:left;}
+#funded.go .fp-strip>div::before{transform:scaleX(1);transition:transform 1s cubic-bezier(.2,.7,.2,1) calc(var(--d) + .7s);}
+.fp-strip>div+div{border-left:1px solid var(--border-d);padding-left:20px;}
+.fp-strip>div+div::before{left:20px;}
+.fp-strip>div:hover{background:rgba(255,255,255,0.025);}
+.fp-strip>div:hover b{color:#fff;}
+.fp-strip>div:hover::before{box-shadow:0 0 14px rgba(48,209,88,0.6);}
+#funded.go .fp-strip>div{opacity:1;transform:none;transition:opacity .6s ease var(--d),transform .6s cubic-bezier(.2,.7,.2,1) var(--d),background .25s ease;}
+.fp-strip b{display:inline-block;font-family:var(--sans);font-size:24px;font-weight:800;letter-spacing:-0.5px;color:var(--text-d);font-variant-numeric:tabular-nums;transition:color .2s;}
+.fp-strip em{font-style:normal;margin-left:7px;font-family:var(--mono);font-size:9px;letter-spacing:0.6px;text-transform:uppercase;color:var(--green);white-space:nowrap;opacity:0;transform:translateY(4px);}
+#funded.go .fp-strip em{opacity:1;transform:none;transition:opacity .5s ease calc(var(--d) + 1.3s),transform .5s cubic-bezier(.2,.7,.2,1) calc(var(--d) + 1.3s);}
+.fp-strip span{display:block;margin-top:5px;font-family:var(--mono);font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-d);}
+.fp-status{display:inline-flex;align-items:center;gap:8px;margin-top:22px;font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--green);}
+.fp-status i{width:7px;height:7px;border-radius:50%;background:var(--green);animation:fpPulse 1.6s ease infinite;}
+@keyframes fpPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(48,209,88,0.35);}50%{opacity:0.55;box-shadow:0 0 0 6px rgba(48,209,88,0);}}
+.fp-stat{margin-top:38px;padding-top:30px;border-top:1px solid var(--border-d);}
+.fp-coach{max-width:470px;margin:20px 0 0;font-family:var(--sans);font-size:14px;line-height:1.65;letter-spacing:-0.1px;color:var(--muted-d);opacity:0;transform:translateY(8px);transition:opacity .7s ease 1.9s,transform .7s cubic-bezier(.2,.7,.2,1) 1.9s;}
+#funded.go .fp-coach{opacity:1;transform:none;}
+.fp-coach b{font-weight:700;color:var(--text-d);}
+.fp-coach-src{display:flex;align-items:center;gap:9px;margin-top:16px;font-family:var(--mono);font-size:9.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--muted-d);opacity:0;transition:opacity .7s ease 2.4s;}
+#funded.go .fp-coach-src{opacity:1;}
+.fp-cmark{width:16px;height:16px;border-radius:4px;flex:none;background:#F5F6F8 url('assets/flyxa-logo.png') center/84% no-repeat;animation:flyxaFlash 1.8s ease-in-out infinite;}
+.fp-win{background:var(--dark2);border:1px solid rgba(255,255,255,0.1);border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px rgba(255,107,43,0.04),0 40px 120px rgba(0,0,0,0.8),0 8px 32px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.06);}
+.fp-win-tb{display:flex;align-items:center;gap:7px;padding:13px 16px;border-bottom:1px solid var(--border-d);}
+.fp-win-tb em{font-style:normal;margin-left:9px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.5px;color:var(--muted-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fp-win-bd{padding:20px 18px 16px;}
+.fp-meter{position:relative;height:6px;border-radius:3px;margin:13px 0 7px;background:rgba(255,255,255,0.06);overflow:visible;}
+.fp-meter i{position:absolute;inset:0;width:0;border-radius:3px;background:linear-gradient(90deg,#c24f1a,var(--accent));}
+#funded.go .fp-meter i{width:74%;transition:width 1.2s cubic-bezier(.2,.7,.2,1) 2s;}
+.fp-meter s{position:absolute;top:-4px;bottom:-4px;left:74%;width:1.5px;background:transparent;}
+#funded.go .fp-meter s{background:#fff;box-shadow:0 0 8px rgba(255,255,255,0.6);transition:background .4s ease 3.1s;}
+.fp-meter b{position:absolute;top:-4px;bottom:-4px;right:0;width:2px;background:#FF453A;border-radius:1px;}
+.fp-meter-lbl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted-d);}
+.fp-meter-lbl b{font-weight:700;color:#FF6E64;}
+.fp-guard{margin-top:16px;padding:13px 15px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border-d);border-radius:10px;opacity:0;transform:translateY(8px);transition:opacity .6s ease 1.4s,transform .6s cubic-bezier(.2,.7,.2,1) 1.4s;}
+#funded.go .fp-guard{opacity:1;transform:none;}
+.fp-guard-hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-family:var(--mono);font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-d);}
+.fp-guard-hd em{font-style:normal;color:var(--text-d);font-size:10.5px;letter-spacing:0.4px;text-transform:none;font-variant-numeric:tabular-nums;margin-left:8px;}
+@media(max-width:980px){.fp-grid{grid-template-columns:1fr;gap:44px;}}
+@media(max-width:900px){#prop,#funded{padding-left:24px;padding-right:24px;}}
+@media(max-width:700px){#prop,#funded{padding-top:60px;padding-bottom:60px;}.fp-strip>div b{font-size:18px;}.fp-strip>div+div{padding-left:12px;}.fp-big{letter-spacing:-2px;}}
 
 
 /* Comparison */
@@ -2979,8 +3091,8 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
     <li><a href="#metrics">Results</a><span class="nav-marker" id="nav-marker"></span></li>
   </ul>
   <div class="nav-r">
-    <a class="nav-login" href="/auth">Log in</a>
-    <button class="btn-nav-cta" onclick="location.href='/auth?tab=waitlist'">Join waitlist</button>
+    <a class="nav-login" href="#">Log in</a>
+    <button class="btn-nav-cta">Join waitlist</button>
   </div>
 </nav>
 
@@ -3001,7 +3113,7 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
         <span class="hs-logo" aria-hidden="true"></span>
         <kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>L</kbd> anywhere · journaled in ~15s
       </span>
-      <button class="btn-primary" id="hero-cta" onclick="location.href='/auth?tab=waitlist'">Join waitlist <span class="ba">→</span></button>
+      <button class="btn-primary" id="hero-cta">Join waitlist <span class="ba">→</span></button>
     </div>
     <div class="hero-beta">Private beta · waitlist open</div>
   </div>
@@ -3072,7 +3184,95 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
   </div>
 </section>
 
-<!-- (platform strip removed) -->
+<!-- PROP RULE MONITOR (moved up from comparison) -->
+<section id="prop" data-screen-label="Rule presets">
+    <div class="plat-strip reveal d1">
+      <div class="plat-hd">
+        <div class="plat-lbl">Rule presets built in.</div>
+        <span class="plat-note">Your firm's loss limits, drawdown and consistency rules, watched live as you trade.</span>
+      </div>
+      <div class="plat-row" role="tablist">
+        <span class="act" data-firm="topstep" tabindex="0">Topstep</span><span data-firm="lucid" tabindex="0">Lucid Trading</span><span data-firm="fundednext" tabindex="0">FundedNext</span><span data-firm="mff" tabindex="0">MyFundedFutures</span><span data-firm="alpha" tabindex="0">Alpha Futures</span><span data-firm="tradeify" tabindex="0">Tradeify</span><span data-firm="tpt" tabindex="0">TakeProfitTrader</span>
+      </div>
+      <div class="plat-panel" id="plat-panel">
+        <div class="plat-plan"><b id="pp-plan">Topstep · 50K Trading Combine</b><div class="plat-progs" id="pp-progs"></div></div>
+        <div class="plat-rules" id="pp-rules"></div>
+        <div class="plat-eg">
+          <span class="plat-eg-firm" id="pp-today">Today, so far</span>
+          <span class="plat-eg-rule" id="pp-bar-lbl">Daily loss limit</span>
+          <span class="plat-eg-bar"><i id="pp-bar"></i></span>
+          <span class="plat-eg-val" id="pp-val">$580 / $1,000</span>
+          <span class="plat-eg-state" id="pp-flag">clear</span>
+        </div>
+      </div>
+    </div>
+</section>
+
+<!-- THE FUNDED PATH -->
+<section id="funded" data-screen-label="The funded path">
+  <div class="fp-inner">
+    <div class="fp-grid">
+      <div class="fp-copy">
+        <div class="sect-tag reveal" style="display:block">The funded path</div>
+        <h2 class="sect-title reveal" style="color:var(--text-d)">Pass the evaluation.<br>Keep the account.</h2>
+        <p class="sect-sub reveal d1" style="color:var(--muted-d);max-width:560px;margin-top:14px">Flyxa scores your evaluation live, the way the firm judges it — progress to target, drawdown health, minimum days, consistency and rule behaviour — folded into one number: <span class="fp-kg">your probability of passing</span>.</p>
+        <div class="fp-stat reveal d1">
+          <div class="fp-big" data-hl="now"><span id="fp-pct">0</span><i>%</i></div>
+          <div class="fp-big-lbl">Probability of passing</div>
+          <p class="fp-coach">Keep risk under <b>$260</b> a trade and hold your morning win rate — two more green days at this pace clears the $53K target by Day 8.</p>
+          <div class="fp-coach-src"><span class="fp-cmark"></span>Flyxa coach · recalculated after every trade</div>
+        </div>
+      </div>
+      <div class="fp-score reveal d2">
+        <div class="fp-win">
+          <div class="fp-win-tb"><span class="wdot r"></span><span class="wdot y"></span><span class="wdot g"></span><em>Evaluation · Topstep 50K Combine</em><span class="live-pill"><span class="live-dot"></span>Day 6</span></div>
+          <div class="fp-win-bd">
+        <div class="fp-chart">
+          <svg viewBox="0 0 560 240" aria-hidden="true">
+            <defs><linearGradient id="fpArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(48,209,88,0.16)"></stop><stop offset="1" stop-color="rgba(48,209,88,0)"></stop></linearGradient></defs>
+            <line class="fp-gridln" x1="30" y1="76" x2="520" y2="76"></line>
+            <line class="fp-gridln" x1="30" y1="116" x2="520" y2="116"></line>
+            <line class="fp-gridln" x1="30" y1="155" x2="520" y2="155"></line>
+            <text class="fp-glab" x="526" y="79">$52K</text>
+            <text class="fp-glab" x="526" y="119">$51K</text>
+            <text class="fp-glab" x="526" y="158">$50K</text>
+            <line class="fp-target-ln hlt" x1="30" y1="36" x2="520" y2="36"></line>
+            <text class="fp-glab t hlt" x="520" y="27" text-anchor="end">Profit target · $53,000</text>
+            <path class="fp-floor-ln hlf" id="fp-floor" d="M30,214 H246 V193 H390 V174 H462 V161 H520"></path>
+            <text class="fp-glab r hlf" x="30" y="207">Trailing drawdown</text>
+            <path class="fp-area hlc" fill="url(#fpArea)" d="M30,155 L66,149 L102,137 L138,144 L174,147 L210,128 L246,114 L282,121 L318,123 L354,104 L390,95 L426,88 L462,81 L462,215 L30,215 Z"></path>
+            <path class="fp-eq-path hlc hlt" id="fp-eq" d="M30,155 L66,149 L102,137 L138,144 L174,147 L210,128 L246,114 L282,121 L318,123 L354,104 L390,95 L426,88 L462,81"></path>
+            <circle class="fp-dot hld" cx="102" cy="137" r="3" style="--d:.62s"></circle>
+            <circle class="fp-dot hld" cx="174" cy="147" r="3" style="--d:.98s"></circle>
+            <circle class="fp-dot hld" cx="246" cy="114" r="3" style="--d:1.35s"></circle>
+            <circle class="fp-dot hld" cx="318" cy="123" r="3" style="--d:1.72s"></circle>
+            <circle class="fp-dot hld" cx="390" cy="95" r="3" style="--d:2.08s"></circle>
+            <text class="fp-glab hld" x="102" y="234" text-anchor="middle">Day 1</text>
+            <text class="fp-glab hld" x="174" y="234" text-anchor="middle">Day 2</text>
+            <text class="fp-glab hld" x="246" y="234" text-anchor="middle">Day 3</text>
+            <text class="fp-glab hld" x="318" y="234" text-anchor="middle">Day 4</text>
+            <text class="fp-glab hld" x="390" y="234" text-anchor="middle">Day 5</text>
+            <text class="fp-glab hld" x="462" y="234" text-anchor="middle">Day 6</text>
+            <g class="fp-endlab hln hlt hlf hld hlc"><circle class="fp-now-halo" cx="462" cy="81" r="10"></circle><circle class="fp-now-c" cx="462" cy="81" r="4"></circle><text class="fp-glab g" x="454" y="64" text-anchor="end">$51,860 · 62% to target</text></g>
+          </svg>
+        </div>
+        <div class="fp-strip">
+          <div style="--d:.35s;--v:62%" data-hl="target"><b data-v="62" data-f="%">0%</b><em>+9</em><span>to target</span></div>
+          <div style="--d:.5s;--v:78%" data-hl="floor"><b data-v="78">0</b><em>+2</em><span>drawdown health</span></div>
+          <div style="--d:.65s;--v:100%" data-hl="days"><b data-v="2" data-f="/2">0/2</b><em>done</em><span>min days</span></div>
+          <div style="--d:.8s;--v:95%" data-hl="rules"><b data-v="95">0</b><em>clean</em><span>rule score</span></div>
+        </div>
+        <div class="fp-guard">
+          <div class="fp-guard-hd"><span>Daily loss used<em>−$740 of $1,000</em></span><span>Headroom<em>$260</em></span></div>
+          <div class="fp-meter"><i></i><s></s><b></b></div>
+          <div class="fp-meter-lbl"><span>$0</span><b>breach · −$1,000</b></div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- FEATURE REEL -->
 <div id="reel-outer">
@@ -3559,22 +3759,6 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
     </div>
   </div>
   <p class="cmp-kicker reveal">Everything else tracks your trades. <em>Flyxa reads the trader.</em></p>
-    <div class="plat-strip reveal d2" style="margin-top:64px">
-      <div class="plat-hd">
-        <div class="plat-lbl">Rule presets built in.</div>
-        <span class="plat-note">Your firm's loss limits, drawdown and consistency rules, watched live as you trade.</span>
-      </div>
-      <div class="plat-row">
-        <span>Topstep</span><span>Lucid Trading</span><span>FundedNext</span><span>MyFundedFutures</span><span>Alpha Futures</span><span>Tradeify</span><span>TakeProfitTrader</span>
-      </div>
-      <div class="plat-eg">
-        <span class="plat-eg-firm">Topstep · 50K Combine</span>
-        <span class="plat-eg-rule">Daily loss limit</span>
-        <span class="plat-eg-bar"><i></i></span>
-        <span class="plat-eg-val">$580 / $1,000</span>
-        <span class="plat-eg-state">clear</span>
-      </div>
-    </div>
     </div>
 
 </section>
@@ -3664,7 +3848,7 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
       <p class="cta-sub reveal">Your trades are already logged somewhere. Flyxa is the first thing that reads them.</p>
     </div>
     <div class="cta-r reveal">
-      <form class="cta-form" onsubmit="location.href='/auth?tab=waitlist&email='+encodeURIComponent(document.getElementById('cta-email').value);return false;">
+      <form class="cta-form" onsubmit="return false;">
         <input id="cta-email" type="email" placeholder="you@email.com" aria-label="Email" />
         <button class="btn-primary">Join waitlist <span class="ba">→</span></button>
       </form>
@@ -3812,11 +3996,106 @@ blockquote footer,.twq-item footer{border-top:none;padding:0;background:none;}
   });
 })();
 
-// Rule-preset example bar
-(function platEg(){
+// Rule presets — clickable firm tabs + program picker (data from Flyxa prop-firm catalog)
+(function propRules(){
   const strip=document.querySelector('.plat-strip');
   if(!strip) return;
-  new IntersectionObserver((es,o)=>{es.forEach(e=>{if(e.isIntersecting){strip.classList.add('in');o.disconnect();}})},{threshold:.3}).observe(strip);
+  const $=id=>document.getElementById(id);
+  const T='$3,000',DD2=['Max drawdown','$2,000','EOD trailing'],M=(a,b)=>['Max contracts',a+' / '+b,'minis / micros'],NOTGT=['Profit target','None','funded account'],NODLL=['Daily loss limit','None','no daily cap'];
+  const FIRMS={
+    topstep:{name:'Topstep',progs:[
+      {label:'Combine',plan:'Topstep · 50K Trading Combine',rules:[['Profit target',T,'min 2 days'],DD2,['Daily loss limit','$1,000','hard limit'],['Consistency','50%','largest-day cap'],M(5,50)],bar:['Daily loss limit',580,1000]},
+      {label:'XFA',plan:'Topstep · 50K Express Funded',rules:[NOTGT,DD2,['Daily loss limit','$1,000','hard limit'],['Consistency','40%','payout gate'],M(5,50)],bar:['Daily loss limit',580,1000]}]},
+    lucid:{name:'Lucid Trading',progs:[
+      {label:'Pro',plan:'Lucid · LucidPro 50K',rules:[['Profit target',T,'min 1 day'],DD2,['Daily loss limit','$1,200','hard limit'],['Consistency','None','in evaluation'],M(4,40)],bar:['Daily loss limit',690,1200]},
+      {label:'Flex',plan:'Lucid · LucidFlex 50K',rules:[['Profit target',T,'min 2 days'],DD2,NODLL,['Consistency','50%','largest-day cap'],M(4,40)],bar:['Trailing drawdown',1150,2000]},
+      {label:'Daily',plan:'Lucid · LucidDaily 50K',rules:[['Profit target',T,'min 2 days'],['Max drawdown','$2,000','intraday trailing'],['Daily loss limit','$1,200','soft breach'],['Consistency','50%','largest-day cap'],M(4,40)],bar:['Daily loss limit',690,1200]},
+      {label:'Direct',plan:'Lucid · LucidDirect 50K',rules:[NOTGT,DD2,['Daily loss limit','$1,200','hard limit'],['Consistency','20%','per payout cycle'],M(4,40)],bar:['Daily loss limit',690,1200]}]},
+    fundednext:{name:'FundedNext',progs:[
+      {label:'Rapid Pro',plan:'FundedNext · Rapid Pro 50K',rules:[['Profit target',T,'no min days'],DD2,['Daily loss limit','$1,000','soft lock'],['Consistency','40%','largest-day cap'],M(4,40)],bar:['Daily loss limit',580,1000]},
+      {label:'Flex',plan:'FundedNext · Flex Challenge 50K',rules:[['Profit target','$2,500','no min days'],['Max drawdown','$1,500','EOD trailing'],NODLL,['Consistency','40%','largest-day cap'],M(3,30)],bar:['Trailing drawdown',880,1500]},
+      {label:'Rapid Daily',plan:'FundedNext · Rapid Daily 50K',rules:[['Profit target',T,'no min days'],DD2,['Daily loss limit','$1,000','hard limit'],['Consistency','None','in challenge'],M(4,40)],bar:['Daily loss limit',580,1000]}]},
+    mff:{name:'MyFundedFutures',progs:[
+      {label:'Rapid',plan:'MyFundedFutures · Rapid 50K',rules:[['Profit target',T,'min 2 days'],DD2,NODLL,['Consistency','50%','largest-day cap'],M(5,50)],bar:['Trailing drawdown',1150,2000]},
+      {label:'Builder',plan:'MyFundedFutures · Builder 50K',rules:[['Profit target',T,'min 1 day'],DD2,['Daily loss limit','$1,000','soft pause'],['Consistency','50%','largest-day cap'],M(4,40)],bar:['Daily loss limit',580,1000]},
+      {label:'Pro',plan:'MyFundedFutures · Pro 50K',rules:[['Profit target',T,'no min days'],DD2,NODLL,['Consistency','50%','eval only'],['Max contracts','5','minis']],bar:['Trailing drawdown',1150,2000]}]},
+    alpha:{name:'Alpha Futures',progs:[
+      {label:'Zero',plan:'Alpha Futures · Zero 50K',rules:[['Profit target',T,'min 1 day'],DD2,['Daily loss limit','$1,000','soft lock'],['Consistency','40%','once qualified'],M(3,30)],bar:['Daily loss limit',540,1000]},
+      {label:'Advanced',plan:'Alpha Futures · Advanced 50K',rules:[['Profit target','$4,000','min 3 days'],['Max drawdown','$1,750','EOD trailing'],NODLL,['Consistency','40%','in evaluation'],M(5,50)],bar:['Trailing drawdown',1020,1750]},
+      {label:'Direct',plan:'Alpha Futures · Direct 50K',rules:[NOTGT,DD2,['Daily loss limit','$1,000','soft lock'],['Consistency','20%','per payout cycle'],M(4,40)],bar:['Daily loss limit',540,1000]}]},
+    tradeify:{name:'Tradeify',progs:[
+      {label:'Growth',plan:'Tradeify · Growth 50K',rules:[['Profit target',T,'min 1 day'],DD2,['Daily loss limit','$1,250','hard limit'],['Consistency','35%','largest-day cap'],M(4,40)],bar:['Daily loss limit',760,1250]},
+      {label:'Select',plan:'Tradeify · Select 50K',rules:[['Profit target',T,'min 3 days'],DD2,NODLL,['Consistency','40%','largest-day cap'],M(4,40)],bar:['Trailing drawdown',1150,2000]},
+      {label:'Lightning',plan:'Tradeify · Lightning Funded 50K',rules:[NOTGT,DD2,['Daily loss limit','$1,250','hard limit'],['Consistency','20%','per payout cycle'],M(4,40)],bar:['Daily loss limit',760,1250]}]},
+    tpt:{name:'TakeProfitTrader',progs:[
+      {label:'Test',plan:'TakeProfitTrader · 50K Test',rules:[['Profit target',T,'min 5 days'],DD2,NODLL,['Consistency','50%','largest-day cap'],M(6,60)],bar:['Trailing drawdown',1150,2000]},
+      {label:'PRO',plan:'TakeProfitTrader · PRO 50K',rules:[NOTGT,['Max drawdown','$2,000','intraday trailing'],NODLL,['Consistency','None','funded account'],M(6,60)],bar:['Trailing drawdown',1150,2000]},
+      {label:'PRO+',plan:'TakeProfitTrader · PRO+ Development 50K',rules:[NOTGT,['Max drawdown','$1,250','EOD trailing'],['Daily loss limit','$1,000','hard limit'],['Consistency','None','funded account'],M(2,20)],bar:['Daily loss limit',580,1000]}]}
+  };
+  const fmt=n=>'$'+n.toLocaleString('en-US');
+  let cur={firm:'topstep',prog:0};
+  function render(){
+    const f=FIRMS[cur.firm],p=f.progs[cur.prog];
+    const base=strip.classList.contains('in')?0:520;
+    $('pp-plan').textContent=p.plan;
+    $('pp-progs').innerHTML=f.progs.map((pr,i)=>'<button type="button" class="plat-prog'+(i===cur.prog?' act':'')+'" data-i="'+i+'">'+pr.label+'</button>').join('');
+    $('pp-rules').innerHTML=p.rules.map((r,i)=>'<div class="plat-rule" style="animation-delay:'+(base+i*70)+'ms"><b>'+r[0]+'</b><strong>'+r[1]+'</strong><em>'+r[2]+'</em></div>').join('');
+    const [lbl,used,lim]=p.bar,pct=used/lim*100;
+    $('pp-bar-lbl').textContent=lbl;
+    $('pp-val').textContent=fmt(used)+' / '+fmt(lim);
+    const flag=$('pp-flag');
+    flag.textContent=pct>=75?'watch':'clear';
+    flag.classList.toggle('warn',pct>=75);
+    const bar=$('pp-bar');
+    bar.style.transition='none';bar.style.width='0';
+    requestAnimationFrame(()=>{requestAnimationFrame(()=>{bar.style.transition='';bar.style.width=pct.toFixed(1)+'%';});});
+    $('pp-progs').querySelectorAll('.plat-prog').forEach(b=>b.addEventListener('click',()=>{if(+b.dataset.i===cur.prog)return;cur.prog=+b.dataset.i;swap();}));
+  }
+  function swap(){
+    const panel=$('plat-panel');
+    panel.classList.add('swap');
+    setTimeout(()=>{render();panel.classList.remove('swap');},180);
+  }
+  const tabs=[...strip.querySelectorAll('.plat-row span')];
+  function pick(el){
+    if(el.dataset.firm===cur.firm) return;
+    tabs.forEach(t=>t.classList.toggle('act',t===el));
+    cur={firm:el.dataset.firm,prog:0};
+    swap();
+  }
+  tabs.forEach(t=>{
+    t.addEventListener('click',()=>pick(t));
+    t.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick(t);}});
+  });
+  render();
+  const bar=$('pp-bar');bar.style.width='0';
+  new IntersectionObserver((es,o)=>{es.forEach(e=>{if(e.isIntersecting){render();strip.classList.add('in');}else{strip.classList.remove('in');}})},{threshold:.3}).observe(strip);
+})();
+
+// Funded-path: pass-probability counter + factor ledger (weights from Flyxa's evaluationCoach)
+(function fundedGo(){
+  const sec=document.getElementById('funded'); if(!sec) return;
+  const eq=document.getElementById('fp-eq'),fl=document.getElementById('fp-floor'),pct=document.getElementById('fp-pct');
+  const chart=sec.querySelector('.fp-chart');
+  sec.querySelectorAll('[data-hl]').forEach(el=>{
+    el.addEventListener('mouseenter',()=>{chart.dataset.hl=el.dataset.hl;});
+    el.addEventListener('mouseleave',()=>{delete chart.dataset.hl;});
+  });
+  [eq,fl].forEach(p=>{if(!p)return;const L=p.getTotalLength();p.style.strokeDasharray=L+' '+L;p.style.strokeDashoffset=L;});
+  new IntersectionObserver((es,o)=>{es.forEach(e=>{if(e.isIntersecting){
+    sec.classList.add('go');
+    sec.querySelectorAll('.fp-strip b').forEach(b=>{const v=+b.dataset.v,f=b.dataset.f||'',s0=performance.now(),SD=1400;requestAnimationFrame(function tk(t){const k=Math.min(1,(t-s0)/SD),ez=1-Math.pow(1-k,3);b.textContent=Math.round(v*ez)+f;if(k<1)requestAnimationFrame(tk);});});
+    if(eq){eq.style.transition='stroke-dashoffset 2.2s cubic-bezier(.35,.1,.25,1) .25s';eq.style.strokeDashoffset='0';}
+    if(fl){fl.style.transition='stroke-dashoffset 1.6s ease .9s';fl.style.strokeDashoffset='0';}
+    const t0=performance.now(),D=2200;
+    requestAnimationFrame(function tick(t){const k=Math.min(1,(t-t0)/D),ez=1-Math.pow(1-k,3);pct.textContent=Math.round(72*ez);if(k<1)requestAnimationFrame(tick);});
+    setTimeout(()=>{sec.dataset.done='1';},2600);
+  }else if(sec.dataset.done){
+    delete sec.dataset.done;sec.classList.remove('go');
+    [eq,fl].forEach(p=>{if(!p)return;p.style.transition='none';p.style.strokeDashoffset=p.getTotalLength();void p.getBoundingClientRect();});
+    pct.textContent='0';
+    sec.querySelectorAll('.fp-strip b').forEach(b=>{b.textContent='0'+(b.dataset.f||'');});
+  }})},{threshold:.35}).observe(sec);
 })();
 
 // FAQ live filter
@@ -3901,7 +4180,7 @@ document.querySelectorAll('.faq-item').forEach(item => {
   // blur-to-sharp reveal for major headings + statement lines
   const blurTargets = [...document.querySelectorAll('.sect-title, .stitle, .sim-thesis, .cta-title, .price-name')];
   blurTargets.forEach(el=>el.classList.add('sfx-blur'));
-  const bio = new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('sfx-in'); bio.unobserve(e.target); } }), {threshold:0.2, rootMargin:'0px 0px -8% 0px'});
+  const bio = new IntersectionObserver(es=>es.forEach(e=>{ e.target.classList.toggle('sfx-in', e.isIntersecting); }), {threshold:0.2, rootMargin:'0px 0px -8% 0px'});
   blurTargets.forEach(el=>bio.observe(el));
 
   // depth parallax elements
@@ -4352,8 +4631,10 @@ document.querySelectorAll('.faq-item').forEach(item => {
 (function pipeTerm(){
   const lines=[...document.querySelectorAll('.pt-line')];
   if(!lines.length) return;
+  let tids=[];
   const io=new IntersectionObserver(es=>es.forEach(e=>{
-    if(e.isIntersecting){ lines.forEach((l,i)=>setTimeout(()=>l.classList.add('on'), 300+i*240)); io.disconnect(); }
+    if(e.isIntersecting){ tids=lines.map((l,i)=>setTimeout(()=>l.classList.add('on'), 300+i*240)); }
+    else{ tids.forEach(clearTimeout); tids=[]; lines.forEach(l=>l.classList.remove('on')); }
   }),{threshold:0.4});
   io.observe(lines[0]);
 })();
@@ -4363,7 +4644,7 @@ document.querySelectorAll('.faq-item').forEach(item => {
   const sec = document.getElementById('sim');
   if (!sec) return;
   const targets = [...sec.querySelectorAll('.sim-line, .sim-row')];
-  const io = new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target); } }), {threshold:0.35, rootMargin:'0px 0px -12% 0px'});
+  const io = new IntersectionObserver(es=>es.forEach(e=>{ e.target.classList.toggle('on', e.isIntersecting); }), {threshold:0.35, rootMargin:'0px 0px -12% 0px'});
   targets.forEach((t,i)=>{ t.style.transitionDelay = (i%3)*0.08+'s'; io.observe(t); });
 
   const qs = [...sec.querySelectorAll('.sim-ask-q')];
@@ -4579,7 +4860,7 @@ setInterval(updateHdClock, 1000);
   cal.innerHTML=out;
   if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){wrap.classList.add('on');}
   else{
-    const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){wrap.classList.add('on');io.disconnect();}}),{threshold:0.12});
+    const io=new IntersectionObserver(es=>es.forEach(e=>{wrap.classList.toggle('on',e.isIntersecting);}),{threshold:0.12});
     io.observe(wrap);
   }
   // TODAY value ticks like a live session
@@ -5441,7 +5722,6 @@ if (phsNum) {
           if (p < 1) requestAnimationFrame(tick);
         };
         setTimeout(() => requestAnimationFrame(tick), 1200);
-        heroObs.unobserve(e.target);
       }
     });
   }, { threshold: 0.4 });
@@ -5464,7 +5744,7 @@ if (phsNum) {
   });};
   walk(q);
   [...q.querySelectorAll('.w')].forEach((w,i)=>w.style.transitionDelay=(i*0.045)+'s');
-  new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ q.classList.add('on'); } }),{threshold:.3}).observe(q);
+  new IntersectionObserver(es=>es.forEach(e=>{ q.classList.toggle('on', e.isIntersecting); }),{threshold:.3}).observe(q);
 })();
 
 // Founder note — paragraphs light as they enter
@@ -5603,7 +5883,7 @@ if(bc2) {
 // ═══════════════════════
 // SCROLL REVEAL
 // ═══════════════════════
-const ro = new IntersectionObserver(e => e.forEach(e => { if(e.isIntersecting) e.target.classList.add('on'); }), { threshold: 0.07, rootMargin: '0px 0px -28px 0px' });
+const ro = new IntersectionObserver(e => e.forEach(e => { e.target.classList.toggle('on', e.isIntersecting); }), { threshold: 0.07, rootMargin: '0px 0px -28px 0px' });
 document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
 
 // Comparison stagger + spotlight alignment
@@ -5638,7 +5918,7 @@ if(cmpWrap){
       }, delay);
     });
   }
-  const cio = new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ placeCmpGlow(); cmpWrap.classList.add('in'); runScores(); cio.disconnect(); } }),{threshold:0.25});
+  const cio = new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ placeCmpGlow(); cmpWrap.classList.add('in'); runScores(); } else { cmpWrap.classList.remove('in'); cmpWrap.querySelectorAll('.cmp-score').forEach(el=>{ if(+el.getAttribute('data-score')) el.firstChild.textContent='0'; }); } }),{threshold:0.25});
   cio.observe(cmpWrap);
 }
 
@@ -5728,7 +6008,9 @@ function countUp(el, target) {
   requestAnimationFrame(tick);
 }
 const co = new IntersectionObserver(e => e.forEach(e => {
-  if(e.isIntersecting&&e.target.dataset.count){ countUp(e.target,+e.target.dataset.count); co.unobserve(e.target); }
+  if(!e.target.dataset.count) return;
+  if(e.isIntersecting){ countUp(e.target,+e.target.dataset.count); }
+  else{ e.target.textContent='0'+(e.target.dataset.sfx||''); }
 }),{threshold:0.5});
 document.querySelectorAll('[data-count]').forEach(el=>co.observe(el));
 
@@ -5814,6 +6096,22 @@ document.querySelectorAll('.btn-primary,.btn-nav-cta').forEach(btn => {
     if(!raf) raf=requestAnimationFrame(tick);
   });
 })();
+</script>
+<script>
+  /* Route the landing CTAs into the app (design handoff ships them without handlers). */
+  (function () {
+    function toAuth(url) { return function (e) { if (e) e.preventDefault(); window.location.href = url; }; }
+    document.querySelectorAll('button').forEach(function (b) {
+      var t = (b.textContent || '').toLowerCase();
+      if (t.indexOf('log in') > -1 || t.indexOf('login') > -1) {
+        b.addEventListener('click', toAuth('/auth'));
+        b.style.cursor = 'pointer';
+      } else if (t.indexOf('waitlist') > -1) {
+        b.addEventListener('click', toAuth('/auth?tab=waitlist'));
+        b.style.cursor = 'pointer';
+      }
+    });
+  })();
 </script>
 </body>
 </html>
