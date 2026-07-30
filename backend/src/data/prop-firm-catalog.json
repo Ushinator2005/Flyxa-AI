@@ -403,6 +403,728 @@
       "payoutPolicy": "90% profit split on all current plans from the first payout, up to 4 payouts per month, and each request may be up to 50% of accrued profits (remainder stays for future requests). Zero/Advanced: eligible after every 5 winning days of $200+ profit; Zero min $200 with caps $1,000/$1,500/$2,500 by size and a 40% consistency gate; Advanced min $1,000, max $15,000, no consistency gate and no cap by size. Direct: no winning-day requirement \u2014 eligible when the Withdrawal Profit Target (first vs subsequent) and 20% consistency gate are met; min $500 with caps $1,000\u2013$3,000 by size. Failing a consistency gate never breaches the account; it only delays payout eligibility, and the gate resets with each withdrawal request. There is no separate buffer/threshold rule: the MLL stays intact after a withdrawal (it does not jump to the starting balance or $0 upon payout). Sources: https://help.alpha-futures.com/en/articles/9492051-payout-policy, https://help.alpha-futures.com/en/articles/9492048-consistency-rule, https://help.alpha-futures.com/en/articles/11771813-zero-account-overview, https://help.alpha-futures.com/en/articles/11634907-advanced-account-overview, https://help.alpha-futures.com/en/articles/15838742-direct-account-overview"
     },
     {
+      "firm": "Apex Trader Funding",
+      "website": "https://apextraderfunding.com",
+      "scrapedAt": "2026-07-30",
+      "programs": [
+        {
+          "program": "EOD Trailing Drawdown Evaluation",
+          "path": "Evaluation (one-time fee, 30-day access) -> EOD Performance Account (Sim Funded) -> possible invite to Apex Live",
+          "accountSize": 25000,
+          "price": {
+            "amount": 390,
+            "cadence": "one-time",
+            "details": "List price (Rithmic/Tradovate/WealthCharts identical). 'No Activation Fee' variant $890 one-time. 5-pack $1,750 (NAF 5-pack $3,950). Frequent coupons up to ~90% off. 30 calendar days of access, no renewal, nothing to cancel."
+          },
+          "activationFee": 99,
+          "resetFee": null,
+          "profitTarget": 1500,
+          "maxDrawdown": {
+            "amount": 1000,
+            "type": "eod-trailing",
+            "details": "Trails highest end-of-day close, recalculated at 4:59:59 PM ET, enforced in real time next session; never moves down. Eval (Rithmic/WealthCharts): locks once threshold reaches profit-target balance ($26,500); Tradovate eval: trails indefinitely. In PA: locks at starting balance + $100 ($25,100). Touching it fails the eval / closes the PA."
+          },
+          "dailyLossLimit": {
+            "amount": 500,
+            "mandatory": true,
+            "details": "Fixed in evaluation; hitting DLL flattens positions and pauses trading for the day but does not fail the account. In PA the DLL is tier-based ($500 L1-L2, $1,250 L3 max)."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "No consistency rule in evaluation. Funded PA: 50% consistency for payouts (largest profit day must be <50% of net profit since last approved payout)."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 4,
+            "micros": 40,
+            "details": "Fixed during eval (10 micros = 1 mini). PA scales by tier: 1 contract at Level 1 up to max 2 contracts."
+          },
+          "scalingRules": "Evaluation: none, fixed size. PA tier scaling (set daily from prior EOD balance): $0-999 = 1 contract/$500 DLL; $1,000-1,999 = 2/$500; $2,000+ = 2/$1,250 (max tier).",
+          "tradingRestrictions": "No minimum trading days, can pass in 1 day; 30-calendar-day time limit; failed eval cannot be reset (buy new one); no hedging evals against each other; prohibited-activities policy applies; trading day 6:00 PM - 4:59:59 PM ET, positions closed by market close (no overnight/weekend holding); no MAE/30% negative P&L rule, no 5:1 RR rule, no one-direction rule on these 2026 products; 7 calendar days to activate PA after passing.",
+          "payoutRules": "PA: 100% payout split, up to weekly; min 5 qualifying trading days each with >= $100 net profit; safety net = drawdown + $100 ($26,100) held for life of account; min balance to request $26,600; min payout $500; 50% consistency; max 6 payouts per PA (each capped at $1,000 for 25K), then PA closes; inactivity: PA closed without two $50+ profit days per 30 days.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-evaluations/",
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/",
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-performance-accounts-pa/",
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/",
+            "https://apextraderfunding.com/help-center/billing/evaluation-plan-fees-and-access-explained/",
+            "https://apextraderfunding.com/help-center/additional-helpful-items/daily-loss-limit-explained/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "EOD Trailing Drawdown Evaluation",
+          "path": "Evaluation -> EOD Performance Account",
+          "accountSize": 50000,
+          "price": {
+            "amount": 490,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $1,090; 5-pack $2,250 (NAF $4,950). Coupons up to ~90% off."
+          },
+          "activationFee": 119,
+          "resetFee": null,
+          "profitTarget": 3000,
+          "maxDrawdown": {
+            "amount": 2000,
+            "type": "eod-trailing",
+            "details": "EOD trailing; eval locks at $53,000 once highest EOD close reaches $55,000 (Rithmic/WealthCharts; Tradovate trails indefinitely); PA locks at $50,100."
+          },
+          "dailyLossLimit": {
+            "amount": 1000,
+            "mandatory": true,
+            "details": "Eval DLL fixed $1,000; PA tier-based $1,000-$3,000."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% consistency in PA for payouts."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 6,
+            "micros": 60,
+            "details": "Eval fixed; PA 2 contracts at L1 to max 4."
+          },
+          "scalingRules": "PA tiers: $0-1,499 = 2/$1,000; $1,500-2,999 = 3/$1,000; $3,000-5,999 = 4/$2,000; $6,000+ = 4/$3,000 (max).",
+          "tradingRestrictions": "Same as 25K EOD (no min days, 30-day access, no resets, no MAE/5:1/one-direction, close by 4:59:59 PM ET, no overnight).",
+          "payoutRules": "100% split; 5 qualifying days >= $250/day; safety net $52,100; min balance to request $52,600; min payout $500; 50% consistency; max 6 payouts capped $1,500/$1,500/$2,000/$2,500/$2,500/$3,000, then PA closes.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-evaluations/",
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/",
+            "https://apextraderfunding.com/help-center/additional-helpful-items/scaling-levels-pa-explained/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "EOD Trailing Drawdown Evaluation",
+          "path": "Evaluation -> EOD Performance Account",
+          "accountSize": 100000,
+          "price": {
+            "amount": 790,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $1,590; 5-pack $3,450. Coupons up to ~90% off."
+          },
+          "activationFee": 139,
+          "resetFee": null,
+          "profitTarget": 6000,
+          "maxDrawdown": {
+            "amount": 3000,
+            "type": "eod-trailing",
+            "details": "Eval locks at profit-target balance $106,000 (Rithmic/WealthCharts); PA locks at $100,100."
+          },
+          "dailyLossLimit": {
+            "amount": 1500,
+            "mandatory": true,
+            "details": "Eval fixed $1,500; PA tier-based $1,750-$3,500."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% in PA."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 8,
+            "micros": 80,
+            "details": "Eval fixed; PA 3 at L1 to max 6."
+          },
+          "scalingRules": "PA tiers: $0-1,999 = 3/$1,750; $2,000-2,999 = 4/$1,750; $3,000-4,999 = 5/$1,750; $5,000-9,999 = 6/$2,500; $10,000+ = 6/$3,500 (max).",
+          "tradingRestrictions": "Same as other EOD accounts.",
+          "payoutRules": "100% split; 5 qualifying days >= $300/day; safety net $103,100; min balance $103,600; min payout $500; 50% consistency; 6 payouts max capped $2,000/$2,500/$2,500/$3,000/$4,000/$4,000.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-evaluations/",
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "EOD Trailing Drawdown Evaluation",
+          "path": "Evaluation -> EOD Performance Account",
+          "accountSize": 150000,
+          "price": {
+            "amount": 1490,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $2,490; 5-pack $6,950. Coupons up to ~90% off."
+          },
+          "activationFee": 159,
+          "resetFee": null,
+          "profitTarget": 9000,
+          "maxDrawdown": {
+            "amount": 4000,
+            "type": "eod-trailing",
+            "details": "Eval locks at $159,000 (Rithmic/WealthCharts); PA locks at $150,100."
+          },
+          "dailyLossLimit": {
+            "amount": 2000,
+            "mandatory": true,
+            "details": "Eval fixed $2,000; PA tier-based $2,500-$4,000."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% in PA."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 12,
+            "micros": 120,
+            "details": "Eval fixed; PA 4 at L1 to max 10."
+          },
+          "scalingRules": "PA tiers: $0-1,999 = 4/$2,500; $2,000-2,999 = 5/$2,500; $3,000-4,999 = 7/$2,500; $5,000-9,999 = 10/$3,000; $10,000+ = 10/$4,000 (max).",
+          "tradingRestrictions": "Same as other EOD accounts.",
+          "payoutRules": "100% split; 5 qualifying days >= $350/day; safety net $154,100; min balance $154,600; min payout $500; 50% consistency; 6 payouts max capped $2,500/$3,000/$3,000/$3,000/$4,000/$5,000.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-evaluations/",
+            "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-payouts/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Intraday Trailing Drawdown Evaluation",
+          "path": "Evaluation (one-time fee, 30-day access) -> Intraday Trailing PA",
+          "accountSize": 25000,
+          "price": {
+            "amount": 199,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $690; 5-pack $850 (NAF $2,950). Coupons up to ~90% off."
+          },
+          "activationFee": 59,
+          "resetFee": null,
+          "profitTarget": 1500,
+          "maxDrawdown": {
+            "amount": 1000,
+            "type": "intraday-trailing",
+            "details": "Real-time trailing off Peak Balance including unrealized gains; never moves down; does not reset daily. Eval (Rithmic/WealthCharts): locks once threshold reaches profit-target balance; Tradovate eval trails indefinitely. PA: locks at starting balance + $100 ($25,100). Touch = immediate liquidation and fail/closure."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false,
+            "details": "No DLL in Intraday Evaluations. PA has tier-based DLL ($500-$1,250)."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% in PA for payouts."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 4,
+            "micros": 40,
+            "details": "Fixed in eval; PA 1 contract at L1 to max 2."
+          },
+          "scalingRules": "PA tiers identical to EOD PA: $0-999 = 1/$500; $1,000-1,999 = 2/$500; $2,000+ = 2/$1,250.",
+          "tradingRestrictions": "No min trading days (1-day pass possible); 30-day access, no extensions, no resets; no hedging accounts against each other; prohibited activities policy; positions closed by market close, day resets 6 PM ET; no MAE/5:1/one-direction rules on 2026 products; 7 days to activate PA.",
+          "payoutRules": "100% split; 5 qualifying days >= $100/day; safety net $26,100 (drawdown+$100, for life); min balance $26,600; min payout $500; 50% consistency; max 6 payouts, $1,000 cap each, then PA closes; inactivity rule (two $50 profit days per 30 days).",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/intraday-trailing-drawdown-evaluations/",
+            "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-explained/",
+            "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-performance-accounts-pa/",
+            "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-payouts/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Intraday Trailing Drawdown Evaluation",
+          "path": "Evaluation -> Intraday Trailing PA",
+          "accountSize": 50000,
+          "price": {
+            "amount": 249,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $790; 5-pack $950 (NAF $3,450)."
+          },
+          "activationFee": 59,
+          "resetFee": null,
+          "profitTarget": 3000,
+          "maxDrawdown": {
+            "amount": 2000,
+            "type": "intraday-trailing",
+            "details": "Eval locks at $53,000 once peak (incl. unrealized) reaches $55,000 (Rithmic/WealthCharts; Tradovate never locks); PA locks at $50,100."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false,
+            "details": "No DLL in eval; PA tier-based $1,000-$3,000."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% in PA."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 6,
+            "micros": 60,
+            "details": "Eval fixed; PA 2 at L1 to max 4."
+          },
+          "scalingRules": "PA tiers: 2/$1,000; 3/$1,000; 4/$2,000; 4/$3,000 (same thresholds as EOD 50K PA).",
+          "tradingRestrictions": "Same as 25K Intraday.",
+          "payoutRules": "100% split; 5 qualifying days >= $200/day; safety net $52,100; min balance $52,600; min payout $500; 50% consistency; 6 payouts capped $1,500/$2,000/$2,500/$2,500/$3,000/$3,000.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/intraday-trailing-drawdown-evaluations/",
+            "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-payouts/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Intraday Trailing Drawdown Evaluation",
+          "path": "Evaluation -> Intraday Trailing PA",
+          "accountSize": 100000,
+          "price": {
+            "amount": 399,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $1,090; 5-pack $1,750 (NAF $4,950)."
+          },
+          "activationFee": 59,
+          "resetFee": null,
+          "profitTarget": 6000,
+          "maxDrawdown": {
+            "amount": 3000,
+            "type": "intraday-trailing",
+            "details": "Eval locks at $106,000 (Rithmic/WealthCharts); PA locks at $100,100."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false,
+            "details": "No DLL in eval; PA tier-based $1,750-$3,500."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% in PA."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 8,
+            "micros": 80,
+            "details": "Eval fixed; PA 3 at L1 to max 6."
+          },
+          "scalingRules": "PA tiers as EOD 100K PA (3/$1,750 up to 6/$3,500).",
+          "tradingRestrictions": "Same as 25K Intraday.",
+          "payoutRules": "100% split; 5 qualifying days >= $250/day; safety net $103,100; min balance $103,600; min $500; 50% consistency; 6 payouts capped $2,000/$2,500/$3,000/$3,000/$4,000/$4,000.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/intraday-trailing-drawdown-evaluations/",
+            "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-payouts/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Intraday Trailing Drawdown Evaluation",
+          "path": "Evaluation -> Intraday Trailing PA",
+          "accountSize": 150000,
+          "price": {
+            "amount": 599,
+            "cadence": "one-time",
+            "details": "'No Activation Fee' variant $1,690; 5-pack $2,450 (NAF $7,950)."
+          },
+          "activationFee": 59,
+          "resetFee": null,
+          "profitTarget": 9000,
+          "maxDrawdown": {
+            "amount": 4000,
+            "type": "intraday-trailing",
+            "details": "Eval locks at $159,000 (Rithmic/WealthCharts); PA locks at $150,100."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false,
+            "details": "No DLL in eval; PA tier-based $2,500-$4,000."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "None in eval; 50% in PA."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 12,
+            "micros": 120,
+            "details": "Eval fixed; PA 4 at L1 to max 10."
+          },
+          "scalingRules": "PA tiers as EOD 150K PA (4/$2,500 up to 10/$4,000).",
+          "tradingRestrictions": "Same as 25K Intraday.",
+          "payoutRules": "100% split; 5 qualifying days >= $300/day; safety net $154,100; min balance $154,600; min $500; 50% consistency; 6 payouts capped $2,500/$3,000/$3,000/$4,000/$4,000/$5,000.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/intraday-trailing-drawdown-evaluations/",
+            "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-payouts/",
+            "https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED, not purchasable since 2026-03-01",
+          "path": "Legacy monthly-subscription Evaluation -> Legacy Performance Account",
+          "accountSize": 25000,
+          "price": {
+            "amount": 187,
+            "cadence": "monthly",
+            "details": "Last advertised monthly price (Feb 2026); existing subscriptions continue until cancelled; cancelled legacy subs cannot be reinstated."
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 1500,
+          "maxDrawdown": {
+            "amount": 1500,
+            "type": "intraday-trailing",
+            "details": "Trails highest live (unrealized) balance in real time. Rithmic eval: stops trailing when threshold reaches profit-target balance; Tradovate eval trails indefinitely. Legacy PA: locks at starting balance + $100. Activation fee shown is legacy PA fee $85/month per account (Rithmic/WealthCharts, $105 Tradovate); one-time lifetime PA fee option ~$130-$360 by size (third-party corroboration, not verified on an official page). Reset fee $80 (Rithmic/WealthCharts) or $100 (Tradovate), unlimited, legacy evals only."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false,
+            "details": "No daily drawdown on legacy accounts."
+          },
+          "consistencyRule": {
+            "pct": 30,
+            "details": "No consistency rule in legacy eval; legacy PA payouts require 30% consistency (windfall) - no single day >30% of profit since last payout, applies until 6th payout."
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 4,
+            "micros": 40,
+            "details": "Legacy PA contract scaling: only half of max contracts until EOD balance exceeds initial balance + drawdown + $100, then full size."
+          },
+          "scalingRules": "Legacy PA half-contract rule until safety-net/trailing-stop level reached; violation profits removed + 8 extra compliant days before payout.",
+          "tradingRestrictions": "Legacy PA rules: 30% Negative P&L (MAE) rule per trade (50% once profit doubles safety net); 5:1 risk-reward rule; one-direction rule (no simultaneous long+short, no non-directional open orders both sides); no hedging correlated instruments; all trades closed and orders cancelled by 4:59 PM ET (no overnight/weekend); half-day holidays don't count as trading days; news trading not prohibited.",
+          "payoutRules": "Legacy PA: 100% of first $25,000 per account then 90/10; min 8 trading days between payouts, 5 of them $50+ profit days; 30% consistency until 6th payout; safety net (drawdown+$100) applies to first 3 payouts; min payout $500; max payouts first five: $1,500 (25K); from 6th payout no cap and 100% eligibility; min balance to request $26,600; max 20 PAs.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/legacy-evaluation-rules/",
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-safety-net-requirement-rule/",
+            "https://apextraderfunding.com/help-center/legacy-products/legacy-products-overview/",
+            "https://support.apextraderfunding.com/hc/en-us/articles/40463003786267",
+            "https://support.apextraderfunding.com/hc/en-us/articles/40463165052955",
+            "https://support.apextraderfunding.com/hc/en-us/articles/40463232267035",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 50000,
+          "price": {
+            "amount": 197,
+            "cadence": "monthly"
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 3000,
+          "maxDrawdown": {
+            "amount": 2500,
+            "type": "intraday-trailing",
+            "details": "Trails live peak; Rithmic eval locks at $53,000; PA locks at $50,100."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30,
+            "details": "PA payouts: 30% windfall rule until 6th payout."
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 10,
+            "micros": 100,
+            "details": "PA: half (5) until $52,600 EOD balance, then full 10."
+          },
+          "scalingRules": "Half contracts until initial balance + $2,500 + $100 = $52,600 EOD.",
+          "tradingRestrictions": "Same legacy PA rules (MAE 30%, 5:1 RR, one-direction, no hedging, 4:59 PM ET close).",
+          "payoutRules": "100% of first $25K then 90/10; 8 days/5 profitable $50+ days; safety net $52,600 first 3 payouts; min balance $52,600; max $2,000 first five payouts; uncapped from 6th; min $500.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/legacy-evaluation-rules/",
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 75000,
+          "price": {
+            "amount": null,
+            "cadence": "monthly",
+            "details": "75K plan was no longer listed on the pricing page by Feb 2026 (historical price ~$187/mo, unverified)."
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": null,
+          "maxDrawdown": {
+            "amount": 2750,
+            "type": "intraday-trailing",
+            "details": "Per legacy master-course table: 75K Full, 12 minis, $2,750 trailing threshold. Historical profit target $4,250 not verifiable on current official pages."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30,
+            "details": "Legacy PA payout rules apply."
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 12,
+            "micros": 120
+          },
+          "scalingRules": "Legacy half-contract rule.",
+          "tradingRestrictions": "Legacy PA rules.",
+          "payoutRules": "Legacy payout structure (100% of first $25K then 90/10); 75K not listed in current legacy min-balance/max-payout tables.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/evaluation-accounts-ea/legacy-evaluation-rules/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 100000,
+          "price": {
+            "amount": 297,
+            "cadence": "monthly"
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 6000,
+          "maxDrawdown": {
+            "amount": 3000,
+            "type": "intraday-trailing",
+            "details": "Note: legacy master-course table lists 14 minis/$3,000; PA locks at $100,100."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 14,
+            "micros": 140
+          },
+          "scalingRules": "Half contracts until $103,100 EOD.",
+          "tradingRestrictions": "Legacy PA rules.",
+          "payoutRules": "Min balance to request $103,100; max $2,500 first five payouts; 100% of first $25K then 90/10.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 150000,
+          "price": {
+            "amount": 397,
+            "cadence": "monthly"
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 9000,
+          "maxDrawdown": {
+            "amount": 5000,
+            "type": "intraday-trailing"
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 17,
+            "micros": 170
+          },
+          "scalingRules": "Half contracts until $155,100 EOD.",
+          "tradingRestrictions": "Legacy PA rules.",
+          "payoutRules": "Min balance $155,100; max $2,750 first five payouts.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 250000,
+          "price": {
+            "amount": 397,
+            "cadence": "monthly"
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 15000,
+          "maxDrawdown": {
+            "amount": 6500,
+            "type": "intraday-trailing"
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 27,
+            "micros": 270
+          },
+          "scalingRules": "Half contracts until $256,600 EOD.",
+          "tradingRestrictions": "Legacy PA rules.",
+          "payoutRules": "Min balance $256,600; max $3,000 first five payouts.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy Evaluation (Full) - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 300000,
+          "price": {
+            "amount": 397,
+            "cadence": "monthly"
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 20000,
+          "maxDrawdown": {
+            "amount": 7500,
+            "type": "intraday-trailing"
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 35,
+            "micros": 350
+          },
+          "scalingRules": "Half contracts until $307,600 EOD.",
+          "tradingRestrictions": "Legacy PA rules.",
+          "payoutRules": "Min balance $307,600; max $3,500 first five payouts.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Legacy 100K Static - DISCONTINUED",
+          "path": "Legacy Evaluation -> Legacy PA",
+          "accountSize": 100000,
+          "price": {
+            "amount": 297,
+            "cadence": "monthly"
+          },
+          "activationFee": 85,
+          "resetFee": 80,
+          "profitTarget": 2000,
+          "maxDrawdown": {
+            "amount": 625,
+            "type": "static",
+            "details": "Fixed drawdown at $99,375; never trails."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false
+          },
+          "consistencyRule": {
+            "pct": 30,
+            "details": "Static 30% MAE staged: max loss/trade $187.50 below $2,600 safety net; 30% of profit balance above it."
+          },
+          "minTradingDays": 7,
+          "maxContracts": {
+            "minis": 2,
+            "micros": 20,
+            "details": "Full contracts in PA only after reaching $2,600 safety net."
+          },
+          "scalingRules": "Half-contract rule until $2,600 profit safety net.",
+          "tradingRestrictions": "Legacy PA rules.",
+          "payoutRules": "Min balance to request $102,600; max $1,000 first five payouts; 100% of first $25K then 90/10.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/",
+            "https://support.apextraderfunding.com/hc/en-us/articles/40463232267035",
+            "https://web.archive.org/web/20260210160101/https://apextraderfunding.com/"
+          ]
+        },
+        {
+          "program": "Apex Live Prop Trading Program",
+          "path": "Invite-only graduation from Sim PAs to live trading (cannot hold sim + live simultaneously)",
+          "accountSize": null,
+          "price": {
+            "amount": 0,
+            "cadence": "one-time",
+            "details": "No monthly or upfront account fee; trader classified professional for data (~$140/mo, Apex covers initial main data fee)."
+          },
+          "activationFee": 0,
+          "resetFee": null,
+          "profitTarget": null,
+          "maxDrawdown": {
+            "amount": 3000,
+            "type": "eod-trailing",
+            "details": "Live account starts at $0 balance with $3,000 EOD drawdown; once profit reaches +$3,100 the drawdown locks at +$100 (safety net $3,100); balance at/below $100 closes the account."
+          },
+          "dailyLossLimit": {
+            "amount": null,
+            "mandatory": false,
+            "details": "No DLL at Level 1; Level 2 ($10k-25k profit) $5,000 DLL/25 minis; Level 3 ($25k-50k) $10,000 DLL/30 minis; Level 4 ($50k+) custom."
+          },
+          "consistencyRule": {
+            "pct": null,
+            "details": "No consistency rule at Level 1; may be imposed under probation/Longevity Assistance."
+          },
+          "minTradingDays": 0,
+          "maxContracts": {
+            "minis": 10,
+            "micros": 100,
+            "details": "Level 1; scales to 25/30 minis at higher levels; up to 5 live accounts (new account each +$4,500 profit, eligibility-based)."
+          },
+          "scalingRules": "Level-based on live profit balance; Level 4 ($50k+) custom review.",
+          "tradingRestrictions": "All trades closed by 4:50 PM ET, no overnight; no hedging/counter positions/group trading; no automation/algos; no VPN masking; avoid limit-up/limit-down; CME rules apply; 14-day cooling-off after blowing a live account, then $199 'Second Chance Eval-to-Live' to return.",
+          "payoutRules": "90/10 split (90% trader); daily payout requests; $500 minimum; no cap; no min trading days between payouts; paid within 48 hours to payment processing; payouts only from profit above $3,100 safety net; Bonus Vault pays 20% of monthly live withdrawals (40% first month) from banked sim profits, paid on the 15th of following month; declining a live invite = account deactivated with final $3,000 payment.",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/getting-started/apex-live-prop-trading-program-faq/"
+          ]
+        },
+        {
+          "program": "Second Chance Eval-to-Live",
+          "path": "Re-entry evaluation to return to Apex Live after losing a live account",
+          "accountSize": null,
+          "price": {
+            "amount": 199,
+            "cadence": "one-time"
+          },
+          "activationFee": null,
+          "resetFee": null,
+          "profitTarget": 4000,
+          "maxDrawdown": {
+            "amount": 2000,
+            "type": "intraday-trailing",
+            "details": "Live intraday drawdown type."
+          },
+          "dailyLossLimit": {
+            "amount": 1000,
+            "mandatory": true,
+            "details": "'Done-for-Now' flatten event per each -$1,000; trader may continue same day."
+          },
+          "consistencyRule": {
+            "pct": 40,
+            "details": "40% consistency; also $250 min daily profit requirement."
+          },
+          "minTradingDays": 5,
+          "maxContracts": {
+            "minis": 3,
+            "micros": 30
+          },
+          "scalingRules": "Up to 5 open Second Chance accounts; passing multiple does not create multiple live accounts.",
+          "tradingRestrictions": "Live program rules apply; passed accounts do not carry forward if the new live account is lost.",
+          "payoutRules": "Passing returns trader directly to the live program (no sim PA stage).",
+          "sourceUrls": [
+            "https://apextraderfunding.com/help-center/getting-started/apex-live-prop-trading-program-faq/"
+          ]
+        }
+      ],
+      "generalNotes": "Apex relaunched its entire product line ('Apex 4.0') on 2026-03-01: legacy monthly-subscription evaluations (25K-300K Full, 100K Static) were retired and replaced by one-time-fee 30-day EOD Trail and Intraday Trail evaluations in 25K/50K/100K/150K only (no 250K/300K/Static in the new lineup). Platforms: Rithmic, Tradovate, WealthCharts (same pricing; real-time data + NinjaTrader license included). Each eval sold as Standard (lower eval fee + PA activation fee) or 'No Activation Fee' variant (higher eval fee, $0 activation), plus 5-packs; sitewide coupons up to 85-90% off list prices are near-constant. New evals: no consistency rule, no minimum trading days (1-day pass), no resets (failed/expired = buy new), fixed contracts, pass -> 7 calendar days to pay one-time PA activation (EOD: $99/$119/$139/$159; Intraday: $59 all sizes). PAs are Simulated Funded accounts with tier-based scaling and DLL, inactivity rule (two $50+ profit days per 30 days), and a 20-PA cap per household across Legacy+EOD+Intraday combined (no limit on evaluations). Rules removed in 4.0 vs legacy: 30% Negative P&L (MAE), 5:1 risk-reward, one-direction rule, 30% windfall consistency, minimum 7 trading days. Legacy accounts bought before 2026-03-01 keep old rules/billing (reset $80 Rithmic/WealthCharts, $100 Tradovate; PA $85/mo Rithmic-WealthCharts or $105/mo Tradovate, data included) and cannot be converted to new products. Ten micros = one mini everywhere. Site risk disclosure states services are intended for U.S. users only where permitted; restricted-countries list applies. Facts verified against official apextraderfunding.com help-center pages and homepage product JSON via Wayback Machine snapshots (Mar 25 - Jul 14, 2026) because the live site blocks automated fetching; prices are the Jul 14, 2026 list prices.",
+      "payoutPolicy": "New (post-2026-03-01) EOD and Intraday PAs: 100% payout split with no 90/10 stage; payouts up to weekly; requirements per request: 5 qualifying trading days meeting a per-size minimum daily profit (EOD $100/$250/$300/$350; Intraday $100/$200/$250/$300 for 25K/50K/100K/150K), balance above lifetime Safety Net (max drawdown + $100) plus $500 minimum payout, and 50% consistency (largest day <50% of net profit since last approved payout; resets after each payout). Hard cap of 6 payouts per PA with per-payout dollar caps ($1,000-$5,000 by size/sequence); after the 6th payout the PA is closed and a new evaluation must be passed. Payouts automated (marketed as 'no payout denials' aside from eligibility checks). Legacy PAs: 100% of first $25,000 per account then 90/10; 8 trading days between requests (5 days with $50+ profit); 30% windfall consistency and $500 min; safety net applies to first 3 payouts; per-size max payout for first five payouts, uncapped 100% from the 6th. Apex Live: 90/10 split, daily requests, $500 min, no caps, plus 20% monthly Bonus Vault bonus on live withdrawals until banked sim profits are exhausted."
+    },
+    {
       "firm": "FundedNext Futures",
       "website": "https://fundednext.com/futures",
       "scrapedAt": "2026-07-27",

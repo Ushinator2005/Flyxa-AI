@@ -49,7 +49,7 @@ test('add-account flow offers firm presets and applies rules', async ({ page }) 
   // Firm dropdown: catalog firms present, no duplicates.
   const firmSelect = page.locator('select:has(option:has-text("Alpha Futures"))').first();
   const options = await firmSelect.locator('option').allTextContents();
-  for (const firm of ['Alpha Futures', 'Lucid Trading', 'Topstep', 'Tradeify']) {
+  for (const firm of ['Alpha Futures', 'Apex Trader Funding', 'Lucid Trading', 'Topstep', 'Tradeify']) {
     expect(options.filter(o => o === firm)).toHaveLength(1);
   }
 

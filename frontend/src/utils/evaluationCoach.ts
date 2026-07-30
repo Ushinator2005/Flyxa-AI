@@ -276,6 +276,11 @@ function catalogProgramToTemplate(firm: CatalogFirm, program: CatalogProgram): E
   // Only variants usable as evaluation templates: funded-stage records
   // (XFA, PRO+, Live, …) have no size or target and are skipped.
   if (!accountSize || !profitTarget || !drawdownAmount) return null;
+  // Retired lineups (e.g. Apex legacy subscriptions) stay in the catalog for
+  // reference but are not offered as presets for new accounts. NOTE: the word
+  // "legacy" alone is NOT a signal — FundedNext's current product is named
+  // "Legacy Challenge" and LucidBlack "(Legacy)" is still sold.
+  if (/discontinued|retired/i.test(program.program)) return null;
 
   const pathLabel = (program.path ?? '').trim();
   const drawdownDetails = program.maxDrawdown?.details ?? '';

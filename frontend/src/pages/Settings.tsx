@@ -3482,7 +3482,7 @@ export default function Settings() {
                   }}
                 >
                   <option value="">Select firm</option>
-                  {[...templateFirmNames(), 'Apex Trader Funding', 'FTMO']
+                  {Array.from(new Set([...templateFirmNames(), 'Apex Trader Funding', 'FTMO']))
                     .sort((a, b) => a.localeCompare(b))
                     .map(firm => <option key={firm} value={firm}>{firm}</option>)}
                   <option value="Other">Other / broker account</option>
