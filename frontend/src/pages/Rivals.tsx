@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   ArrowUp, ArrowDown, Bell, Check, ChevronDown, Clock3,
-  MessageCircle, Minus, Plus, Share2, Trophy, Users, X,
+  MessageCircle, Minus, Plus, Share2, Users, X,
 } from 'lucide-react';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
@@ -253,6 +253,23 @@ function heroStat(stats: RivalPeriodStats, rival: Rival, metric: LeaderboardMetr
   return { value: formatCurrency(stats.netPnl), tone: stats.netPnl > 0 ? 'up' : stats.netPnl < 0 ? 'down' : 'neutral', label: 'Net P&L' };
 }
 
+// Crafted marks — no emoji in the UI.
+function Crown({ size = 22, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size * 0.78} viewBox="0 0 28 22" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M2.6 8.1 L7.8 13.6 L13.6 3.4 L19.4 13.6 L24.6 8.1 L22.7 18.4 Q22.4 19.6 21.1 19.6 L6.1 19.6 Q4.8 19.6 4.5 18.4 Z" />
+      <circle cx="2.6" cy="6.6" r="2.1" /><circle cx="13.6" cy="2.4" r="2.1" /><circle cx="24.6" cy="6.6" r="2.1" />
+    </svg>
+  );
+}
+function Flame({ size = 12, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size * 1.28} viewBox="0 0 14 18" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M7 0 C9 4 12.5 5.2 11.4 10.4 A5 5 0 1 1 2 9.6 C1.8 12 3.2 7.8 4.4 8.6 C3.6 4.8 5.4 2.6 7 0 Z" />
+    </svg>
+  );
+}
+
 export default function Rivals() {
   const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
   const { trades: allMyTrades } = useTrades();
@@ -376,9 +393,8 @@ export default function Rivals() {
     ? Math.max(0, metricValue(myAhead, metric, period) - metricValue(currentUser, metric, period))
     : 0;
   const hasRivals = ranked.length >= 2;
-  // Podium is the celebratory top-3; the table below is "the rest of the
-  // field" (ranks 4+) so no one is ever rendered twice.
-  const podiumRivals = ranked.slice(0, 3);
+  // Podium shows the top three; the table below is "the rest of the field"
+  // (ranks 4+) so no one is ever rendered twice.
   const fieldRivals = ranked.slice(3);
 
   // Live countdown to the season lock (first of next month).
@@ -421,15 +437,14 @@ export default function Rivals() {
     <div className="rv2-page" style={{ color: LB.text }}>
 
       {/* ── Header ── */}
-      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, padding: '4px 2px 22px' }}>
+      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, padding: '2px 2px 18px' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
+          <h1 className="rvc-display" style={{ margin: 0, fontSize: 30, color: LB.text }}>
             {activeLeague?.name ?? 'Rivals'}
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 9 }}>
-            <span className="rvc-verified"><Check size={12} strokeWidth={3} /> Verified journal data</span>
-            <span style={{ fontSize: 12.5, color: LB.muted }}>No screenshots, no claims — {ranked.length} {ranked.length === 1 ? 'trader' : 'traders'}.</span>
-          </div>
+          <p style={{ margin: '8px 0 0', fontSize: 13.5, color: LB.muted, lineHeight: 1.6 }}>
+            Ranked on <span className="rvc-verified"><Check size={12} strokeWidth={3} /> verified journal data</span> — no screenshots, no claims.
+          </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
           <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
@@ -469,177 +484,174 @@ export default function Rivals() {
         </section>
       )}
 
-      {/* ── Controls: rank-by tabs + period filters ── */}
-      <div data-tour-id="rivals-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', margin: '2px 0 18px' }}>
-        <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
-          {MODES.map(mode => {
-            const on = metric === mode.value;
-            return (
-              <button type="button" key={mode.value} title={mode.help} onClick={() => setMetric(mode.value)}
-                style={{ padding: '7px 15px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: on ? LB.amber : 'transparent', color: on ? '#000' : LB.muted }}>
-                {mode.label}
-              </button>
-            );
-          })}
+      {/* ── Controls: text tabs + period ── */}
+      <div data-tour-id="rivals-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', margin: '4px 0 6px' }}>
+        <div className="rvc-tabs">
+          {MODES.map(mode => (
+            <button type="button" key={mode.value} title={mode.help} onClick={() => setMetric(mode.value)}
+              className={`rvc-tab${metric === mode.value ? ' on' : ''}`}>{mode.label}</button>
+          ))}
         </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {leagues.length > 0 && (
-            <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
-              {[{ id: 'all', name: 'All' }, ...leagues.map(l => ({ id: l.id, name: l.name }))].map(l => {
-                const on = activeLeagueId === l.id;
-                return <button type="button" key={l.id} onClick={() => setActiveLeagueId(l.id)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? 'var(--app-panel-strong)' : 'transparent', color: on ? LB.text : LB.muted }}>{l.name}</button>;
-              })}
+            <div className="rvc-period">
+              {[{ id: 'all', name: 'All' }, ...leagues.map(l => ({ id: l.id, name: l.name }))].map(l => (
+                <button type="button" key={l.id} onClick={() => setActiveLeagueId(l.id)} className={activeLeagueId === l.id ? 'on' : ''}>{l.name}</button>
+              ))}
             </div>
           )}
-          <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
-            {PERIODS.map(item => {
-              const on = period === item.value;
-              return <button type="button" key={item.value} onClick={() => setPeriod(item.value)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? 'var(--app-panel-strong)' : 'transparent', color: on ? LB.text : LB.muted }}>{item.label}</button>;
-            })}
+          <div className="rvc-period">
+            {PERIODS.map(item => (
+              <button type="button" key={item.value} onClick={() => setPeriod(item.value)} className={period === item.value ? 'on' : ''}>{item.label}</button>
+            ))}
           </div>
-          <button type="button" onClick={() => { setSelectedRivalId(currentUser.id); setInspectorOpen(true); }} style={{ ...btnGhost, height: 38 }}>Show my place</button>
         </div>
       </div>
 
-      {/* ── Countdown + what's at stake ── */}
-      {hasRivals && (
-        <div className="rvc-countdown rvc-fade-up">
-          <div>
-            <div className="rvc-kicker" style={{ color: LB.amber }}>{seasonLabel()} season</div>
-            <div className="rvc-countdown-clock" style={{ marginTop: 6 }}>
-              <span><span className="rvc-clock-num">{cd.d}</span><span className="rvc-clock-unit">d</span></span>
-              <span><span className="rvc-clock-num">{String(cd.h).padStart(2, '0')}</span><span className="rvc-clock-unit">h</span></span>
-              <span><span className="rvc-clock-num">{String(cd.m).padStart(2, '0')}</span><span className="rvc-clock-unit">m</span></span>
-              <span><span className="rvc-clock-num">{String(cd.s).padStart(2, '0')}</span><span className="rvc-clock-unit">s</span></span>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: LB.muted, marginLeft: 8 }}>until the board locks</span>
-            </div>
+      {/* ── Countdown: a bare live clock between two hairlines ── */}
+      {hasRivals && (<>
+        <hr className="rvc-rule" style={{ marginTop: 8 }} />
+        <div className="rvc-count rvc-fade">
+          <div className="rvc-count-clock">
+            {([['Days', cd.d], ['Hrs', cd.h], ['Min', cd.m], ['Sec', cd.s]] as const).map(([label, val], idx) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'flex-end', gap: 20 }}>
+                {idx > 0 && <span className="rvc-count-colon">:</span>}
+                <div className="rvc-count-seg">
+                  <span className="rvc-count-num">{idx === 0 ? val : String(val).padStart(2, '0')}</span>
+                  <span className="rvc-count-label">{label}</span>
+                </div>
+              </div>
+            ))}
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: LB.muted }}>
-            <Trophy size={16} color="var(--color-gold, #f6c343)" />
-            Season champion takes the trophy shelf &amp; hall-of-fame spot.
+          <div style={{ fontSize: 13, color: LB.muted, textAlign: 'right', maxWidth: 320, lineHeight: 1.55 }}>
+            {seasonLabel()} board locks then. <b style={{ color: LB.text, fontWeight: 600 }}>The champion</b> takes the trophy shelf and the hall of fame.
           </div>
         </div>
-      )}
+        <hr className="rvc-rule" style={{ marginBottom: 22 }} />
+      </>)}
 
-      {/* ── Podium hierarchy: champion elevated & centered ── */}
-      {hasRivals && (
-      <div className="rvc-podium rvc-fade-up" style={{ marginTop: 2 }}>
-        {[podiumRivals[1], podiumRivals[0], podiumRivals[2]].map((rival) => {
-          if (!rival) return null;
-          const i = ranked.findIndex(r => r.id === rival.id); // 0-based rank
-          const s = getPeriodStats(rival, period);
-          const hero = heroStat(s, rival, metric);
-          const medal = i === 0 ? 'var(--color-gold, #f6c343)' : i === 1 ? 'var(--color-silver, #aab6c7)' : 'var(--color-bronze, #c48b4e)';
-          const heroColor = hero.tone === 'up' ? LB.green : hero.tone === 'down' ? LB.red : LB.text;
-          const movement = rankMovement(rival, leagueRivals, metric, period);
-          const streak = hotStreak(s);
-          const heroNum = metric === 'netPnl' ? s.netPnl : metric === 'winRate' ? s.winRate : metric === 'consistency' ? s.consistency : rival.mascot.stats.processScore;
-          const fmt = (n: number) => metric === 'netPnl' ? formatCurrency(n) : metric === 'winRate' ? `${Math.round(n)}%` : `${Math.round(n)}`;
-          return (
-            <button
-              key={rival.id}
-              type="button"
-              onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
-              className={`rvc-pod rvc-pod--${i + 1}${i === 0 ? ' rvc-pod--champion' : ''}${rival.isMe ? ' rvc-pod--you' : ''}`}
-            >
-              {i === 0 && <Trophy className="rvc-crown" size={26} strokeWidth={1.8} />}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <span className="rvc-rankbadge" style={{ background: `color-mix(in srgb, ${medal} 16%, transparent)`, color: medal }}>#{i + 1}</span>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  {streak >= 2 && <span className="rvc-flame">🔥 {streak}</span>}
-                  <MovementBadge delta={movement} period={period} />
-                </div>
+      {/* ── Podium: asymmetric — champion carries the mass ── */}
+      {hasRivals && (() => {
+        const champ = ranked[0];
+        const runners = ranked.slice(1, 3);
+        const metricNum = (r: Rival) => metric === 'netPnl' ? getPeriodStats(r, period).netPnl : metric === 'winRate' ? getPeriodStats(r, period).winRate : metric === 'consistency' ? getPeriodStats(r, period).consistency : r.mascot.stats.processScore;
+        const fmtMetric = (n: number) => metric === 'netPnl' ? formatCurrency(n) : metric === 'winRate' ? `${Math.round(n)}%` : `${Math.round(n)}`;
+        const toneColor = (r: Rival) => { const t = heroStat(getPeriodStats(r, period), r, metric).tone; return t === 'up' ? LB.green : t === 'down' ? LB.red : LB.text; };
+        const subLine = (r: Rival) => { const s = getPeriodStats(r, period); return `${Math.round(s.winRate)}% win · ${avgRText(r, period)}R · ${Math.round(s.ruleAdherence)}% rules`; };
+        const cs = getPeriodStats(champ, period);
+        const champStreak = hotStreak(cs);
+        return (
+          <div className="rvc-podium rvc-fade">
+            {/* Champion */}
+            <button type="button" onClick={() => { setSelectedRivalId(champ.id); setInspectorOpen(true); }} className="rvc-champ">
+              <span className="rvc-champ-num rvc-serif">1</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
+                <Crown size={22} className="rvc-crown rvc-crown--bob" />
+                <span className="rvc-eyebrow" style={{ color: 'var(--color-gold, #f6c343)' }}>Champion</span>
+                {champStreak >= 2 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4, fontSize: 12, fontWeight: 600, color: LB.amber }}><Flame size={12} className="rvc-flame rvc-flame--pulse" />{champStreak}-day run</span>}
+                <span style={{ marginLeft: 'auto' }}><MovementBadge delta={rankMovement(champ, leagueRivals, metric, period)} period={period} /></span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 14 }}>
-                <RivalAvatar rival={rival} large={i === 0} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 20, position: 'relative', zIndex: 1 }}>
+                <RivalAvatar rival={champ} large />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <b style={{ fontSize: i === 0 ? 16 : 14.5, fontWeight: 700, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
-                    <Check size={12} strokeWidth={3} color={LB.green} aria-label="Verified" />
-                    {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 20, color: LB.text, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{champ.displayName}</span>
+                    <Check size={13} strokeWidth={3} color={LB.green} aria-label="Verified" />
+                    {champ.isMe && <span className="rvc-you">YOU</span>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: LB.muted, marginTop: 1 }}>@{rival.username}</div>
+                  <div style={{ fontSize: 12.5, color: LB.muted, marginTop: 2 }}>@{champ.username}</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, marginTop: 16 }}>
-                <div>
-                  <div className="rvc-kicker">{hero.label}</div>
-                  <div className="rvc-hero" style={{ fontSize: i === 0 ? 26 : 21, color: heroColor, marginTop: 4 }}>
-                    <CountUp target={heroNum} format={fmt} />
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, marginTop: 22, position: 'relative', zIndex: 1 }}>
+                <div className="rvc-champ-pnl" style={{ color: toneColor(champ) }}>
+                  <CountUp target={metricNum(champ)} format={fmtMetric} />
                 </div>
-                <Sparkline stats={s} up={s.netPnl >= 0} width={i === 0 ? 88 : 66} />
+                <Sparkline stats={cs} up={cs.netPnl >= 0} width={120} height={34} />
               </div>
-              <div style={{ display: 'flex', gap: 18, marginTop: 14, paddingTop: 13, borderTop: `1px solid ${LB.border}` }}>
-                <div><div className="rvc-kicker">Win</div><div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, marginTop: 3 }}>{Math.round(s.winRate)}%</div></div>
-                <div><div className="rvc-kicker">Avg R</div><div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, marginTop: 3 }}>{avgRText(rival, period)}</div></div>
-                <div><div className="rvc-kicker">Rules</div><div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, marginTop: 3, color: s.ruleAdherence >= 80 ? LB.green : LB.text }}>{Math.round(s.ruleAdherence)}%</div></div>
+              <div className="rvc-champ-sub" style={{ marginTop: 16 }}>
+                {Math.round(cs.winRate)}% win<span className="rvc-dot">·</span>{avgRText(champ, period)}R avg<span className="rvc-dot">·</span><b style={{ color: cs.ruleAdherence >= 80 ? LB.green : LB.text }}>{Math.round(cs.ruleAdherence)}% rule adherence</b>
               </div>
             </button>
-          );
-        })}
-      </div>
-      )}
+            {/* Runners #2 / #3 */}
+            <div className="rvc-runners">
+              {runners.map((rival, ri) => {
+                const rank = ri + 2;
+                const s = getPeriodStats(rival, period);
+                const streak = hotStreak(s);
+                return (
+                  <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }} className="rvc-runner">
+                    <span className="rvc-runner-num rvc-serif" style={{ color: LB.subtle }}>{rank}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <RivalAvatar rival={rival} />
+                        <span style={{ fontSize: 15, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</span>
+                        <Check size={11} strokeWidth={3} color={LB.green} aria-label="Verified" />
+                        {rival.isMe && <span className="rvc-you">YOU</span>}
+                        {streak >= 2 && <Flame size={11} className="rvc-flame rvc-flame--pulse" />}
+                      </div>
+                      <div className="rvc-runner-sub">{subLine(rival)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="rvc-runner-pnl" style={{ color: toneColor(rival) }}>{fmtMetric(metricNum(rival))}</div>
+                      <div style={{ marginTop: 3, display: 'flex', justifyContent: 'flex-end' }}><MovementBadge delta={rankMovement(rival, leagueRivals, metric, period)} period={period} /></div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
-      {/* ── Chase & Defend — the emotional centerpiece ── */}
+      {/* ── Chase & Defend — bare, split by a hairline ── */}
       {hasRivals && (myAhead || behindRival) && (
-        <div className="rvc-cd rvc-fade-up">
-          {/* CHASE */}
-          <div className={`rvc-cd-card ${myAhead ? 'rvc-cd-card--chase' : 'rvc-cd-card--safe'}`}>
-            <div className="rvc-kicker" style={{ color: myAhead ? LB.amber : LB.green }}>{myAhead ? `Chase ${myAhead.displayName}` : 'Board leader'}</div>
-            {myAhead ? (
-              <>
-                <div style={{ marginTop: 8, fontSize: 15, color: LB.text }}>
-                  <b style={{ fontFamily: 'var(--font-mono)', color: LB.amber }}>{formatMetricGap(myGap, metric)}</b> to overtake <b>#{myPosition - 1}</b>
-                </div>
-                <div className="rvc-bar"><div className="rvc-bar-fill rvc-bar-fill--amber" style={{ width: `${Math.max(6, Math.min(100, chaseFillPct))}%` }} /></div>
-                <div style={{ marginTop: 8, ...kicker }}>You're {chaseFillPct}% of the way up the board</div>
-              </>
-            ) : (
-              <div style={{ marginTop: 8, fontSize: 14, color: LB.muted }}>You hold <b style={{ color: LB.green }}>#1</b>. Keep the lead until the board locks.</div>
-            )}
+        <div className="rvc-cd rvc-fade" style={{ marginTop: 26 }}>
+          <div className="rvc-cd-col">
+            {myAhead ? (<>
+              <div className="rvc-cd-head">Chasing <b>{myAhead.displayName}</b></div>
+              <div className="rvc-cd-big" style={{ color: LB.amber }}>{formatMetricGap(myGap, metric)}</div>
+              <div className="rvc-track"><div className="rvc-track-fill rvc-track-fill--amber" style={{ width: `${Math.max(4, Math.min(100, chaseFillPct))}%` }} /></div>
+              <div className="rvc-cd-note">{chaseFillPct}% of the way up the board — {formatMetricGap(myGap, metric)} to take #{myPosition - 1}.</div>
+            </>) : (<>
+              <div className="rvc-cd-head" style={{ color: LB.green }}>Leading the board</div>
+              <div className="rvc-cd-big" style={{ color: LB.green }}>#1</div>
+              <div className="rvc-cd-note">Hold the top until the board locks to take the season.</div>
+            </>)}
           </div>
-          {/* DEFEND */}
-          <div className={`rvc-cd-card ${defendUrgent ? 'rvc-cd-card--defend' : behindRival ? '' : 'rvc-cd-card--safe'}`}>
-            <div className="rvc-kicker" style={{ color: defendUrgent ? LB.red : LB.subtle }}>{behindRival ? `Defend #${myPosition}` : 'Back of the board'}</div>
-            {behindRival ? (
-              <>
-                <div style={{ marginTop: 8, fontSize: 15, color: LB.text }}>
-                  <b style={{ fontFamily: 'var(--font-mono)', color: defendUrgent ? LB.red : LB.text }}>{formatMetricGap(defendGap, metric)}</b> ahead of <b>{behindRival.displayName}</b>
-                </div>
-                <div className="rvc-bar"><div className={`rvc-bar-fill ${defendUrgent ? 'rvc-bar-fill--red' : 'rvc-bar-fill--green'}`} style={{ width: `${Math.max(6, defendCushion)}%` }} /></div>
-                <div style={{ marginTop: 8, ...kicker, color: defendUrgent ? LB.red : LB.subtle }}>{defendUrgent ? 'They are closing in — protect the spot' : 'Comfortable cushion for now'}</div>
-              </>
-            ) : (
-              <div style={{ marginTop: 8, fontSize: 14, color: LB.muted }}>No one behind you yet — invite more traders to raise the stakes.</div>
-            )}
+          <div className="rvc-cd-col">
+            {behindRival ? (<>
+              <div className="rvc-cd-head">Defending <b>#{myPosition}</b> from <b>{behindRival.displayName}</b></div>
+              <div className="rvc-cd-big" style={{ color: defendUrgent ? LB.red : LB.text }}>{formatMetricGap(defendGap, metric)}</div>
+              <div className="rvc-track"><div className={`rvc-track-fill ${defendUrgent ? 'rvc-track-fill--red' : 'rvc-track-fill--green'}`} style={{ width: `${Math.max(4, defendCushion)}%` }} /></div>
+              <div className={`rvc-cd-note${defendUrgent ? ' rvc-cd-note--warn' : ''}`}>{defendUrgent ? 'Closing in fast — one red day flips the spot.' : 'A comfortable cushion, for now.'}</div>
+            </>) : (<>
+              <div className="rvc-cd-head">Back of the board</div>
+              <div className="rvc-cd-note" style={{ marginTop: 8 }}>No one behind you yet. Invite more traders to raise the stakes.</div>
+            </>)}
           </div>
         </div>
       )}
 
-      {/* ── Ghost benchmark — a small board still has something to beat ── */}
+      {/* ── Benchmark: one quiet sentence ── */}
       {hasRivals && (
-        <div className="rvc-ghost rvc-fade-up">
-          <Users size={15} style={{ color: LB.subtle, flexShrink: 0 }} />
-          <span>
-            <b style={{ color: LB.text }}>Average funded trader:</b> {GHOST_WIN}% win rate ·{' '}
-            {beatingGhost
-              ? <span style={{ color: LB.green }}>you're beating them ({myWin}%)</span>
-              : <span style={{ color: LB.muted }}>you're at {myWin}% — {GHOST_WIN - myWin} points to clear the bar</span>}
-          </span>
+        <div className="rvc-bench rvc-fade" style={{ marginTop: 22 }}>
+          The average funded trader clears a <b>{GHOST_WIN}% win rate</b>.{' '}
+          {beatingGhost
+            ? <>You're <span style={{ color: LB.green, fontWeight: 600 }}>ahead of that benchmark</span> at {myWin}%.</>
+            : <>You're at {myWin}% — <span style={{ color: LB.text, fontWeight: 600 }}>{GHOST_WIN - myWin} points</span> from clearing it.</>}
         </div>
       )}
 
-      {/* ── Live activity pulse ── */}
+      {/* ── Activity: bare feed on hairlines ── */}
       {hasRivals && activity.length > 0 && (
-        <div className="rvc-pulse rvc-fade-up">
-          <div className="rvc-pulse-hd">
+        <div className="rvc-fade" style={{ marginTop: 26 }}>
+          <div className="rvc-feed-head">
             <span className="rvc-live-dot" />
-            <span className="rvc-kicker" style={{ color: LB.text }}>Live activity</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: LB.text }}>Live</span>
           </div>
           {activity.map(ev => (
-            <div key={ev.id} className="rvc-pulse-row">
-              <span className="rvc-pulse-dot" style={{ background: ev.tone === 'up' ? LB.green : ev.tone === 'down' ? LB.red : LB.subtle }} />
+            <div key={ev.id} className="rvc-feed-row">
+              <span className="rvc-feed-tick" style={{ background: ev.tone === 'up' ? LB.green : ev.tone === 'down' ? LB.red : LB.subtle }} />
               <span>{ev.text}</span>
             </div>
           ))}
