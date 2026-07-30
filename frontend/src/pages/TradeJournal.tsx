@@ -1612,12 +1612,27 @@ export default function TradeJournal() {
     const paramKey = `${date}|${tradeId ?? ''}`;
     if (appliedDateParamRef.current === paramKey) return;
     const targetEntry = entries.find(entry => entry.date === date);
-    if (!targetEntry) return;
+    if (!targetEntry) {
+      // No entry for the linked day (empty days are pruned) — materialize a
+      // blank day so "View trades" from the journal always lands on the
+      // right date instead of silently falling back to the most recent day.
+      if (!isValidIsoDate(date)) return;
+      appliedDateParamRef.current = paramKey;
+      const parsedDate = parseDate(date);
+      const blank = createEmptyEntry(date, rulesTemplate, getDefaultTradeAccountId(), true);
+      mutateEntries(prev => [blank, ...prev]);
+      setSelectedEntryId(blank.id);
+      setMonthCursor(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
+      setShowScanner(false);
+      return;
+    }
     appliedDateParamRef.current = paramKey;
     setSelectedEntryId(targetEntry.id);
     if (tradeId) setActiveTradeId(tradeId);
     setShowScanner(false);
-  }, [entries, params]);
+    const parsedDate = parseDate(date);
+    setMonthCursor(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
+  }, [entries, params, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setMonthCursor]);
 
   useEffect(() => {
     const currentSelected = entries.find(entry => entry.id === selectedEntryId) ?? null;
