@@ -1600,12 +1600,20 @@ export default function TradeJournal() {
     }
   }, [entries, selectedEntryId]);
 
+  // Deep link (?date=...&tradeId=...) applies exactly ONCE per param value.
+  // Without the guard this effect re-fires on every entries change (autosave
+  // churn included) and snaps selection back to the URL's day — making every
+  // other day in the list feel unclickable.
+  const appliedDateParamRef = useRef<string | null>(null);
   useEffect(() => {
     const date = params.get('date');
     const tradeId = params.get('tradeId');
     if (!date) return;
+    const paramKey = `${date}|${tradeId ?? ''}`;
+    if (appliedDateParamRef.current === paramKey) return;
     const targetEntry = entries.find(entry => entry.date === date);
     if (!targetEntry) return;
+    appliedDateParamRef.current = paramKey;
     setSelectedEntryId(targetEntry.id);
     if (tradeId) setActiveTradeId(tradeId);
     setShowScanner(false);
