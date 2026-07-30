@@ -1,6 +1,17 @@
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToastStore } from '../../store/toastStore.js';
+
+// Live "ago" for a persistent toast — same buckets as the Market News wire.
+function fmtAge(fromMs: number, nowMs: number): string {
+  const mins = Math.floor((nowMs - fromMs) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 const toneStyles = {
   amber: {
@@ -24,6 +35,15 @@ export default function ToastStack() {
   const toasts = useToastStore((state) => state.toasts);
   const dismissToast = useToastStore((state) => state.dismissToast);
   const navigate = useNavigate();
+  // Tick once a minute so live "ago" labels on persistent toasts stay honest.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasTimestamped = toasts.some((toast) => typeof toast.timestampMs === 'number');
+  useEffect(() => {
+    if (!hasTimestamped) return;
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, [hasTimestamped]);
 
   if (toasts.length === 0) return null;
 
@@ -105,6 +125,7 @@ export default function ToastStack() {
                   marginBottom: 4,
                 }}>
                   {toast.kicker}
+                  {typeof toast.timestampMs === 'number' && ` · ${fmtAge(toast.timestampMs, nowMs)}`}
                 </span>
               )}
               <span style={{

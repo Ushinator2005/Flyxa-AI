@@ -9,8 +9,11 @@ export interface ToastItem {
   durationMs: number | null;
   /** Breaking-news treatment: solid red, pulsing, dismissed only by click. */
   emphasis?: boolean;
-  /** Small label above the message (e.g. "BREAKING · Reuters · 2 min ago"). */
+  /** Small label above the message (e.g. "BREAKING · Reuters"). */
   kicker?: string;
+  /** When set, a live "· Xm ago" is appended to the kicker and kept fresh so
+      a persistent toast's age never goes stale. */
+  timestampMs?: number;
   /** Navigate here when the toast body is clicked (also dismisses it). */
   href?: string;
 }

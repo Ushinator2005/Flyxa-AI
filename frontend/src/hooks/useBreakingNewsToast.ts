@@ -9,13 +9,14 @@ import { pushToast, dismissToast } from '../store/toastStore.js';
  */
 export function useBreakingNewsToast() {
   const onAlert = useCallback((headline: { text: string; source: string; timestamp: string }) => {
-    const ageMins = Math.round((Date.now() - new Date(headline.timestamp).getTime()) / 60_000);
-    const ageLabel = ageMins < 1 ? 'just now' : ageMins === 1 ? '1 min ago' : `${ageMins} min ago`;
     const id = pushToast({
       tone: 'red',
       durationMs: null, // persists until the user clicks it
       emphasis: true,
-      kicker: `Breaking · ${headline.source} · ${ageLabel}`,
+      kicker: `Breaking · ${headline.source}`,
+      // The age is rendered live from this stamp so a long-lived toast stays
+      // accurate instead of freezing at whatever it said when it appeared.
+      timestampMs: new Date(headline.timestamp).getTime(),
       message: headline.text,
       href: '/market-news',
     });
