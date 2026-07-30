@@ -4364,9 +4364,13 @@
    ══════════════════════════════════════════════════════════════ */
 
 .rv2-page {
-  max-width: 1060px;
-  margin: 0 auto;
-  padding: 24px 24px 80px;
+  /* Full-bleed lifted surface: the board sits a step above the app ground so
+     Default doesn't read as flat near-black. The muted-surface token is
+     theme-driven, so Default gets a warm lift while Midnight keeps its deep
+     near-black. Content stays capped at ~1060px via the auto side padding. */
+  width: 100%;
+  padding: 24px max(24px, calc((100% - 1060px) / 2)) 80px;
+  background: var(--color-bg-muted);
   color: var(--app-text);
   font-family: var(--font-sans);
   display: flex;
