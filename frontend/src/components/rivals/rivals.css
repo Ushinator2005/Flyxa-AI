@@ -4372,10 +4372,11 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  /* The page lives inside a fixed-height full-bleed <main>; let it scroll
-     rather than let flex-shrink crush its children. */
+  /* The page lives inside a fixed-height full-bleed <main>. Bind to that
+     height and scroll only when content actually overflows — otherwise a
+     phantom scrollbar shows even on short boards. */
+  height: 100%;
   overflow-y: auto;
-  min-height: 0;
 }
 
 /* Board sections keep their intrinsic height. Without this, any child with

@@ -95,18 +95,6 @@ function seasonLabel(): string {
   return now.toLocaleString('en-US', { month: 'long' });
 }
 
-// A neutral flavour tier derived from the trader's strongest attribute.
-// Deliberately non-punitive — the down case is "Building", never a red badge.
-function tierFor(rival: Rival, period: LeaderboardPeriod): string {
-  const s = getPeriodStats(rival, period);
-  const process = rival.mascot.stats.processScore ?? 0;
-  if (s.winRate >= 55 && s.netPnl > 0) return 'Apex';
-  if (process >= 65 || s.ruleAdherence >= 80) return 'Disciplined';
-  if (s.consistency >= 55) return 'Consistent';
-  if (s.tradeCount === 0) return 'On deck';
-  return 'Building';
-}
-
 function winsLosses(rival: Rival, period: LeaderboardPeriod): [number, number] {
   const s = getPeriodStats(rival, period);
   const wins = Math.round(s.tradeCount * (s.winRate / 100));
@@ -448,13 +436,10 @@ export default function Rivals() {
                   <Trophy size={18} color={trophyColor} strokeWidth={1.7} />
                 </div>
               </div>
-              <div style={{ marginTop: 15, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: LB.text }}>
-                  <span style={{ color: LB.amber, fontSize: 10 }}>◆</span> {tierFor(rival, period)}
-                </span>
-                <span style={{ fontSize: 11.5, color: LB.muted }}>
-                  {ahead ? `${formatMetricGap(gap, metric)} behind #${i}` : 'Board leader'}
-                </span>
+              <div style={{ marginTop: 15, fontSize: 12, color: LB.muted }}>
+                {ahead
+                  ? <><b style={{ color: LB.text, fontWeight: 600 }}>{formatMetricGap(gap, metric)}</b> behind #{i}</>
+                  : <b style={{ color: LB.green, fontWeight: 600 }}>Board leader</b>}
               </div>
               <div style={{ marginTop: 16, display: 'flex', gap: 26 }}>
                 {podStat('Net P&L', formatCurrency(s.netPnl), s.netPnl > 0 ? LB.green : s.netPnl < 0 ? LB.red : LB.text)}

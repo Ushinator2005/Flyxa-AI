@@ -2,9 +2,15 @@
   display: none;
 }
 
+/* Right-edge slide-in drawer. Fixed (not in the page's column flow) so it
+   never claims layout height when closed — otherwise it forces the whole
+   Rivals page to overflow and scroll. */
 .rival-chat-panel {
-  position: relative;
-  height: 100%;
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 90;
+  height: 100vh;
   width: 0;
   flex-shrink: 0;
   overflow: hidden;
@@ -14,11 +20,12 @@
   pointer-events: none;
   border-left: 1px solid var(--app-border);
   background: var(--app-panel);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.35);
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
 }
 
 .rival-chat-panel.open {
-  width: 360px;
+  width: 380px;
   opacity: 1;
   pointer-events: auto;
 }
