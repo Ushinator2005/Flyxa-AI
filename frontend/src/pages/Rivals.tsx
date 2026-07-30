@@ -3,7 +3,6 @@ import {
   Bell, Check, ChevronDown, Clock3,
   MessageCircle, Plus, Share2, Trophy, X,
 } from 'lucide-react';
-import FlyxaLogo from '../components/common/FlyxaLogo.js';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
 import type { RivalRequestResponse, SharedTradeRecord } from '../services/api.js';
@@ -273,18 +272,13 @@ export default function Rivals() {
 
       {/* ── Header ── */}
       <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, padding: '4px 2px 22px' }}>
-        <div style={{ display: 'flex', gap: 18, minWidth: 0 }}>
-          <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 12, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <FlyxaLogo size={28} showWordmark={false} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
-              {activeLeague?.name ?? 'Rivals'}
-            </h1>
-            <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
-              Private league · <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> traders · Verified P&amp;L only. Compare consistency, process and edge with your circle.
-            </p>
-          </div>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
+            {activeLeague?.name ?? 'Rivals'}
+          </h1>
+          <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
+            Private league · <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> traders · Verified P&amp;L only. Compare consistency, process and edge with your circle.
+          </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 14, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12, color: LB.muted, whiteSpace: 'nowrap' }}>
