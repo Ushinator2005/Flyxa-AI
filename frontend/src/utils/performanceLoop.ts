@@ -10,6 +10,23 @@ export interface PerformanceLimits {
   dailyLossLimit: number;
   maxTrades: number;
   maxContracts: number;
+  // Per-instrument contract caps pulled straight from the Rules section, e.g.
+  // { NQ: 2, MNQ: 20 }. When present, these take precedence over the flat
+  // maxContracts so a micro (MNQ) isn't judged against a full-size (NQ) cap.
+  contractLimits?: Record<string, number>;
+}
+
+// The contract cap that applies to a given trade: its own instrument's cap when
+// per-instrument caps are configured, otherwise the flat cap. Returns null when
+// nothing caps this symbol (so it never false-flags).
+function contractCapFor(limits: PerformanceLimits, symbol: string): number | null {
+  const perInstrument = limits.contractLimits;
+  if (perInstrument && Object.keys(perInstrument).length > 0) {
+    const sym = symbol.toUpperCase();
+    const cap = perInstrument[sym] ?? perInstrument[symbol];
+    return typeof cap === 'number' ? cap : null;
+  }
+  return limits.maxContracts > 0 ? limits.maxContracts : null;
 }
 
 export function limitsFromPreSession(
@@ -25,6 +42,7 @@ export function limitsFromPreSession(
     dailyLossLimit: Number(preSession?.sessionMaxLoss ?? valueFor('daily_loss_limit') ?? fallback.dailyLossLimit ?? 0) || fallback.dailyLossLimit || 0,
     maxTrades: valueFor('max_trades') || fallback.maxTrades || 0,
     maxContracts: valueFor('max_contracts') || fallback.maxContracts || 0,
+    contractLimits: fallback.contractLimits,
   };
 }
 
@@ -90,11 +108,15 @@ export function evaluateTradeViolations(
     ));
   }
 
-  if (limits.maxContracts > 0 && Number(trade.contract_size ?? 0) > limits.maxContracts) {
+  const symbol = String(trade.symbol ?? '');
+  const size = Number(trade.contract_size ?? 0);
+  const contractCap = contractCapFor(limits, symbol);
+  if (contractCap !== null && size > contractCap) {
+    const perInstrument = limits.contractLimits && Object.keys(limits.contractLimits).length > 0;
     violations.push(violation(
       'max_contracts',
       'critical',
-      `${trade.contract_size} contracts exceeded the ${limits.maxContracts}-contract limit.`,
+      `${size} ${symbol || 'contracts'}${symbol ? ` contract${size === 1 ? '' : 's'}` : ''} exceeded the ${contractCap}-contract cap${perInstrument && symbol ? ` for ${symbol.toUpperCase()}` : ''}.`,
       Math.abs(Math.min(0, tradeNet)),
       trade.id,
     ));
@@ -159,7 +181,10 @@ export function generateNextSessionPrescriptions(
   const now = new Date().toISOString();
   const prescriptions: PerformancePrescription[] = [];
   const offPlan = recent.filter(trade => trade.followed_plan === false || (trade.behavioral_flags ?? []).includes('plan-deviation'));
-  const oversized = recent.filter(trade => limits.maxContracts > 0 && trade.contract_size > limits.maxContracts);
+  const oversized = recent.filter(trade => {
+    const cap = contractCapFor(limits, String(trade.symbol ?? ''));
+    return cap !== null && Number(trade.contract_size ?? 0) > cap;
+  });
 
   let postLossCount = 0;
   let postLossPnl = 0;

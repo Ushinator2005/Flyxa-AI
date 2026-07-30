@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { Trade as ApiTrade } from '../types/index.js';
 import useFlyxaStore, { createEmptyJournalEntry, DEFAULT_ACCOUNT_ID } from '../store/flyxaStore.js';
-import type { Trade as StoreTrade } from '../store/types.js';
+import type { Trade as StoreTrade, RiskRule } from '../store/types.js';
 import { tradesApi } from '../services/api.js';
 import { persistDeletedTradeId } from '../utils/deletedTrades.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
@@ -12,6 +12,15 @@ import {
   limitsFromPreSession,
   violationBehaviorFlags,
 } from '../utils/performanceLoop.js';
+
+// Per-instrument contract caps configured in the Rules section (e.g. NQ 2,
+// MNQ 20). Fed into the performance-loop check so a micro isn't judged against
+// a full-size cap. Undefined when no per-instrument caps are set.
+function contractLimitsFromRules(rules: RiskRule[]): Record<string, number> | undefined {
+  const rule = rules.find(r => (r.kind ?? 'manual') === 'max_contracts' && r.enabled !== false);
+  const limits = rule?.contractLimits;
+  return limits && Object.keys(limits).length > 0 ? limits : undefined;
+}
 
 function normalizeEmotion(value: unknown): ApiTrade['emotional_state'] {
   if (typeof value !== 'string') return null;
@@ -405,7 +414,7 @@ export function useTrades() {
     const violations = evaluateTradeViolations(
       draftApi,
       earlierDayTrades,
-      limitsFromPreSession(state.preSession, { dailyLossLimit: account?.dailyLossLimit ?? 0 }),
+      limitsFromPreSession(state.preSession, { dailyLossLimit: account?.dailyLossLimit ?? 0, contractLimits: contractLimitsFromRules(state.riskRules) }),
       state.preSession,
     );
     const enrichedData: Partial<ApiTrade> = {
@@ -476,7 +485,7 @@ export function useTrades() {
     const violations = evaluateTradeViolations(
       toApiTrade(updatedTrade),
       earlierDayTrades,
-      limitsFromPreSession(state.preSession, { dailyLossLimit: account?.dailyLossLimit ?? 0 }),
+      limitsFromPreSession(state.preSession, { dailyLossLimit: account?.dailyLossLimit ?? 0, contractLimits: contractLimitsFromRules(state.riskRules) }),
       state.preSession,
     );
     updateTradeInStore(entry.id, id, {
