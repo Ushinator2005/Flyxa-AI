@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   ArrowUp, ArrowDown, Bell, Check, ChevronDown, Clock3,
   MessageCircle, Minus, Plus, Share2, Trophy, Users, X,
@@ -82,14 +82,6 @@ const LB = {
   rowYou: 'var(--amber-dim)',
 };
 
-// The season is the calendar month; standings reset on the 1st. Days-left is
-// the honest, low-key way to say that — no ticking clock implying live stakes.
-function countdownDaysLeft(): number {
-  const now = new Date();
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000));
-}
-
 function seasonLabel(): string {
   const now = new Date();
   return now.toLocaleString('en-US', { month: 'long' });
@@ -156,6 +148,111 @@ function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
   return 'Momentum intact — keep pressing the repeatable setup.';
 }
 
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/** Re-renders on an interval — drives the live season countdown. */
+function useTicker(ms: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), ms);
+    return () => window.clearInterval(id);
+  }, [ms]);
+  return now;
+}
+
+/** Animates a number toward `target` (~700ms). Skips under reduced motion. */
+function useCountUp(target: number): number {
+  const [value, setValue] = useState(target);
+  const fromRef = useRef(target);
+  useEffect(() => {
+    if (prefersReducedMotion()) { setValue(target); fromRef.current = target; return; }
+    const from = fromRef.current;
+    if (from === target) return;
+    const start = performance.now();
+    const dur = 700;
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(from + (target - from) * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return value;
+}
+
+/** Cumulative-equity sparkline from a period's daily P&L (or equity curve). */
+function Sparkline({ stats, up, width = 68, height = 22 }: { stats: RivalPeriodStats; up: boolean; width?: number; height?: number }) {
+  const series = stats.equityCurve?.length
+    ? stats.equityCurve
+    : (stats.dailyPnl ?? []).reduce<number[]>((acc, d) => { acc.push((acc[acc.length - 1] ?? 0) + d.pnl); return acc; }, []);
+  if (series.length < 2) return <div style={{ width, height }} aria-hidden="true" />;
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const span = max - min || 1;
+  const stepX = width / (series.length - 1);
+  const pts = series.map((v, i) => `${(i * stepX).toFixed(1)},${(height - ((v - min) / span) * height).toFixed(1)}`).join(' ');
+  const color = up ? 'var(--green)' : 'var(--red)';
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" opacity={0.9} />
+    </svg>
+  );
+}
+
+/** Trailing consecutive green days from a period's daily P&L — powers the 🔥 marker. */
+function hotStreak(stats: RivalPeriodStats): number {
+  const daily = stats.dailyPnl ?? [];
+  let streak = 0;
+  for (let i = daily.length - 1; i >= 0; i--) {
+    if (daily[i].pnl > 0) streak++;
+    else break;
+  }
+  return streak;
+}
+
+/** Count-up numeric display with a formatter (currency, %, etc.). */
+function CountUp({ target, format }: { target: number; format: (n: number) => string }) {
+  const v = useCountUp(target);
+  return <>{format(v)}</>;
+}
+
+interface PulseEvent { id: string; text: ReactNode; tone: 'up' | 'down' | 'neutral'; }
+
+/** Derives a live-feeling activity feed from real, verifiable board data —
+ *  rank moves, hot streaks, best days, and the current leader. No fabrication. */
+function buildActivityFeed(
+  ranked: Rival[], leagueRivals: Rival[], metric: LeaderboardMetric, period: LeaderboardPeriod,
+): PulseEvent[] {
+  const events: PulseEvent[] = [];
+  ranked.forEach((rival) => {
+    const name = rival.isMe ? 'You' : rival.displayName;
+    const move = rankMovement(rival, leagueRivals, metric, period);
+    const rank = ranked.findIndex(r => r.id === rival.id) + 1;
+    if (move > 0) events.push({ id: `mv-${rival.id}`, tone: 'up', text: <><b>{name}</b> climbed to #{rank}</> });
+    else if (move < 0) events.push({ id: `mv-${rival.id}`, tone: 'down', text: <><b>{name}</b> slipped to #{rank}</> });
+    const streak = hotStreak(getPeriodStats(rival, period));
+    if (streak >= 2) events.push({ id: `st-${rival.id}`, tone: 'up', text: <><b>{name}</b> on a {streak}-day green streak</> });
+    const daily = getPeriodStats(rival, period).dailyPnl ?? [];
+    const best = daily.length ? Math.max(...daily.map(d => d.pnl)) : 0;
+    if (best >= 500) events.push({ id: `bd-${rival.id}`, tone: 'up', text: <><b>{name}</b> booked a {formatCurrency(best)} day</> });
+  });
+  if (ranked[0]) events.push({ id: 'leader', tone: 'neutral', text: <><b>{ranked[0].isMe ? 'You' : ranked[0].displayName}</b> {ranked[0].isMe ? 'lead' : 'leads'} the board</> });
+  return events.slice(0, 6);
+}
+
+/** The single hero stat for a metric — used big on the podium. */
+function heroStat(stats: RivalPeriodStats, rival: Rival, metric: LeaderboardMetric): { value: string; tone: 'up' | 'down' | 'neutral'; label: string } {
+  if (metric === 'winRate') return { value: `${Math.round(stats.winRate)}%`, tone: stats.winRate >= 50 ? 'up' : 'neutral', label: 'Win rate' };
+  if (metric === 'consistency') return { value: `${Math.round(stats.consistency)}`, tone: stats.consistency >= 65 ? 'up' : 'neutral', label: 'Consistency' };
+  if (metric === 'processScore') return { value: `${Math.round(rival.mascot.stats.processScore)}`, tone: rival.mascot.stats.processScore >= 65 ? 'up' : 'neutral', label: 'Process' };
+  return { value: formatCurrency(stats.netPnl), tone: stats.netPnl > 0 ? 'up' : stats.netPnl < 0 ? 'down' : 'neutral', label: 'Net P&L' };
+}
+
 export default function Rivals() {
   const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
   const { trades: allMyTrades } = useTrades();
@@ -182,6 +279,7 @@ export default function Rivals() {
   const [sharingBusy, setSharingBusy] = useState<string | null>(null);
   const [sharedSet, setSharedSet] = useState<Set<string>>(new Set());
   const prevRivalIdRef = useRef<string | null>(null);
+  const nowMs = useTicker(1000); // live season countdown
 
   // One-time migration: leagues used to live in localStorage only. Move them into
   // the store (synced to Supabase) and drop the legacy key.
@@ -277,13 +375,43 @@ export default function Rivals() {
   const myGap = myAhead
     ? Math.max(0, metricValue(myAhead, metric, period) - metricValue(currentUser, metric, period))
     : 0;
-  const myMovement = rankMovement(currentUser, leagueRivals, metric, period);
   const hasRivals = ranked.length >= 2;
   // Podium is the celebratory top-3; the table below is "the rest of the
   // field" (ranks 4+) so no one is ever rendered twice.
   const podiumRivals = ranked.slice(0, 3);
   const fieldRivals = ranked.slice(3);
-  const daysToSeasonEnd = Number(countdownDaysLeft());
+
+  // Live countdown to the season lock (first of next month).
+  const seasonEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).getTime();
+  const msLeft = Math.max(0, seasonEnd - nowMs);
+  const cd = {
+    d: Math.floor(msLeft / 86400000),
+    h: Math.floor((msLeft % 86400000) / 3600000),
+    m: Math.floor((msLeft % 3600000) / 60000),
+    s: Math.floor((msLeft % 60000) / 1000),
+  };
+
+  // Chase (person ahead) and Defend (person directly behind).
+  const myValue = metricValue(currentUser, metric, period);
+  const behindRival = ranked[myPosition] ?? null; // myPosition is 1-based
+  const defendGap = behindRival ? Math.max(0, myValue - metricValue(behindRival, metric, period)) : 0;
+  const boardValues = ranked.map(r => metricValue(r, metric, period));
+  const boardMin = Math.min(...boardValues, 0);
+  const boardMax = Math.max(...boardValues, 1);
+  const boardSpan = boardMax - boardMin || 1;
+  const chaseFillPct = Math.round(((myValue - boardMin) / boardSpan) * 100);
+  // Defend bar: how much of your lead over #below remains before they catch you.
+  const defendCushion = behindRival
+    ? Math.min(100, Math.round((defendGap / (Math.abs(myValue - boardMin) || 1)) * 100))
+    : 100;
+  const defendUrgent = behindRival ? defendGap < boardSpan * 0.12 : false;
+
+  const activity = buildActivityFeed(ranked, leagueRivals, metric, period);
+
+  // Ghost benchmark — the disciplined baseline a funded trader clears.
+  const GHOST_WIN = 55;
+  const myWin = Math.round(getPeriodStats(currentUser, period).winRate);
+  const beatingGhost = myWin >= GHOST_WIN;
 
   const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
   const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#000', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
@@ -298,18 +426,14 @@ export default function Rivals() {
           <h1 style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
             {activeLeague?.name ?? 'Rivals'}
           </h1>
-          <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
-            <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> {ranked.length === 1 ? 'trader' : 'traders'} · ranked on verified journal data — no screenshots, no claims.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 9 }}>
+            <span className="rvc-verified"><Check size={12} strokeWidth={3} /> Verified journal data</span>
+            <span style={{ fontSize: 12.5, color: LB.muted }}>No screenshots, no claims — {ranked.length} {ranked.length === 1 ? 'trader' : 'traders'}.</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 14, flexShrink: 0 }}>
-          <div style={{ ...kicker, whiteSpace: 'nowrap' }}>
-            {seasonLabel()} season · resets in {daysToSeasonEnd} {daysToSeasonEnd === 1 ? 'day' : 'days'}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
-            <button type="button" onClick={() => setIsAddOpen(true)} style={btnPrimary}>Invite traders</button>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
+          <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
+          <button type="button" onClick={() => setIsAddOpen(true)} style={btnPrimary}>Invite traders</button>
         </div>
       </header>
 
@@ -377,79 +501,149 @@ export default function Rivals() {
         </div>
       </div>
 
-      {/* ── Your standing: the hook. Rank, movement, and the gap to close. ── */}
+      {/* ── Countdown + what's at stake ── */}
       {hasRivals && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', background: LB.card, border: `1px solid ${LB.borderHi}`, borderRadius: 14, padding: '16px 22px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
-            <RivalAvatar rival={currentUser} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 20, fontWeight: 700, color: LB.text, fontFamily: 'var(--font-sans)' }}>#{myPosition}</span>
-                <span style={{ fontSize: 12.5, color: LB.muted }}>of {ranked.length} on {metricLabel}</span>
-                <MovementBadge delta={myMovement} period={period} />
-              </div>
-              <div style={{ marginTop: 3, fontSize: 12.5, color: LB.muted }}>
-                {myAhead
-                  ? <>{formatMetricGap(myGap, metric)} behind <b style={{ color: LB.text, fontWeight: 600 }}>{myAhead.displayName}</b> to move up</>
-                  : <b style={{ color: LB.green, fontWeight: 600 }}>Leading the board</b>}
-              </div>
+        <div className="rvc-countdown rvc-fade-up">
+          <div>
+            <div className="rvc-kicker" style={{ color: LB.amber }}>{seasonLabel()} season</div>
+            <div className="rvc-countdown-clock" style={{ marginTop: 6 }}>
+              <span><span className="rvc-clock-num">{cd.d}</span><span className="rvc-clock-unit">d</span></span>
+              <span><span className="rvc-clock-num">{String(cd.h).padStart(2, '0')}</span><span className="rvc-clock-unit">h</span></span>
+              <span><span className="rvc-clock-num">{String(cd.m).padStart(2, '0')}</span><span className="rvc-clock-unit">m</span></span>
+              <span><span className="rvc-clock-num">{String(cd.s).padStart(2, '0')}</span><span className="rvc-clock-unit">s</span></span>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: LB.muted, marginLeft: 8 }}>until the board locks</span>
             </div>
           </div>
-          <div style={{ fontSize: 12.5, color: LB.muted, maxWidth: 360, textAlign: 'right' }}>{coachingInsight(currentUser, period)}</div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: LB.muted }}>
+            <Trophy size={16} color="var(--color-gold, #f6c343)" />
+            Season champion takes the trophy shelf &amp; hall-of-fame spot.
+          </div>
         </div>
       )}
 
-      {/* ── Podium: the celebratory top three ── */}
+      {/* ── Podium hierarchy: champion elevated & centered ── */}
       {hasRivals && (
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, podiumRivals.length)}, minmax(0, 1fr))`, gap: 16, marginBottom: 16 }}>
-        {podiumRivals.map((rival, i) => {
+      <div className="rvc-podium rvc-fade-up" style={{ marginTop: 2 }}>
+        {[podiumRivals[1], podiumRivals[0], podiumRivals[2]].map((rival) => {
+          if (!rival) return null;
+          const i = ranked.findIndex(r => r.id === rival.id); // 0-based rank
           const s = getPeriodStats(rival, period);
-          const trophyColor = i === 0 ? 'var(--color-gold)' : i === 1 ? 'var(--color-silver)' : 'var(--color-bronze)';
-          const podStat = (label: string, value: string, color?: string) => (
-            <div style={{ minWidth: 0 }}>
-              <div style={kicker}>{label}</div>
-              <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: color ?? LB.text }}>{value}</div>
-            </div>
-          );
-          const ahead = i > 0 ? ranked[i - 1] : null;
-          const gap = ahead ? Math.max(0, metricValue(ahead, metric, period) - metricValue(rival, metric, period)) : 0;
+          const hero = heroStat(s, rival, metric);
+          const medal = i === 0 ? 'var(--color-gold, #f6c343)' : i === 1 ? 'var(--color-silver, #aab6c7)' : 'var(--color-bronze, #c48b4e)';
+          const heroColor = hero.tone === 'up' ? LB.green : hero.tone === 'down' ? LB.red : LB.text;
           const movement = rankMovement(rival, leagueRivals, metric, period);
+          const streak = hotStreak(s);
+          const heroNum = metric === 'netPnl' ? s.netPnl : metric === 'winRate' ? s.winRate : metric === 'consistency' ? s.consistency : rival.mascot.stats.processScore;
+          const fmt = (n: number) => metric === 'netPnl' ? formatCurrency(n) : metric === 'winRate' ? `${Math.round(n)}%` : `${Math.round(n)}`;
           return (
-            <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
-              style={{ textAlign: 'left', font: 'inherit', cursor: 'pointer', background: LB.card, border: `1px solid ${rival.isMe ? LB.borderHi : LB.border}`, borderRadius: 14, padding: '18px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                  <RivalAvatar rival={rival} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <b style={{ fontSize: 15, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
-                      {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
-                      <span style={{ fontSize: 12, color: LB.muted }}>@{rival.username}</span>
-                      <MovementBadge delta={movement} period={period} />
-                    </div>
+            <button
+              key={rival.id}
+              type="button"
+              onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
+              className={`rvc-pod rvc-pod--${i + 1}${i === 0 ? ' rvc-pod--champion' : ''}${rival.isMe ? ' rvc-pod--you' : ''}`}
+            >
+              {i === 0 && <Trophy className="rvc-crown" size={26} strokeWidth={1.8} />}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <span className="rvc-rankbadge" style={{ background: `color-mix(in srgb, ${medal} 16%, transparent)`, color: medal }}>#{i + 1}</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {streak >= 2 && <span className="rvc-flame">🔥 {streak}</span>}
+                  <MovementBadge delta={movement} period={period} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 14 }}>
+                <RivalAvatar rival={rival} large={i === 0} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <b style={{ fontSize: i === 0 ? 16 : 14.5, fontWeight: 700, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
+                    <Check size={12} strokeWidth={3} color={LB.green} aria-label="Verified" />
+                    {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: LB.muted, marginTop: 1 }}>@{rival.username}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, marginTop: 16 }}>
+                <div>
+                  <div className="rvc-kicker">{hero.label}</div>
+                  <div className="rvc-hero" style={{ fontSize: i === 0 ? 26 : 21, color: heroColor, marginTop: 4 }}>
+                    <CountUp target={heroNum} format={fmt} />
                   </div>
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: trophyColor }}>#{i + 1}</span>
-                  <Trophy size={18} color={trophyColor} strokeWidth={1.7} />
-                </div>
+                <Sparkline stats={s} up={s.netPnl >= 0} width={i === 0 ? 88 : 66} />
               </div>
-              <div style={{ marginTop: 15, fontSize: 12, color: LB.muted }}>
-                {ahead
-                  ? <><b style={{ color: LB.text, fontWeight: 600 }}>{formatMetricGap(gap, metric)}</b> behind #{i}</>
-                  : <b style={{ color: LB.green, fontWeight: 600 }}>Board leader</b>}
-              </div>
-              <div style={{ marginTop: 16, display: 'flex', gap: 26 }}>
-                {podStat('Net P&L', formatCurrency(s.netPnl), s.netPnl > 0 ? LB.green : s.netPnl < 0 ? LB.red : LB.text)}
-                {podStat('Win rate', `${Math.round(s.winRate)}%`)}
-                {podStat('Avg R', avgRText(rival, period))}
+              <div style={{ display: 'flex', gap: 18, marginTop: 14, paddingTop: 13, borderTop: `1px solid ${LB.border}` }}>
+                <div><div className="rvc-kicker">Win</div><div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, marginTop: 3 }}>{Math.round(s.winRate)}%</div></div>
+                <div><div className="rvc-kicker">Avg R</div><div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, marginTop: 3 }}>{avgRText(rival, period)}</div></div>
+                <div><div className="rvc-kicker">Rules</div><div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, marginTop: 3, color: s.ruleAdherence >= 80 ? LB.green : LB.text }}>{Math.round(s.ruleAdherence)}%</div></div>
               </div>
             </button>
           );
         })}
       </div>
+      )}
+
+      {/* ── Chase & Defend — the emotional centerpiece ── */}
+      {hasRivals && (myAhead || behindRival) && (
+        <div className="rvc-cd rvc-fade-up">
+          {/* CHASE */}
+          <div className={`rvc-cd-card ${myAhead ? 'rvc-cd-card--chase' : 'rvc-cd-card--safe'}`}>
+            <div className="rvc-kicker" style={{ color: myAhead ? LB.amber : LB.green }}>{myAhead ? `Chase ${myAhead.displayName}` : 'Board leader'}</div>
+            {myAhead ? (
+              <>
+                <div style={{ marginTop: 8, fontSize: 15, color: LB.text }}>
+                  <b style={{ fontFamily: 'var(--font-mono)', color: LB.amber }}>{formatMetricGap(myGap, metric)}</b> to overtake <b>#{myPosition - 1}</b>
+                </div>
+                <div className="rvc-bar"><div className="rvc-bar-fill rvc-bar-fill--amber" style={{ width: `${Math.max(6, Math.min(100, chaseFillPct))}%` }} /></div>
+                <div style={{ marginTop: 8, ...kicker }}>You're {chaseFillPct}% of the way up the board</div>
+              </>
+            ) : (
+              <div style={{ marginTop: 8, fontSize: 14, color: LB.muted }}>You hold <b style={{ color: LB.green }}>#1</b>. Keep the lead until the board locks.</div>
+            )}
+          </div>
+          {/* DEFEND */}
+          <div className={`rvc-cd-card ${defendUrgent ? 'rvc-cd-card--defend' : behindRival ? '' : 'rvc-cd-card--safe'}`}>
+            <div className="rvc-kicker" style={{ color: defendUrgent ? LB.red : LB.subtle }}>{behindRival ? `Defend #${myPosition}` : 'Back of the board'}</div>
+            {behindRival ? (
+              <>
+                <div style={{ marginTop: 8, fontSize: 15, color: LB.text }}>
+                  <b style={{ fontFamily: 'var(--font-mono)', color: defendUrgent ? LB.red : LB.text }}>{formatMetricGap(defendGap, metric)}</b> ahead of <b>{behindRival.displayName}</b>
+                </div>
+                <div className="rvc-bar"><div className={`rvc-bar-fill ${defendUrgent ? 'rvc-bar-fill--red' : 'rvc-bar-fill--green'}`} style={{ width: `${Math.max(6, defendCushion)}%` }} /></div>
+                <div style={{ marginTop: 8, ...kicker, color: defendUrgent ? LB.red : LB.subtle }}>{defendUrgent ? 'They are closing in — protect the spot' : 'Comfortable cushion for now'}</div>
+              </>
+            ) : (
+              <div style={{ marginTop: 8, fontSize: 14, color: LB.muted }}>No one behind you yet — invite more traders to raise the stakes.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Ghost benchmark — a small board still has something to beat ── */}
+      {hasRivals && (
+        <div className="rvc-ghost rvc-fade-up">
+          <Users size={15} style={{ color: LB.subtle, flexShrink: 0 }} />
+          <span>
+            <b style={{ color: LB.text }}>Average funded trader:</b> {GHOST_WIN}% win rate ·{' '}
+            {beatingGhost
+              ? <span style={{ color: LB.green }}>you're beating them ({myWin}%)</span>
+              : <span style={{ color: LB.muted }}>you're at {myWin}% — {GHOST_WIN - myWin} points to clear the bar</span>}
+          </span>
+        </div>
+      )}
+
+      {/* ── Live activity pulse ── */}
+      {hasRivals && activity.length > 0 && (
+        <div className="rvc-pulse rvc-fade-up">
+          <div className="rvc-pulse-hd">
+            <span className="rvc-live-dot" />
+            <span className="rvc-kicker" style={{ color: LB.text }}>Live activity</span>
+          </div>
+          {activity.map(ev => (
+            <div key={ev.id} className="rvc-pulse-row">
+              <span className="rvc-pulse-dot" style={{ background: ev.tone === 'up' ? LB.green : ev.tone === 'down' ? LB.red : LB.subtle }} />
+              <span>{ev.text}</span>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ── Low state: no rivals yet — coach the invite, don't show a bare board ── */}
