@@ -22,7 +22,7 @@ export default defineConfig({
     },
     {
       name: 'logged-in',
-      testMatch: /app\.spec\.ts/,
+      testMatch: /(app|pages)\.spec\.ts/,
     },
   ],
   webServer: [

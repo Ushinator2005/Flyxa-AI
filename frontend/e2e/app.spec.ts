@@ -1,4 +1,27 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+// Deletes every account named "E2E Smoke Account" via the Settings table.
+// Self-healing: failed historical runs may have left several behind.
+async function purgeSmokeAccounts(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const tagged = await page.evaluate(() => {
+      document.querySelectorAll('[data-e2e-target]').forEach(el => el.removeAttribute('data-e2e-target'));
+      const input = Array.from(document.querySelectorAll('input'))
+        .find(el => (el as HTMLInputElement).value === 'E2E Smoke Account');
+      input?.setAttribute('data-e2e-target', 'row-name');
+      return Boolean(input);
+    });
+    if (!tagged) return;
+    const row = page
+      .locator('div')
+      .filter({ has: page.locator('[data-e2e-target="row-name"]') })
+      .filter({ has: page.getByRole('button', { name: /delete/i }) })
+      .last();
+    await row.getByRole('button', { name: /delete/i }).first().click();
+    await page.getByRole('button', { name: /confirm delete/i }).click();
+    await expect(page.locator('[data-e2e-target="row-name"]')).toHaveCount(0);
+  }
+}
 
 // Logged-in critical path: dashboard boots, account creation with firm
 // presets works, journal/scanner renders.
@@ -17,6 +40,7 @@ test('scanner (trade journal) renders', async ({ page }) => {
 
 test('add-account flow offers firm presets and applies rules', async ({ page }) => {
   await page.goto('/settings#accounts');
+  await purgeSmokeAccounts(page);
   await page.locator('[data-tour-id="settings-add-account"]').click();
   await expect(page.getByText('Add Trading Account')).toBeVisible();
 
@@ -43,20 +67,8 @@ test('add-account flow offers firm presets and applies rules', async ({ page }) 
   // The account shows in the (always-visible) active accounts table.
   await expect(page.getByText('E2E Smoke Account').first()).toBeVisible();
 
-  // Cleanup so repeated runs stay tidy: delete the account we just made.
-  // Row names render as <input> values (a property, not an attribute), so
-  // tag the matching input via JS and locate the row around it.
-  await page.evaluate(() => {
-    const input = Array.from(document.querySelectorAll('input'))
-      .find(el => (el as HTMLInputElement).value === 'E2E Smoke Account');
-    input?.setAttribute('data-e2e-target', 'row-name');
-  });
-  const row = page
-    .locator('div')
-    .filter({ has: page.locator('[data-e2e-target="row-name"]') })
-    .filter({ has: page.getByRole('button', { name: /delete/i }) })
-    .last();
-  await row.getByRole('button', { name: /delete/i }).first().click();
-  await page.getByRole('button', { name: /confirm delete/i }).click();
+  // Cleanup so repeated runs stay tidy: purge everything this test created
+  // (and anything older failed runs left behind).
+  await purgeSmokeAccounts(page);
   await expect(page.getByText('E2E Smoke Account')).toHaveCount(0);
 });

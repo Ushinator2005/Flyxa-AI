@@ -3,8 +3,10 @@ import { test, expect } from '@playwright/test';
 // Logged-out surface: landing page, auth tabs, waitlist entry.
 
 test('root sends logged-out visitors to the landing page', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForURL('**/landing/index.html');
+  // The pre-boot script redirects mid-load; Playwright may report the
+  // interrupted navigation as an error — the redirect itself is the point.
+  await page.goto('/', { waitUntil: 'commit' }).catch(() => {});
+  await page.waitForURL(/\/landing\/?(index\.html)?$/);
   await expect(page).toHaveTitle(/Flyxa/);
   await expect(page.locator('.btn-nav-cta')).toHaveText(/Join waitlist/i);
   await expect(page.locator('.nav-login')).toHaveAttribute('href', '/auth');
