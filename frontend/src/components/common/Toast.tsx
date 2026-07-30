@@ -37,7 +37,9 @@ export default function ToastStack() {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        width: 360,
+        // Emphasized alerts (breaking news, imminent high-impact events) get a
+        // wider stack so they read as a warning banner, not a passing notice.
+        width: toasts.some((toast) => toast.emphasis) ? 440 : 360,
         maxWidth: 'calc(100vw - 32px)',
       }}
     >
@@ -62,10 +64,10 @@ export default function ToastStack() {
             style={{
               border: toast.emphasis ? `2px solid var(--red, #f87171)` : `1px solid ${tone.border}`,
               background: toast.emphasis ? 'rgba(80, 14, 14, 0.97)' : 'var(--surface-1)',
-              borderRadius: 6,
-              padding: toast.emphasis ? '14px 16px' : '12px 16px',
+              borderRadius: toast.emphasis ? 8 : 6,
+              padding: toast.emphasis ? '18px 20px' : '12px 16px',
               color: 'var(--txt)',
-              fontSize: 13,
+              fontSize: toast.emphasis ? 15 : 13,
               fontFamily: 'var(--font-sans)',
               display: 'flex',
               alignItems: toast.emphasis ? 'flex-start' : 'center',

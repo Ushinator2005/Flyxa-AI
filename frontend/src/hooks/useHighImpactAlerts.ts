@@ -118,9 +118,12 @@ export function useHighImpactAlerts(displayTimezone: string) {
       }
 
       activeToastId.current = pushToast({
-        message: `High impact: ${bestLabel}`,
+        message: bestLabel,
+        kicker: 'HIGH IMPACT · ECON CALENDAR',
         tone: 'red',
+        emphasis: true, // breaking-news treatment: solid red, pulsing, larger
         durationMs: null, // persists until the user closes it
+        href: '/market-news',
       });
     }
 
