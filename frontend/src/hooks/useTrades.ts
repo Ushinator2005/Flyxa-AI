@@ -428,6 +428,10 @@ export function useTrades() {
 
     const patch: Partial<StoreTrade> = {
       symbol: data.symbol,
+      // The trade's own date drives which calendar day it lands on. Without this
+      // an edited date was silently dropped and the trade snapped back to its
+      // original day on the next load.
+      date: data.trade_date,
       direction: data.direction === 'Short' ? 'SHORT' : data.direction === 'Long' ? 'LONG' : undefined,
       entry: data.entry_price,
       sl: data.sl_price,
