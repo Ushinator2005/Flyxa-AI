@@ -567,16 +567,19 @@ export default function WebsiteTour() {
   }, [markDone, shouldShow, step.id, step.targetId, stepIndex]);
 
   const panelStyle = useMemo(() => {
-    const width = 330;
-    const fallback = { left: 220, top: 96 };
-    if (!rect) return fallback;
+    // Match the rendered width (min(360, 100vw - 32)) so the panel is always
+    // clamped fully inside the viewport — otherwise it spills off the right
+    // edge on narrow screens (and in the no-target fallback).
+    const width = Math.min(360, window.innerWidth - 32);
+    const maxLeft = Math.max(16, window.innerWidth - width - 16);
+    if (!rect) return { left: clamp(220, 16, maxLeft), top: 96 };
     const roomRight = window.innerWidth - rect.right;
-    const left = roomRight >= width + 28
+    const preferred = roomRight >= width + 28
       ? rect.right + 16
-      : Math.max(16, rect.left - width - 16);
+      : rect.left - width - 16;
     return {
-      left,
-      top: clamp(rect.top - 8, 16, Math.max(16, window.innerHeight - 230)),
+      left: clamp(preferred, 16, maxLeft),
+      top: clamp(rect.top - 8, 16, Math.max(16, window.innerHeight - 260)),
     };
   }, [rect]);
 
