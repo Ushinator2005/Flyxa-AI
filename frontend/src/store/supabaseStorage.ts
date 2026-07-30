@@ -6,7 +6,10 @@ import type { RiskRule } from './types.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const SAVE_DEBOUNCE_MS = 500;
+// Cloud-write debounce. The local cache + safe backup are written synchronously
+// on every change, so only the network save waits — a longer window coalesces
+// rapid edits into far fewer database writes (kinder to small compute).
+const SAVE_DEBOUNCE_MS = 2000;
 const REMOTE_RECONCILE_COOLDOWN_MS = 15_000;
 
 export const REMOTE_RECONCILE_EVENT = 'flyxa-store-remote-reconciled';
@@ -100,6 +103,20 @@ let latestValue: string | null = null;
 let cachedUserId: string | null = null;
 let cachedToken: string | null = null;
 let setItemRevision = 0;
+
+// Per-entry content fingerprints from the last successful backup upsert, so we
+// only re-write the journal rows that actually changed instead of every entry
+// on every save. Cleared when the signed-in user changes. The user_store blob
+// still carries the full state, so this table is a redundant safety net —
+// skipping an unchanged row can never lose data.
+const lastEntryHashes = new Map<string, string>();
+let entryHashCacheUserId: string | null = null;
+
+function cheapHash(input: string): string {
+  let h = 5381;
+  for (let i = 0; i < input.length; i += 1) h = (((h << 5) + h) + input.charCodeAt(i)) | 0;
+  return `${input.length}:${h >>> 0}`;
+}
 
 // ── Stale-session guard ─────────────────────────────────────────────────
 // The newest cloud `updated_at` THIS TAB has observed (hydrate, pre-write
@@ -807,21 +824,40 @@ async function syncEntriesToTable(
   deletedTradeIds: Set<string>,
   deletedEntryDates: Set<string>
 ): Promise<void> {
+  // Reset the change cache if a different user signed in.
+  if (entryHashCacheUserId !== userId) {
+    lastEntryHashes.clear();
+    entryHashCacheUserId = userId;
+  }
+
   const protectedEntries = entries
     .filter((entry) => typeof entry.date !== 'string' || !deletedEntryDates.has(entry.date))
     .map((entry) => removeDeletedTradesFromEntry(entry, deletedTradeIds));
-  const rows = protectedEntries.map(e => ({
-    id: e.id as string,
-    user_id: userId,
-    date: e.date as string,
-    data: stripBase64Images(e) as Record<string, unknown>,
-    updated_at: new Date().toISOString(),
-  }));
-  if (rows.length > 0) {
+
+  // Only write the rows whose content actually changed since the last upsert.
+  // On a small database this turns "re-write all N journal rows every save" into
+  // "write just the one you edited" — the dominant write-IO saving.
+  const candidates = protectedEntries.map(e => {
+    const data = stripBase64Images(e) as Record<string, unknown>;
+    return { id: e.id as string, data, hash: cheapHash(JSON.stringify(data)) };
+  });
+  const changed = candidates.filter(c => c.id && lastEntryHashes.get(c.id) !== c.hash);
+
+  if (changed.length > 0) {
+    const now = new Date().toISOString();
+    const rows = changed.map(c => ({
+      id: c.id,
+      user_id: userId,
+      data: c.data,
+      date: (c.data.date as string) ?? '',
+      updated_at: now,
+    }));
     const { error: upsertError } = await supabase
       .from('store_entries_backup')
       .upsert(rows, { onConflict: 'id' });
     if (upsertError) throw upsertError;
+    // Only record fingerprints after a successful write so a failed upsert retries.
+    changed.forEach(c => lastEntryHashes.set(c.id, c.hash));
   }
 
   // Never delete backup rows merely because this client does not currently see
