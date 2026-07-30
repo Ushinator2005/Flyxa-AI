@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
-  Bell, Check, ChevronDown, Clock3,
-  MessageCircle, Plus, Share2, Trophy, X,
+  ArrowUp, ArrowDown, Bell, Check, ChevronDown, Clock3,
+  MessageCircle, Minus, Plus, Share2, Trophy, Users, X,
 } from 'lucide-react';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
@@ -82,26 +82,29 @@ const LB = {
   rowYou: 'var(--amber-dim)',
 };
 
-function seasonCountdown(): { d: string; h: string; m: string } {
+// The season is the calendar month; standings reset on the 1st. Days-left is
+// the honest, low-key way to say that — no ticking clock implying live stakes.
+function countdownDaysLeft(): number {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  let ms = Math.max(0, end.getTime() - now.getTime());
-  const d = Math.floor(ms / 86400000); ms -= d * 86400000;
-  const h = Math.floor(ms / 3600000); ms -= h * 3600000;
-  const m = Math.floor(ms / 60000);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return { d: pad(d), h: pad(h), m: pad(m) };
+  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000));
 }
 
-// A flavour tier derived from the trader's strongest attribute.
+function seasonLabel(): string {
+  const now = new Date();
+  return now.toLocaleString('en-US', { month: 'long' });
+}
+
+// A neutral flavour tier derived from the trader's strongest attribute.
+// Deliberately non-punitive — the down case is "Building", never a red badge.
 function tierFor(rival: Rival, period: LeaderboardPeriod): string {
   const s = getPeriodStats(rival, period);
   const process = rival.mascot.stats.processScore ?? 0;
   if (s.winRate >= 55 && s.netPnl > 0) return 'Apex';
   if (process >= 65 || s.ruleAdherence >= 80) return 'Disciplined';
   if (s.consistency >= 55) return 'Consistent';
-  if (s.netPnl < 0) return 'Grinding';
-  return 'Contender';
+  if (s.tradeCount === 0) return 'On deck';
+  return 'Building';
 }
 
 function winsLosses(rival: Rival, period: LeaderboardPeriod): [number, number] {
@@ -136,6 +139,24 @@ function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, 
   const currentRank = [...rivals].sort((a, b) => metricValue(b, metric, period) - metricValue(a, metric, period)).findIndex(item => item.id === rival.id);
   const previousRank = [...rivals].sort((a, b) => previousValue(b) - previousValue(a)).findIndex(item => item.id === rival.id);
   return previousRank - currentRank;
+}
+
+// Rank movement pill: ▲n (up, green), ▼n (down, red), — (flat, muted).
+// Hidden entirely for all-time (no prior period to compare against).
+function MovementBadge({ delta, period }: { delta: number; period: LeaderboardPeriod }) {
+  if (period === 'allTime') return null;
+  const flat = delta === 0;
+  const up = delta > 0;
+  const color = flat ? LB.subtle : up ? LB.green : LB.red;
+  return (
+    <span
+      title={flat ? 'No rank change this period' : `${up ? 'Up' : 'Down'} ${Math.abs(delta)} this period`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color }}
+    >
+      {flat ? <Minus size={11} /> : up ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
+      {!flat && Math.abs(delta)}
+    </span>
+  );
 }
 
 function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
@@ -262,7 +283,20 @@ export default function Rivals() {
     setLeagueBuilderOpen(false);
   }
 
-  const countdown = seasonCountdown();
+  // Current user's own standing — drives the "your standing" hook bar.
+  const myPosition = ranked.findIndex(rival => rival.id === currentUser.id) + 1;
+  const myAhead = myPosition > 1 ? ranked[myPosition - 2] : null;
+  const myGap = myAhead
+    ? Math.max(0, metricValue(myAhead, metric, period) - metricValue(currentUser, metric, period))
+    : 0;
+  const myMovement = rankMovement(currentUser, leagueRivals, metric, period);
+  const hasRivals = ranked.length >= 2;
+  // Podium is the celebratory top-3; the table below is "the rest of the
+  // field" (ranks 4+) so no one is ever rendered twice.
+  const podiumRivals = ranked.slice(0, 3);
+  const fieldRivals = ranked.slice(3);
+  const daysToSeasonEnd = Number(countdownDaysLeft());
+
   const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
   const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#000', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
   const kicker: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: LB.subtle };
@@ -277,18 +311,12 @@ export default function Rivals() {
             {activeLeague?.name ?? 'Rivals'}
           </h1>
           <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
-            Private league · <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> traders · Verified P&amp;L only. Compare consistency, process and edge with your circle.
+            <b style={{ color: LB.text, fontWeight: 600 }}>{ranked.length}</b> {ranked.length === 1 ? 'trader' : 'traders'} · ranked on verified journal data — no screenshots, no claims.
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 14, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12, color: LB.muted, whiteSpace: 'nowrap' }}>
-            Season resets in
-            {[countdown.d, countdown.h, countdown.m].map((v, i) => (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-                {i > 0 && <span style={{ color: LB.subtle }}>:</span>}
-                <span style={{ minWidth: 24, textAlign: 'center', padding: '3px 6px', borderRadius: 6, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, fontFamily: 'var(--font-mono)', fontSize: 12, color: LB.text }}>{v}</span>
-              </span>
-            ))}
+          <div style={{ ...kicker, whiteSpace: 'nowrap' }}>
+            {seasonLabel()} season · resets in {daysToSeasonEnd} {daysToSeasonEnd === 1 ? 'day' : 'days'}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
@@ -361,9 +389,32 @@ export default function Rivals() {
         </div>
       </div>
 
-      {/* ── Podium: top three ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, marginBottom: 16 }}>
-        {ranked.slice(0, 3).map((rival, i) => {
+      {/* ── Your standing: the hook. Rank, movement, and the gap to close. ── */}
+      {hasRivals && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', background: LB.card, border: `1px solid ${LB.borderHi}`, borderRadius: 14, padding: '16px 22px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+            <RivalAvatar rival={currentUser} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 20, fontWeight: 700, color: LB.text, fontFamily: 'var(--font-sans)' }}>#{myPosition}</span>
+                <span style={{ fontSize: 12.5, color: LB.muted }}>of {ranked.length} on {metricLabel}</span>
+                <MovementBadge delta={myMovement} period={period} />
+              </div>
+              <div style={{ marginTop: 3, fontSize: 12.5, color: LB.muted }}>
+                {myAhead
+                  ? <>{formatMetricGap(myGap, metric)} behind <b style={{ color: LB.text, fontWeight: 600 }}>{myAhead.displayName}</b> to move up</>
+                  : <b style={{ color: LB.green, fontWeight: 600 }}>Leading the board</b>}
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12.5, color: LB.muted, maxWidth: 360, textAlign: 'right' }}>{coachingInsight(currentUser, period)}</div>
+        </div>
+      )}
+
+      {/* ── Podium: the celebratory top three ── */}
+      {hasRivals && (
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, podiumRivals.length)}, minmax(0, 1fr))`, gap: 16, marginBottom: 16 }}>
+        {podiumRivals.map((rival, i) => {
           const s = getPeriodStats(rival, period);
           const trophyColor = i === 0 ? 'var(--color-gold)' : i === 1 ? 'var(--color-silver)' : 'var(--color-bronze)';
           const podStat = (label: string, value: string, color?: string) => (
@@ -372,8 +423,12 @@ export default function Rivals() {
               <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500, color: color ?? LB.text }}>{value}</div>
             </div>
           );
+          const ahead = i > 0 ? ranked[i - 1] : null;
+          const gap = ahead ? Math.max(0, metricValue(ahead, metric, period) - metricValue(rival, metric, period)) : 0;
+          const movement = rankMovement(rival, leagueRivals, metric, period);
           return (
-            <div key={rival.id} style={{ background: LB.card, border: `1px solid ${rival.isMe ? LB.borderHi : LB.border}`, borderRadius: 14, padding: '18px 20px' }}>
+            <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
+              style={{ textAlign: 'left', font: 'inherit', cursor: 'pointer', background: LB.card, border: `1px solid ${rival.isMe ? LB.borderHi : LB.border}`, borderRadius: 14, padding: '18px 20px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                   <RivalAvatar rival={rival} />
@@ -382,41 +437,74 @@ export default function Rivals() {
                       <b style={{ fontSize: 15, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
                       {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: LB.muted }}>@{rival.username}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
+                      <span style={{ fontSize: 12, color: LB.muted }}>@{rival.username}</span>
+                      <MovementBadge delta={movement} period={period} />
+                    </div>
                   </div>
                 </div>
-                <Trophy size={20} color={trophyColor} strokeWidth={1.6} />
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: trophyColor }}>#{i + 1}</span>
+                  <Trophy size={18} color={trophyColor} strokeWidth={1.7} />
+                </div>
               </div>
-              <div style={{ marginTop: 15, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: LB.text }}>
-                <span style={{ color: LB.amber, fontSize: 10 }}>◆</span> {tierFor(rival, period)}
+              <div style={{ marginTop: 15, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: LB.text }}>
+                  <span style={{ color: LB.amber, fontSize: 10 }}>◆</span> {tierFor(rival, period)}
+                </span>
+                <span style={{ fontSize: 11.5, color: LB.muted }}>
+                  {ahead ? `${formatMetricGap(gap, metric)} behind #${i}` : 'Board leader'}
+                </span>
               </div>
               <div style={{ marginTop: 16, display: 'flex', gap: 26 }}>
                 {podStat('Net P&L', formatCurrency(s.netPnl), s.netPnl > 0 ? LB.green : s.netPnl < 0 ? LB.red : LB.text)}
                 {podStat('Win rate', `${Math.round(s.winRate)}%`)}
                 {podStat('Avg R', avgRText(rival, period))}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
+      )}
 
-      {/* ── Standings table (full width) ── */}
+      {/* ── Low state: no rivals yet — coach the invite, don't show a bare board ── */}
+      {!hasRivals && (
+        <div style={{ background: LB.card, border: `1px solid ${LB.border}`, borderRadius: 14, padding: '48px 28px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }} data-tour-id="rivals-standings">
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: LB.amber }}>
+            <Users size={22} />
+          </div>
+          <div style={{ maxWidth: 420 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: LB.text }}>Your board is empty</h3>
+            <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted }}>
+              Rivals compares verified journal stats side by side — profit, consistency, and process. Invite a trading friend by their Flyxa username to start the table.
+            </p>
+          </div>
+          <button type="button" onClick={() => setIsAddOpen(true)} style={{ ...btnPrimary, height: 40 }}><Plus size={14} /> Invite a trader</button>
+        </div>
+      )}
+
+      {/* ── The rest of the field: ranks 4+ (podium already shows the top 3) ── */}
+      {hasRivals && fieldRivals.length > 0 && (
       <div style={{ background: LB.card, border: `1px solid ${LB.border}`, borderRadius: 14, overflow: 'hidden' }} data-tour-id="rivals-standings">
         {(() => {
           const cols = '52px minmax(0, 1fr) 150px 110px 110px 130px';
           return (
             <>
               <div style={{ ...kicker, display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', padding: '12px 22px', borderBottom: `1px solid ${LB.border}` }}>
-                <span>Place</span><span>Trader</span><span>Season W - L</span><span>Win rate</span><span>Avg R</span>
-                <span style={{ textAlign: 'right' }}>Net P&amp;L</span>
+                <span>Place</span><span>Trader</span><span>{selectedPeriodLabel} W - L</span><span>Win rate</span><span>Avg R</span>
+                <span style={{ textAlign: 'right' }}>{metricLabel}</span>
               </div>
-              {ranked.map((rival, index) => {
+              {fieldRivals.map((rival, i) => {
+                const index = i + 3; // real rank index (podium took 0-2)
                 const s = getPeriodStats(rival, period);
                 const [w, l] = winsLosses(rival, period);
                 return (
                   <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
-                    style={{ width: '100%', display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', textAlign: 'left', padding: '14px 22px', borderTop: index === 0 ? 'none' : `1px solid ${LB.border}`, borderLeft: rival.isMe ? `2px solid ${LB.amber}` : '2px solid transparent', background: rival.isMe ? LB.rowYou : 'transparent', color: LB.text, cursor: 'pointer', font: 'inherit' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: index === 0 ? LB.amber : LB.muted }}>{index + 1}</span>
+                    style={{ width: '100%', display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', textAlign: 'left', padding: '14px 22px', borderTop: i === 0 ? 'none' : `1px solid ${LB.border}`, borderLeft: rival.isMe ? `2px solid ${LB.amber}` : '2px solid transparent', background: rival.isMe ? LB.rowYou : 'transparent', color: LB.text, cursor: 'pointer', font: 'inherit' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.muted }}>{index + 1}</span>
+                      <MovementBadge delta={rankMovement(rival, leagueRivals, metric, period)} period={period} />
+                    </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                       <RivalAvatar rival={rival} />
                       <div style={{ minWidth: 0 }}>
@@ -445,6 +533,15 @@ export default function Rivals() {
           );
         })()}
       </div>
+      )}
+
+      {/* ── Grow-the-board CTA when the podium is the whole field ── */}
+      {hasRivals && fieldRivals.length === 0 && (
+        <button type="button" onClick={() => setIsAddOpen(true)}
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', borderRadius: 14, border: `1px dashed ${LB.border}`, background: 'transparent', color: LB.muted, fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.04em', cursor: 'pointer' }}>
+          <Plus size={14} /> Invite more traders to grow the board
+        </button>
+      )}
 
       {/* ── Inspector drawer (opens on row click / Show my place) ── */}
       {inspectorOpen && (

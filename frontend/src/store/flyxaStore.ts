@@ -1317,4 +1317,9 @@ export function createEmptyJournalEntry(date?: string, accountId?: string): Jour
   };
 }
 
+// Dev-only console/debug handle: `window.useFlyxaStore.getState()` etc.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as unknown as { useFlyxaStore?: typeof useFlyxaStore }).useFlyxaStore = useFlyxaStore;
+}
+
 export default useFlyxaStore;
