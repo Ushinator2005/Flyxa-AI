@@ -74,11 +74,13 @@ function metricValue(rival: Rival, metric: LeaderboardMetric, period: Leaderboar
 }
 
 // Leaderboard palette — matches the reference board exactly.
+// House design tokens — the board must read as part of the app, not its own
+// product, and must follow the active theme (Default / Light / Midnight).
 const LB = {
-  card: '#141416', cardHi: '#191919', border: 'rgba(255,255,255,0.07)', borderHi: 'rgba(255,255,255,0.12)',
-  text: '#f2f1ef', muted: '#8b8a90', subtle: '#57555b',
-  amber: '#f5a623', green: '#4ade80', red: '#f26d6d',
-  rowYou: 'rgba(245,166,35,0.06)',
+  card: 'var(--app-panel)', cardHi: 'var(--app-panel-strong)', border: 'var(--app-border)', borderHi: 'var(--amber-border)',
+  text: 'var(--app-text)', muted: 'var(--app-text-muted)', subtle: 'var(--app-text-subtle)',
+  amber: 'var(--amber)', green: 'var(--green)', red: 'var(--red)',
+  rowYou: 'var(--amber-dim)',
 };
 
 function seasonCountdown(): { d: string; h: string; m: string } {
@@ -262,8 +264,8 @@ export default function Rivals() {
   }
 
   const countdown = seasonCountdown();
-  const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: '#161616', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
-  const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#0a0a0c', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
+  const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+  const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#000', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
   const kicker: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: LB.subtle };
 
   return (
@@ -272,11 +274,11 @@ export default function Rivals() {
       {/* ── Header ── */}
       <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, padding: '4px 2px 22px' }}>
         <div style={{ display: 'flex', gap: 18, minWidth: 0 }}>
-          <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 12, background: '#191919', border: `1px solid ${LB.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: 12, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <FlyxaLogo size={28} showWordmark={false} />
           </div>
           <div style={{ minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
+            <h1 style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: LB.text }}>
               {activeLeague?.name ?? 'Rivals'}
             </h1>
             <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted, maxWidth: 520 }}>
@@ -290,7 +292,7 @@ export default function Rivals() {
             {[countdown.d, countdown.h, countdown.m].map((v, i) => (
               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
                 {i > 0 && <span style={{ color: LB.subtle }}>:</span>}
-                <span style={{ minWidth: 24, textAlign: 'center', padding: '3px 6px', borderRadius: 6, background: '#191919', border: `1px solid ${LB.border}`, fontFamily: 'var(--font-mono)', fontSize: 12, color: LB.text }}>{v}</span>
+                <span style={{ minWidth: 24, textAlign: 'center', padding: '3px 6px', borderRadius: 6, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, fontFamily: 'var(--font-mono)', fontSize: 12, color: LB.text }}>{v}</span>
               </span>
             ))}
           </div>
@@ -340,7 +342,7 @@ export default function Rivals() {
             const on = metric === mode.value;
             return (
               <button type="button" key={mode.value} title={mode.help} onClick={() => setMetric(mode.value)}
-                style={{ padding: '7px 15px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: on ? LB.amber : 'transparent', color: on ? '#0a0a0c' : LB.muted }}>
+                style={{ padding: '7px 15px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: on ? LB.amber : 'transparent', color: on ? '#000' : LB.muted }}>
                 {mode.label}
               </button>
             );
@@ -351,14 +353,14 @@ export default function Rivals() {
             <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
               {[{ id: 'all', name: 'All' }, ...leagues.map(l => ({ id: l.id, name: l.name }))].map(l => {
                 const on = activeLeagueId === l.id;
-                return <button type="button" key={l.id} onClick={() => setActiveLeagueId(l.id)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? '#26262a' : 'transparent', color: on ? LB.text : LB.muted }}>{l.name}</button>;
+                return <button type="button" key={l.id} onClick={() => setActiveLeagueId(l.id)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? 'var(--app-panel-strong)' : 'transparent', color: on ? LB.text : LB.muted }}>{l.name}</button>;
               })}
             </div>
           )}
           <div style={{ display: 'inline-flex', gap: 3, padding: 4, background: LB.card, borderRadius: 11, border: `1px solid ${LB.border}` }}>
             {PERIODS.map(item => {
               const on = period === item.value;
-              return <button type="button" key={item.value} onClick={() => setPeriod(item.value)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? '#26262a' : 'transparent', color: on ? LB.text : LB.muted }}>{item.label}</button>;
+              return <button type="button" key={item.value} onClick={() => setPeriod(item.value)} style={{ padding: '7px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: on ? 'var(--app-panel-strong)' : 'transparent', color: on ? LB.text : LB.muted }}>{item.label}</button>;
             })}
           </div>
           <button type="button" onClick={() => { setSelectedRivalId(currentUser.id); setInspectorOpen(true); }} style={{ ...btnGhost, height: 38 }}>Show my place</button>
@@ -369,7 +371,7 @@ export default function Rivals() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, marginBottom: 16 }}>
         {ranked.slice(0, 3).map((rival, i) => {
           const s = getPeriodStats(rival, period);
-          const trophyColor = i === 0 ? '#f5c451' : i === 1 ? '#c6c8cf' : '#cd8b5b';
+          const trophyColor = i === 0 ? 'var(--color-gold)' : i === 1 ? 'var(--color-silver)' : 'var(--color-bronze)';
           const podStat = (label: string, value: string, color?: string) => (
             <div style={{ minWidth: 0 }}>
               <div style={kicker}>{label}</div>
@@ -454,7 +456,7 @@ export default function Rivals() {
       {inspectorOpen && (
         <div onClick={() => setInspectorOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end' }}>
           <aside className="rv2-me" data-tour-id="rivals-detail" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: 'min(380px, 92vw)', height: '100%', overflowY: 'auto', borderRadius: 0 }}>
-            <button type="button" onClick={() => setInspectorOpen(false)} aria-label="Close" style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: '50%', border: `1px solid ${LB.border}`, background: '#161616', color: LB.muted, cursor: 'pointer', zIndex: 2 }}>✕</button>
+            <button type="button" onClick={() => setInspectorOpen(false)} aria-label="Close" style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: '50%', border: `1px solid ${LB.border}`, background: 'var(--app-panel-strong)', color: LB.muted, cursor: 'pointer', zIndex: 2 }}>✕</button>
           <div className="rv2-me-hd">
             <RivalAvatar rival={selectedRival} large />
             <div className="rv2-nm">
