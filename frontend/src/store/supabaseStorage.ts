@@ -100,6 +100,31 @@ let latestValue: string | null = null;
 let cachedUserId: string | null = null;
 let cachedToken: string | null = null;
 let setItemRevision = 0;
+
+// ── Stale-session guard ─────────────────────────────────────────────────
+// The newest cloud `updated_at` THIS TAB has observed (hydrate, pre-write
+// read, or its own write). If the cloud moves past this stamp, another
+// session wrote in the meantime — this tab's state is the stale one, so
+// entry-placement conflicts must resolve in the CLOUD's favor. Without this,
+// a long-lived tab's autosave resurrects old trade arrangements wholesale.
+let lastObservedRemoteUpdatedAtMs: number | null = null;
+
+function markRemoteObserved(updatedAt: string | null | undefined): void {
+  if (!updatedAt) return;
+  const ms = Date.parse(updatedAt);
+  if (!Number.isFinite(ms)) return;
+  if (lastObservedRemoteUpdatedAtMs === null || ms > lastObservedRemoteUpdatedAtMs) {
+    lastObservedRemoteUpdatedAtMs = ms;
+  }
+}
+
+function remoteIsFresherThanThisSession(remoteUpdatedAt: string | null | undefined): boolean {
+  if (!remoteUpdatedAt || lastObservedRemoteUpdatedAtMs === null) return false;
+  const remoteMs = Date.parse(remoteUpdatedAt);
+  if (!Number.isFinite(remoteMs)) return false;
+  // 2s tolerance absorbs clock skew between our stamp and Supabase's.
+  return remoteMs > lastObservedRemoteUpdatedAtMs + 2000;
+}
 let saveQueue: Promise<void> = Promise.resolve();
 let bypassLocalFastPath = false;
 let backgroundReconcileInFlight = false;
@@ -528,7 +553,10 @@ function mergeRemoteEntriesIntoStoreBlob(
   deletedEntryDates = new Set([
     ...deletedEntryDatesFromBlob(remoteBlob),
     ...deletedEntryDatesFromBlob(localBlob),
-  ])
+  ]),
+  // When true, the CLOUD's trade placement wins conflicts (set when another
+  // session wrote after this tab last synced — this tab is the stale one).
+  preferRemotePlacement = false
 ): Record<string, unknown> {
   const localRecord = (localBlob && typeof localBlob === 'object')
     ? (localBlob as Record<string, unknown>)
@@ -536,12 +564,17 @@ function mergeRemoteEntriesIntoStoreBlob(
   const localState = (localRecord.state && typeof localRecord.state === 'object')
     ? (localRecord.state as Record<string, unknown>)
     : {};
-  const localEntries = entryRecordsFromBlob(localRecord)
+  const rawLocalEntries = entryRecordsFromBlob(localRecord)
     .filter((entry) => typeof entry.date !== 'string' || !deletedEntryDates.has(entry.date))
     .map((entry) => removeDeletedTradesFromEntry(entry, deletedTradeIds));
-  const remoteEntries = entryRecordsFromBlob(remoteBlob)
+  const rawRemoteEntries = entryRecordsFromBlob(remoteBlob)
     .filter((entry) => typeof entry.date !== 'string' || !deletedEntryDates.has(entry.date))
     .map((entry) => removeDeletedTradesFromEntry(entry, deletedTradeIds));
+
+  // "Local"/"remote" below are really primary/secondary: primary placement
+  // is authoritative for trades that exist on both sides.
+  const localEntries = preferRemotePlacement ? rawRemoteEntries : rawLocalEntries;
+  const remoteEntries = preferRemotePlacement ? rawLocalEntries : rawRemoteEntries;
 
   if (remoteEntries.length === 0) {
     return {
@@ -844,12 +877,17 @@ async function flushSave(userId: string, value: string): Promise<void> {
   let parsed = JSON.parse(sanitizedValue) as Record<string, unknown>;
   const { data: existingStore, error: existingStoreError } = await supabase
     .from('user_store')
-    .select('flyxa_data')
+    .select('flyxa_data, updated_at')
     .eq('user_id', userId)
     .maybeSingle();
   if (existingStoreError) throw existingStoreError;
 
   const remoteBlob = existingStore?.flyxa_data as Record<string, unknown> | null;
+  // Another session wrote since this tab last synced: the cloud arrangement
+  // is the fresh one, so it wins trade-placement conflicts in the merge.
+  const preferRemotePlacement = remoteIsFresherThanThisSession(
+    (existingStore as { updated_at?: string } | null)?.updated_at
+  );
   const restoredEntryDates = restoredEntryDatesFromBlob(parsed);
   const restoredTradeIds = tradeIdsForDates(parsed, restoredEntryDates);
   const deletedTradeIds = new Set([
@@ -860,7 +898,7 @@ async function flushSave(userId: string, value: string): Promise<void> {
     ...deletedEntryDatesFromBlob(remoteBlob),
     ...deletedEntryDatesFromBlob(parsed),
   ].filter((date) => !restoredEntryDates.has(date)));
-  parsed = mergeRemoteEntriesIntoStoreBlob(parsed, remoteBlob, deletedTradeIds, deletedEntryDates);
+  parsed = mergeRemoteEntriesIntoStoreBlob(parsed, remoteBlob, deletedTradeIds, deletedEntryDates, preferRemotePlacement);
   // Ensure accounts, tradingPlan, etc. are never wiped by a blank incoming snapshot
   parsed = recoverMissingStateFromRemote(parsed, remoteBlob);
   parsed = {
@@ -898,6 +936,7 @@ async function flushSave(userId: string, value: string): Promise<void> {
     await backupWritePromise;
     throw error;
   }
+  markRemoteObserved(now);
 
   try { localStorage.setItem(localSavedAtKey(userId), Date.now().toString()); } catch { /* quota */ }
 
@@ -1424,6 +1463,7 @@ export const supabaseZustandStorage: StateStorage = {
       ]);
 
       if (!error && data?.flyxa_data) {
+        markRemoteObserved(data.updated_at as string | null | undefined);
         const remoteSavedAt = timestampMs(data.updated_at) ?? Date.now();
         const local = localStorage.getItem(storeKey);
         const sanitizedLocal = local ? sanitizeStoreValue(local) : null;
@@ -1674,6 +1714,7 @@ export const supabaseZustandStorage: StateStorage = {
           .eq('user_id', resolvedUserId)
           .maybeSingle();
         if (!error && data?.flyxa_data && Object.keys(data.flyxa_data).length > 0) {
+          markRemoteObserved((data as { updated_at?: string }).updated_at);
           const remoteValue = sanitizeStoreValue(JSON.stringify(data.flyxa_data));
           localStorage.setItem(localStoreKey(resolvedUserId), remoteValue);
           localStorage.setItem(localSavedAtKey(resolvedUserId), Date.now().toString());
