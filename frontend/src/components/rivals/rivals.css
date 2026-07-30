@@ -4490,15 +4490,17 @@
 .rvc-rung:first-child { border-top: 0; }
 .rvc-rung:hover { background: color-mix(in srgb, var(--app-panel) 45%, transparent); }
 
-/* Big ghosted serif rank numeral — the through-line for the whole ladder. */
+/* Big ghosted rank numeral — the through-line for the whole ladder.
+   Display face (Syne), not the editorial serif. */
 .rvc-rung-num {
-  font-family: var(--font-editorial);
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-weight: 800;
   line-height: 0.8;
   text-align: center;
   color: var(--app-text-subtle);
-  font-feature-settings: 'lnum' 1;
-  font-size: 44px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  font-size: 40px;
 }
 
 .rvc-rung-name { font-size: 15px; font-weight: 600; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -4569,12 +4571,12 @@
 .rvc-bench { font-size: 13px; color: var(--app-text-muted); padding: 4px 2px; line-height: 1.6; }
 .rvc-bench b { color: var(--app-text); font-weight: 600; }
 
-/* ── Activity: a designed feed on a light contained surface ───── */
-.rvc-feed-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 8px; }
-.rvc-feed-title { display: inline-flex; align-items: center; gap: 9px; }
+/* ── Activity: a social-style feed — avatars, sentence copy, airy ── */
+.rvc-feed-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 6px; }
+.rvc-feed-title { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--app-text); }
 .rvc-feed-showall {
   background: none; border: 0; cursor: pointer;
-  font-size: 12px; color: var(--app-text-subtle);
+  font-size: 12.5px; color: var(--app-text-subtle);
   transition: color 0.15s ease;
 }
 .rvc-feed-showall:hover { color: var(--amber); }
@@ -4584,25 +4586,33 @@
   70% { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
   100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
 }
-.rvc-feed-surface {
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--app-panel) 55%, transparent);
-  border: 1px solid var(--border-sub, rgba(255,255,255,0.05));
-  padding: 4px 14px;
-}
+.rvc-feed { display: flex; flex-direction: column; }
 .rvc-feed-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 0;
-  font-size: 13px; color: var(--app-text-muted);
+  gap: 12px;
+  padding: 13px 2px;
+  font-size: 13.5px; color: var(--app-text-muted); line-height: 1.5;
   animation: rvc-slide 0.4s ease both;
 }
-.rvc-feed-row + .rvc-feed-row { border-top: 1px solid var(--border-sub, rgba(255,255,255,0.04)); }
+.rvc-feed-row + .rvc-feed-row { border-top: 1px solid var(--border-sub, rgba(255,255,255,0.045)); }
 .rvc-feed-row b { color: var(--app-text); font-weight: 600; }
-.rvc-feed-tick { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.rvc-feed-when { font-family: var(--font-mono); font-size: 10.5px; color: var(--app-text-subtle); white-space: nowrap; }
+/* A slim tone rail on the avatar signals the event type without a mono tick. */
+.rvc-feed-av {
+  position: relative;
+  flex-shrink: 0;
+  padding-left: 9px;
+}
+.rvc-feed-av::before {
+  content: '';
+  position: absolute; left: 0; top: 3px; bottom: 3px; width: 2px; border-radius: 2px;
+}
+.rvc-feed-av--gain::before { background: var(--green); }
+.rvc-feed-av--loss::before { background: var(--red); }
+.rvc-feed-av--rank::before { background: var(--amber); }
+.rvc-feed-av--neutral::before { background: var(--app-text-subtle); }
+.rvc-feed-text { flex: 1; min-width: 0; }
+.rvc-feed-when { font-size: 12px; color: var(--app-text-subtle); white-space: nowrap; margin-left: auto; padding-left: 12px; }
 @keyframes rvc-slide { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
 
 .rvc-verified { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--green); }

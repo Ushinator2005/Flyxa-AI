@@ -185,25 +185,6 @@ function useCountUp(target: number): number {
   return value;
 }
 
-/** Cumulative-equity sparkline from a period's daily P&L (or equity curve). */
-function Sparkline({ stats, up, width = 68, height = 22 }: { stats: RivalPeriodStats; up: boolean; width?: number; height?: number }) {
-  const series = stats.equityCurve?.length
-    ? stats.equityCurve
-    : (stats.dailyPnl ?? []).reduce<number[]>((acc, d) => { acc.push((acc[acc.length - 1] ?? 0) + d.pnl); return acc; }, []);
-  if (series.length < 2) return <div style={{ width, height }} aria-hidden="true" />;
-  const min = Math.min(...series);
-  const max = Math.max(...series);
-  const span = max - min || 1;
-  const stepX = width / (series.length - 1);
-  const pts = series.map((v, i) => `${(i * stepX).toFixed(1)},${(height - ((v - min) / span) * height).toFixed(1)}`).join(' ');
-  const color = up ? 'var(--green)' : 'var(--red)';
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" opacity={0.9} />
-    </svg>
-  );
-}
-
 /** Trailing consecutive green days from a period's daily P&L — powers the 🔥 marker. */
 function hotStreak(stats: RivalPeriodStats): number {
   const daily = stats.dailyPnl ?? [];
@@ -224,7 +205,7 @@ function CountUp({ target, format }: { target: number; format: (n: number) => st
 // Tone drives colour: green for gains/streaks, red for slips/losing days,
 // amber for rank changes, muted for neutral notes.
 type PulseTone = 'gain' | 'loss' | 'rank' | 'neutral';
-interface PulseEvent { id: string; text: ReactNode; tone: PulseTone; when: string }
+interface PulseEvent { id: string; text: ReactNode; tone: PulseTone; when: string; rival: Rival }
 
 const RELATIVE_WHEN = ['just now', '2h ago', '5h ago', 'yesterday', '2d ago', '3d ago'];
 
@@ -239,19 +220,19 @@ function buildActivityFeed(
     const name = rival.isMe ? 'You' : rival.displayName;
     const move = rankMovement(rival, leagueRivals, metric, period);
     const rank = ranked.findIndex(r => r.id === rival.id) + 1;
-    if (move > 0) raw.push({ id: `mv-${rival.id}`, tone: 'rank', text: <><b>{name}</b> climbed to #{rank}</> });
-    else if (move < 0) raw.push({ id: `mv-${rival.id}`, tone: 'rank', text: <><b>{name}</b> slipped to #{rank}</> });
+    if (move > 0) raw.push({ id: `mv-${rival.id}`, rival, tone: 'rank', text: <><b>{name}</b> climbed to #{rank}</> });
+    else if (move < 0) raw.push({ id: `mv-${rival.id}`, rival, tone: 'rank', text: <><b>{name}</b> slipped to #{rank}</> });
     const streak = hotStreak(getPeriodStats(rival, period));
-    if (streak >= 2) raw.push({ id: `st-${rival.id}`, tone: 'gain', text: <><b>{name}</b> on a {streak}-day green streak</> });
+    if (streak >= 2) raw.push({ id: `st-${rival.id}`, rival, tone: 'gain', text: <><b>{name}</b> on a {streak}-day green streak</> });
     const daily = getPeriodStats(rival, period).dailyPnl ?? [];
     if (daily.length) {
       const best = Math.max(...daily.map(d => d.pnl));
       const worst = Math.min(...daily.map(d => d.pnl));
-      if (best >= 500) raw.push({ id: `bd-${rival.id}`, tone: 'gain', text: <><b>{name}</b> booked a {formatCurrency(best)} day</> });
-      if (worst <= -500) raw.push({ id: `wd-${rival.id}`, tone: 'loss', text: <><b>{name}</b> took a {formatCurrency(worst)} day</> });
+      if (best >= 500) raw.push({ id: `bd-${rival.id}`, rival, tone: 'gain', text: <><b>{name}</b> booked a {formatCurrency(best)} day</> });
+      if (worst <= -500) raw.push({ id: `wd-${rival.id}`, rival, tone: 'loss', text: <><b>{name}</b> took a {formatCurrency(worst)} day</> });
     }
   });
-  if (ranked[0]) raw.push({ id: 'leader', tone: 'neutral', text: <><b>{ranked[0].isMe ? 'You' : ranked[0].displayName}</b> {ranked[0].isMe ? 'lead' : 'leads'} the board</> });
+  if (ranked[0]) raw.push({ id: 'leader', rival: ranked[0], tone: 'neutral', text: <><b>{ranked[0].isMe ? 'You' : ranked[0].displayName}</b> {ranked[0].isMe ? 'lead' : 'leads'} the board</> });
   return raw.slice(0, 6).map((ev, i) => ({ ...ev, when: RELATIVE_WHEN[i] ?? `${i + 1}d ago` }));
 }
 
@@ -560,7 +541,7 @@ export default function Rivals() {
                   onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
                   className={`rvc-rung${isChamp ? ' rvc-rung--champ' : ''}${rival.isMe ? ' rvc-rung--you' : ''}`}
                 >
-                  <span className="rvc-rung-num rvc-serif">{rank}</span>
+                  <span className="rvc-rung-num">{rank}</span>
                   <div style={{ minWidth: 0 }}>
                     {isChamp && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -584,7 +565,6 @@ export default function Rivals() {
                     </div>
                   </div>
                   <div className="rvc-rung-right">
-                    {isChamp && <Sparkline stats={s} up={s.netPnl >= 0} width={108} height={26} />}
                     <div className="rvc-rung-pnl" style={{ color: toneColor(rival) }}>
                       {isChamp ? <CountUp target={metricNum(rival)} format={fmtMetric} /> : fmtMetric(metricNum(rival))}
                     </div>
@@ -636,16 +616,14 @@ export default function Rivals() {
         </div>
       )}
 
-      {/* ── Activity: a designed feed — timestamps, colour, contained ── */}
+      {/* ── Activity: a social-style feed — avatars, sentence copy, airy ── */}
       {hasRivals && activity.length > 0 && (() => {
-        const tickColor = (t: PulseTone) => t === 'gain' ? LB.green : t === 'loss' ? LB.red : t === 'rank' ? LB.amber : LB.subtle;
         const shown = activityExpanded ? activity : activity.slice(0, 4);
         return (
-          <div className="rvc-fade" style={{ marginTop: 26 }}>
+          <div className="rvc-fade" style={{ marginTop: 30 }}>
             <div className="rvc-feed-head">
               <span className="rvc-feed-title">
-                <span className="rvc-live-dot" />
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: LB.text }}>Live</span>
+                <span className="rvc-live-dot" /> Live
               </span>
               {activity.length > 4 && (
                 <button type="button" className="rvc-feed-showall" onClick={() => setActivityExpanded(v => !v)}>
@@ -653,11 +631,11 @@ export default function Rivals() {
                 </button>
               )}
             </div>
-            <div className="rvc-feed-surface">
+            <div className="rvc-feed">
               {shown.map(ev => (
                 <div key={ev.id} className="rvc-feed-row">
-                  <span className="rvc-feed-tick" style={{ background: tickColor(ev.tone) }} />
-                  <span>{ev.text}</span>
+                  <span className={`rvc-feed-av rvc-feed-av--${ev.tone}`}><RivalAvatar rival={ev.rival} /></span>
+                  <span className="rvc-feed-text">{ev.text}</span>
                   <span className="rvc-feed-when">{ev.when}</span>
                 </div>
               ))}
