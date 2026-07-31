@@ -897,7 +897,12 @@ export default function FlyxaAIAsk() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   margin: '0 auto 16px',
                 }}>
-                  <Sparkles size={20} style={{ color: C.acc }} />
+                  <svg width="24" height="24" viewBox="0 0 100 100" fill="none" style={{ animation: 'flyxa-logo-pulse 1.4s ease-in-out infinite' }} aria-hidden="true">
+                    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill={C.acc} />
+                    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(-90 50 50) translate(9 9) scale(0.82)" />
+                    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(90 50 50) translate(6 6) scale(0.88)" />
+                    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(180 50 50) translate(18 18) scale(0.64)" />
+                  </svg>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: C.t0, marginBottom: 6 }}>
                   Ask anything about your trading

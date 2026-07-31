@@ -28,6 +28,7 @@ const pageNames: Record<string, string> = {
   '/chart': 'Backtest',
   '/backtest': 'Backtest',
   '/rules': 'Rules',
+  '/market-news': 'Market News',
   '/psychology': 'Psychology Tracker',
   '/goals': 'Goals',
   '/rivals': 'Rivals',

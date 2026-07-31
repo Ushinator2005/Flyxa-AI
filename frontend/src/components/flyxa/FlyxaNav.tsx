@@ -48,13 +48,6 @@ export default function FlyxaNav() {
           </NavLink>
         ))}
       </nav>
-
-      <div className="mt-6 rounded-[10px] border px-3 py-3" style={{ borderColor: colors.b0, backgroundColor: colors.d2 }}>
-        <p className="text-[10px] uppercase tracking-[0.12em]" style={{ color: colors.t2 }}>How to use this</p>
-        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: colors.t1 }}>
-          Read the debrief, choose one fix, then ask a follow-up only if you need context.
-        </p>
-      </div>
     </aside>
   );
 }
