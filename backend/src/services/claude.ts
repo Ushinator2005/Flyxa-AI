@@ -479,10 +479,17 @@ Rules:
 
 // ── Ask Flyxa — data-grounded trade query ─────────────────────────────────────
 
+export interface FlyxaAnswerResult {
+  /** A FlyxaAnswerSpec JSON object when the model produced a valid block spec. */
+  spec: Record<string, unknown> | null;
+  /** Plain-text fallback (also a flattened version of the spec for older clients). */
+  reply: string;
+}
+
 export async function answerTradeDataQuery(
   question: string,
   stats: Record<string, unknown>
-): Promise<string> {
+): Promise<FlyxaAnswerResult> {
   const trimmed = question.trim();
   if (!trimmed) throw new Error('Question is required');
 
@@ -523,7 +530,8 @@ export async function answerTradeDataQuery(
       const dailyLoss = Number(matching.dailyLossLimit ?? 0) > 0
         ? `${usd(matching.dailyLossLimit)} fixed daily loss limit`
         : `no mandatory daily loss limit; Topstep offers an optional ${usd(matching.optionalDailyLossLimit)} fixed limit at purchase`;
-      return `A Topstep ${Number(matching.accountSize) / 1000}K Trading Combine on the ${path} path requires ${usd(matching.profitTarget)} in profit, has a ${usd(matching.maxDrawdown)} real-time trailing Maximum Loss Limit, and allows up to ${matching.maxContracts} mini contracts or ${matching.maxMicros} micros. It uses a ${matching.consistencyLimitPct}% consistency objective and can be passed in a minimum of ${matching.minimumTradingDays} trading days. This configuration has ${dailyLoss}; the activation fee is ${usd(matching.activationFee)}. Flyxa has this as verified rule version ${matching.version ?? 1}, last checked ${String(matching.verifiedAt ?? 'from the bundled catalog')}, but you should still compare it with your Topstep dashboard because account terms can change.`;
+      const reply = `A Topstep ${Number(matching.accountSize) / 1000}K Trading Combine on the ${path} path requires ${usd(matching.profitTarget)} in profit, has a ${usd(matching.maxDrawdown)} real-time trailing Maximum Loss Limit, and allows up to ${matching.maxContracts} mini contracts or ${matching.maxMicros} micros. It uses a ${matching.consistencyLimitPct}% consistency objective and can be passed in a minimum of ${matching.minimumTradingDays} trading days. This configuration has ${dailyLoss}; the activation fee is ${usd(matching.activationFee)}. Flyxa has this as verified rule version ${matching.version ?? 1}, last checked ${String(matching.verifiedAt ?? 'from the bundled catalog')}, but you should still compare it with your Topstep dashboard because account terms can change.`;
+      return { spec: null, reply };
     }
   }
 
@@ -531,40 +539,107 @@ export async function answerTradeDataQuery(
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    temperature: 0.3,
-    max_tokens: 700,
-    system: `You are Flyxa AI — a sharp, brutally honest trading performance analyst embedded inside a trade journal app.
+    temperature: 0.2,
+    max_tokens: 1400,
+    system: `You are Flyxa AI — a sharp, brutally honest trading performance analyst embedded in a trade journal.
 
-The user just asked you a question about their trading. You have been given their complete computed trading statistics below. Your job is to:
-1. Understand exactly what the user is asking (even if phrased casually or ambiguously).
-2. Locate the relevant numbers from the provided stats.
-3. Give a direct, precise, data-driven answer using their actual figures — never invent numbers.
-4. Proactively surface any important pattern you notice (good or bad) that's relevant to their question.
-5. End with one specific, actionable recommendation.
-6. Prop-firm rules may be present under activePropFirmRule and availableTopstepRules. Use them directly and never claim rule information is unavailable when those fields contain a matching rule.
-7. Never invent a prop-firm rule. If no matching structured rule exists, say it is not in Flyxa's verified catalog.
+You DO NOT write prose or layout. You classify the user's question into one shape, then return a JSON "answer spec" that the app renders into fixed visual blocks. Return ONLY the JSON object — no prose, no markdown, no code fences.
 
-Style rules:
-- Plain conversational English. No bullet lists. No markdown headers.
-- 3–5 sentences. Concise and meaty — no filler phrases.
-- Lead with the answer, not with preamble like "Based on your data..." or "Great question!".
-- Use specific percentages and dollar amounts from the provided stats.
-- If a specific breakdown has fewer than 5 samples, note the small sample size and caveat accordingly.
-- If the stats don't contain enough information to answer the question, say so plainly and suggest what data the user should log.
+QUESTION SHAPES (pick exactly one for "shape"):
+- "comparison"   two things measured side by side  (e.g. "when do I trade best?", "London vs Asia")
+- "single_metric" one headline number             (e.g. "what's my win rate this month?")
+- "trend"        change over time                  (e.g. "am I improving?")
+- "diagnosis"    why something keeps happening      (e.g. "why do I lose on Asia?")
+- "ranking"      order items by a measure           (e.g. "which setups make me money?")
+- "journal"      surface the user's own words        (e.g. "what was I thinking on my worst days?")
+- "no_data"      the answer isn't in their data      (e.g. asking about an instrument they've never traded)
+
+OUTPUT SCHEMA (a FlyxaAnswerSpec):
+{
+  "shape": <one shape above>,
+  "verdict": string,          // THE ANSWER, first line. Never a preamble. e.g. "Thursdays, in the ~London session~."
+  "verdictNote"?: string,     // one muted supporting sentence
+  "blocks": Block[],          // AT MOST 2 data blocks (split/hero/chart/causes/ranked/empty); pills/quotes are extra
+  "directive"?: { "text": string, "sub"?: string },  // one closing recommendation, optional
+  "footer": string            // the sample it's based on, e.g. "69 trades analysed · 4 sessions compared"
+}
+
+BLOCK TYPES (choose the ones that fit the shape):
+- { "type":"split", "left":Side, "right":Side }  Side = { "title":string, "badge"?:string, "tone":"good"|"bad"|"neutral", "rows":[{"label":string,"value":string,"tone"?:tone}] }
+- { "type":"hero", "value":string, "unit"?:string, "tone":tone, "label":string, "right"?:string[] }   // big single stat
+- { "type":"chart", "points":number[], "markerIndex"?:number, "markerLabel"?:string, "startLabel"?:string, "endLabel"?:string }  // equity/metric over time; markerIndex colours pre=amber/post=green
+- { "type":"causes", "items":[{"title":string,"impact":string,"tone":"bad","detail":string,"weight":number}] }  // ranked by dollar impact
+- { "type":"ranked", "items":[{"name":string,"nameTone"?:tone,"meta":string,"value":string,"tone":tone}] }
+- { "type":"quotes", "items":[{"date"?:string,"text":string}] }
+- { "type":"pills", "items":[{"label":string,"value"?:string,"tone"?:tone}] }
+- { "type":"empty", "title":string, "body":string, "suggestions":string[] }   // ONLY for shape "no_data"
+tone: "good" (green) | "bad" (red) | "accent" (amber) | "neutral". Winning side/rows = good, losing = bad.
+
+TYPICAL FLOWS:
+- comparison  → verdict, split, pills, directive
+- single_metric → verdict, hero, pills
+- trend       → verdict, chart, pills, directive
+- diagnosis   → verdict, causes, directive
+- ranking     → verdict, ranked, pills
+- journal     → verdict, quotes, directive
+- no_data     → verdict, empty (verdict = an honest "I can't answer that from your data")
+
+HARD RULES:
+- Use ONLY numbers present in the STATS JSON. Never invent a figure. If a needed number isn't there, use shape "no_data" or omit that block and caveat in verdictNote.
+- "verdict" is the literal answer, never "Based on your data…".
+- Never exceed 2 data blocks (split/hero/chart/causes/ranked/empty). pills and quotes don't count.
+- "footer" MUST state the sample size (trades / sessions / weeks / tags) the answer used.
+- If a breakdown has fewer than 5 samples, say so in verdictNote or directive.sub.
+- Inline markup allowed in verdict/verdictNote/label/directive text: **bold**, ~amber phrase~. Signed money/percent (+$338, −$485, +9%) auto-colour, so write them plainly.
+- Prop-firm rules may appear under activePropFirmRule / availableTopstepRules — use them; never claim a matching rule is unavailable.
 
 TRADE STATISTICS (JSON):
 ${statsJson}`,
-    messages: [{ role: 'user', content: trimmed }],
+    messages: [{ role: 'user', content: `Question: ${trimmed}\n\nReturn only the FlyxaAnswerSpec JSON.` }],
   });
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map(b => b.text.trim())
     .filter(Boolean)
-    .join('\n\n');
+    .join('\n');
 
   if (!text) throw new Error('No response from Claude');
-  return text;
+
+  // Parse the spec. Strip any accidental code fences, then validate the essentials.
+  const spec = parseAnswerSpec(text);
+  const reply = spec ? flattenSpecToText(spec) : text;
+  return { spec, reply };
+}
+
+/** Extract and lightly validate a FlyxaAnswerSpec from the model's raw text. */
+function parseAnswerSpec(raw: string): Record<string, unknown> | null {
+  let body = raw.trim();
+  const fence = body.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) body = fence[1].trim();
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(body.slice(start, end + 1)) as Record<string, unknown>;
+    if (typeof parsed.verdict !== 'string' || !Array.isArray(parsed.blocks)) return null;
+    if (typeof parsed.shape !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Flat text version of a spec so non-block clients (and screen readers) still get the answer. */
+function flattenSpecToText(spec: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const strip = (s: unknown) => String(s ?? '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/~(.+?)~/g, '$1');
+  if (spec.verdict) parts.push(strip(spec.verdict));
+  if (spec.verdictNote) parts.push(strip(spec.verdictNote));
+  const directive = spec.directive as { text?: string; sub?: string } | undefined;
+  if (directive?.text) parts.push(strip(directive.text));
+  if (spec.footer) parts.push(strip(spec.footer));
+  return parts.join('\n\n');
 }
 
 // ── Market news AI filter ─────────────────────────────────────────────────────

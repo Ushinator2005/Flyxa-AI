@@ -114,6 +114,8 @@ export interface AskHistoryEntry {
   sampleSize: number;
   error?: boolean;
   createdAt: string;
+  /** Structured block spec (FlyxaAnswerSpec) when the answer rendered as blocks. */
+  spec?: unknown;
 }
 
 export interface FlyxaStore extends FlyxaStateData {

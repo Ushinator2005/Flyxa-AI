@@ -73,8 +73,8 @@ router.post('/ask-flyxa-data', authMiddleware, aiQuotaMiddleware, async (req: Au
       return;
     }
 
-    const reply = await answerTradeDataQuery(question, stats);
-    res.json({ reply });
+    const { reply, spec } = await answerTradeDataQuery(question, stats);
+    res.json({ reply, spec });
   } catch (err) {
     next(err);
   }

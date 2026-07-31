@@ -2,6 +2,7 @@ import React, { CSSProperties, useEffect, useMemo, useRef, useState } from 'reac
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Send, RotateCcw, Sparkles, X, ArrowRight } from 'lucide-react';
 import FlyxaNav from '../components/flyxa/FlyxaNav.js';
+import FlyxaAnswer, { type FlyxaAnswerSpec } from '../components/flyxa/AnswerBlocks.js';
 import { useTrades, toApiTrade } from '../hooks/useTrades.js';
 import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
 import { api, aiApi } from '../services/api.js';
@@ -331,10 +332,12 @@ interface AIReply {
   reply: string;
   sampleSize: number;
   error?: boolean;
+  spec?: unknown;
 }
 
-function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string) => void }) {
-  // Format the reply: split on double newlines for paragraphs
+function ResponseCard({ r, onNavigate, onSuggestion }: { r: AIReply; onNavigate: (path: string) => void; onSuggestion: (q: string) => void }) {
+  // Prefer the structured block spec; fall back to prose paragraphs.
+  const spec = (!r.error && r.spec ? r.spec : null) as FlyxaAnswerSpec | null;
   const paragraphs = r.reply.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
 
   return (
@@ -366,9 +369,11 @@ function ResponseCard({ r, onNavigate }: { r: AIReply; onNavigate: (path: string
           "{r.question}"
         </div>
 
-        {/* Flyxa's answer */}
+        {/* Flyxa's answer — structured blocks when available, prose otherwise */}
         <div style={{ marginBottom: 14 }}>
-          {paragraphs.map((para, i) => (
+          {spec ? (
+            <FlyxaAnswer spec={spec} onSuggestion={onSuggestion} />
+          ) : paragraphs.map((para, i) => (
             <p key={i} style={{
               fontSize: 13.5,
               color: r.error ? C.red : C.t0,
@@ -560,11 +565,11 @@ export default function FlyxaAIAsk() {
     const sampleSize = trades.length;
 
     try {
-      const { reply } = await api.post<{ reply: string }>('/api/ai/ask-flyxa-data', {
+      const { reply, spec } = await api.post<{ reply: string; spec?: FlyxaAnswerSpec | null }>('/api/ai/ask-flyxa-data', {
         question: trimmed,
         stats,
       });
-      addAskHistoryEntry({ id: crypto.randomUUID(), question: trimmed, reply, sampleSize, createdAt: new Date().toISOString() });
+      addAskHistoryEntry({ id: crypto.randomUUID(), question: trimmed, reply, spec: spec ?? null, sampleSize, createdAt: new Date().toISOString() });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       addAskHistoryEntry({
@@ -933,7 +938,7 @@ export default function FlyxaAIAsk() {
 
             {/* Response history */}
             {history.map((r) => (
-              <ResponseCard key={r.id} r={r} onNavigate={navigate} />
+              <ResponseCard key={r.id} r={r} onNavigate={navigate} onSuggestion={(q) => void submitQuestion(q)} />
             ))}
             <div ref={historyEndRef} />
           </div>
