@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import useFlyxaStore from '../store/flyxaStore.js';
+import type { RiskRule } from '../store/types.js';
 import { useRisk } from '../contexts/RiskContext.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
@@ -63,11 +64,23 @@ function formatMoney(val: number, withSign = false): string {
   return `${val >= 0 ? '+' : '−'}$${str}`;
 }
 
+// The live value of an enabled numeric rule from the user's Rules page, so the
+// session reflects rule edits immediately (the backend daily-status settings can
+// lag behind the store). Loss only counts when it's a dollar rule.
+function enabledRuleValue(rules: RiskRule[], kind: NonNullable<RiskRule['kind']>): number | null {
+  const rule = rules.find(r => (r.kind ?? 'manual') === kind && r.enabled !== false);
+  if (!rule) return null;
+  if (kind === 'max_daily_loss' && rule.unit && rule.unit !== '$') return null;
+  const value = Number(rule.value);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function SessionActive() {
   const navigate = useNavigate();
   const preSession  = useFlyxaStore(s => s.preSession);
+  const riskRules   = useFlyxaStore(s => s.riskRules);
   const setPreSession = useFlyxaStore(s => s.setPreSession);
   const setPreSessionForDate = useFlyxaStore(s => s.setPreSessionForDate);
   const { dailyStatus, riskLevel } = useRisk();
@@ -141,8 +154,14 @@ export default function SessionActive() {
   const hasGuardLog   = guardSummary.count > 0;
   const pnl           = hasGuardLog ? guardSummary.pnl : dbPnl;
   const tradesCount   = Math.max(dbTradesCount, guardSummary.count);
-  const maxTrades     = dailyStatus?.maxTradesPerDay ?? 0;
-  const lossLimit     = (preSession as { sessionMaxLoss?: number | null }).sessionMaxLoss
+  // Prefer the user's Rules page values so rule edits show up live; a per-session
+  // loss override from the pre-session brief still wins when set.
+  const planMaxTrades = enabledRuleValue(riskRules, 'max_trades');
+  const planLossLimit = enabledRuleValue(riskRules, 'max_daily_loss');
+  const sessionMaxLoss = (preSession as { sessionMaxLoss?: number | null }).sessionMaxLoss ?? 0;
+  const maxTrades     = planMaxTrades ?? dailyStatus?.maxTradesPerDay ?? 0;
+  const lossLimit     = (sessionMaxLoss > 0 ? sessionMaxLoss : null)
+    ?? planLossLimit
     ?? dailyStatus?.dailyLossLimit
     ?? 0;
   const dbLossUsed    = Math.abs(Math.min(0, dbPnl));

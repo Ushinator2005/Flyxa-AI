@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { clearStaleGuardSessionTrades, summarizeGuardSessionTrades, useGuardSessionTrades } from '../../hooks/useGuardSessionTrades.js';
 import useFlyxaStore from '../../store/flyxaStore.js';
+import type { RiskRule } from '../../store/types.js';
 import { useRisk } from '../../contexts/RiskContext.js';
 import { useAppSettings } from '../../contexts/AppSettingsContext.js';
 import { flushSupabaseStoreNow } from '../../store/supabaseStorage.js';
@@ -10,6 +11,16 @@ import { getTimeZoneParts } from '../../utils/calendarTime.js';
 
 type BiasValue = 'Bull' | 'Bear' | 'Neutral';
 type BiasState = Record<string, BiasValue>;
+
+// Live value of an enabled numeric rule from the Rules page, so rule edits show
+// here immediately rather than waiting on the backend risk settings.
+function enabledRuleValue(rules: RiskRule[], kind: NonNullable<RiskRule['kind']>): number | null {
+  const rule = rules.find(r => (r.kind ?? 'manual') === kind && r.enabled !== false);
+  if (!rule) return null;
+  if (kind === 'max_daily_loss' && rule.unit && rule.unit !== '$') return null;
+  const value = Number(rule.value);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
 
 const SEP = () => (
   <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.07)', flexShrink: 0, display: 'inline-block' }} />
@@ -51,6 +62,7 @@ function readinessColor(status: string) {
 
 export default function SessionStatusBar() {
   const preSession = useFlyxaStore(state => state.preSession);
+  const riskRules = useFlyxaStore(state => state.riskRules);
   const setPreSession = useFlyxaStore(state => state.setPreSession);
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const { dailyStatus } = useRisk();
@@ -106,12 +118,17 @@ export default function SessionStatusBar() {
   // Use the more conservative (worse) value between DB and Guard
   const dbTradesUsed = dailyStatus?.tradesCount ?? 0;
   const effectiveTradesUsed = Math.max(dbTradesUsed, guardTradeCount);
-  const tradesLeft = dailyStatus?.maxTradesPerDay
-    ? Math.max(0, dailyStatus.maxTradesPerDay - effectiveTradesUsed)
+  // Prefer the Rules page value so edits show live; fall back to DB risk settings.
+  const planMaxTrades = enabledRuleValue(riskRules, 'max_trades');
+  const planLossLimit = enabledRuleValue(riskRules, 'max_daily_loss');
+  const effectiveMaxTrades = planMaxTrades ?? dailyStatus?.maxTradesPerDay ?? 0;
+  const tradesLeft = effectiveMaxTrades > 0
+    ? Math.max(0, effectiveMaxTrades - effectiveTradesUsed)
     : null;
 
-  // Prefer session-specific max loss set in pre-session over DB risk settings
-  const effectiveLossLimit = (preSession as unknown as { sessionMaxLoss?: number | null })?.sessionMaxLoss ?? dailyStatus?.dailyLossLimit ?? 0;
+  // Prefer a per-session max loss set in pre-session, then the Rules page, then DB.
+  const sessionMaxLoss = (preSession as unknown as { sessionMaxLoss?: number | null })?.sessionMaxLoss ?? 0;
+  const effectiveLossLimit = (sessionMaxLoss > 0 ? sessionMaxLoss : null) ?? planLossLimit ?? dailyStatus?.dailyLossLimit ?? 0;
   const dbLoss = Math.abs(Math.min(0, dailyStatus?.todayPnL ?? 0));
   const effectiveLoss = Math.max(dbLoss, guardLoss);
   const lossRemaining = effectiveLossLimit > 0
