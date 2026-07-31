@@ -1,3 +1,28 @@
+/* Rulebook row — responsive so the value/status/controls never overflow on
+   narrow viewports (below 720px it reflows to a 2×2 block). */
+.tp-rr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px 96px 84px;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+}
+.tp-rr-value { text-align: right; }
+.tp-rr-status { justify-self: end; }
+.tp-rr-controls { justify-self: end; }
+@media (max-width: 720px) {
+  .tp-rr {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name controls" "value status";
+    row-gap: 10px;
+    column-gap: 12px;
+  }
+  .tp-rr-name { grid-area: name; }
+  .tp-rr-value { grid-area: value; text-align: left; }
+  .tp-rr-status { grid-area: status; justify-self: end; }
+  .tp-rr-controls { grid-area: controls; }
+}
+
 .tp-page {
   height: 100%;
   display: flex;

@@ -349,24 +349,24 @@ export default function TradingPlan() {
 
             return (
               <div key={rule.id} style={{ borderTop: ruleIndex === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)', opacity: rule.enabled === false ? 0.5 : 1, transition: 'opacity .15s' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 190px 96px 84px', alignItems: 'center', gap: 16, padding: '14px 20px' }}>
+                <div className="tp-rr">
                   {/* Rule + commitment line */}
-                  <div style={{ minWidth: 0 }}>
+                  <div className="tp-rr-name" style={{ minWidth: 0 }}>
                     <b style={{ fontSize: 13.5, fontWeight: 600, display: 'block', letterSpacing: '-0.1px', color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
                     <span style={{ fontSize: 12, color: 'var(--txt-3)', display: 'block', marginTop: 2, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{statement}</span>
                   </div>
                   {/* Value — neutral mono + unit caption */}
-                  <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+                  <div className="tp-rr-value" style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
                     {valueText}
                     <small style={{ display: 'block', fontSize: 9, color: 'var(--txt-3)', letterSpacing: '0.8px', marginTop: 3 }}>{unitCaption}</small>
                   </div>
                   {/* Verification status */}
-                  <span style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '1px', color: today === 'fail' ? 'var(--red)' : today === 'ok' ? 'var(--txt-2)' : 'var(--txt-3)' }}>
+                  <span className="tp-rr-status" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '1px', color: today === 'fail' ? 'var(--red)' : today === 'ok' ? 'var(--txt-2)' : 'var(--txt-3)' }}>
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: today === 'fail' ? 'var(--red)' : today === 'ok' ? 'var(--green)' : 'rgba(255,255,255,0.18)' }} />
                     {today === 'fail' ? 'BROKEN' : today === 'ok' ? 'HELD' : '—'}
                   </span>
                   {/* Controls */}
-                  <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div className="tp-rr-controls" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button type="button" onClick={() => setEditingRuleId(editing ? null : rule.id)} style={{ background: 'none', border: 'none', fontFamily: 'var(--font-mono)', fontSize: 10, color: editing ? 'var(--amber)' : 'var(--txt-3)', cursor: 'pointer', padding: 0, letterSpacing: '.5px' }}>
                       {editing ? 'DONE' : 'EDIT'}
                     </button>

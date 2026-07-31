@@ -14,6 +14,8 @@ import {
   ZAxis,
 } from 'recharts';
 import LoadingSpinner from '../components/common/LoadingSpinner.js';
+import LollipopDistribution from '../components/analytics/LollipopDistribution.js';
+import RuleAdherenceCard, { type AdherenceData, type AdherenceDay } from '../components/analytics/RuleAdherenceCard.js';
 import { useTrades } from '../hooks/useTrades.js';
 import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
@@ -55,9 +57,6 @@ const TIME_WINDOW_OPTIONS: Array<{ value: TimeWindowMins; label: string }> = [
 const DASHBOARD_GREEN = '#34d399';
 const DASHBOARD_RED = '#f87171';
 
-// Discipline bar palette — matches the Trading Plan adherence chart.
-// A day is amber only if every rule held; a single break marks the day red.
-const BAR_ON = '#f59e0b';
 
 // Mono uppercase section labels — the report/terminal voice used across Flyxa.
 const KICKER: CSSProperties = {
@@ -570,18 +569,85 @@ export default function Analytics() {
   }, [filteredTrades]);
 
   // One bar per rule-checked day in the period (capped for bar width sanity).
-  const adherenceBars = useMemo(() => {
-    const bars: Array<{ date: string; pct: number; failed: number }> = [];
-    for (const day of planReport.daily) {
-      const checked = day.evaluations.filter(ev => ev.state !== 'unchecked');
-      if (checked.length === 0) continue;
-      const passed = checked.filter(ev => ev.state === 'ok').length;
-      bars.push({ date: day.date, pct: Math.round((passed / checked.length) * 100), failed: checked.length - passed });
+  // One reconciled data object for the rule-adherence card: the ribbon, the
+  // percentage, the streaks, the breakdown and the callout all derive from
+  // days[] here, so the callout can never contradict the ribbon.
+  const adherenceData = useMemo<AdherenceData | null>(() => {
+    const daily = [...planReport.daily]
+      .filter(d => d.checked > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (daily.length === 0) return null;
+
+    // Scope the ribbon to the month of the most recent day-level check.
+    const last = daily[daily.length - 1].date; // YYYY-MM-DD
+    const monthKey = last.slice(0, 7);
+    const y = Number(last.slice(0, 4)), m = Number(last.slice(5, 7));
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const byDate = new Map(daily.map(d => [d.date, d]));
+
+    const days: AdherenceDay[] = Array.from({ length: daysInMonth }, (_, i) => {
+      const date = `${monthKey}-${String(i + 1).padStart(2, '0')}`;
+      const d = byDate.get(date);
+      const traded = !!d && d.checked > 0;
+      return {
+        date, traded,
+        held: traded && d!.failed === 0,
+        breaches: d ? d.failedRules.map(r => ({ id: r.ruleId, label: r.label })) : [],
+      };
+    });
+
+    const trading = days.filter(d => d.traded);
+    const tradingDays = trading.length;
+    const cleanDays = trading.filter(d => d.held).length;
+    const brokenDays = tradingDays - cleanDays;
+    const breaches = trading.reduce((s, d) => s + d.breaches.length, 0);
+    const adherence = tradingDays > 0 ? cleanDays / tradingDays : 0;
+
+    let bestStreak = 0, run = 0;
+    for (const d of trading) { if (d.held) { run += 1; bestStreak = Math.max(bestStreak, run); } else run = 0; }
+    let currentStreak = 0;
+    for (let i = trading.length - 1; i >= 0; i--) { if (trading[i].held) currentStreak += 1; else break; }
+
+    // Per-rule breach counts (month-scoped) + every enabled rule at zero.
+    const breachCount = new Map<string, number>();
+    const labelById = new Map<string, string>();
+    trading.forEach(d => d.breaches.forEach(b => {
+      breachCount.set(b.id, (breachCount.get(b.id) ?? 0) + 1);
+      labelById.set(b.id, b.label);
+    }));
+    const ruleMap = new Map<string, { id: string; label: string; breaches: number }>();
+    riskRules.filter(r => r.enabled !== false).forEach(r => ruleMap.set(r.id, { id: r.id, label: r.label, breaches: breachCount.get(r.id) ?? 0 }));
+    breachCount.forEach((n, id) => { if (!ruleMap.has(id)) ruleMap.set(id, { id, label: labelById.get(id) ?? 'Rule', breaches: n }); });
+    const rules = [...ruleMap.values()].sort((a, b) => b.breaches - a.breaches);
+
+    // Callout: one weekday carrying 60%+ of broken days, else one rule with 50%+ of breaches.
+    const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const word = (n: number) => WORDS[n] ? WORDS[n][0].toUpperCase() + WORDS[n].slice(1) : String(n);
+    let callout: AdherenceData['callout'] = null;
+    const broken = trading.filter(d => !d.held);
+    if (brokenDays > 0) {
+      const byWd = new Map<number, number>();
+      broken.forEach(d => { const wd = new Date(`${d.date}T00:00:00`).getDay(); byWd.set(wd, (byWd.get(wd) ?? 0) + 1); });
+      const top = [...byWd.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (top && top[1] >= 2 && top[1] / brokenDays >= 0.6) {
+        callout = {
+          text: `${word(top[1])} of your ${word(brokenDays).toLowerCase()} broken days were ${WEEKDAYS[top[0]]}s.`,
+          detail: `That single weekday is behind ${Math.round((top[1] / brokenDays) * 100)}% of this month's rule breaks.`,
+        };
+      }
     }
-    // planReport.daily arrives newest-first — the chart reads left→right in time.
-    bars.sort((a, b) => a.date.localeCompare(b.date));
-    return bars.slice(-42);
-  }, [planReport]);
+    if (!callout && breaches > 0 && rules[0] && rules[0].breaches / breaches >= 0.5 && rules.length > 1) {
+      const r = rules[0];
+      callout = {
+        text: `${r.label} caused ${word(r.breaches).toLowerCase()} of the ${word(breaches).toLowerCase()} breaches.`,
+        detail: `More than the other ${rules.length - 1} rule${rules.length - 1 === 1 ? '' : 's'} combined.`,
+      };
+    }
+
+    const monthLabel = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    return { monthLabel, days, rules, summary: { tradingDays, cleanDays, brokenDays, breaches, adherence, currentStreak, bestStreak }, callout };
+  }, [planReport, riskRules]);
 
   const dayOfWeekRows = useMemo(() => {
     const values: Record<string, { pnl: number; count: number }> = {
@@ -1172,88 +1238,22 @@ export default function Analytics() {
           </div>
         </section>
 
-        {/* Plan adherence — same discipline bars as the Trading Plan page */}
-        <section className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '15px 18px 0' }}>
-            <p style={KICKER}>Plan adherence · {periodSubtitle}</p>
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 500, lineHeight: 1, flexShrink: 0,
-              color: planReport.pct === null ? 'var(--app-text-subtle)'
-                : planReport.pct >= 80 ? DASHBOARD_GREEN
-                : planReport.pct >= 60 ? BAR_ON
-                : DASHBOARD_RED,
-            }}>
-              {planReport.pct === null ? '--' : `${planReport.pct}%`}
-            </span>
-          </div>
-
-          {adherenceBars.length > 0 ? (
-            <>
-              <div style={{ position: 'relative', height: 96, margin: '18px 18px 0' }}>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 3 }}>
-                  {adherenceBars.map(bar => (
-                    <span
-                      key={bar.date}
-                      title={`${formatDateLabel(bar.date)} · ${bar.failed === 0 ? 'all rules held' : `${bar.failed} break${bar.failed !== 1 ? 's' : ''}`} · ${bar.pct}% of checks passed`}
-                      style={{
-                        flex: 1, maxWidth: 18,
-                        height: `${Math.max(8, bar.pct)}%`,
-                        borderRadius: '2px 2px 0 0',
-                        backgroundColor: bar.failed === 0 ? BAR_ON : DASHBOARD_RED,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', margin: '8px 18px 0' }}>
-                {Array.from(
-                  new Set(
-                    Array.from({ length: Math.min(5, adherenceBars.length) }, (_, i) =>
-                      Math.round((i * (adherenceBars.length - 1)) / Math.max(1, Math.min(5, adherenceBars.length) - 1))
-                    )
-                  )
-                ).map(barIndex => (
-                  <span key={barIndex} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.05em', color: 'var(--app-text-subtle)' }}>
-                    {formatDateLabel(adherenceBars[barIndex].date)}
-                  </span>
-                ))}
-              </div>
-              <p style={{ margin: '9px 18px 13px', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>
-                One bar per trading day — <span style={{ color: BAR_ON }}>amber</span> held every rule,{' '}
-                <span style={{ color: DASHBOARD_RED }}>red</span> broke at least one. Hover for the exact day.
-              </p>
-            </>
-          ) : (
-            <p style={{ margin: '16px 18px 14px', fontSize: 12, color: 'var(--app-text-subtle)' }}>
-              {planReport.checked > 0 ? 'No day-level rule checks in this period.' : 'No configured rule checks yet — set rules in the Trading Plan.'}
-            </p>
-          )}
-
-          <div style={{ borderTop: '1px solid var(--app-border)', padding: '11px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '5px 16px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--app-text-subtle)' }}>
-            <span>
-              CHECKED <b style={{ color: 'var(--app-text)' }}>{planReport.checked}</b>
-              {' '}· BROKEN DAYS <b style={{ color: DASHBOARD_RED }}>{planReport.brokenDays}</b>
-              {' '}· PERFECT DAYS <b style={{ color: DASHBOARD_GREEN }}>{planReport.perfectDays}</b>
-            </span>
-            <span>
-              {planReport.mostBrokenRule
-                ? <>MOST BROKEN · <b style={{ color: 'var(--app-text)' }}>{planReport.mostBrokenRule.label.toUpperCase()}</b> ({planReport.mostBrokenRule.failed}×)</>
-                : planReport.checked > 0 ? 'NO RULE BREAKS THIS PERIOD' : null}
-            </span>
-          </div>
-        </section>
+        {/* Plan adherence — streak ribbon + rule breakdown, one reconciled object */}
+        <RuleAdherenceCard data={adherenceData} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h3 style={KICKER}>P&amp;L by day of week</h3>
-          <DivergingColumns rows={dayOfWeekRows} />
-        </section>
+        <LollipopDistribution
+          title="P&L by day of week"
+          rows={dayOfWeekRows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
+          order="given" unit="days" sortLabel="by weekday"
+        />
 
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h3 style={KICKER}>P&amp;L by session</h3>
-          <DivergingColumns rows={sessionRows} />
-        </section>
+        <LollipopDistribution
+          title="P&L by session"
+          rows={sessionRows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
+          order="given" unit="sessions" sortLabel="by session"
+        />
 
         <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
           <h3 style={KICKER}>P&amp;L by hold time</h3>
