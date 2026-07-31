@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useAuth } from '../contexts/AuthContext.js';
+import { rivalsApi } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { JournalEntry as StoreJournalEntry, RiskRule } from '../store/types.js';
 import { pushToast } from '../store/toastStore.js';
@@ -1447,6 +1448,14 @@ export default function TradeJournal() {
   const navigate = useNavigate();
   const { preferences, accounts, getDefaultTradeAccountId } = useAppSettings();
   const { user } = useAuth();
+  // The user's actual chosen username (from their rivals profile), not the email
+  // prefix — so the share card signature matches what they picked.
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    rivalsApi.getProfile().then(p => { if (alive && p?.username) setProfileUsername(p.username); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const { deleteTrade: deleteTradeEverywhere, createTrade } = useTrades();
   const persistedEntries = useFlyxaStore(state => state.entries);
   const riskRules = useFlyxaStore(state => state.riskRules);
@@ -2206,7 +2215,8 @@ export default function TradeJournal() {
               winRate: Math.round(stats.winRate),
               grade: null,
               extraStat,
-              username: (user?.user_metadata?.display_name as string | undefined)
+              username: profileUsername
+                ?? (user?.user_metadata?.display_name as string | undefined)
                 ?? user?.email?.split('@')[0]
                 ?? 'trader',
             };
@@ -2658,13 +2668,13 @@ function EntryHeaderSection({
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               paddingBottom: 14, borderBottom: '1px solid var(--border)', padding: '16px 20px 14px',
-              flexShrink: 0,
+              flexShrink: 0, flexWrap: 'wrap', gap: 10,
             }}>
-              <div>
+              <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                 <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--txt)', marginBottom: 6, fontFamily: 'var(--font-sans)' }}>
                   {formatDateTitle(selectedEntry.date)}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   {(() => {
                     const stats = computeEntryStats(selectedEntry, riskRules);
                     const pnl = stats.pnl;
@@ -2760,7 +2770,7 @@ function EntryHeaderSection({
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
                 {deleteEntryConfirm ? (
                   <>
                     <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Delete this day?</span>

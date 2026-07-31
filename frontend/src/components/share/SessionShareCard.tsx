@@ -8,6 +8,11 @@ import { C } from '../../utils/theme.js';
 
 const PETAL_PATH = 'M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z';
 
+// The card is authored at a fixed size and merely scaled down to fit narrow
+// screens, so the exported design is pixel-identical on every device.
+const CARD_W = 780;
+const CARD_H = Math.round((CARD_W * 9) / 16); // 439 — locked 16:9
+
 function petalTransform(rotation: number, scale: number): string {
   const offset = 50 * (1 - scale);
   return `rotate(${rotation} 50 50) translate(${offset} ${offset}) scale(${scale})`;
@@ -61,6 +66,7 @@ export default function SessionShareCard({ open, onClose, data }: {
   const [maskAmount, setMaskAmount] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +76,16 @@ export default function SessionShareCard({ open, onClose, data }: {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
+
+  // Fit the fixed-size card within the viewport (minus the modal's 20px padding
+  // each side) by scaling it down — the layout itself never reflows.
+  useEffect(() => {
+    if (!open) return;
+    const update = () => setScale(Math.min(1, (window.innerWidth - 40) / CARD_W));
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [open]);
 
   const capture = useCallback(async (): Promise<{ dataUrl: string; blob: Blob } | null> => {
     const el = cardRef.current;
@@ -195,11 +211,15 @@ export default function SessionShareCard({ open, onClose, data }: {
 
         {/* ── The card (this exact DOM gets exported at 3×) ──
              Fixed dark + amber palette so the export looks identical whatever
-             theme the app is in. */}
+             theme the app is in. Authored at CARD_W×CARD_H and scaled down for
+             display; the exported node stays native size for a crisp, identical
+             render on every device. */}
+        <div style={{ width: CARD_W * scale, height: CARD_H * scale, flexShrink: 0 }}>
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
         <div
           ref={cardRef}
           style={{
-            width: 780, maxWidth: '100%', boxSizing: 'border-box', aspectRatio: '16 / 9',
+            width: CARD_W, height: CARD_H, boxSizing: 'border-box',
             display: 'flex', borderRadius: 16, overflow: 'hidden', backgroundColor: '#0b0a0a',
           }}
         >
@@ -229,7 +249,7 @@ export default function SessionShareCard({ open, onClose, data }: {
               </p>
               <p style={{
                 margin: '12px 0 0', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700,
-                fontSize: 'clamp(44px, 8vw, 72px)', lineHeight: 1, letterSpacing: '-0.02em',
+                fontSize: 64, lineHeight: 1, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
                 color: maskAmount ? '#8a8178' : pnlColor,
               }}>
                 {maskAmount ? '✱✱✱✱' : fmtMoney(data.netPnl)}
@@ -260,6 +280,8 @@ export default function SessionShareCard({ open, onClose, data }: {
               </div>
             </div>
           </div>
+        </div>
+        </div>
         </div>
 
         {/* ── Share destinations ── */}
