@@ -1203,8 +1203,14 @@
 }
 
 .scanner-empty-entry {
-  height: 100%;
+  /* Fill the panel's available height via flex-grow rather than height:100%.
+     A percentage height in this flex-column chain can resolve taller than the
+     viewport, which pushed the centered card well below the fold. flex-grow
+     clamps to the real available space so the card sits dead-center. */
+  flex: 1;
+  min-height: 0;
   align-items: center;
+  justify-content: center;
   padding: 40px 24px;
   overflow: hidden;
 }

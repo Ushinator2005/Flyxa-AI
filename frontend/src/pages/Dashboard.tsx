@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp, Minus,
+  TrendingUp, Minus, Camera,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X, ChevronDown,
   Landmark,
 } from 'lucide-react';
@@ -56,6 +56,27 @@ const fmtUSD = (v: number) =>
   v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const fmtPct = (v: number) => v.toFixed(1) + '%';
 const fmtRR  = (v: number) => formatRiskRewardRatio(v, { placeholder: '1:0 RR' });
+
+// Counts from 0 up to `target` over `duration` ms, replaying whenever `resetKey`
+// changes. Eased to match the win-ring's ease-out sweep so the number and the
+// wheel fill finish together when you change months.
+function useCountUp(target: number, duration: number, resetKey: string | number): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    let start = 0;
+    const tick = (ts: number) => {
+      if (!start) start = ts;
+      const p = Math.min(1, (ts - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(target * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, resetKey]);
+  return value;
+}
 const fmtSignedCompactUSD = (v: number) => {
   const formatted = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -236,16 +257,21 @@ export default function Dashboard() {
     });
   }, [weekOffset]);
 
-  const { wins, losses, breakevens, winRingData } = useMemo(() => {
+  // Win-rate ring is scoped to the month the calendar is showing, so navigating
+  // the calendar to June recomputes it for June, July for July, and so on.
+  const { wins, losses, breakevens, winRingData, winRate: monthWinRate } = useMemo(() => {
+    const prefix = `${calendarMonth.year}-${String(calendarMonth.month).padStart(2, '0')}`;
+    const scoped = filteredTrades.filter(t => t.trade_date?.startsWith(prefix));
     const ep = (t: typeof filteredTrades[0]) => t.pnl - (t.commission ?? 0);
-    const w = filteredTrades.filter(t => ep(t) > 0).length;
-    const l = filteredTrades.filter(t => ep(t) < 0).length;
-    const b = filteredTrades.filter(t => ep(t) === 0 && (t.exit_price ?? 0) > 0).length;
+    const w = scoped.filter(t => ep(t) > 0).length;
+    const l = scoped.filter(t => ep(t) < 0).length;
+    const b = scoped.filter(t => ep(t) === 0 && (t.exit_price ?? 0) > 0).length;
     const total = w + l + b;
     return {
       wins: w,
       losses: l,
       breakevens: b,
+      winRate: total > 0 ? (w / total) * 100 : 0,
       winRingData: total > 0
         ? [
             { v: w, c: GREEN },
@@ -254,7 +280,10 @@ export default function Dashboard() {
           ]
         : [{ v: 1, c: 'rgba(255,255,255,0.06)' }],
     };
-  }, [filteredTrades]);
+  }, [filteredTrades, calendarMonth]);
+
+  // Center % counts up in step with the ring's sweep, restarting on month change.
+  const animatedWinRate = useCountUp(monthWinRate, 750, `${calendarMonth.year}-${calendarMonth.month}`);
 
   const todayPnL = useMemo(
     () => todayTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0),
@@ -462,7 +491,7 @@ export default function Dashboard() {
                 data-tour-id="dashboard-log-trade"
                 variant="primary"
                 size="md"
-                icon={<TrendingUp size={13} />}
+                icon={<Camera size={13} />}
                 onClick={() => navigate('/scanner')}
               >
                 Log trade
@@ -587,13 +616,13 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* EXECUTION */}
+              {/* RISK TO REWARD RATIO — average planned reward vs risk across trades */}
               <div style={cs}>
-                <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: '0 0 8px', fontFamily: MONO }}>EXECUTION</p>
+                <p style={{ fontSize: 10, fontWeight: 500, color: T3, margin: '0 0 8px', fontFamily: MONO, whiteSpace: 'nowrap' }}>RISK TO REWARD RATIO</p>
                 <p style={{ fontSize: isMobile ? 20 : 22, fontWeight: 500, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1, margin: '0 0 5px', lineHeight: 1 }}>
-                  {fmtPct(summary.winRate)}
+                  {summary.totalTrades > 0 && summary.avgRR > 0 ? `${fmtRR(summary.avgRR)}:1` : '—'}
                 </p>
-                <p style={{ fontSize: 11, color: T3, margin: 0 }}><span style={{ fontFamily: MONO }}>{fmtRR(summary.avgRR)}</span> avg R:R</p>
+                <p style={{ fontSize: 11, color: T3, margin: 0 }}>average reward vs risk</p>
               </div>
 
               {/* MONTHLY P&L */}
@@ -943,16 +972,25 @@ export default function Dashboard() {
           {/* Right column — widgets */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
 
-            {/* Win Rate ring */}
+            {/* Win Rate ring — scoped to the month the calendar is showing */}
             <SectionPanel style={{ flexShrink: 0 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: T1, marginBottom: 14 }}>Win Rate</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: T1, marginBottom: 14 }}>
+                {format(new Date(calendarMonth.year, calendarMonth.month - 1, 1), 'MMMM')} Win Rate
+              </p>
               <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
                 <PieChart width={132} height={132}>
                   <Pie
+                    // Re-key on the visible month so the sweep-fill replays each
+                    // time you page to a new month, instead of sitting static.
+                    key={`${calendarMonth.year}-${calendarMonth.month}`}
                     data={winRingData} dataKey="v"
                     cx="50%" cy="50%"
                     innerRadius={48} outerRadius={62}
-                    stroke="none" isAnimationActive={false}
+                    stroke="none"
+                    isAnimationActive={true}
+                    animationBegin={0}
+                    animationDuration={750}
+                    animationEasing="ease-out"
                     startAngle={90} endAngle={-270}
                   >
                     {winRingData.map((entry, i) => <Cell key={i} fill={entry.c} />)}
@@ -960,7 +998,7 @@ export default function Dashboard() {
                 </PieChart>
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
                   <div style={{ fontSize: 20, fontWeight: 400, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: T1, lineHeight: 1 }}>
-                    {fmtPct(summary.winRate)}
+                    {fmtPct(animatedWinRate)}
                   </div>
                   <div style={{ fontSize: 10, color: T3, marginTop: 3 }}>Win Rate</div>
                 </div>

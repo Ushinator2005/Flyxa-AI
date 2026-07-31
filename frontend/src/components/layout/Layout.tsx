@@ -43,7 +43,7 @@ export default function Layout() {
     || isJournalWorkspace;
 
   return (
-    <div className="app-shell flex min-h-screen">
+    <div className="app-shell flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header />

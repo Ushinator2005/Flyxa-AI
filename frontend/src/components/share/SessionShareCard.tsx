@@ -221,8 +221,9 @@ export default function SessionShareCard({ open, onClose, data }: {
           </div>
 
           {/* Right — dark result panel */}
-          <div style={{ flex: 1, minWidth: 0, backgroundColor: '#0b0a0a', color: '#e8e3dc', padding: '30px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
+          <div style={{ flex: 1, minWidth: 0, backgroundColor: '#0b0a0a', color: '#e8e3dc', padding: '30px 34px', display: 'flex', flexDirection: 'column' }}>
+            {/* P&L centered in the space above the footer, not pinned to the top */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#6f695f' }}>
                 Net P&L
               </p>

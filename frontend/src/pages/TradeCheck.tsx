@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, CircleSlash } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleSlash, Pencil, ArrowUp, ArrowDown } from 'lucide-react';
 import { ALL_ACCOUNTS_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import { useRisk } from '../contexts/RiskContext.js';
 import { useTrades } from '../hooks/useTrades.js';
@@ -39,6 +39,45 @@ const C = {
   sans:   'var(--font-sans)',
   mono:   'var(--font-mono)',
 } as const;
+
+// TEMP PREVIEW: set true to downgrade a hard "Blocked" to "Caution" so the
+// Long/Short buttons enable and the unblocked dock can be inspected. Remove /
+// set false before shipping — this bypasses real trading blocks.
+const TEMP_UNBLOCK = false;
+
+// Shared metric-bar styling for the session limit meters (loss / trades / target).
+const metricLabel: React.CSSProperties = {
+  fontSize: 9, color: C.subtle, letterSpacing: '0.11em', textTransform: 'uppercase', fontWeight: 600,
+};
+const metricTrack: React.CSSProperties = {
+  height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden',
+};
+const metricFill: React.CSSProperties = {
+  height: '100%', borderRadius: 3, transition: 'width 0.4s ease, background 0.3s ease',
+};
+
+// The session limit editor is driven entirely by the numeric rules the user has
+// set on their Rules page — one field per enabled rule, shown in this order.
+type RuleKind = NonNullable<RiskRule['kind']>;
+const RULE_FIELD_META: Partial<Record<RuleKind, { label: string; step: string }>> = {
+  max_daily_loss:      { label: 'Loss $',        step: '1'   },
+  max_trades:          { label: 'Max trades',    step: '1'   },
+  max_contracts:       { label: 'Max contracts', step: '1'   },
+  min_rr:              { label: 'Min R:R',       step: '0.1' },
+  cooldown_after_loss: { label: 'Cooldown min',  step: '1'   },
+};
+const RULE_FIELD_ORDER: RuleKind[] = ['max_daily_loss', 'max_trades', 'max_contracts', 'min_rr', 'cooldown_after_loss'];
+
+// The number a rule shows in the editor. Max-contracts prefers its per-instrument
+// caps (highest) so a rule set as "MNQ 10" reads 10, not its flat fallback value.
+function ruleEditableValue(rule: RiskRule): string {
+  if ((rule.kind ?? 'manual') === 'max_contracts') {
+    const caps = Object.values(rule.contractLimits ?? {}).filter((n): n is number => Number.isFinite(n) && n > 0);
+    if (caps.length > 0) return String(Math.max(...caps));
+  }
+  const v = Number(rule.value);
+  return Number.isFinite(v) && v > 0 ? String(v) : '';
+}
 
 function todayKey(timeZone: string) {
   return getTimeZoneParts(new Date(), timeZone).date;
@@ -138,7 +177,7 @@ export default function TradeCheck() {
   const [pendingClose, setPendingClose]   = useState<{ outcome: Exclude<Outcome, 'be'>; amount: string } | null>(null);
   // Inline risk-limit editor
   const [showLimits, setShowLimits]       = useState(false);
-  const [limitDraft, setLimitDraft]       = useState({ loss: '', trades: '', riskPct: '', contracts: '' });
+  const [ruleDraft, setRuleDraft]         = useState<Record<string, string>>({});
   const [limitSaving, setLimitSaving]     = useState(false);
   const sessionStartedAtRef = useRef<string | null>(activeStartedAt ?? null);
   const currentDate = todayKey(preferences.timezone);
@@ -300,8 +339,10 @@ export default function TradeCheck() {
     if (newsRisk)     flags.push(flag('caution', `News: ${newsRisk.length > 46 ? newsRisk.slice(0, 43) + '…' : newsRisk}`));
     else if (calRisk) flags.push(flag('caution', `Calendar: ${calRisk}`));
 
-    const status: GateStatus = flags.some(f => f.status === 'blocked') ? 'blocked'
+    let status: GateStatus = flags.some(f => f.status === 'blocked') ? 'blocked'
       : flags.some(f => f.status === 'caution') ? 'caution' : 'clear';
+    // TEMP: let the user preview the unblocked dock (see TEMP_UNBLOCK note above).
+    if (TEMP_UNBLOCK && status === 'blocked') status = 'caution';
 
     return { status, flags, sessionPnl, sessionLoss, tradeCount, lossPct: Math.round(lossPct), lossLimit, profitTarget, maxTrades };
   }, [
@@ -360,33 +401,69 @@ export default function TradeCheck() {
       ? { label: 'Caution', color: C.amber, Icon: AlertTriangle }
       : { label: 'Clear',   color: C.green, Icon: CheckCircle2  };
 
+  // The editor pulls straight from the user's Rules page: every enabled numeric
+  // rule they have, in a sensible order. Nothing is invented — if a rule isn't
+  // on their Rules page, it doesn't show here.
+  const editableRules = useMemo<RiskRule[]>(() =>
+    RULE_FIELD_ORDER
+      .map(kind => riskRules.find(r => (r.kind ?? 'manual') === kind && r.enabled !== false && RULE_FIELD_META[kind]))
+      .filter((r): r is RiskRule => !!r && ruleEditableValue(r) !== ''),
+  [riskRules]);
+
   function openLimitEditor() {
-    const loss  = gate.lossLimit > 0 ? String(gate.lossLimit) : riskSettings?.daily_loss_limit ? String(riskSettings.daily_loss_limit) : '';
-    const max   = (dailyStatus?.maxTradesPerDay ?? riskSettings?.max_trades_per_day ?? 0);
-    setLimitDraft({
-      loss,
-      trades:    max > 0 ? String(max) : '',
-      riskPct:   riskSettings?.risk_percentage ? String(riskSettings.risk_percentage) : '',
-      contracts: riskSettings?.max_contracts_per_trade ? String(riskSettings.max_contracts_per_trade) : '',
-    });
+    // Seed each field straight from the user's Rules page value.
+    const draft: Record<string, string> = {};
+    for (const rule of editableRules) draft[rule.id] = ruleEditableValue(rule);
+    setRuleDraft(draft);
     setShowLimits(true);
   }
 
   async function saveLimits() {
-    const loss  = parseFloat(limitDraft.loss);
-    const trades = parseInt(limitDraft.trades, 10);
-    if (!isFinite(loss) || loss <= 0 || !isFinite(trades) || trades <= 0) return;
-    const update: Record<string, number> = { daily_loss_limit: loss, max_trades_per_day: trades };
-    const pct = parseFloat(limitDraft.riskPct);
-    if (isFinite(pct) && pct > 0) update.risk_percentage = pct;
-    const contracts = parseInt(limitDraft.contracts, 10);
-    if (isFinite(contracts) && contracts > 0) update.max_contracts_per_trade = contracts;
+    // Write every edited value back to its rule on the Rules page (store →
+    // Supabase). Per-instrument contract caps are left to the Rules page when
+    // there is more than one instrument, so a single edit can't flatten them.
+    const current = useFlyxaStore.getState().riskRules;
+    const settingsUpdate: Record<string, number> = {};
+    let changed = false;
+
+    const next = current.map(rule => {
+      const kind = (rule.kind ?? 'manual') as RuleKind;
+      if (rule.enabled === false || !RULE_FIELD_META[kind]) return rule;
+      const raw = ruleDraft[rule.id];
+      if (raw === undefined || raw.trim() === '') return rule;
+      const v = parseFloat(raw);
+      if (!isFinite(v) || v < 0) return rule;
+
+      // Mirror the gate-relevant caps into risk settings so the backend daily
+      // status and warnings stay in step with the Rules page.
+      if (kind === 'max_daily_loss') settingsUpdate.daily_loss_limit = v;
+      if (kind === 'max_trades')     settingsUpdate.max_trades_per_day = v;
+      if (kind === 'max_contracts')  settingsUpdate.max_contracts_per_trade = v;
+
+      if (kind === 'max_contracts') {
+        const entries = Object.entries(rule.contractLimits ?? {});
+        if (entries.length === 1) {
+          const [sym] = entries[0];
+          if ((rule.contractLimits ?? {})[sym] === v) return rule;
+          changed = true;
+          return { ...rule, contractLimits: { ...rule.contractLimits, [sym]: v } };
+        }
+        if (entries.length > 1) return rule; // multiple caps — edit on the Rules page
+      }
+      if (rule.value === String(v)) return rule;
+      changed = true;
+      return { ...rule, value: String(v) };
+    });
+
     setLimitSaving(true);
     try {
-      await riskApi.updateSettings(update);
-      await refreshSettings();
-      setShowLimits(false);
+      if (changed) useFlyxaStore.getState().updateRiskRules(next);
+      if (Object.keys(settingsUpdate).length > 0) {
+        await riskApi.updateSettings(settingsUpdate);
+        await refreshSettings();
+      }
     } catch { /* ignore */ }
+    setShowLimits(false);
     setLimitSaving(false);
   }
 
@@ -461,33 +538,36 @@ export default function TradeCheck() {
       {/* ══ IDLE ════════════════════════════════════════════════════ */}
       {phase === 'idle' && (
         <>
-          {/* Status badge */}
+          {/* Status header — a solid dark status bar with a colored accent stripe,
+              distinct from the solid color-fill Long/Short buttons below. */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '6px 8px',
-            background: `${sc.color}0e`,
-            border: `1px solid ${sc.color}28`,
-            borderRadius: 5,
+            padding: '9px 11px',
+            background: '#17171c',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderLeft: `3px solid ${sc.color}`,
+            borderRadius: 8,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{
-                width: 5, height: 5, borderRadius: '50%',
-                background: sc.color,
-                display: 'inline-block', flexShrink: 0,
-              }} />
-              <span style={{ fontSize: 10, fontWeight: 700, color: sc.color, lineHeight: 1, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <sc.Icon size={13} color={sc.color} strokeWidth={2.4} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 10, fontWeight: 600, color: sc.color, lineHeight: 1, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: C.sans }}>
                 {sc.label}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {gate.sessionPnl !== 0 && (
-                <span style={{ fontSize: 10, fontFamily: C.mono, fontWeight: 700, color: gate.sessionPnl > 0 ? C.green : C.red }}>
+                <span style={{ fontSize: 11, fontFamily: C.mono, fontWeight: 700, color: gate.sessionPnl > 0 ? C.green : C.red }}>
                   {gate.sessionPnl > 0 ? '+' : ''}{fmtMoney(gate.sessionPnl)}
                 </span>
               )}
-              <button type="button" onClick={openLimitEditor}
-                style={{ fontSize: 8.5, fontWeight: 600, color: C.amber, background: 'none', border: `1px solid ${C.amber}30`, cursor: 'pointer', padding: '2px 6px', letterSpacing: '0.05em', borderRadius: 3, fontFamily: C.sans }}>
-                edit
+              <button type="button" onClick={openLimitEditor} title="Edit limits"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  fontSize: 9, fontWeight: 600, color: C.muted, background: 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${C.border}`, cursor: 'pointer', padding: '3px 7px',
+                  letterSpacing: '0.04em', borderRadius: 5, fontFamily: C.sans, textTransform: 'uppercase',
+                }}>
+                <Pencil size={9} strokeWidth={2.2} /> Edit
               </button>
             </div>
           </div>
@@ -495,75 +575,80 @@ export default function TradeCheck() {
           {/* Live stats bars — hidden when limit editor is open */}
           {!showLimits && (
             <>
-              {/* Loss bar */}
-              {gate.lossLimit > 0 && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                    <span style={{ fontSize: 8.5, color: C.subtle, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Loss</span>
-                    <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.muted }}>
-                      {fmtMoney(gate.sessionLoss)}<span style={{ opacity: 0.45 }}> / {fmtMoney(gate.lossLimit)}</span>
-                    </span>
-                  </div>
-                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 2,
-                      width: `${Math.min(100, gate.lossPct)}%`,
-                      background: gate.lossPct >= 100 ? C.red
-                        : gate.sessionPnl > 0 ? C.green
-                        : gate.lossPct >= 80 ? C.red
-                        : gate.sessionPnl < 0 ? 'rgba(248,113,113,0.65)'
-                        : 'rgba(255,255,255,0.10)',
-                      boxShadow: gate.lossPct >= 80 ? `0 0 6px ${C.red}80` : undefined,
-                      transition: 'width 0.4s ease, background 0.3s ease' }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Trade segments */}
-              {maxTrades > 0 && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                    <span style={{ fontSize: 8.5, color: C.subtle, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Trades</span>
-                    <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.tradeCount >= maxTrades ? C.red : C.muted }}>
-                      {gate.tradeCount}<span style={{ opacity: 0.45 }}> / {maxTrades}</span>
-                    </span>
-                  </div>
-                  {maxTrades <= 8 ? (
-                    <div style={{ display: 'flex', gap: 2 }}>
-                      {Array.from({ length: maxTrades }).map((_, i) => (
-                        <div key={i} style={{ flex: 1, height: 4, borderRadius: 2,
-                          background: i < gate.tradeCount
-                            ? (gate.tradeCount >= maxTrades ? C.red : C.amber)
-                            : 'rgba(255,255,255,0.05)',
-                          transition: 'background 0.3s ease' }} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 2,
-                        width: `${Math.min(100, (gate.tradeCount / maxTrades) * 100)}%`,
-                        background: gate.tradeCount >= maxTrades ? C.red : C.amber,
-                        transition: 'width 0.4s ease' }} />
+              {(gate.lossLimit > 0 || maxTrades > 0 || (gate.profitTarget !== null && gate.profitTarget > 0)) && (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 10,
+                  padding: '11px 11px 12px',
+                  background: 'rgba(255,255,255,0.015)',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                }}>
+                  {/* Loss bar */}
+                  {gate.lossLimit > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                        <span style={metricLabel}>Loss</span>
+                        <span style={{ fontSize: 10, fontFamily: C.mono, color: gate.lossPct >= 80 ? C.red : C.muted }}>
+                          {fmtMoney(gate.sessionLoss)}<span style={{ opacity: 0.4 }}> / {fmtMoney(gate.lossLimit)}</span>
+                        </span>
+                      </div>
+                      <div style={metricTrack}>
+                        <div style={{ ...metricFill,
+                          width: `${Math.min(100, gate.lossPct)}%`,
+                          background: gate.lossPct >= 100 ? C.red
+                            : gate.sessionPnl > 0 ? C.green
+                            : gate.lossPct >= 80 ? C.red
+                            : gate.sessionPnl < 0 ? 'rgba(248,113,113,0.65)'
+                            : 'rgba(255,255,255,0.12)' }} />
+                      </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Profit target bar */}
-              {gate.profitTarget !== null && gate.profitTarget > 0 && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                    <span style={{ fontSize: 8.5, color: C.subtle, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Target</span>
-                    <span style={{ fontSize: 9.5, fontFamily: C.mono, color: gate.sessionPnl >= gate.profitTarget ? C.green : C.muted }}>
-                      {fmtMoney(Math.max(0, gate.sessionPnl))}<span style={{ opacity: 0.45 }}> / {fmtMoney(gate.profitTarget)}</span>
-                    </span>
-                  </div>
-                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 2,
-                      width: `${Math.min(100, Math.max(0, (gate.sessionPnl / gate.profitTarget) * 100))}%`,
-                      background: gate.sessionPnl >= gate.profitTarget ? C.green : 'rgba(52,211,153,0.38)',
-                      boxShadow: gate.sessionPnl >= gate.profitTarget ? `0 0 6px ${C.green}80` : undefined,
-                      transition: 'width 0.4s ease' }} />
-                  </div>
+                  {/* Trade segments */}
+                  {maxTrades > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                        <span style={metricLabel}>Trades</span>
+                        <span style={{ fontSize: 10, fontFamily: C.mono, color: gate.tradeCount >= maxTrades ? C.red : C.muted }}>
+                          {gate.tradeCount}<span style={{ opacity: 0.4 }}> / {maxTrades}</span>
+                        </span>
+                      </div>
+                      {maxTrades <= 8 ? (
+                        <div style={{ display: 'flex', gap: 3 }}>
+                          {Array.from({ length: maxTrades }).map((_, i) => (
+                            <div key={i} style={{ flex: 1, height: 5, borderRadius: 3,
+                              background: i < gate.tradeCount
+                                ? (gate.tradeCount >= maxTrades ? C.red : C.amber)
+                                : 'rgba(255,255,255,0.06)',
+                              transition: 'background 0.3s ease' }} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={metricTrack}>
+                          <div style={{ ...metricFill,
+                            width: `${Math.min(100, (gate.tradeCount / maxTrades) * 100)}%`,
+                            background: gate.tradeCount >= maxTrades ? C.red : C.amber }} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Profit target bar */}
+                  {gate.profitTarget !== null && gate.profitTarget > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                        <span style={metricLabel}>Target</span>
+                        <span style={{ fontSize: 10, fontFamily: C.mono, color: gate.sessionPnl >= gate.profitTarget ? C.green : C.muted }}>
+                          {fmtMoney(Math.max(0, gate.sessionPnl))}<span style={{ opacity: 0.4 }}> / {fmtMoney(gate.profitTarget)}</span>
+                        </span>
+                      </div>
+                      <div style={metricTrack}>
+                        <div style={{ ...metricFill,
+                          width: `${Math.min(100, Math.max(0, (gate.sessionPnl / gate.profitTarget) * 100))}%`,
+                          background: gate.sessionPnl >= gate.profitTarget ? C.green : 'rgba(52,211,153,0.4)' }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -576,59 +661,87 @@ export default function TradeCheck() {
 
           {/* Limit editor (inline) */}
           {showLimits && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                {([
-                  { key: 'loss',      label: 'Loss $',        required: true  },
-                  { key: 'trades',    label: 'Max trades',    required: true  },
-                  { key: 'riskPct',   label: 'Risk %',        required: false },
-                  { key: 'contracts', label: 'Max contracts', required: false },
-                ] as const).map(({ key, label, required }) => (
-                  <div key={key}>
-                    <p style={{ margin: '0 0 3px', fontSize: 8.5, color: C.subtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                      {label}{!required && <span style={{ opacity: 0.6 }}> opt</span>}
-                    </p>
-                    <input type="number" min="0" step={key === 'riskPct' ? '0.1' : '1'}
-                      placeholder={required ? '—' : 'skip'} value={limitDraft[key]}
-                      onChange={e => setLimitDraft(prev => ({ ...prev, [key]: e.target.value }))}
-                      style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${C.border}`, borderRadius: 4, padding: '4px 6px',
-                        color: C.text, fontSize: 11, fontFamily: C.mono, outline: 'none' }} />
-                  </div>
-                ))}
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 8,
+              padding: '9px 9px',
+              background: 'rgba(255,255,255,0.015)',
+              border: `1px solid ${C.border}`,
+              borderRadius: 7,
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+                {editableRules.map((rule) => {
+                  const meta = RULE_FIELD_META[(rule.kind ?? 'manual') as RuleKind]!;
+                  return (
+                    <div key={rule.id}>
+                      <p style={{ ...metricLabel, fontSize: 8.5, margin: '0 0 3px' }}>
+                        {meta.label}
+                      </p>
+                      <input type="number" min="0" step={meta.step} inputMode="decimal"
+                        placeholder="0" value={ruleDraft[rule.id] ?? ''}
+                        onChange={e => setRuleDraft(prev => ({ ...prev, [rule.id]: e.target.value }))}
+                        onFocus={e => { e.currentTarget.style.borderColor = C.amber; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                        onBlur={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+                        style={{ width: '100%', boxSizing: 'border-box', height: 26, background: 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${C.border}`, borderRadius: 5, padding: '0 7px',
+                          color: C.text, fontSize: 11.5, fontFamily: C.mono, outline: 'none',
+                          transition: 'border-color 0.12s, background 0.12s' }} />
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 <button type="button" onClick={() => { void saveLimits(); }} disabled={limitSaving}
-                  style={{ height: 28, borderRadius: 4, fontSize: 10, fontWeight: 700, border: `1px solid ${C.amber}35`, background: `${C.amber}12`, color: C.amber, cursor: 'pointer' }}>
+                  style={{ height: 28, borderRadius: 6, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.02em',
+                    border: '1px solid transparent', background: limitSaving ? `${C.amber}55` : C.amber, color: '#0b0b0d',
+                    cursor: limitSaving ? 'default' : 'pointer', transition: 'all 0.12s' }}>
                   {limitSaving ? 'Saving…' : 'Save'}
                 </button>
                 <button type="button" onClick={() => setShowLimits(false)}
-                  style={{ height: 28, borderRadius: 4, fontSize: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.subtle, cursor: 'pointer' }}>
+                  style={{ height: 28, borderRadius: 6, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.02em',
+                    border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.045)', color: C.muted, cursor: 'pointer', transition: 'all 0.12s' }}>
                   Cancel
                 </button>
               </div>
             </div>
           )}
 
-          {/* Top flag */}
+          {/* Reason — one clean line: the single most important flag, with a quiet
+              count if others exist. The amber status header carries the rest. */}
           {gate.flags.length > 0 && (
             <div style={{
-              borderLeft: `2px solid ${gate.flags[0].status === 'blocked' ? C.red : C.amber}`,
-              paddingLeft: 7, paddingTop: 4, paddingBottom: 4,
-              background: gate.flags[0].status === 'blocked' ? `${C.red}0a` : `${C.amber}0a`,
-              borderRadius: '0 4px 4px 0',
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 11px',
+              background: 'rgba(255,255,255,0.015)',
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
             }}>
-              <span style={{ fontSize: 9.5, fontWeight: 650, color: gate.flags[0].status === 'blocked' ? C.red : C.amber, display: 'block', lineHeight: 1.35, letterSpacing: '0.01em' }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                background: gate.flags[0].status === 'blocked' ? C.red : C.amber,
+              }} />
+              <span style={{
+                flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                fontSize: 9.5, fontWeight: 600, letterSpacing: '0.01em',
+                color: gate.flags[0].status === 'blocked' ? C.red : C.amber,
+              }}>
                 {gate.flags[0].label}
               </span>
-              {gate.flags.length > 1 && <span style={{ fontSize: 8.5, color: C.subtle }}>+{gate.flags.length - 1} more</span>}
+              {gate.flags.length > 1 && (
+                <span style={{ fontSize: 8.5, color: C.subtle, flexShrink: 0 }}>
+                  +{gate.flags.length - 1}
+                </span>
+              )}
             </div>
           )}
 
           {/* Enter trade */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-            <button type="button" onClick={() => handleEnterTrade('long')}  disabled={gate.status === 'blocked'} style={dirBtn(C.green, gate.status === 'blocked')}>↑ Long</button>
-            <button type="button" onClick={() => handleEnterTrade('short')} disabled={gate.status === 'blocked'} style={dirBtn(C.red,   gate.status === 'blocked')}>↓ Short</button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <button type="button" onClick={() => handleEnterTrade('long')}  disabled={gate.status === 'blocked'} style={dirBtn(C.green, gate.status === 'blocked')}>
+              <ArrowUp size={13} strokeWidth={2.5} /> Long
+            </button>
+            <button type="button" onClick={() => handleEnterTrade('short')} disabled={gate.status === 'blocked'} style={dirBtn(C.red,   gate.status === 'blocked')}>
+              <ArrowDown size={13} strokeWidth={2.5} /> Short
+            </button>
           </div>
 
           {/* New session reset — only shown when blocked by session trades */}
@@ -833,12 +946,14 @@ const KICKER: React.CSSProperties = {
 
 function dirBtn(color: string, disabled: boolean): React.CSSProperties {
   return {
-    height: 28, borderRadius: 4, fontSize: 11, fontWeight: 700,
-    border: `1px solid ${color}${disabled ? '18' : '38'}`,
-    background: disabled ? 'rgba(255,255,255,0.02)' : `${color}12`,
-    color: disabled ? `${color}30` : color,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+    height: 36, borderRadius: 7, fontSize: 12, fontWeight: 700,
+    // Solid fill with dark text when active; a clean muted solid when blocked.
+    border: disabled ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${color}`,
+    background: disabled ? 'rgba(255,255,255,0.045)' : color,
+    color: disabled ? 'rgba(180,174,165,0.5)' : '#0b0b0d',
     cursor: disabled ? 'not-allowed' : 'pointer',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
     transition: 'all 0.12s',
   };
 }

@@ -5,7 +5,13 @@ export function getTradeRiskReward(trade: Trade): number | null {
   const risk = Math.abs(trade.entry_price - trade.sl_price);
   const reward = Math.abs(trade.tp_price - trade.entry_price);
   if (risk === 0) return null;
-  return reward / risk;
+  const rr = reward / risk;
+  // Guard against bad stop-loss data: a stop sitting almost on top of the entry
+  // produces an absurd hundreds-to-one ratio that was never a real plan. Treat
+  // anything past a sane ceiling as missing so one broken trade can't distort
+  // the averaged R:R on the dashboard.
+  if (!Number.isFinite(rr) || rr > 50) return null;
+  return rr;
 }
 
 export function buildAnalyticsSummary(trades: Trade[]): AnalyticsSummary {
