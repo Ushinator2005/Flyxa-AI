@@ -40,7 +40,11 @@
           var signedIn = Object.keys(localStorage).some(function (k) {
             return k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1;
           });
-          if (!signedIn) location.replace('/landing/');
+          if (!signedIn) {
+            // Phones get the dedicated mobile landing; desktop is unchanged.
+            var isMobile = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent);
+            location.replace(isMobile ? '/landing/mobile.html' : '/landing/');
+          }
         } catch (e) { /* storage blocked — let the SPA decide */ }
       })();
     </script>

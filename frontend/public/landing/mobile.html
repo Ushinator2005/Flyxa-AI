@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Flyxa · Pass the eval. Keep the account.</title>
+<meta name="description" content="Flyxa reads every trade you take and catches the tilt, revenge entries, and rule breaks that blow prop accounts, before they cost you the funded.">
+<link rel="icon" href="assets/flyxa-glyph.png" type="image/png">
+<meta name="theme-color" content="#020202">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{--bg:#020202;--panel:#070707;--paper:#F1EDE5;--ink:#17150F;--accent:#FF6B2B;--green:#30D158;--red:#FF453A;--text:#f0f0f0;--muted:rgba(255,255,255,0.52);--hair:rgba(255,255,255,0.1);--sans:'Manrope',sans-serif;--mono:'DM Mono',monospace;--serif:'Newsreader',serif;--logo:'Space Grotesk',sans-serif;--r:28px;--pad:22px;--sy:76px;}
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+body{background:#020202;color:var(--text);font-family:var(--sans);font-size:16.5px;line-height:1.6;overscroll-behavior-y:contain;overflow-x:clip;}
+#app,section,.panel,.hero-copy,.hiw-pin{max-width:100%;}
+.firm,.led,.drop,.cmp-r,.mk-row,.hiw-head,.fq-sig,.hero-mark,.led b,.led span,.firm b,.firm span,.cmp-r span{min-width:0;}
+.led span,.firm span,.cmp-r span,.mk-row,.drop-k{overflow-wrap:anywhere;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px;}
+.paper :focus-visible{outline-color:#C2551B;}
+#app{max-width:440px;margin:0 auto;background:var(--bg);position:relative;}
+#grain{position:fixed;inset:0;z-index:400;pointer-events:none;opacity:.05;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");background-size:160px 160px;}
+a{color:var(--accent);text-decoration:none;}
+a:active{color:#ff8a53;}
+.body a,.fi-a a{display:inline-block;min-height:44px;line-height:44px;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;}
+img{display:block;max-width:100%;}
+/* rounded inset panels that slide over each other */
+.panel{position:relative;z-index:1;border-radius:var(--r);margin:0 10px 10px;padding:var(--sy) var(--pad);background:var(--panel);overflow:hidden;}
+.panel.paper{background:var(--paper);color:var(--ink);}
+.panel.flush{padding:0;}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:0;color:rgba(255,255,255,0.42);}
+.paper .eyebrow{color:rgba(23,21,15,0.45);}
+.hl{font-family:var(--serif);font-weight:400;font-size:clamp(33px,9.4vw,44px);letter-spacing:-0.02em;line-height:1.1;text-wrap:pretty;}
+.paper .hl{color:var(--ink);}
+.sub{font-size:13.5px;color:rgba(255,255,255,0.44);margin-top:16px;}
+.paper .sub{color:rgba(23,21,15,0.5);}
+.body{margin-top:18px;font-size:16px;line-height:1.7;color:var(--muted);text-wrap:pretty;}
+.paper .body{color:rgba(23,21,15,0.65);}
+.step-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;}
+.step-hd .hl{flex:1;}
+.step-n{font-family:var(--mono);font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:var(--muted);padding-top:6px;white-space:nowrap;}
+.paper .step-n{color:rgba(23,21,15,0.45);}
+/* reveals with stagger */
+.rv>*{opacity:0;transform:translateY(34px);transition:opacity .7s ease,transform .8s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--i,0) * 70ms);}
+.rv.on>*{opacity:1;transform:none;}
+.w{display:inline-block;opacity:0;transform:translateY(38px);transition:opacity .6s ease,transform .75s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--wi) * 55ms);}
+.on .w{opacity:1;transform:none;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--accent);color:#fff;border:none;min-height:52px;padding:14px 26px;border-radius:980px;font-family:var(--sans);font-weight:700;font-size:15.5px;cursor:pointer;transition:transform .12s ease,background .18s;}
+.btn:active{transform:scale(.96);}
+kbd{font-family:var(--mono);font-size:11px;padding:4px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:3px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);}
+/* NAV PILL */
+#navpill{position:fixed;top:10px;left:0;right:0;z-index:300;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px;max-width:440px;margin:0 auto;width:100%;pointer-events:none;transition:transform .38s cubic-bezier(.2,.7,.2,1),opacity .28s ease;}
+#navpill.hide{transform:translateY(-160%);opacity:0;}
+#navpill .lg,#navpill .burger{pointer-events:auto;background:rgba(2,2,2,0.62);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);}
+#navpill .lg{display:flex;align-items:center;gap:8px;height:38px;padding:0 13px 0 11px;border-radius:980px;}
+#navpill .lg b{font-family:var(--serif);font-size:17px;font-weight:400;color:var(--text);letter-spacing:0;line-height:1;transform:translateY(1px);}
+#navpill .lg img{height:17px;width:auto;}
+#navpill .burger{width:38px;height:38px;flex:none;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;border-radius:50%;cursor:pointer;padding:0;}
+#navpill .burger i{display:block;height:1.6px;background:var(--text);border-radius:2px;}
+#navpill .burger i:nth-child(1){width:15px;}#navpill .burger i:nth-child(2){width:11px;}#navpill .burger i:nth-child(3){width:13px;}
+#menu{position:fixed;inset:0;z-index:290;background:rgba(2,2,2,0.97);backdrop-filter:blur(10px);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 34px;opacity:0;pointer-events:none;transition:opacity .3s ease;}
+#menu.open{opacity:1;pointer-events:auto;}
+#menu a{font-family:var(--serif);font-size:30px;font-weight:400;letter-spacing:-0.02em;color:var(--text);padding:14px 0;min-height:44px;display:flex;align-items:center;}
+#menu a.login{margin-top:22px;padding-top:26px;border-top:1px solid rgba(255,255,255,0.12);font-family:var(--sans);font-size:17px;font-weight:600;color:var(--accent);}
+/* SCROLL STACK */
+#stack{position:relative;}
+#hero{position:sticky;top:0;min-height:100svh;}
+#hero{z-index:1;}
+#hiw{z-index:2;position:relative;}
+#funded{position:relative;z-index:5;margin-top:-100svh;background:var(--panel);border-radius:var(--r);box-shadow:0 -30px 60px -20px rgba(0,0,0,0.8);}
+#stack .dim{position:absolute;inset:0;background:#020202;opacity:0;pointer-events:none;z-index:9;border-radius:var(--r);}
+/* HERO */
+#hero .dim{position:absolute;inset:0;background:#020202;opacity:0;pointer-events:none;z-index:3;}
+
+
+#hero{height:100svh;min-height:600px;border-radius:var(--r);margin:0 10px 10px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;background:var(--panel);transform-origin:50% 30%;}
+#hero .veil{display:none;}
+.hero-copy{position:relative;z-index:2;padding:0 var(--pad);}
+.hero-mark{display:flex;align-items:center;gap:14px;margin-bottom:30px;}
+.hero-mark i{width:22px;height:22px;flex:none;background:url('assets/flyxa-glyph.png') center/contain no-repeat;opacity:.9;}
+.hero-mark s{flex:1;height:1px;background:var(--hair);text-decoration:none;}
+.hero-mark b{font-size:12.5px;font-weight:500;letter-spacing:0;color:rgba(255,255,255,0.4);white-space:nowrap;}
+.hero-h1{font-family:var(--serif);font-weight:400;font-size:clamp(36px,10.4vw,46px);line-height:1.06;letter-spacing:-0.02em;margin-top:10px;color:#fff;}
+.hero-h1 .acc{color:var(--accent);}
+.hero-sub{margin-top:18px;font-size:16px;line-height:1.62;color:var(--muted);max-width:315px;}
+.hero-form{display:flex;align-items:center;gap:6px;margin-top:30px;padding:6px 6px 6px 18px;border-radius:980px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.03);}
+.hero-form input{flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-family:var(--sans);font-size:15.5px;min-height:46px;}
+.hero-form input::placeholder{color:rgba(255,255,255,0.38);}
+.hero-form .btn{min-height:46px;padding:12px 22px;background:#fff;color:var(--ink);}
+.hero-kbd{margin-top:18px;font-size:13px;color:rgba(255,255,255,0.34);}
+/* GRADE DIAL */
+#grade{padding-top:58px;padding-bottom:54px;z-index:6;}
+#grade .body{margin-top:12px;}
+#grade .sub{margin-top:12px;}
+.gdial{display:block;width:100%;margin-top:24px;}
+.gd-meta{display:flex;flex-wrap:wrap;width:100%;gap:6px 16px;align-items:baseline;font-family:var(--mono);font-size:11.5px;color:rgba(255,255,255,0.38);}
+.gd-meta em{font-style:normal;color:var(--green);font-size:13px;margin-left:auto;}
+.gd-ring{display:grid;width:min(236px,63vw);max-width:100%;margin:18px auto 0;transform-origin:center;}
+.gdial.done .gd-ring{animation:gdsettle .8s cubic-bezier(.34,1.4,.6,1) both;}
+@keyframes gdsettle{0%{transform:scale(.97)}60%{transform:scale(1.025)}100%{transform:scale(1)}}
+.gdial.done .gd-seg.ok{filter:drop-shadow(0 0 8px rgba(48,209,88,0.35));}
+.gdial.done .gd-seg.no{filter:drop-shadow(0 0 8px rgba(255,159,10,0.4));}
+.gd-ring>svg{grid-area:1/1;display:block;width:100%;height:auto;}
+.gd-track{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:10;}
+.gd-seg{fill:none;stroke:rgba(255,255,255,0.1);stroke-width:10;stroke-linecap:round;stroke-dasharray:82 496.05;stroke-dashoffset:82;transform:rotate(var(--rot));transform-origin:110px 110px;transform-box:view-box;transition:stroke-dashoffset .5s cubic-bezier(.3,.8,.3,1),stroke .35s ease;}
+.gd-seg.chk{stroke:rgba(255,255,255,0.34);stroke-dashoffset:0;}
+.gd-seg.ok{stroke:var(--green);stroke-dashoffset:0;}
+.gd-seg.no{stroke:#FF9F0A;stroke-dashoffset:0;}
+.gd-scan{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;stroke-dasharray:16 562;transform-origin:110px 110px;transform-box:view-box;opacity:0;transition:opacity .3s ease;}
+.gdial.gd-live .gd-scan{opacity:.85;animation:gdspin 1.15s linear infinite;}
+@keyframes gdspin{to{transform:rotate(360deg)}}
+.gd-center{grid-area:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 22%;pointer-events:none;}
+.gd-nums{display:grid;place-items:center;}
+.gd-nums>*{grid-area:1/1;}
+.gd-count{font-family:var(--mono);font-size:clamp(28px,11.5vw,44px);line-height:1;letter-spacing:-2px;color:rgba(255,255,255,0.9);font-variant-numeric:tabular-nums;transition:opacity .35s ease,transform .4s ease;}
+.gd-count i{font-style:normal;font-size:.45em;color:rgba(255,255,255,0.32);margin-left:2px;}
+.gd-grade{font-family:var(--serif);font-size:clamp(46px,19vw,74px);line-height:1;color:var(--green);opacity:0;transform:scale(.75);transition:opacity .5s ease,transform .6s cubic-bezier(.34,1.5,.6,1);}
+.gd-sub{font-family:var(--mono);text-align:center;font-size:clamp(8.5px,2.7vw,10.5px);line-height:1.35;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,0.34);transition:color .3s ease;}
+.gdial.done .gd-count{opacity:0;transform:scale(.8);}
+.gdial.done .gd-grade{opacity:1;transform:none;}
+.gdial.done .gd-sub{color:rgba(255,255,255,0.5);}
+.gd-legend{display:grid;width:100%;grid-template-columns:1fr 1fr;gap:8px 14px;margin-top:18px;}
+.gd-l{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.2);transition:color .35s ease,transform .45s cubic-bezier(.34,1.4,.6,1);}
+.gd-l.chk{transform:translateX(3px);}
+.gd-l i{flex:none;width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.12);transition:background .3s ease,transform .4s cubic-bezier(.34,1.6,.6,1),box-shadow .3s ease;}
+.gd-l span{position:relative;min-width:0;}
+.gd-l span::after{content:'';position:absolute;left:0;right:0;top:53%;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .4s cubic-bezier(.5,0,.2,1) .1s;}
+.gd-l.chk{color:rgba(255,255,255,0.85);}
+.gd-l.chk i{background:var(--accent);transform:scale(1.35);box-shadow:0 0 10px rgba(255,107,43,0.8);}
+.gd-l.ok{color:rgba(255,255,255,0.6);}
+.gd-l.ok i{background:var(--green);}
+.gd-l.no{color:#FFB25E;}
+.gd-l.no i{background:#FF9F0A;}
+.gd-l.no span::after{transform:scaleX(1);}
+.gd-note{margin-top:16px;padding-top:14px;border-top:1px solid var(--hair);font-size:14.5px;line-height:1.6;color:rgba(255,255,255,0.6);}
+.gd-note b{color:var(--text);font-weight:700;}
+/* PINNED SCRUB */
+#hiw{height:420svh;margin:0 10px 10px;background:var(--bg);}
+.hiw-pin{position:sticky;top:0;height:100svh;border-radius:var(--r);background:var(--panel);overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:72px var(--pad) 28px;}
+.hiw-head{width:100%;flex:none;display:flex;align-items:baseline;justify-content:space-between;gap:14px;}
+.hiw-title{font-family:var(--serif);font-weight:400;font-size:31px;letter-spacing:-0.02em;}
+.hiw-step{font-family:var(--mono);font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:var(--accent);white-space:nowrap;}
+.hiw-track{width:100%;flex:none;height:2px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;}
+.hiw-track i{display:block;height:100%;width:100%;background:var(--accent);transform:scaleX(0);transform-origin:left;will-change:transform;}
+@media(prefers-reduced-motion:reduce){#hiw{height:auto;}.hiw-pin{position:relative;height:auto;min-height:0;padding-bottom:40px;}.hiw-out{height:auto;}.hiw-o{position:relative;inset:auto;}#hiw-o1,#hiw-o2{display:none;}.hiw-row{opacity:1;transform:none;}.phone{flex:none;height:auto;width:min(232px,58vw);}#funded{margin-top:0;box-shadow:none;}.rv>*{opacity:1!important;transform:none!important;}.w{opacity:1!important;transform:none!important;}}
+.phone{position:relative;flex:none;min-height:0;width:min(58vw,23svh,232px);max-width:100%;height:auto;aspect-ratio:9/16.4;border-radius:32px;border:1px solid rgba(255,255,255,0.18);background:#070707;overflow:hidden;box-shadow:0 34px 80px -28px rgba(0,0,0,0.95);}
+#hiw-shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.92;}
+.hiw-scan{position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);box-shadow:0 0 16px var(--accent);will-change:transform,opacity;}
+.hiw-out{position:relative;width:100%;flex:none;height:clamp(150px,22svh,184px);margin-top:4px;}
+.hiw-o{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-start;opacity:0;will-change:opacity;}
+.hiw-rows{display:flex;flex-direction:column;gap:0;}
+.hiw-row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.07);opacity:0;transform:translateY(7px);transition:opacity .3s ease,transform .38s cubic-bezier(.16,.84,.28,1);}
+.hiw-row.in{opacity:1;transform:none;}
+.hiw-row b{font-weight:400;font-size:13.5px;color:rgba(255,255,255,0.45);}
+.hiw-row em{font-style:normal;font-family:var(--mono);font-size:13.5px;color:rgba(255,255,255,0.88);font-variant-numeric:tabular-nums;text-align:right;}
+.hiw-row em.g{color:var(--green);}
+.hiw-lay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:22px 18px;background:linear-gradient(180deg,rgba(2,2,2,0) 26%,rgba(2,2,2,0.95) 62%);opacity:0;will-change:opacity;}
+#hiw-l1{background:rgba(2,2,2,0.34);justify-content:center;align-items:center;padding:0;}
+.hiw-scantxt{padding:8px 15px;border-radius:980px;background:rgba(2,2,2,0.72);border:1px solid rgba(255,255,255,0.14);}
+.hiw-scantxt{font-family:var(--mono);color:#fff;font-size:12.5px;letter-spacing:1.6px;}
+.hiw-grade{font-family:var(--mono);font-size:46px;color:var(--green);line-height:1;}
+.hiw-gline{display:flex;align-items:baseline;gap:14px;}
+.hiw-gline .hiw-gcap{margin-top:0;flex:1;min-width:0;}
+.hiw-gcap{font-size:12.5px;color:var(--muted);margin-top:7px;}
+.hiw-ins{margin-top:11px;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.82);}
+.hiw-ins b{color:#fff;}
+.hiw-pct{font-weight:800;font-size:56px;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums;}
+.hiw-meter{height:6px;border-radius:3px;background:rgba(255,255,255,0.12);margin-top:13px;overflow:hidden;}
+.hiw-meter i{display:block;height:100%;width:100%;background:var(--green);transform:scaleX(0);transform-origin:left;will-change:transform;}
+.hiw-tog{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:13px;border-top:1px solid rgba(255,255,255,0.14);}
+.hiw-tog span{font-size:13px;color:var(--muted);transition:color .3s;}
+.hiw-tog i{width:48px;height:28px;border-radius:980px;background:rgba(255,255,255,0.14);position:relative;flex:none;transition:background .3s;}
+.hiw-tog i::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .35s cubic-bezier(.34,1.45,.64,1);}
+.hiw-tog.onn span{color:var(--green);}
+.hiw-tog.onn i{background:var(--green);}
+.hiw-tog.onn i::after{transform:translateX(20px);}
+@media(max-height:620px){.hiw-out{height:142px}.hiw-row{padding:6px 0}.hiw-pin{padding:56px var(--pad) 18px;gap:12px}.hiw-pin>.hiw-gcap{display:none}.hiw-grade{font-size:38px}.hiw-pct{font-size:40px}.hiw-ins{font-size:11.5px}.hiw-lay{padding:14px 13px}}
+/* DROP COMPARISON + LEDGER */
+.drop{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;margin-top:34px;padding:26px 0;border-top:1px solid rgba(23,21,15,0.14);border-bottom:1px solid rgba(23,21,15,0.14);}
+.drop-col{display:flex;flex-direction:column;gap:8px;}
+.drop-v{font-family:var(--sans);font-weight:800;font-size:clamp(40px,13vw,54px);line-height:.9;letter-spacing:-2.5px;color:var(--ink);font-variant-numeric:tabular-nums;}
+.drop-v i{font-style:normal;font-size:.45em;letter-spacing:-1px;color:rgba(23,21,15,0.4);margin-left:2px;}
+.drop-col.bad .drop-v{color:#C2551B;}
+.drop-k{font-size:13px;color:rgba(23,21,15,0.5);line-height:1.35;}
+.drop-arrow{position:relative;align-self:center;width:34px;height:1px;background:rgba(23,21,15,0.25);}
+.drop-arrow::after{content:'';position:absolute;right:0;top:-3px;border-left:6px solid rgba(23,21,15,0.35);border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;}
+.drop-arrow em{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);font-style:normal;font-family:var(--mono);font-size:9.5px;letter-spacing:1px;white-space:nowrap;color:#C2551B;}
+.ledger{margin-top:26px;}
+.led{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:13px 0;border-bottom:1px solid rgba(23,21,15,0.1);}
+.led:first-child{border-top:1px solid rgba(23,21,15,0.1);}
+.led b{font-size:13.5px;font-weight:500;color:rgba(23,21,15,0.52);}
+.led span{font-family:var(--mono);font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums;}
+.led span.neg{color:#C2551B;}
+/* back-half motion */
+.clps{display:block;width:100%;height:auto;margin-top:30px;overflow:visible;}
+.clps-grid{stroke:rgba(23,21,15,0.14);stroke-width:1;stroke-dasharray:4 6;}
+.clps-lbl{font-family:var(--mono);font-size:11px;fill:rgba(23,21,15,0.42);}
+.clps-lbl.hot{fill:#B93E19;}
+.clps-fill{fill:url(#clpsg);opacity:0;transition:opacity .9s ease 1.15s;}
+.fired .clps-fill{opacity:1;}
+.clps-line{fill:none;stroke:#B93E19;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:var(--L,400);stroke-dashoffset:var(--L,400);transition:stroke-dashoffset 1.9s cubic-bezier(.55,.02,.35,1) .35s;}
+.fired .clps-line{stroke-dashoffset:0;}
+.clps-dot{fill:#B93E19;opacity:0;transform:scale(.4);transform-box:fill-box;transform-origin:center;transition:opacity .4s ease 2.05s,transform .5s cubic-bezier(.34,1.56,.64,1) 2.05s;}
+.fired .clps-dot{opacity:1;transform:scale(1);}
+.clps-ring{fill:none;stroke:#B93E19;stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center;}
+.fired .clps-ring{animation:clpsring 1.4s ease-out 2.2s 2 both;}
+@keyframes clpsring{0%{opacity:.55;transform:scale(.5)}100%{opacity:0;transform:scale(2.4)}}
+.led{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .7s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--n,0) * 130ms + .4s);}
+.fired .led{opacity:1;transform:none;}
+.drop-arrow{opacity:0;transition:opacity .5s ease .55s;}
+.fired .drop-arrow{opacity:1;}
+/* FIRMS */
+.firms{margin-top:30px;position:relative;}
+.fdot{position:absolute;right:1px;top:24px;width:6px;height:6px;border-radius:50%;background:rgba(23,21,15,0.15);transition:background .35s ease;transition-delay:calc(var(--n,0) * 260ms + .5s);}
+.fired .fdot{background:#C2551B;animation:fpulse 2.6s ease-in-out infinite;animation-delay:calc(var(--n,0) * 260ms + .9s);}
+@keyframes fpulse{0%,100%{opacity:1}50%{opacity:.38}}
+.fdot::after{content:'';position:absolute;inset:-5px;border-radius:50%;border:1px solid #C2551B;opacity:0;}
+.fired .fdot::after{animation:fring 1s ease-out both;animation-delay:calc(var(--n,0) * 260ms + .5s);}
+@keyframes fring{0%{opacity:.75;transform:scale(.45)}100%{opacity:0;transform:scale(1.9)}}
+.firm{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .6s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--n,0) * 260ms + .3s);}
+.fired .firm{opacity:1;transform:none;}
+.live{display:inline-flex;align-items:center;gap:7px;}
+.live i{width:6px;height:6px;border-radius:50%;background:#C2551B;animation:livep 1.9s ease-in-out infinite;}
+@keyframes livep{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.78)}}
+.firm{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;padding:16px 22px 16px 0;border-top:1px solid rgba(23,21,15,0.12);}
+.firm:last-child{border-bottom:1px solid rgba(23,21,15,0.12);}
+.firm b{font-family:var(--serif);font-size:20px;font-weight:400;letter-spacing:-0.01em;flex:1 1 100%;}
+.firm span{font-size:13.5px;color:rgba(23,21,15,0.5);flex:1 1 100%;}
+/* FOUNDER (restrained) */
+.fq-body p{opacity:0;transform:translateY(12px);transition:opacity .8s ease,transform .9s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--n,0) * 220ms + .25s);}
+.fired .fq-body p{opacity:1;transform:none;}
+/* FOUNDER */
+.fq{font-family:var(--serif);font-size:clamp(28px,8vw,36px);font-weight:300;line-height:1.25;letter-spacing:-0.02em;color:var(--ink);}
+.fq em{font-style:italic;color:#C2551B;}
+.fq-body{margin-top:26px;display:flex;flex-direction:column;gap:16px;}
+.fq-body p{font-size:15.5px;line-height:1.7;color:rgba(23,21,15,0.65);}
+.fq-sig{display:flex;align-items:center;gap:14px;margin-top:30px;}
+.fq-sig i{width:28px;height:28px;background:url('assets/flyxa-glyph.png') center/contain no-repeat;}
+.fq-sig b{display:block;font-size:14px;}
+.fq-sig span{font-size:12.5px;color:rgba(23,21,15,0.55);}
+/* COMPARE race */
+.race{margin:44px 0 40px;padding:36px 0 34px;display:flex;flex-direction:column;gap:28px;border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);}
+.race-cap{font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:-8px;}
+.race-r{display:grid;grid-template-columns:1fr auto;gap:11px 12px;align-items:baseline;}
+.race-r b{font-size:15.5px;font-weight:600;color:rgba(255,255,255,0.62);}
+.race-r em{font-style:normal;font-family:var(--mono);font-size:19px;color:rgba(255,255,255,0.78);font-variant-numeric:tabular-nums;letter-spacing:-0.3px;}
+.race-bar{grid-column:1/-1;height:10px;border-radius:5px;background:rgba(255,255,255,0.06);overflow:hidden;}
+.race-bar i{display:block;height:100%;width:var(--w);background:rgba(255,255,255,0.28);transform:scaleX(0);transform-origin:left;border-radius:5px;}
+.fired .race-bar i{transform:scaleX(1);transition:transform var(--dur) linear var(--dl);}
+.race-r.fx b{color:var(--text);font-weight:700;}
+.race-r.fx em{color:var(--green);font-size:22px;}
+.race-r.fx .race-bar i{background:var(--green);}
+.race-r.fx .race-bar{transform-origin:left;}
+.race-r.won .race-bar i{box-shadow:0 0 22px 1px rgba(48,209,88,0.75);}
+.race-r.won em{animation:winpop .55s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes winpop{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
+.race-r.won b::after{content:'fastest';margin-left:9px;font-family:var(--mono);font-size:11px;color:var(--green);opacity:0;animation:fadein .5s ease .25s both;}
+@keyframes fadein{to{opacity:1}}
+.cmp-r{opacity:0;transform:translateY(14px);transition:opacity .55s ease,transform .65s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--n,0) * 110ms + 1.1s);}
+.fired .cmp-r{opacity:1;transform:none;}
+.cmp-r span.fx{position:relative;}
+/* COMPARE */
+.cmp{margin-top:30px;}
+.cmp-r{padding:18px 0;border-top:1px solid var(--hair);}
+.cmp-r:last-child{border-bottom:1px solid var(--hair);}
+.cmp-r b{display:block;font-family:var(--serif);font-size:18px;font-weight:400;letter-spacing:-0.01em;margin-bottom:10px;}
+.cmp-r span{display:flex;justify-content:space-between;gap:14px;font-family:var(--mono);font-size:12.5px;color:var(--muted);padding:3px 0;}
+.cmp-r span i{font-style:normal;font-family:var(--sans);font-size:13px;color:rgba(255,255,255,0.32);}
+.cmp-r span.fx{color:var(--green);}
+.cmp-kick{margin-top:30px;font-family:var(--serif);font-size:21px;line-height:1.45;color:rgba(255,255,255,0.82);}
+.cmp-kick em{font-style:italic;color:#fff;}
+/* COMPARE STEPPER */
+#cmpx{height:300svh;margin:0 10px 10px;position:relative;}
+.cx-pin{position:sticky;top:0;height:100svh;display:flex;flex-direction:column;justify-content:center;gap:20px;padding:80px var(--pad) 40px;border-radius:var(--r);background:var(--panel);overflow:hidden;}
+.cx-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px;}
+.cx-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:rgba(255,255,255,0.34);}
+.cx-n{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--accent);font-variant-numeric:tabular-nums;}
+.cx-rail{height:2px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;}
+.cx-rail i{display:block;height:100%;width:100%;background:var(--accent);transform:scaleX(0);transform-origin:left;will-change:transform;}
+.cx-stage{position:relative;display:grid;flex:1 1 auto;min-height:0;align-content:center;}
+.cx-card{grid-area:1/1;align-self:center;opacity:0;will-change:transform,opacity;}
+.cx-card h3{font-family:var(--serif);font-size:clamp(28px,8vw,36px);font-weight:400;letter-spacing:-0.02em;line-height:1.1;margin-bottom:22px;opacity:0;transform:translateY(14px);transition:opacity .55s ease,transform .6s cubic-bezier(.16,.84,.28,1);}
+.cx-card.in h3{opacity:1;transform:none;}
+.cx-row{position:relative;display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:15px 0;border-top:1px solid var(--hair);font-family:var(--mono);font-size:13px;opacity:0;transform:translateY(10px);transition:opacity .5s ease,transform .55s cubic-bezier(.16,.84,.28,1);}
+.cx-card.in .cx-row{opacity:1;transform:none;transition-delay:calc(var(--r,0) * 130ms + .25s);}
+.cx-row::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(255,255,255,0.26);transform:scaleX(0);transform-origin:left;}
+.cx-card.in .cx-row:not(.fx)::before{transform:scaleX(1);transition:transform .6s cubic-bezier(.4,0,.2,1);transition-delay:calc(var(--r,0) * 130ms + .6s);}
+.cx-row.fx::after{content:'';position:absolute;left:-14px;right:-14px;top:2px;bottom:2px;border-radius:8px;background:rgba(48,209,88,0.09);box-shadow:inset 0 0 0 1px rgba(48,209,88,0.22);opacity:0;transform:scaleX(.94);}
+.cx-card.in .cx-row.fx::after{opacity:1;transform:none;transition:opacity .5s ease .95s,transform .6s cubic-bezier(.34,1.4,.64,1) .95s;}
+.cx-row>*{position:relative;z-index:1;}
+.cx-row:last-child{border-bottom:1px solid var(--hair);}
+.cx-card.in .cx-row:not(.fx) b,.cx-card.in .cx-row:not(.fx) span{opacity:.4;transition:opacity .5s ease calc(var(--r,0) * 130ms + .75s);}
+.cx-row b{font-weight:400;color:rgba(255,255,255,0.42);}
+.cx-row span{text-align:right;color:rgba(255,255,255,0.3);}
+.cx-row.fx b{color:var(--text);}
+.cx-row.fx span{color:var(--green);font-size:14.5px;font-weight:500;}
+.cx-row.fx b{font-weight:500;}
+.cx-kick{font-family:var(--serif);font-size:18px;line-height:1.45;color:rgba(255,255,255,0.6);}
+.cx-kick em{font-style:italic;color:#fff;}
+/* FAQ */
+.faq{margin-top:26px;}
+.fi{border-top:1px solid var(--hair);}
+.fi:last-child{border-bottom:1px solid var(--hair);}
+.fi-q{display:flex;width:100%;justify-content:space-between;align-items:center;gap:16px;min-height:60px;padding:18px 0;background:none;border:none;text-align:left;color:inherit;font-family:var(--serif);font-size:18px;font-weight:400;letter-spacing:-0.01em;line-height:1.3;cursor:pointer;}
+.fi-q i{font-style:normal;font-family:var(--mono);font-size:19px;color:var(--muted);transition:transform .3s;}
+.fi.open .fi-q i{transform:rotate(45deg);color:var(--accent);}
+.fi-a{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.2,.7,.2,1);}
+.fi-a div{padding:0 0 22px;font-size:15px;color:var(--muted);}
+/* CTA bookend */
+#cta .hl .w{display:inline-block;opacity:0;transform:translateY(30px);transition:opacity .6s ease,transform .75s cubic-bezier(.16,.84,.28,1);transition-delay:calc(var(--wi) * 60ms);}
+#cta.fired .hl .w{opacity:1;transform:none;}
+#cta .btn{animation:none;}
+#cta.fired .btn{animation:breathe 3.4s ease-in-out 1.2s infinite;}
+#cta .btn:active{animation:none;transform:scale(.96);}
+@keyframes breathe{0%,100%{box-shadow:0 10px 26px -14px rgba(255,107,43,0.5)}50%{box-shadow:0 16px 40px -12px rgba(255,107,43,0.85)}}
+/* CTA + FOOTER */
+#cta{text-align:left;}
+.cta-form{display:flex;align-items:center;gap:6px;margin-top:26px;padding:6px 6px 6px 18px;border-radius:980px;border:1px solid rgba(255,255,255,0.22);}
+.cta-form input{flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-family:var(--sans);font-size:15.5px;min-height:46px;}
+.cta-form input::placeholder{color:rgba(255,255,255,0.4);}
+.cta-form .btn{min-height:46px;padding:12px 22px;}
+footer{padding:40px var(--pad) calc(104px + env(safe-area-inset-bottom));}
+footer .lg{display:inline-flex;align-items:center;gap:9px;min-height:44px;}
+footer .lg img{height:20px;width:auto;}
+footer .lg b{font-family:var(--serif);font-size:19px;font-weight:400;letter-spacing:0;line-height:1;transform:translateY(1px);}
+footer nav{display:flex;flex-wrap:wrap;gap:2px 24px;margin-top:16px;}
+footer nav a{color:var(--muted);font-size:14px;min-height:44px;display:inline-flex;align-items:center;}
+footer .fine{margin-top:14px;font-size:12.5px;color:rgba(255,255,255,0.28);}
+/* STICKY CTA */
+#stick{position:fixed;left:0;right:0;bottom:0;z-index:280;max-width:440px;margin:0 auto;padding:0 10px calc(10px + env(safe-area-inset-bottom));transform:translateY(150%);transition:transform .55s cubic-bezier(.34,1.45,.64,1);}
+#stick.show{transform:none;}
+#stick .btn{width:100%;box-shadow:0 16px 40px -12px rgba(255,107,43,0.6);}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important;}
+.led,.firm,.fq-body p,.cmp-r,#cta .hl .w,.drop-arrow{opacity:1!important;transform:none!important;}
+.clps-line{stroke-dashoffset:0!important;}.clps-fill,.clps-dot{opacity:1!important;transform:none!important;}.clps-ring{display:none;}.race-r.won em{animation:none!important;}
+.race-bar i{transform:scaleX(1)!important;}.fdot{background:#C2551B!important;animation:none!important;}.fdot::after{display:none;}#cta .btn{animation:none!important;}
+#cmpx{height:auto;}.cx-pin{position:relative;height:auto;padding:56px var(--pad);}.cx-stage{display:block;}
+.cx-card,.cx-card h3,.cx-row{opacity:1!important;transform:none!important;}.cx-card{margin-bottom:34px;}.cx-rail,.cx-n{display:none;}.cx-row::before,.cx-row.fx::after{display:none;}}
+</style>
+</head>
+<body>
+
+<div id="grain" aria-hidden="true"></div>
+<div id="app">
+<div id="navpill">
+  <a class="lg" href="#hero"><img src="assets/flyxa-glyph.png" alt="" width="20" height="20"><b>Flyxa</b></a>
+  <button class="burger" id="burger" aria-label="Menu"><i></i><i></i><i></i></button>
+</div>
+<div id="menu">
+  <a href="#hiw">How it works</a>
+  <a href="#funded">The funded path</a>
+  <a href="#presets">Rule presets</a>
+  <a href="#founder">Founder note</a>
+  <a href="#faq">FAQ</a>
+  <a class="login" href="/auth">Log in →</a>
+</div>
+
+<div id="stack">
+<section id="hero" data-screen-label="Hero">
+  <span class="dim" aria-hidden="true"></span>
+  <div class="hero-copy">
+    <div class="hero-mark"><i></i><s></s><b>For evaluation &amp; funded traders</b></div>
+    <h1 class="hero-h1" id="hero-h1">Pass the eval. <span class="acc">Keep the account.</span></h1>
+    <p class="hero-sub">The AI journal that catches the tilt, revenge entries and rule breaks that cost traders their funded accounts.</p>
+    <form class="hero-form" onsubmit="location.href='/auth?tab=waitlist&email='+encodeURIComponent(this.querySelector('input').value);return false;">
+      <input type="email" placeholder="you@email.com" aria-label="Email">
+      <button class="btn">Join</button>
+    </form>
+    <div class="hero-kbd">Private beta · free while in beta</div>
+  </div>
+</section>
+
+<section id="hiw" data-screen-label="How it works">
+  <span class="dim" aria-hidden="true"></span>
+  <div class="hiw-pin">
+    <div class="hiw-head">
+      <span class="hiw-title" id="hiw-name">Scan</span>
+      <span class="hiw-step" id="hiw-num">Step 01</span>
+    </div>
+    <div class="hiw-track"><i id="hiw-prog"></i></div>
+    <div class="phone">
+      <img id="hiw-shot" src="assets/trade-scan.png" alt="" width="1809" height="1017" loading="lazy" decoding="async">
+      <span class="hiw-scan" id="hiw-scan"></span>
+      <div class="hiw-lay" id="hiw-l1"><span class="hiw-scantxt">Scanning…</span></div>
+    </div>
+    <div class="hiw-out">
+      <div class="hiw-o" id="hiw-o1">
+        <div class="hiw-rows">
+          <div class="hiw-row"><b>Instrument</b><em>MNQ1! · short</em></div>
+          <div class="hiw-row"><b>Entry → Exit</b><em>30,055 → 29,920</em></div>
+          <div class="hiw-row"><b>Size · time held</b><em>2 contracts · 14m</em></div>
+          <div class="hiw-row"><b>Realised</b><em class="g">+$1,350</em></div>
+        </div>
+      </div>
+      <div class="hiw-o" id="hiw-o2">
+        <div class="hiw-gline"><span class="hiw-grade">A−</span><span class="hiw-gcap">5 of 6 rules held<br>MNQ1! short · +$1,350</span></div>
+        <p class="hiw-ins"><b>Front-ran your trigger.</b> Same impulse shows in 3 of your last 10 trades.</p>
+      </div>
+      <div class="hiw-o" id="hiw-o3">
+        <span class="hiw-pct"><span id="hiw-pct">0</span>%</span>
+        <span class="hiw-gcap">Probability of passing · Day 6</span>
+        <span class="hiw-meter"><i id="hiw-fill"></i></span>
+        <span class="hiw-tog" id="hiw-tog"><span>Rule presets on</span><i></i></span>
+      </div>
+    </div>
+    <p class="hiw-gcap" style="text-align:center">Scan the trade · grade the process · improve the number</p>
+  </div>
+</section>
+</div>
+
+<section class="panel rv" id="funded" data-screen-label="The funded path">
+  <div class="eyebrow" style="--i:0">The funded path</div>
+  <h2 class="hl" style="--i:1;margin-top:14px">See exactly what it takes to pass.</h2>
+  <p class="body" style="--i:2">Progress to target, drawdown health, minimum days, consistency and rule behaviour, all scored live the way the firm judges it.</p>
+  <div style="--i:3;margin-top:36px">
+    <div style="display:flex;align-items:baseline;font-weight:800;font-size:104px;letter-spacing:-4px;line-height:.85;font-variant-numeric:tabular-nums"><span id="fp-pct">0</span><span style="font-size:.32em;color:var(--muted);margin-left:8px">%</span></div>
+    <div class="sub" style="margin-top:14px">Probability of passing · Topstep 50K · Day 6</div>
+  </div>
+  <div style="--i:4;margin-top:34px">
+    <svg viewBox="0 0 340 180" aria-hidden="true" style="display:block;width:100%;height:auto;overflow:visible;font-family:var(--mono)">
+      <line x1="0" y1="26" x2="340" y2="26" stroke="rgba(255,255,255,0.24)" stroke-width="1" stroke-dasharray="6 7"></line>
+      <text x="340" y="16" text-anchor="end" fill="rgba(255,255,255,0.5)" font-size="11">Target · $53,000</text>
+      <path id="fp-eq" d="M4,132 L60,118 L116,126 L172,96 L228,104 L284,72 L318,58" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path>
+      <text x="4" y="164" fill="rgba(255,255,255,0.4)" font-size="11">Day 1</text>
+      <text x="318" y="44" text-anchor="end" fill="var(--accent)" font-size="12">$51,860</text>
+    </svg>
+  </div>
+  <p class="body fp-quote" style="--i:5" id="fp-coach"><span id="fp-coach-t"></span><span class="fp-caret"></span></p>
+  <div class="sub" style="--i:6;display:flex;align-items:center;gap:9px"><span style="width:16px;height:16px;border-radius:4px;background:#F5F6F8 url('assets/flyxa-logo.png') center/84% no-repeat;flex:none"></span>Flyxa coach · after every trade</div>
+</section>
+
+<section class="panel rv" id="grade" data-screen-label="Grade">
+  <div class="step-hd">
+    <h2 class="hl" style="--i:0">Every trade scored against your rules.</h2>
+  </div>
+  <div class="sub" style="--i:2">Flyxa grades the process, not just the P&amp;L.</div>
+  <p class="body" style="--i:3">Entry discipline, sizing, session, exit patience: checked against the rules you set, every single trade.</p>
+  <div class="gdial" style="--i:4" id="gdial">
+    <div class="gd-meta"><span>MNQ1! short</span><span>2 contracts</span><span>14m 22s</span><em>+$1,350</em></div>
+    <div class="gd-ring">
+      <svg viewBox="0 0 220 220" aria-hidden="true">
+        <circle class="gd-track" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-seg" style="--rot:-85.5deg" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-seg" style="--rot:-25.5deg" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-seg" style="--rot:34.5deg" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-seg" style="--rot:94.5deg" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-seg" style="--rot:154.5deg" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-seg" style="--rot:214.5deg" cx="110" cy="110" r="92"></circle>
+        <circle class="gd-scan" cx="110" cy="110" r="92"></circle>
+      </svg>
+      <div class="gd-center">
+        <span class="gd-nums"><span class="gd-count" id="gd-count">0<i>/6</i></span><span class="gd-grade" id="gd-grade">A−</span></span>
+        <span class="gd-sub" id="gd-sub">Checking rules</span>
+      </div>
+    </div>
+    <div class="gd-legend" id="gd-legend">
+      <div class="gd-l" data-r="1"><i></i><span>Risk within limit</span></div>
+      <div class="gd-l" data-r="1"><i></i><span>Size at plan</span></div>
+      <div class="gd-l" data-r="1"><i></i><span>Traded in session</span></div>
+      <div class="gd-l" data-r="1"><i></i><span>Held to target</span></div>
+      <div class="gd-l" data-r="1"><i></i><span>No revenge entry</span></div>
+      <div class="gd-l" data-r="0"><i></i><span>Waited for trigger</span></div>
+    </div>
+    <p class="gd-note"><b>Front-ran your trigger.</b> The exit, though, was textbook patience.</p>
+  </div>
+</section>
+
+<section class="panel paper rv" id="habit" data-screen-label="The habit">
+  <h2 class="hl" style="--i:0">Your edge collapses<br>when you chase.</h2>
+  <p class="body" style="--i:2">Flyxa reads every journal you write and holds the pattern up against your results.</p>
+  <div class="drop" style="--i:3">
+    <div class="drop-col">
+      <span class="drop-v"><span class="cu" data-to="69">0</span><i>%</i></span>
+      <span class="drop-k">Normal entry</span>
+    </div>
+    <span class="drop-arrow" aria-hidden="true"><em>− 28 pts</em></span>
+    <div class="drop-col bad">
+      <span class="drop-v"><span class="cu" data-to="41">0</span><i>%</i></span>
+      <span class="drop-k">After a $500+ loss</span>
+    </div>
+  </div>
+  <svg class="clps" viewBox="0 0 320 190" aria-hidden="true">
+    <defs><linearGradient id="clpsg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B93E19" stop-opacity="0.16"></stop><stop offset="1" stop-color="#B93E19" stop-opacity="0"></stop></linearGradient></defs>
+    <line class="clps-grid" x1="0" y1="40" x2="320" y2="40"></line>
+    <line class="clps-grid" x1="0" y1="132" x2="320" y2="132"></line>
+    <text class="clps-lbl" x="0" y="30">69% win rate</text>
+    <text class="clps-lbl hot" x="320" y="154" text-anchor="end">41% after chasing</text>
+    <path class="clps-fill" d="M6,40 L74,40 L120,42 L168,88 L214,120 L262,130 L314,132 L314,182 L6,182 Z"></path>
+    <path class="clps-line" d="M6,40 L74,40 L120,42 L168,88 L214,120 L262,130 L314,132"></path>
+    <circle class="clps-ring" cx="314" cy="132" r="7"></circle>
+    <circle class="clps-dot" cx="314" cy="132" r="5"></circle>
+  </svg>
+  <div class="ledger" style="--i:4">
+    <div class="led" style="--n:0"><b>Occurrences</b><span>9× in 60 sessions</span></div>
+    <div class="led" style="--n:1"><b>Average extra loss</b><span>−$680 per trade</span></div>
+    <div class="led" style="--n:2"><b>Total since April</b><span class="neg">−$4,190</span></div>
+  </div>
+</section>
+
+
+<section class="panel paper rv" id="presets" data-screen-label="Rule presets">
+  <div class="eyebrow live" style="--i:0"><i></i>Rule presets built in</div>
+  <h2 class="hl" style="--i:1;margin-top:14px">Your firm's rules, watched live.</h2>
+  <p class="body" style="--i:2">Loss limits, drawdown and consistency rules for your exact plan, checked as you trade.</p>
+  <div class="firms" style="--i:3">
+    <div class="firm" style="--n:0"><b>Topstep</b><span>Combine · XFA</span><i class="fdot" aria-hidden="true"></i></div>
+    <div class="firm" style="--n:1"><b>Lucid Trading</b><span>Pro · Flex · Daily · Direct</span><i class="fdot" aria-hidden="true"></i></div>
+    <div class="firm" style="--n:2"><b>FundedNext</b><span>Rapid Pro · Flex · Daily</span><i class="fdot" aria-hidden="true"></i></div>
+    <div class="firm" style="--n:3"><b>MyFundedFutures</b><span>Rapid · Builder · Pro</span><i class="fdot" aria-hidden="true"></i></div>
+    <div class="firm" style="--n:4"><b>Alpha Futures</b><span>Zero · Advanced · Direct</span><i class="fdot" aria-hidden="true"></i></div>
+    <div class="firm" style="--n:5"><b>Tradeify</b><span>Growth · Select · Lightning</span><i class="fdot" aria-hidden="true"></i></div>
+    <div class="firm" style="--n:6"><b>TakeProfitTrader</b><span>Test · PRO · PRO+</span><i class="fdot" aria-hidden="true"></i></div>
+  </div>
+  <p class="body" style="--i:4">Or write your own. Flyxa holds you to whatever you set.</p>
+</section>
+
+<section class="panel paper rv" id="founder" data-screen-label="Founder note">
+  <div class="eyebrow" style="--i:0">From the founder</div>
+  <blockquote class="fq" style="--i:1;margin-top:18px">Most of my losing days were never my system; <em>it was my psychology.</em></blockquote>
+  <div class="fq-body" style="--i:2">
+    <p style="--n:0">I knew my setups; I knew where to TP, when to trail, and I could tell you exactly what I had to do to follow my system. Then one red trade where I'm either unlucky or take a premature entry and a different person takes over, all the discipline and hard work of weeks slowly increasing my balance vanishes. I would start doubling my size, forcing entries and losing all the progress I had made for weeks in a matter of minutes.</p>
+    <p style="--n:1">The worst part wasn't losing. It was that every answer was already sitting in my own journal. The same mistake, the same sizing issue, the same emotional spiral, week after week. I just couldn't see it from the inside.</p>
+    <p style="--n:2">So I built Flyxa: the tool that reads my trading the way I never could. I use it every session. Now it's yours too.</p>
+  </div>
+  <div class="fq-sig" style="--i:3"><i></i><div><b>Ushnish · Founder, Flyxa</b><span>Futures &amp; prop trader · Sydney</span></div></div>
+</section>
+
+<section class="panel rv" id="compare" data-screen-label="Comparison">
+  <div class="eyebrow" style="--i:0">Why Flyxa</div>
+  <h2 class="hl" style="--i:1;margin-top:14px">Your spreadsheet can't do this.</h2>
+  <div class="race" style="--i:2">
+    <div class="race-cap">Time to log one trade</div>
+    <div class="race-r"><b>Spreadsheet</b><em><span class="cu" data-to="240" data-fmt="clock">0:00</span></em><span class="race-bar" aria-hidden="true"><i style="--w:100%;--dur:1.8s;--dl:.4s"></i></span></div>
+    <div class="race-r"><b>Classic journal</b><em><span class="cu" data-to="120" data-fmt="clock">0:00</span></em><span class="race-bar" aria-hidden="true"><i style="--w:50%;--dur:1.1s;--dl:.4s"></i></span></div>
+    <div class="race-r fx" id="race-fx"><b>Flyxa</b><em><span class="cu" data-to="15">0</span> sec</em><span class="race-bar" aria-hidden="true"><i style="--w:6.5%;--dur:.35s;--dl:.4s"></i></span></div>
+  </div>
+</section>
+
+<section id="cmpx" data-screen-label="Comparison detail">
+  <div class="cx-pin">
+    <div class="cx-head">
+      <span class="cx-eyebrow">Feature by feature</span>
+      <span class="cx-n" id="cx-n">01 / 04</span>
+    </div>
+    <div class="cx-rail"><i id="cx-prog"></i></div>
+    <div class="cx-stage">
+      <div class="cx-card">
+        <h3>Reads your psychology</h3>
+        <div class="cx-row" style="--r:0"><b>Spreadsheet</b><span class="no">Not a chance</span></div>
+        <div class="cx-row" style="--r:1"><b>Classic journal</b><span class="no">Not a chance</span></div>
+        <div class="cx-row fx" style="--r:2"><b>Flyxa</b><span>Every entry</span></div>
+      </div>
+      <div class="cx-card">
+        <h3>Discipline scoring</h3>
+        <div class="cx-row" style="--r:0"><b>Spreadsheet</b><span class="no">Not a chance</span></div>
+        <div class="cx-row" style="--r:1"><b>Classic journal</b><span class="no">Manual tags</span></div>
+        <div class="cx-row fx" style="--r:2"><b>Flyxa</b><span>Automatic</span></div>
+      </div>
+      <div class="cx-card">
+        <h3>Prop-firm rule monitoring</h3>
+        <div class="cx-row" style="--r:0"><b>Spreadsheet</b><span class="no">Not a chance</span></div>
+        <div class="cx-row" style="--r:1"><b>Classic journal</b><span class="no">Not a chance</span></div>
+        <div class="cx-row fx" style="--r:2"><b>Flyxa</b><span>Built in</span></div>
+      </div>
+      <div class="cx-card">
+        <h3>Logging 100 trades</h3>
+        <div class="cx-row" style="--r:0"><b>Spreadsheet</b><span class="no">6.5 hrs</span></div>
+        <div class="cx-row" style="--r:1"><b>Classic journal</b><span class="no">3.3 hrs</span></div>
+        <div class="cx-row fx" style="--r:2"><b>Flyxa</b><span>25 min</span></div>
+      </div>
+    </div>
+    <p class="cx-kick">Everything else tracks your trades. <em>Flyxa reads the trader.</em></p>
+  </div>
+</section>
+
+<section class="panel rv" id="faq" data-screen-label="FAQ">
+  <div class="eyebrow" style="--i:0">FAQ</div>
+  <h2 class="hl" style="--i:1;margin-top:14px">Questions, answered.</h2>
+  <div class="faq" style="--i:2">
+    <div class="fi open"><button class="fi-q" type="button" aria-expanded="false">How do I get access? <i>+</i></button><div class="fi-a"><div>Join the waitlist and invites go out in order. Flyxa is in private beta and free for everyone with access, with no card required. Paid plans arrive after launch, and beta members will be the first to know.</div></div></div>
+    <div class="fi"><button class="fi-q" type="button" aria-expanded="false">Which platforms does Flyxa support? <i>+</i></button><div class="fi-a"><div>Any platform you can screenshot. Flyxa reads charts from TradingView, MT4/MT5, NinjaTrader, ThinkorSwim and others, and you can import trade history by CSV.</div></div></div>
+    <div class="fi"><button class="fi-q" type="button" aria-expanded="false">Is my trading data private and secure? <i>+</i></button><div class="fi-a"><div>Yes. Your data is encrypted at rest and in transit, never sold, and never shared. You can export or permanently delete everything at any time. Full details in our <a href="Privacy.html">Privacy Policy</a>.</div></div></div>
+    <div class="fi"><button class="fi-q" type="button" aria-expanded="false">Does it work with prop-firm rules? <i>+</i></button><div class="fi-a"><div>Yes. Set your daily loss limit, max contracts, trade count and trading window, and Flyxa checks every session against them. Presets exist for the common firms, and you can write your own rules for anything else.</div></div></div>
+    <div class="fi"><button class="fi-q" type="button" aria-expanded="false">What does Flyxa AI actually tell me? <i>+</i></button><div class="fi-a"><div>It reads your own journal, not the internet. You get a process score for each session, the behavioural patterns behind your losses, and one specific thing to fix, with the trades it drew that from so you can check its work.</div></div></div>
+    <div class="fi"><button class="fi-q" type="button" aria-expanded="false">I've quit every journal I've started. Why is this different? <i>+</i></button><div class="fi-a"><div>Because you barely do anything. Hit the shortcut, and about 15 seconds later the trade is logged, graded and analysed. The reading, tagging and pattern-finding that made journaling homework is Flyxa's job now, and red days are exactly the entries it learns the most from.</div></div></div>
+  </div>
+  <p class="body" style="--i:3">Can't find yours? <a href="mailto:team@flyxa.app">team@flyxa.app</a>, every question gets a real reply.</p>
+</section>
+
+<section class="panel rv" id="cta" data-screen-label="CTA">
+  <div class="eyebrow" style="--i:0">Private beta</div>
+  <h2 class="hl" style="--i:1;margin-top:14px" id="cta-h">The journal that reads you back.</h2>
+  <p class="body" style="--i:2">Your trades are already logged somewhere. Flyxa is the first thing that reads them.</p>
+  <form class="cta-form" style="--i:3" onsubmit="location.href='/auth?tab=waitlist&email='+encodeURIComponent(document.getElementById('cta-email').value);return false;">
+    <input id="cta-email" type="email" placeholder="you@email.com" aria-label="Email">
+    <button class="btn">Join</button>
+  </form>
+</section>
+
+<footer>
+  <span class="lg"><img src="assets/flyxa-glyph.png" alt="" width="20" height="20"><b>Flyxa</b></span>
+  <nav>
+    <a href="mailto:team@flyxa.app">team@flyxa.app</a>
+    <a href="https://www.instagram.com/flyxaai/" target="_blank" rel="noopener">Instagram</a>
+    <a href="https://www.linkedin.com/company/flyxa/" target="_blank" rel="noopener">LinkedIn</a>
+    <a href="Privacy.html">Privacy</a>
+    <a href="Terms.html">Terms</a>
+  </nav>
+  <p class="fine">© 2026 Flyxa. The AI trading journal. Trading involves risk.</p>
+</footer>
+
+<div id="stick"><button class="btn" onclick="window.scrollTo({top:document.getElementById('cta').offsetTop-20,behavior:'smooth'})">Join waitlist →</button></div>
+</div>
+
+<script>
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+// word-split (hero + closing CTA bookend)
+function splitWords(el){
+  const parts=[];
+  el.childNodes.forEach(n=>{
+    const cls=n.nodeType===3?'':n.className||'';
+    (n.textContent||'').split(/\s+/).filter(Boolean).forEach(w=>parts.push([w,cls]));
+  });
+  el.innerHTML=parts.map((p,i)=>'<span class="w '+p[1]+'" style="--wi:'+i+'">'+p[0]+'</span>').join(' ');
+}
+splitWords(document.getElementById('cta-h'));
+(function(){
+  const h=document.getElementById('hero-h1');
+  h.querySelectorAll('span').forEach(s=>s.dataset.acc='1');
+  const parts=[];
+  h.childNodes.forEach(n=>{
+    if(n.nodeType===3){n.textContent.split(/\s+/).filter(Boolean).forEach(w=>parts.push([w,'']));}
+    else{n.textContent.split(/\s+/).filter(Boolean).forEach(w=>parts.push([w,n.className]));}
+  });
+  h.innerHTML=parts.map((p,i)=>'<span class="w '+p[1]+'" style="--wi:'+i+'">'+p[0]+'</span>').join(' ');
+})();
+// reveals, once, driven by one master rAF loop (no IntersectionObserver)
+const revealEls=[...document.querySelectorAll('.rv')];
+// count-up helper (transform-free text writes, once)
+const clockFmt=s=>Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0');
+function countUp(el,to,dur,from,fmt){
+  const a=from==null?0:from,f=fmt==='clock'?clockFmt:(v=>Math.round(v)),tok={};
+  el.__cu=tok;let t0=null;
+  const paint=v=>{if(el.__cu===tok)el.textContent=f(v)};
+  requestAnimationFrame(function tk(t){
+    if(el.__cu!==tok)return;
+    if(t0===null)t0=t;
+    const k=Math.min(1,Math.max(0,(t-t0)/dur));
+    paint(a+(to-a)*(1-Math.pow(1-k,3)));
+    if(k<1)requestAnimationFrame(tk);else paint(to);
+  });
+  setTimeout(()=>paint(to),dur+280);
+}
+document.querySelectorAll('.cu').forEach(c=>{c.dataset.init=c.textContent;});
+const resetCU=sec=>sec.querySelectorAll('.cu').forEach(c=>{c.__cu={};c.textContent=c.dataset.init;});
+// per-section entrance hooks: add .fired once, run an optional callback
+const fires=[
+  {id:'grade',
+   reset(){
+     const d=document.getElementById('gdial');
+     d.classList.remove('gd-live','done');
+     d.querySelectorAll('.gd-seg,.gd-l').forEach(e=>e.classList.remove('chk','ok','no'));
+     document.getElementById('gd-count').innerHTML='0<i>/6</i>';
+     document.getElementById('gd-sub').textContent='Checking rules';
+   },
+   fn(sec,T){
+    const dial=document.getElementById('gdial');
+    const segs=[...dial.querySelectorAll('.gd-seg')],legs=[...dial.querySelectorAll('.gd-l')],
+          cnt=document.getElementById('gd-count'),sub=document.getElementById('gd-sub');
+    let held=0;
+    const settle=i=>{
+      const ok=legs[i].dataset.r==='1',c=ok?'ok':'no';
+      segs[i].classList.remove('chk');segs[i].classList.add(c);
+      legs[i].classList.remove('chk');legs[i].classList.add(c);
+      if(ok)held++;cnt.innerHTML=held+'<i>/6</i>';
+    };
+    const finish=()=>{dial.classList.remove('gd-live');dial.classList.add('done');sub.textContent='5 of 6 rules held';};
+    if(RM){legs.forEach((_,i)=>settle(i));finish();return;}
+    const run=i=>{
+      if(i>=segs.length){finish();return;}
+      segs[i].classList.add('chk');legs[i].classList.add('chk');
+      T(()=>{settle(i);T(()=>run(i+1),140);},420);
+    };
+    dial.classList.add('gd-live');
+    T(()=>run(0),650);
+  }},
+  {id:'habit',reset:resetCU,fn(sec,T){
+    const ln=sec.querySelector('.clps-line');
+    if(ln){const L=Math.ceil(ln.getTotalLength());ln.style.setProperty('--L',L);}
+    const cu=[...sec.querySelectorAll('.cu')];
+    T(()=>countUp(cu[0],69,1300),150);
+    T(()=>countUp(cu[1],41,1500,69),700);
+  }},
+  {id:'presets'},
+  {id:'founder'},
+  {id:'compare',
+   reset(sec){resetCU(sec);const fx=document.getElementById('race-fx');if(fx)fx.classList.remove('won');},
+   fn(sec,T){
+    const cu=[...sec.querySelectorAll('.race .cu')];
+    T(()=>countUp(cu[0],240,1800,0,'clock'),400);
+    T(()=>countUp(cu[1],120,1100,0,'clock'),400);
+    T(()=>countUp(cu[2],15,350),400);
+    T(()=>{const fx=document.getElementById('race-fx');if(fx)fx.classList.add('won');},800);
+  }},
+  {id:'cta'}
+].map(o=>({...o,el:document.getElementById(o.id),done:false,timers:[]}));
+if(RM)fires.forEach(f=>{f.done=true;f.el.classList.add('fired');if(f.fn)f.fn(f.el,(cb,ms)=>setTimeout(cb,ms));
+  f.el.querySelectorAll('.cu').forEach(c=>{c.textContent=c.dataset.fmt==='clock'?clockFmt(+c.dataset.to):c.dataset.to;});
+  const fx=f.el.querySelector('#race-fx');if(fx)fx.classList.add('won');});
+const heroEl=document.getElementById('hero'),heroH1=document.getElementById('hero-h1');
+heroEl.classList.add('on');heroH1.classList.add('on');
+const heroReplay=()=>{
+  if(RM)return;
+  const r=heroEl.getBoundingClientRect(),vh=innerHeight;
+  if(r.bottom<-60||r.top>vh+60){heroEl.classList.remove('on');heroH1.classList.remove('on');}
+  else if(r.top<vh*0.6){heroEl.classList.add('on');heroH1.classList.add('on');}
+};
+// nav hides on scroll down, returns on scroll up
+(function(){
+  const pill=document.getElementById('navpill');
+  let last=scrollY,acc=0;
+  addEventListener('scroll',()=>{
+    const y=scrollY,d=y-last;last=y;
+    if(document.getElementById('menu').classList.contains('open')){pill.classList.remove('hide');return;}
+    if(y<80){pill.classList.remove('hide');acc=0;return;}
+    acc=(d>0)===(acc>0)?acc+d:d;
+    if(acc>46)pill.classList.add('hide');
+    else if(acc<-30)pill.classList.remove('hide');
+  },{passive:true});
+})();
+// menu
+const menu=document.getElementById('menu');
+document.getElementById('burger').addEventListener('click',()=>menu.classList.toggle('open'));
+menu.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>menu.classList.remove('open')));
+// funded numbers + chart: driven directly by scroll progress (never stalls)
+const funded=(function(){
+  const sec=document.getElementById('funded'),eq=document.getElementById('fp-eq'),pct=document.getElementById('fp-pct'),svg=eq.closest('svg');
+  const L=eq.getTotalLength();eq.style.strokeDasharray=L+' '+L;eq.style.transition='none';
+  const labs=[...svg.querySelectorAll('text')];
+  labs.forEach(t=>{t.style.transformBox='fill-box';});
+  if(RM){pct.textContent='72';eq.style.strokeDashoffset='0';labs.forEach(t=>t.style.opacity='1');return{tick:()=>{}};}
+  const quote=document.getElementById('fp-coach'),qt=document.getElementById('fp-coach-t');
+  const TXT='“Keep risk under <em>$260</em> a trade. Two more green days at this pace clears the target by Day 8.”';
+  let typing=false,tiv=null;
+  function type(){
+    if(typing)return;typing=true;quote.classList.add('typing');
+    let i=0;tiv=setInterval(()=>{
+      i+=2;
+      if(i>=TXT.length){qt.innerHTML=TXT;clearInterval(tiv);tiv=null;quote.classList.add('typed');}
+      else{let s=TXT.slice(0,i);const o=(s.match(/<em>/g)||[]).length,c=(s.match(/<\/em>/g)||[]).length;if(o>c)s+='</em>';qt.innerHTML=s;}
+    },22);
+  }
+  if(RM){qt.innerHTML=TXT;typing=true;}
+  function paint(ez){
+    pct.textContent=Math.round(72*ez);
+    eq.style.strokeDashoffset=(L*(1-ez)).toFixed(1);
+    if(ez>0.5)type();
+    labs.forEach((t,i)=>{
+      const lk=Math.min(1,Math.max(0,(ez-0.3-i*0.16)/0.32));
+      t.style.opacity=lk.toFixed(3);
+      t.style.transform='translateY('+((1-lk)*8).toFixed(1)+'px)';
+    });
+  }
+  paint(0);
+  let played=false,run=null,endT=null;
+  let pumpIv=null;
+  function play(){
+    if(played)return;played=true;
+    const DUR=2400,tok={},t0=performance.now();run=tok;
+    const step=()=>{
+      if(run!==tok)return false;
+      const k=Math.min(1,Math.max(0,(performance.now()-t0)/DUR));
+      paint(1-Math.pow(1-k,3));
+      return k<1;
+    };
+    // pumped by rAF and a timer, so it still animates if frames are throttled
+    (function raf(){if(step())requestAnimationFrame(raf);})();
+    if(pumpIv)clearInterval(pumpIv);
+    pumpIv=setInterval(()=>{if(!step()){clearInterval(pumpIv);pumpIv=null;}},40);
+    endT=setTimeout(()=>{if(run!==tok)return;paint(1);
+      if(!quote.classList.contains('typed')){if(tiv){clearInterval(tiv);tiv=null;}qt.innerHTML=TXT;quote.classList.add('typed');}},DUR+900);
+  }
+  function reset(){
+    played=false;run=null;
+    if(pumpIv){clearInterval(pumpIv);pumpIv=null;}
+    if(endT){clearTimeout(endT);endT=null;}
+    if(tiv){clearInterval(tiv);tiv=null;}
+    typing=false;quote.classList.remove('typing','typed');qt.innerHTML='';
+    paint(0);
+  }
+  return {tick(){
+    const r=sec.getBoundingClientRect(),vh=innerHeight;
+    if(played){if(r.bottom<-80||r.top>vh+80)reset();return;}
+    // start once the section is properly on screen (tolerant of short sections)
+    if(r.top<=vh*0.22&&r.bottom>=Math.min(r.height*0.55,vh*0.55))play();
+  }};
+})();
+// pinned scrub
+const scrub=(function(){
+  const sec=document.getElementById('hiw');
+  const scan=document.getElementById('hiw-scan'),l1=document.getElementById('hiw-l1'),l2=document.getElementById('hiw-o2'),l3=document.getElementById('hiw-o3'),
+        o1=document.getElementById('hiw-o1'),rows=[...document.querySelectorAll('#hiw-o1 .hiw-row')],
+        tog=document.getElementById('hiw-tog'),fill=document.getElementById('hiw-fill'),pctEl=document.getElementById('hiw-pct'),prog=document.getElementById('hiw-prog'),
+        num=document.getElementById('hiw-num'),name=document.getElementById('hiw-name'),phone=sec.querySelector('.phone');
+  const NAMES=['Scan','Grade','Improve'];
+  function paint(p){
+    const cl=v=>Math.min(1,Math.max(0,v));
+    const a=cl(p/0.22),b=cl((p-0.22)/0.11),c=cl((p-0.76)/0.11),cv=cl((p-0.84)/0.15);
+    const es=t=>t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,eb=es(b),ec=es(c);
+    prog.style.transform='scaleX('+p.toFixed(3)+')';
+    scan.style.opacity=a<1?1:0;
+    scan.style.transform='translate3d(0,'+(a*(phone.clientHeight-2)).toFixed(1)+'px,0)';
+    l1.style.opacity=(1-eb).toFixed(3);
+    o1.style.opacity=(1-eb).toFixed(3);
+    o1.style.transform='translate3d(0,'+(-20*eb).toFixed(1)+'px,0)';
+    l2.style.opacity=(eb*(1-ec)).toFixed(3);
+    l2.style.transform='translate3d(0,'+((1-eb)*20-ec*20).toFixed(1)+'px,0)';
+    l3.style.opacity=ec.toFixed(3);
+    l3.style.transform='translate3d(0,'+((1-ec)*20).toFixed(1)+'px,0)';
+    for(let i=0;i<rows.length;i++)rows[i].classList.toggle('in',a>0.14+i*0.2);
+    fill.style.transform='scaleX('+(cv*0.72).toFixed(3)+')';
+    pctEl.textContent=Math.round(cv*72);
+    tog.classList.toggle('onn',cv>0.88);
+    const i=p<0.24?0:p<0.79?1:2;
+    if(num.dataset.i!==''+i){num.dataset.i=i;num.textContent='Step 0'+(i+1);name.textContent=NAMES[i];}
+  }
+  if(RM){paint(1);return{tick:()=>{}};}
+  return {tick(){
+    const r=sec.getBoundingClientRect(),span=(r.height-innerHeight)*0.46;
+    if(r.bottom<-200||r.top>innerHeight+200)return;
+    paint(span>0?Math.min(1,Math.max(0,-r.top/span)):(r.top<0?1:0));
+  }};
+})();
+// hero parallax removed with the background image
+const heroPlx={tick:()=>{}};
+// scroll-stack takeover: each stacked section dims + scales as the next covers it
+const heroStack=(function(){
+  if(RM)return{tick:()=>{}};
+  const secs=[...document.querySelectorAll('#stack>section')].map(s=>({el:s,dim:s.querySelector('.dim'),k:-1}));
+  secs.forEach(s=>{s.el.style.transformOrigin='50% 32%';});
+  return {tick(){
+    for(let i=0;i<secs.length-1;i++){
+      const s=secs[i],next=secs[i+1].el;
+      const r=next.getBoundingClientRect();
+      const k=Math.min(1,Math.max(0,1-r.top/Math.max(1,innerHeight)));
+      if(Math.abs(k-s.k)<0.004)continue;
+      s.k=k;
+      s.el.style.transform=k>0?'scale('+(1-0.045*k).toFixed(4)+')':'';
+      s.dim.style.opacity=(k*0.55).toFixed(3);
+      s.el.style.willChange=(k>0&&k<1)?'transform':'auto';
+    }
+  }};
+})();
+// inertial smooth scroll, desktop pointers only, native on touch
+(function(){
+  if(RM||!matchMedia('(pointer:fine)').matches)return;
+  let target=scrollY,running=false;
+  const max=()=>document.documentElement.scrollHeight-innerHeight;
+  function frame(){
+    target=Math.min(max(),Math.max(0,target));
+    const cur=scrollY,d=target-cur;
+    if(Math.abs(d)<0.4){window.scrollTo(0,target);running=false;return;}
+    window.scrollTo(0,cur+d*0.12);
+    requestAnimationFrame(frame);
+  }
+  addEventListener('wheel',e=>{
+    if(e.ctrlKey)return;
+    e.preventDefault();
+    target=Math.min(max(),Math.max(0,(running?target:scrollY)+e.deltaY));
+    if(!running){running=true;requestAnimationFrame(frame);}
+  },{passive:false});
+  addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(e.key))running=false;});
+})();
+// comparison stepper: one criterion at a time, driven by scroll progress
+const cmpx=(function(){
+  const sec=document.getElementById('cmpx');if(!sec)return{tick:()=>{}};
+  const cards=[...sec.querySelectorAll('.cx-card')],prog=document.getElementById('cx-prog'),num=document.getElementById('cx-n');
+  const N=cards.length;
+  if(RM){cards.forEach(c=>c.style.opacity=1);return{tick:()=>{}};}
+  let last=-1;
+  function paint(p){
+    prog.style.transform='scaleX('+p.toFixed(3)+')';
+    const seg=p*(N-1);
+    cards.forEach((c,i)=>{
+      const d=seg-i,ad=Math.abs(d);
+      c.style.opacity=Math.max(0,1-ad*1.45).toFixed(3);
+      c.style.transform='translate3d(0,'+(d*-26).toFixed(1)+'px,0)';
+      c.classList.toggle('in',ad<0.42);
+    });
+    const i=Math.min(N-1,Math.max(0,Math.round(seg)));
+    if(i!==last){last=i;num.textContent='0'+(i+1)+' / 0'+N;}
+  }
+  paint(0);
+  return {tick(){
+    const r=sec.getBoundingClientRect(),span=r.height-innerHeight;
+    if(r.bottom<-200||r.top>innerHeight+200)return;
+    paint(span>0?Math.min(1,Math.max(0,-r.top/span)):(r.top<0?1:0));
+  }};
+})();
+// master loop: reveals + scrub + parallax + sticky CTA
+(function(){
+  const stick=document.getElementById('stick'),cta=document.getElementById('cta'),hero=document.getElementById('hero');
+  function frame(){
+    const vh=innerHeight;
+    for(let i=0;i<revealEls.length;i++){
+      const el=revealEls[i],r=el.getBoundingClientRect();
+      if(r.top<vh*0.88&&r.bottom>0)el.classList.add('on');
+      else if(!RM&&(r.bottom<-60||r.top>vh+60))el.classList.remove('on');
+    }
+    for(let i=0;i<fires.length;i++){
+      const f=fires[i],r=f.el.getBoundingClientRect();
+      if(!f.done){
+        if(r.top<vh*0.78&&r.bottom>0){
+          f.done=true;f.timers=[];f.el.classList.add('fired');
+          if(f.fn)f.fn(f.el,(cb,ms)=>{const id=setTimeout(cb,ms);f.timers.push(id);return id;});
+        }
+      }else if(!RM&&(r.bottom<-80||r.top>vh+80)){
+        f.done=false;f.timers.forEach(clearTimeout);f.timers=[];
+        f.el.classList.remove('fired');if(f.reset)f.reset(f.el);
+      }
+    }
+    funded.tick();heroReplay();cmpx.tick();
+    scrub.tick();heroPlx.tick();heroStack.tick();
+    const past=hero.getBoundingClientRect().bottom<vh*0.5;
+    const onCta=cta.getBoundingClientRect().top<vh*0.85;
+    stick.classList.toggle('show',past&&!onCta);
+    lastRun=performance.now();
+  }
+  let running=false,until=0,lastRun=0;
+  function loop(){frame();if(performance.now()<until)requestAnimationFrame(loop);else running=false;}
+  function kick(){
+    until=performance.now()+500;
+    if(performance.now()-lastRun>60)frame();
+    if(!running){running=true;requestAnimationFrame(loop);}
+  }
+  addEventListener('scroll',kick,{passive:true});
+  addEventListener('touchmove',kick,{passive:true});
+  addEventListener('resize',kick);
+  addEventListener('load',kick);
+  setInterval(kick,900);
+  kick();
+  // safety: if frames never run (throttled tab), never leave content invisible
+  let ran=false;const mark=()=>{ran=true};requestAnimationFrame(mark);
+  setTimeout(()=>{if(!ran)revealEls.forEach(el=>el.classList.add('on'));},1500);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)kick();});
+})();
+// FAQ
+document.querySelectorAll('.fi').forEach((item,n)=>{
+  const q=item.querySelector('.fi-q'),a=item.querySelector('.fi-a');
+  a.id='faq-a-'+n;q.setAttribute('aria-controls',a.id);
+  q.setAttribute('aria-expanded',item.classList.contains('open')?'true':'false');
+  if(item.classList.contains('open'))a.style.maxHeight=a.scrollHeight+'px';
+  q.addEventListener('click',()=>{
+    const wasOpen=item.classList.contains('open');
+    document.querySelectorAll('.fi.open').forEach(x=>{x.classList.remove('open');x.querySelector('.fi-a').style.maxHeight='0';x.querySelector('.fi-q').setAttribute('aria-expanded','false');});
+    if(!wasOpen){item.classList.add('open');a.style.maxHeight=a.scrollHeight+'px';q.setAttribute('aria-expanded','true');}
+  });
+});
+// sticky CTA handled in master loop
+</script>
+</body>
+</html>
