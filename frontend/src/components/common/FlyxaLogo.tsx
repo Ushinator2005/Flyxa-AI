@@ -66,7 +66,7 @@ export default function FlyxaLogo({
           <div className="relative shrink-0" style={{ width: size, height: size }}>
             {mark}
           </div>
-          <div className={`text-xl leading-none tracking-[-0.02em] ${wordmarkClassName}`.trim()} style={{ color: palette.word, fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+          <div className={`text-xl leading-none tracking-[-0.02em] ${wordmarkClassName}`.trim()} style={{ color: palette.word, fontFamily: "'Newsreader', Georgia, serif", fontWeight: 400 }}>
             Flyxa
           </div>
         </div>
@@ -87,7 +87,7 @@ export default function FlyxaLogo({
           {mark}
         </div>
         <div className="min-w-0 text-center">
-          <div className={`text-xl leading-none tracking-[-0.02em] ${wordmarkClassName}`.trim()} style={{ color: palette.word, fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+          <div className={`text-xl leading-none tracking-[-0.02em] ${wordmarkClassName}`.trim()} style={{ color: palette.word, fontFamily: "'Newsreader', Georgia, serif", fontWeight: 400 }}>
             Flyxa
           </div>
           <div className={`mt-2 text-[10px] uppercase tracking-[0.5em] ${subtitleClassName}`.trim()} style={{ color: palette.subtitle }}>

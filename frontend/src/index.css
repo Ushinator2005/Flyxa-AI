@@ -335,10 +335,10 @@ html[data-theme='light'] .hm-neg-1 { background-color: rgba(255, 23, 68, 0.12); 
   }
 
   .auth-brand-word {
-    font-family: 'Space Grotesk', var(--font-display), sans-serif;
-    font-size: 23px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 26px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
     color: var(--app-text);
   }
 

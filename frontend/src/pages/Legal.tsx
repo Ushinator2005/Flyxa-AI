@@ -156,7 +156,7 @@ export default function Legal() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 34 }}>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
             <FlyxaLogo size={30} />
-            <span style={{ marginLeft: 10, fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: C.t0, letterSpacing: '-0.01em' }}>Flyxa</span>
+            <span style={{ marginLeft: 10, fontFamily: "'Newsreader', Georgia, serif", fontSize: 21, fontWeight: 400, color: C.t0, letterSpacing: '-0.01em' }}>Flyxa</span>
           </Link>
           <div style={{ display: 'flex', gap: 16 }}>
             <Link to="/terms" style={{ fontSize: 12, fontWeight: isTerms ? 700 : 500, color: isTerms ? C.t0 : C.t2, textDecoration: 'none' }}>Terms</Link>
