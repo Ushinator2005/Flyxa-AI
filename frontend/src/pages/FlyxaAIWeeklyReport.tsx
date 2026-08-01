@@ -100,7 +100,7 @@ function computeWeekStats(
   const mon  = weekMonday(offset);
   const sun  = addDays(mon, 6); sun.setHours(23, 59, 59, 999);
   const weekKey   = mon.toISOString().slice(0, 10);
-  const weekLabel = `${fmtShort(mon)} – ${fmtShort(addDays(mon, 4))}, ${mon.getFullYear()}`;
+  const weekLabel = `${fmtShort(mon)}, ${fmtShort(addDays(mon, 4))}, ${mon.getFullYear()}`;
 
   const wt = trades.filter(t => {
     const ds = tradeDate(t); if (!ds) return false;
@@ -188,24 +188,24 @@ function computeWeekStats(
 function generateActionPlan(s: WeekStats): string[] {
   const items: string[] = [];
   if (s.planAdherence !== null && s.planAdherence < 70)
-    items.push(`Plan adherence was ${s.planAdherence}% — before each trade, log your thesis and stop level.`);
+    items.push(`Plan adherence was ${s.planAdherence}%, before each trade, log your thesis and stop level.`);
   if (s.wins > 0 && s.losses > 0 && Math.abs(s.avgLossPnl) > s.avgWinPnl)
-    items.push(`Avg loss (${fmtCurrency(Math.abs(s.avgLossPnl))}) exceeded avg win (${fmtCurrency(s.avgWinPnl)}) — cut losers earlier or hold winners longer.`);
+    items.push(`Avg loss (${fmtCurrency(Math.abs(s.avgLossPnl))}) exceeded avg win (${fmtCurrency(s.avgWinPnl)}), cut losers earlier or hold winners longer.`);
   if (s.behavioralFlags.length > 0) {
     const { flag, count } = s.behavioralFlags[0];
-    items.push(`"${flag}" appeared ${count} time${count > 1 ? 's' : ''} — review those trades and find the trigger.`);
+    items.push(`"${flag}" appeared ${count} time${count > 1 ? 's' : ''}, review those trades and find the trigger.`);
   }
   if (s.winRate < 40 && s.tradeCount >= 4)
-    items.push(`Win rate was ${s.winRate}% — scale back size until edge is confirmed.`);
+    items.push(`Win rate was ${s.winRate}%, scale back size until edge is confirmed.`);
   if (s.worstDayLabel !== '—' && s.worstDayPnl < -200)
-    items.push(`${s.worstDayLabel} was your worst day (${fmtSigned(s.worstDayPnl)}) — set a hard daily loss limit.`);
+    items.push(`${s.worstDayLabel} was your worst day (${fmtSigned(s.worstDayPnl)}), set a hard daily loss limit.`);
   if (s.topConfluences[0]?.winRate >= 60) {
     const { label, winRate, trades } = s.topConfluences[0];
-    items.push(`"${label}" hit ${winRate}% on ${trades} trades — lead with this setup next week.`);
+    items.push(`"${label}" hit ${winRate}% on ${trades} trades, lead with this setup next week.`);
   }
   if (s.tradeCount === 0)
     return [
-      'No trades logged — start with one fully journaled session.',
+      'No trades logged, start with one fully journaled session.',
       'Build a pre-session routine: thesis, key levels, and bias written before open.',
       'Tag confluences on every setup to unlock pattern analysis next week.',
     ];
@@ -630,9 +630,9 @@ function SlidePatterns({ stats }: { stats: WeekStats }) {
   const cost:    { icon: string; text: string; accent: string }[] = [];
 
   stats.topConfluences.filter(c => c.winRate >= 60).forEach(c =>
-    clicked.push({ icon: '↑', text: `${c.label} — ${c.winRate}% win rate across ${c.trades} trades`, accent: C.grn }));
+    clicked.push({ icon: '↑', text: `${c.label}, ${c.winRate}% win rate across ${c.trades} trades`, accent: C.grn }));
   stats.topConfluences.filter(c => c.winRate < 60).forEach(c =>
-    cost.push({ icon: '↓', text: `${c.label} — only ${c.winRate}% win rate (${c.trades} trades)`, accent: C.red }));
+    cost.push({ icon: '↓', text: `${c.label}, only ${c.winRate}% win rate (${c.trades} trades)`, accent: C.red }));
   stats.behavioralFlags.forEach(f =>
     cost.push({ icon: '!', text: `"${f.flag}" flagged ${f.count}× this week`, accent: C.acc }));
 
@@ -643,25 +643,25 @@ function SlidePatterns({ stats }: { stats: WeekStats }) {
 
   if (stats.wins > 0 && stats.losses > 0) {
     if (Math.abs(stats.avgLossPnl) > stats.avgWinPnl)
-      cost.push({ icon: '≠', text: `Avg loss (${fmtCurrency(Math.abs(stats.avgLossPnl))}) exceeded avg win (${fmtCurrency(stats.avgWinPnl)}) — R:R needs work`, accent: C.red });
+      cost.push({ icon: '≠', text: `Avg loss (${fmtCurrency(Math.abs(stats.avgLossPnl))}) exceeded avg win (${fmtCurrency(stats.avgWinPnl)}), R:R needs work`, accent: C.red });
     else
-      clicked.push({ icon: '✓', text: `Avg win (${fmtCurrency(stats.avgWinPnl)}) exceeded avg loss (${fmtCurrency(Math.abs(stats.avgLossPnl))}) — solid R:R`, accent: C.grn });
+      clicked.push({ icon: '✓', text: `Avg win (${fmtCurrency(stats.avgWinPnl)}) exceeded avg loss (${fmtCurrency(Math.abs(stats.avgLossPnl))}), solid R:R`, accent: C.grn });
   }
   if (stats.planAdherence !== null) {
     if (stats.planAdherence >= 70)
-      clicked.push({ icon: '✓', text: `Plan adherence: ${stats.planAdherence}% — stayed disciplined`, accent: C.grn });
+      clicked.push({ icon: '✓', text: `Plan adherence: ${stats.planAdherence}%, stayed disciplined`, accent: C.grn });
     else
-      cost.push({ icon: '!', text: `Plan adherence only ${stats.planAdherence}% — consistency needed`, accent: C.acc });
+      cost.push({ icon: '!', text: `Plan adherence only ${stats.planAdherence}%, consistency needed`, accent: C.acc });
   }
   if (stats.winRate >= 60 && stats.tradeCount >= 3)
-    clicked.push({ icon: '↑', text: `${stats.winRate}% win rate over ${stats.tradeCount} trades — above expectancy`, accent: C.grn });
+    clicked.push({ icon: '↑', text: `${stats.winRate}% win rate over ${stats.tradeCount} trades, above expectancy`, accent: C.grn });
   else if (stats.winRate < 40 && stats.tradeCount >= 3)
-    cost.push({ icon: '↓', text: `${stats.winRate}% win rate over ${stats.tradeCount} trades — below threshold`, accent: C.red });
+    cost.push({ icon: '↓', text: `${stats.winRate}% win rate over ${stats.tradeCount} trades, below threshold`, accent: C.red });
 
   if (clicked.length === 0)
     clicked.push({ icon: '—', text: 'Tag confluences on each trade to identify what setups work best for you.', accent: C.t2 });
   if (cost.length === 0)
-    cost.push({ icon: '—', text: 'No issues flagged — keep logging to surface patterns over time.', accent: C.t2 });
+    cost.push({ icon: '—', text: 'No issues flagged, keep logging to surface patterns over time.', accent: C.t2 });
 
   // Avg winner vs loser visual bar
   const maxBar = Math.max(stats.avgWinPnl, Math.abs(stats.avgLossPnl), 1);
@@ -762,7 +762,7 @@ function SlideReflection({
           onBlur={e  => { e.currentTarget.style.borderColor = C.b1; }}
         />
         <p style={{ fontSize: 10.5, color: C.t2, marginTop: 10 }}>
-          {reflection ? `Saved · ${stats.weekLabel}` : 'Start typing — it saves automatically.'}
+          {reflection ? `Saved · ${stats.weekLabel}` : 'Start typing, it saves automatically.'}
         </p>
       </div>
     </SlideShell>
@@ -776,7 +776,7 @@ function SlideFocus({ items, stats }: { items: string[]; stats: WeekStats }) {
       <div style={{ maxWidth: 560, width: '100%' }}>
         <div style={{ marginBottom: 'clamp(20px, 3.5vh, 32px)' }}>
           <div style={{ fontSize: 'clamp(20px, 3vw, 30px)', fontWeight: 700, color: C.t0, letterSpacing: '-0.02em', marginBottom: 8 }}>Action Plan</div>
-          <div style={{ fontSize: 11, color: C.t2 }}>Based on {stats.weekLabel} — focus on these next week.</div>
+          <div style={{ fontSize: 11, color: C.t2 }}>Based on {stats.weekLabel}, focus on these next week.</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(10px, 1.8vh, 16px)' }}>
           {items.map((item, i) => (

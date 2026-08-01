@@ -177,7 +177,7 @@ export default function GlobalMessagesPanel() {
               {rivals.length === 0 ? (
                 <div className="gmp-empty">
                   <MessageSquare size={28} />
-                  <span>No rivals yet — add someone on the Rivals page to start chatting</span>
+                  <span>No rivals yet, add someone on the Rivals page to start chatting</span>
                 </div>
               ) : (
                 rivals.map(rival => (
@@ -251,7 +251,7 @@ export default function GlobalMessagesPanel() {
               {messages.length === 0 ? (
                 <div className="gmp-empty">
                   <MessageSquare size={28} />
-                  <span>No messages yet — say something!</span>
+                  <span>No messages yet, say something!</span>
                 </div>
               ) : (
                 messages.map((msg, i) => {

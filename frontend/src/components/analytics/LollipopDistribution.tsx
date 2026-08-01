@@ -1,4 +1,4 @@
-import { CSSProperties, useMemo } from 'react';
+import { CSSProperties, ReactNode, useMemo } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // P&L distribution — lollipop rows on a shared zero axis.
@@ -59,7 +59,7 @@ const STYLE = `
 `;
 
 export default function LollipopDistribution({
-  title, rows, order, unit, sortLabel, loading = false, onSelect,
+  title, rows, order, unit, sortLabel, loading = false, onSelect, note,
 }: {
   title: string;
   rows: LollipopRow[];
@@ -68,6 +68,7 @@ export default function LollipopDistribution({
   sortLabel: string;          // "ranked" / "by session"
   loading?: boolean;
   onSelect?: (key: string) => void;
+  note?: ReactNode;           // optional insight line rendered beneath the rows
 }) {
   const ordered = useMemo(
     () => (order === 'value' ? [...rows].sort((a, b) => b.value - a.value) : rows),
@@ -181,6 +182,10 @@ export default function LollipopDistribution({
           );
         })}
       </div>
+
+      {note && (
+        <p style={{ margin: '13px 0 0', fontSize: 10.5, lineHeight: 1.55, color: 'var(--app-text-subtle)' }}>{note}</p>
+      )}
     </section>
   );
 }

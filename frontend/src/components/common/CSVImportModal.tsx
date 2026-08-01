@@ -36,7 +36,7 @@ interface FieldDef {
 
 const FIELDS: FieldDef[] = [
   { key: 'symbol',         label: 'Symbol',        required: true,  hint: 'NQ, ES, AAPL…'         },
-  { key: 'direction',      label: 'Direction',     required: false, hint: 'Long/Short, Buy/Sell — auto-inferred from P&L if missing' },
+  { key: 'direction',      label: 'Direction',     required: false, hint: 'Long/Short, Buy/Sell, auto-inferred from P&L if missing' },
   { key: 'entry_price',    label: 'Entry Price',   required: false, hint: 'Numeric, optional'      },
   { key: 'exit_price',     label: 'Exit Price',    required: false, hint: 'Numeric, optional'      },
   { key: 'pnl',            label: 'P&L',           required: true,  hint: 'Numeric, e.g. 250 or -100' },
@@ -356,7 +356,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
 
   const processText = useCallback((text: string) => {
     const { headers: h, rows: r } = parseCSV(text);
-    if (h.length === 0) { setFileError('Could not parse CSV — check the file has a header row.'); return; }
+    if (h.length === 0) { setFileError('Could not parse CSV, check the file has a header row.'); return; }
     if (r.length === 0) { setFileError('CSV has headers but no data rows.'); return; }
     const guessed = autoGuessMapping(h);
     setHeaders(h); setRows(r);
@@ -575,7 +575,7 @@ export default function CSVImportModal({ onClose, onImport }: CSVImportModalProp
                   ))}
                 </div>
                 <div style={{ marginTop: 8, fontSize: 11, color: C.t2 }}>
-                  Column names don't need to match exactly — you can remap everything on the next step.
+                  Column names don't need to match exactly, you can remap everything on the next step.
                 </div>
               </div>
             </div>

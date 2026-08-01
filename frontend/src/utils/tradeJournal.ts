@@ -844,9 +844,9 @@ export function computeProcessScore(trade: JournalTrade): number {
     const scores = [r.setupQuality, r.discipline, r.execution, r.patience, r.riskManagement, r.emotionalControl].filter(v => v > 0);
     baseScore = scores.length > 0
       ? (scores.reduce((a, b) => a + b, 0) / scores.length) * 20
-      : 75; // ratings object exists but empty — use neutral base
+      : 75; // ratings object exists but empty, use neutral base
   } else if (flags.length > 0 || trade.executionReview || (trade.preEntry?.confidenceAtEntry ?? 0) > 0) {
-    baseScore = 75; // no ratings but other process data present — use neutral base
+    baseScore = 75; // no ratings but other process data present, use neutral base
   } else {
     return 0; // genuinely no data
   }
@@ -861,13 +861,13 @@ export function computeProcessScore(trade: JournalTrade): number {
 
 
 export const BEHAVIORAL_FLAGS_LEFT = [
-  { id:'chased-entry',    label:'Chased entry — outside the zone' },
+  { id:'chased-entry',    label:'Chased entry, outside the zone' },
   { id:'no-confirmation', label:'Jumped in before confirmation' },
   { id:'incorrect-stop-loss', label:'Incorrect stop loss' },
   { id:'sized-up',        label:'Oversized position' },
   { id:'added-losing',    label:'Added to a losing position' },
   { id:'be-too-early',    label:'Moved to breakeven too early' },
-  { id:'overtraded',      label:'Overtraded — too many setups' },
+  { id:'overtraded',      label:'Overtraded, too many setups' },
 ];
 export const BEHAVIORAL_FLAGS_RIGHT = [
   { id:'moved-stop',    label:'Widened stop loss after entry' },

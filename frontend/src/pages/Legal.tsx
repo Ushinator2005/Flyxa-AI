@@ -22,14 +22,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function TermsContent() {
   return (
     <>
-      <Section title="1. What Flyxa is — and is not">
+      <Section title="1. What Flyxa is, and is not">
         <p>
           Flyxa is a trading journal and performance-psychology tool. It helps you record trades,
           review your own behavior, and hold yourself to rules you define.
         </p>
         <p style={{ color: C.t0, fontWeight: 600 }}>
           Flyxa is not a broker, financial advisor, or trading-signal service. Nothing in the app —
-          including AI-generated debriefs, coaching directives, readiness scores, or statistics — is
+          including AI-generated debriefs, coaching directives, readiness scores, or statistics, is
           financial advice or a recommendation to buy or sell any instrument. Trading futures and
           other leveraged products involves substantial risk of loss and is not suitable for everyone.
           You alone are responsible for your trading decisions and their outcomes.
@@ -79,7 +79,7 @@ function TermsContent() {
           Flyxa is provided "as is" without warranties of any kind. To the maximum extent permitted
           by law, we are not liable for trading losses, data inaccuracies, downtime, or indirect
           damages arising from use of the service. Prop-firm rule presets are monitoring aids, not a
-          legal source of truth — always verify limits against your firm's own dashboard.
+          legal source of truth, always verify limits against your firm's own dashboard.
         </p>
       </Section>
 

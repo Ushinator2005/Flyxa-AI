@@ -313,7 +313,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       const preview = e.target?.result as string;
       setImagePreview(preview);
       if (!editTrade) {
-        try { localStorage.setItem(DRAFT_IMAGE_KEY, preview); } catch { /* quota exceeded — skip */ }
+        try { localStorage.setItem(DRAFT_IMAGE_KEY, preview); } catch { /* quota exceeded, skip */ }
       }
     };
     reader.readAsDataURL(file);
@@ -393,7 +393,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
       const evidence = extracted.first_touch_evidence ?? '';
       useScanStore.getState().completeScan({ aiFields: [...fields], warnings: w, evidence });
       if (!mountedRef.current) {
-        pushToast({ tone: 'green', durationMs: 6000, message: 'Trade scan complete — open the journal to review.' });
+        pushToast({ tone: 'green', durationMs: 6000, message: 'Trade scan complete, open the journal to review.' });
       }
       setAiFields(fields);
       setFormData(mapped);
@@ -767,7 +767,7 @@ export default function ScreenshotImportModal({ isOpen, onClose, onSave, editTra
               {aiFields.size > 0 && (
                 <div className="flex items-center gap-2 rounded-xl border border-blue-400/20 bg-blue-400/8 px-4 py-3 text-sm text-blue-200">
                   <Sparkles size={14} />
-                  {aiFields.size} fields auto-extracted — review and save
+                  {aiFields.size} fields auto-extracted, review and save
                 </div>
               )}
             </div>

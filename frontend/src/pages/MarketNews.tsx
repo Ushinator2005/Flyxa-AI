@@ -2030,7 +2030,7 @@ export default function MarketNews() {
             return [live, ...prev].slice(0, 60);
           });
           setLastRefresh(new Date());
-        } catch { /* malformed event — ignore */ }
+        } catch { /* malformed event, ignore */ }
       };
       // Recreate with a fresh token instead of letting EventSource retry a stale one.
       source.onerror = () => {
@@ -2315,7 +2315,7 @@ export default function MarketNews() {
 
           {!loading && isRawFallback && items.length > 0 && (
             <div style={{ padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: T3 }}>
-              <span style={{ color: AMBER }}>raw wire</span> · unfiltered headlines — ai found nothing es/nq-specific this batch
+              <span style={{ color: AMBER }}>raw wire</span> · unfiltered headlines, ai found nothing es/nq-specific this batch
             </div>
           )}
 
@@ -2355,7 +2355,7 @@ export default function MarketNews() {
                 </span>
                 <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', color: T3 }}>
                   {archiveState === 'loading' ? 'searching…'
-                    : archiveState === 'unavailable' ? 'unavailable — apply migration 026'
+                    : archiveState === 'unavailable' ? 'unavailable, apply migration 026'
                     : `${archiveOnly.length} older match${archiveOnly.length === 1 ? '' : 'es'}`}
                 </span>
                 <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />

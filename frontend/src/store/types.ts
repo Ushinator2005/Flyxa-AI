@@ -95,7 +95,7 @@ export interface JournalEntry {
 export interface Payout {
   id: string;
   date: string;    // YYYY-MM-DD
-  amount: number;  // positive — money taken out
+  amount: number;  // positive, money taken out
   note?: string;
 }
 

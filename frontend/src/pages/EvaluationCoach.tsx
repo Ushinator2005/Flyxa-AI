@@ -648,7 +648,7 @@ export default function EvaluationCoach() {
       try {
         const saved = JSON.parse(selected.coachingNotes!) as { what?: string; different?: string };
         return saved.what || saved.different
-          ? `Coach note — What happened: "${saved.what}". Will improve: "${saved.different}".`
+          ? `Coach note, What happened: "${saved.what}". Will improve: "${saved.different}".`
           : '';
       } catch { return ''; }
     })() : '';
@@ -660,20 +660,20 @@ export default function EvaluationCoach() {
     const prompt = `You are Flyxa's evaluation coaching system. Give this trader ONE pass-focused directive for the next session.
 
 Account: ${selected.name} (${selected.firm})
-Eval status: ${progress.status} — ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
+Eval status: ${progress.status}, ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
 MLL: balance must stay above ${money(progress.drawdownFloor)} (${ddTypeLabel}${progress.floorLocked ? ', locked' : progress.trailingStopsAt !== null ? `, locks at ${money(progress.trailingStopsAt)}` : ''})
-${progress.consistencyLimitPct !== null && progress.consistencyPct !== null ? `Consistency: biggest day is ${progress.consistencyPct}% of profit (firm limit ${progress.consistencyLimitPct}%)${progress.consistencyPct > progress.consistencyLimitPct ? ' — NOT met, needs steadier days' : ''}` : ''}
+${progress.consistencyLimitPct !== null && progress.consistencyPct !== null ? `Consistency: biggest day is ${progress.consistencyPct}% of profit (firm limit ${progress.consistencyLimitPct}%)${progress.consistencyPct > progress.consistencyLimitPct ? ', NOT met, needs steadier days' : ''}` : ''}
 Sessions traded: ${progress.tradingDays} | Avg P&L/session: ${money(avgDailyPnl)} | Pass probability: ${progress.passProbability}%
 Pace to target: ${paceHeadline} | ${paceDetail}
 Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'} | Plan adherence: ${planAdherencePct !== null ? `${planAdherencePct}%` : 'not enough tagged data'}
-${avgWinHoldMin > 0 && avgLossHoldMin > 0 ? `Hold time: winners avg ${Math.round(avgWinHoldMin)}m, losers ${Math.round(avgLossHoldMin)}m${avgLossHoldMin > avgWinHoldMin * 1.5 ? ' — losers held too long' : ''}` : ''}
+${avgWinHoldMin > 0 && avgLossHoldMin > 0 ? `Hold time: winners avg ${Math.round(avgWinHoldMin)}m, losers ${Math.round(avgLossHoldMin)}m${avgLossHoldMin > avgWinHoldMin * 1.5 ? ', losers held too long' : ''}` : ''}
 Main leak: ${primaryLeak ?? 'none detected'}
 Last 3 sessions: ${last3 || 'none yet'}
 ${behavioralWarnings.length ? `Behavioral patterns: ${behavioralWarnings.map(w => w.title).join('; ')}` : ''}
 ${journalContext}
 ${debriefNote}
 
-Write exactly ONE coaching directive sentence. Optimize for passing the evaluation without violating drawdown or daily loss rules. Start with an action verb (Focus on..., Limit entries to..., Avoid..., Cut size to..., Target..., etc.). Be specific to this account's current numbers. No greeting, no explanation — just the directive.`;
+Write exactly ONE coaching directive sentence. Optimize for passing the evaluation without violating drawdown or daily loss rules. Start with an action verb (Focus on..., Limit entries to..., Avoid..., Cut size to..., Target..., etc.). Be specific to this account's current numbers. No greeting, no explanation, just the directive.`;
 
     setMissionLoading(true);
     aiApi.flyxaChat(prompt, [])
@@ -726,7 +726,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               <em>·</em>
               <span>Target <i>{money(targetBalance)}</i></span>
               <em>·</em>
-              <span title={progress.floorLocked
+              <span className="ec-evhd-mll" title={progress.floorLocked
                 ? 'The MLL has stopped trailing. The account is closed if balance touches this.'
                 : `${ddTypeLabel} MLL. The account is closed if balance touches this.`}
               >
@@ -769,7 +769,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             </div>
             {equityPoints.length >= 2
               ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} floorSeries={mllSeries} dates={equityDates} />
-              : <p className="ec-no-data">No sessions recorded yet — the balance line starts with your first trade.</p>}
+              : <p className="ec-no-data">No sessions recorded yet, the balance line starts with your first trade.</p>}
           </div>
         </div>
 
@@ -785,9 +785,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
           <div
             className="ec-metric-card"
             title={progress.drawdownType === 'static'
-              ? 'Static — the MLL never moves.'
+              ? 'Static, the MLL never moves.'
               : progress.floorLocked
-                ? 'Locked — the MLL has stopped trailing.'
+                ? 'Locked, the MLL has stopped trailing.'
                 : `${ddTypeLabel === 'EOD trailing' ? 'Rises with end-of-day balance highs' : 'Rises with every new balance high'}.`}
           >
             <span className="ec-metric-lbl">Room above MLL</span>

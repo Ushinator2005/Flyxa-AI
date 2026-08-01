@@ -885,7 +885,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
             value={localLessons}
             onChange={e => setLocalLessons(e.target.value)}
             onBlur={e => update({ lessons: e.target.value })}
-            placeholder="One specific thing to do differently next session. Not 'be more disciplined' — something concrete and actionable."
+            placeholder="One specific thing to do differently next session. Not 'be more disciplined', something concrete and actionable."
           />
           <div style={{ padding:'10px 14px', borderTop:'1px solid var(--app-border)' }}>
             <div style={{ fontSize:9, color:'var(--app-text-subtle)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:6 }}>Lesson Category</div>
@@ -1004,7 +1004,7 @@ function PreEntryBlock({ trade, entry, allEntries, onMutate }: {
         </div>
         {isThirdPlus && prevWasLoss && (
           <div style={{ padding:'3px 10px', borderRadius:4, background:'var(--amber-dim)', border:'1px solid var(--amber-border)', fontSize:10, color:'var(--amber)', fontFamily:'var(--font-sans)' }}>
-            Trade {tradeNumber} after loss — check revenge risk
+            Trade {tradeNumber} after loss, check revenge risk
           </div>
         )}
         {nearLimit && (
@@ -1158,7 +1158,7 @@ function ProcessScoreBlock({ trade, entries, navigate, onSaveEntries }: { trade:
   if (avgWinScore !== null && avgLossScore !== null) insights.push({ text: `Avg score: wins ${avgWinScore} vs losses ${avgLossScore}`, color: 'var(--txt-2)' });
   const conf = trade.preEntry?.confidenceAtEntry ?? 0;
   const disc = trade.psychologyRatings?.discipline ?? 0;
-  if (conf >= 4 && disc <= 2) insights.push({ text: 'High confidence, low discipline — review sizing', color: 'var(--amber)' });
+  if (conf >= 4 && disc <= 2) insights.push({ text: 'High confidence, low discipline, review sizing', color: 'var(--amber)' });
   if (insights.length === 0 && score === 0) insights.push({ text: 'Rate psychology + flag behaviors to generate a score', color: 'var(--txt-3)' });
 
   const RING = 48;
@@ -1689,7 +1689,7 @@ export default function TradeJournal() {
   const selectedEntry = useMemo(() => {
     const fromStore = entries.find(entry => entry.id === selectedEntryId) ?? null;
     if (fromStore) {
-      optimisticEntryRef.current = null; // store has caught up — clear optimistic
+      optimisticEntryRef.current = null; // store has caught up, clear optimistic
       return fromStore;
     }
     // Fallback: if we just created this entry optimistically, use it until the
@@ -3228,7 +3228,7 @@ function TradeListSection({
                               </div>
                             </div>
                             {/* Entry time, exit time and duration are one fact
-                                (exit = entry + duration) — editing any one of
+                                (exit = entry + duration), editing any one of
                                 them reconciles the other two so cooldown rules
                                 and re-entry flags never read a stale exit. */}
                             <div>
@@ -3486,8 +3486,8 @@ async function performScanFile(file: File, ctx: PerformScanFileCtx) {
           tone: 'amber',
           durationMs: 6000,
           message: detail
-            ? `Trade saved — ${detail}`
-            : 'Trade saved — exit unconfirmed, set the exit price manually.',
+            ? `Trade saved, ${detail}`
+            : 'Trade saved, exit unconfirmed, set the exit price manually.',
         });
       } else {
         pushToast({ tone: 'green', durationMs: 3000, message: 'Trade scanned and saved' });
@@ -3614,7 +3614,7 @@ function applyEntriesMutation(
       pushToast({
         tone: 'red',
         durationMs: 8000,
-        message: '⚠️ Could not save to cloud — your changes are local only. Stay on this device or try again.',
+        message: '⚠️ Could not save to cloud, your changes are local only. Stay on this device or try again.',
       });
     });
 }

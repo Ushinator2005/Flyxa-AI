@@ -680,7 +680,7 @@ export default function Dashboard() {
                   Set up your trading account
                 </p>
                 <p style={{ fontSize: 11, color: T3, margin: '2px 0 0' }}>
-                  Pick your prop firm and account size — rules, balances and evaluation tracking come pre-configured.
+                  Pick your prop firm and account size, rules, balances and evaluation tracking come pre-configured.
                 </p>
               </div>
             </div>

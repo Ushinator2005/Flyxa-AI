@@ -325,7 +325,7 @@ export default function SessionActive() {
             fontSize: 15, fontWeight: 800, letterSpacing: '0.25em', textTransform: 'uppercase',
             color: RED,
           }}>
-            Loss limit reached — stand down
+            Loss limit reached, stand down
           </span>
         ) : activeRule && activeRuleTag ? (
           <div key={ruleIdx} className="sa-rule" style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 720 }}>

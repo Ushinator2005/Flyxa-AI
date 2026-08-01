@@ -751,7 +751,7 @@ export default function Billing() {
       const firmMatch = FIRM_OPTIONS.find(
         f => f.toLowerCase() === rawFirm.toLowerCase()
       ) ?? 'Other';
-      if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}" — set to Other`);
+      if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}", set to Other`);
 
       // Status normalisation
       const meaning = inferImportMeaning(rawStatus, rawAccountType, rawNotes, rawEntryType);
@@ -761,8 +761,8 @@ export default function Billing() {
       // Date validation
       const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
       const purchaseDate = dateValid ? rawDate : '';
-      if (!rawDate) warnings.push('Purchase date is missing — left blank');
-      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — date left blank');
+      if (!rawDate) warnings.push('Purchase date is missing, left blank');
+      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD, date left blank');
 
       // Numeric fields
       const parsedPrice    = parseOptionalMoney(rawPrice);
@@ -939,8 +939,8 @@ export default function Billing() {
       outcomeEvidence: historical.evidence,
       outcomeConfidence: historical.confidence,
       warning: entryKind === 'account'
-        ? `Unknown status "${rawStatus}" — treated as a historical Blown account`
-        : `Unknown status "${rawStatus}" — kept as In Progress`,
+        ? `Unknown status "${rawStatus}", treated as a historical Blown account`
+        : `Unknown status "${rawStatus}", kept as In Progress`,
     };
   };
 
@@ -1068,7 +1068,7 @@ export default function Billing() {
       const warnings: string[] = [];
 
       const firmMatch = FIRM_OPTIONS.find(f => f.toLowerCase() === rawFirm.toLowerCase()) ?? 'Other';
-      if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}" — set to Other`);
+      if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}", set to Other`);
 
       const rawStatus = get(colStatus);
       const rawNotes = get(colNotes);
@@ -1079,8 +1079,8 @@ export default function Billing() {
       const rawDate = get(colDate);
       const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
       const purchaseDate = dateValid ? rawDate : '';
-      if (!rawDate) warnings.push('Purchase date is missing — left blank');
-      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD — date left blank');
+      if (!rawDate) warnings.push('Purchase date is missing, left blank');
+      if (!dateValid && rawDate) warnings.push('Date format should be YYYY-MM-DD, date left blank');
 
       const parsedPrice    = parseOptionalMoney(rawPrice);
       const rawPayout      = get(colPayout);

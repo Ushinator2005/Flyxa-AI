@@ -130,9 +130,9 @@ export function formatPeriodRange(start: Date, end: Date): string {
   if (start.getTime() <= 1000) return `All time · through ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   if (start.getFullYear() !== end.getFullYear()) {
-    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}, ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }
-  return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
+  return `${fmt(start)}, ${fmt(end)}, ${end.getFullYear()}`;
 }
 
 export function dateKey(date: Date): string {
@@ -649,7 +649,7 @@ export function buildData(
         title: `${needed} more trade${needed !== 1 ? 's' : ''} needed to unlock time-of-day analysis`,
         body: timedTrades.length === 0
           ? 'Add a trade time to your entries to see which windows of the session are helping or hurting your P&L.'
-          : `You have ${timedTrades.length} timed trade${timedTrades.length !== 1 ? 's' : ''} this period — net ${formatSignedCurrency(summary.netPnl)}. Log ${needed} more with entry times to enable sub-window comparison.`,
+          : `You have ${timedTrades.length} timed trade${timedTrades.length !== 1 ? 's' : ''} this period, net ${formatSignedCurrency(summary.netPnl)}. Log ${needed} more with entry times to enable sub-window comparison.`,
         keyPhrases: ['entry times', 'time-of-day'],
         tags: [
           { label: `${timedTrades.length}/3 trades`, tone: 'neutral' },
@@ -673,7 +673,7 @@ export function buildData(
         badge: 'Session Note',
         frequency: `${timedTrades.length} trades · ${windowLabel} · ${tradingSessions} sessions`,
         title: `Entries tightly clustered in the ${windowLabel} window`,
-        body: `All ${timedTrades.length} timed trades landed in a ${windowDesc} window around ${windowLabel} across ${tradingSessions} session${tradingSessions !== 1 ? 's' : ''} — net ${formatSignedCurrency(summary.netPnl)}, avg ${formatSignedCurrency(summary.avgPnl)}/trade. Consistent entry timing shows discipline. Log more sessions across varying times to unlock sub-window comparison.`,
+        body: `All ${timedTrades.length} timed trades landed in a ${windowDesc} window around ${windowLabel} across ${tradingSessions} session${tradingSessions !== 1 ? 's' : ''}, net ${formatSignedCurrency(summary.netPnl)}, avg ${formatSignedCurrency(summary.avgPnl)}/trade. Consistent entry timing shows discipline. Log more sessions across varying times to unlock sub-window comparison.`,
         keyPhrases: [windowLabel, formatSignedCurrency(summary.netPnl)],
         tags: [
           { label: windowLabel, tone: 'neutral' },
@@ -698,8 +698,8 @@ export function buildData(
         type: 'risk' as const,
         badge: 'Risk Flag',
         frequency: `${worst.trades.length} trades in ${worst.label} · ${tradingSessions} sessions`,
-        title: `Your ${worst.label} entries are your weakest window — cut them`,
-        body: `${worst.trades.length} trade${worst.trades.length !== 1 ? 's' : ''} in the ${worst.label} window averaged ${formatSignedCurrency(worst.stats.avgPnl)}/trade (${formatSignedCurrency(worst.stats.netPnl)} total, ${Math.round(worst.stats.winRate)}% win rate). Your ${best.label} window averaged ${formatSignedCurrency(best.stats.avgPnl)}/trade — a ${formatSignedCurrency(avgGap)} gap per trade. Skipping ${worst.label} entries is your highest-leverage rule right now.`,
+        title: `Your ${worst.label} entries are your weakest window, cut them`,
+        body: `${worst.trades.length} trade${worst.trades.length !== 1 ? 's' : ''} in the ${worst.label} window averaged ${formatSignedCurrency(worst.stats.avgPnl)}/trade (${formatSignedCurrency(worst.stats.netPnl)} total, ${Math.round(worst.stats.winRate)}% win rate). Your ${best.label} window averaged ${formatSignedCurrency(best.stats.avgPnl)}/trade, a ${formatSignedCurrency(avgGap)} gap per trade. Skipping ${worst.label} entries is your highest-leverage rule right now.`,
         keyPhrases: [worst.label, best.label, formatSignedCurrency(worst.stats.netPnl)],
         tags: [
           { label: `${formatSignedCurrency(worst.stats.netPnl)} in ${worst.label}`, tone: 'negative' },
@@ -716,8 +716,8 @@ export function buildData(
       type: 'pattern' as const,
       badge: 'Session Note',
       frequency: `${timedTrades.length} timed trades · ${windowLabel} · ${tradingSessions} sessions`,
-      title: `Best window: ${best.label} — no major drag detected in ${windowLabel}`,
-      body: `Across ${timedTrades.length} timed trades in the ${windowLabel} range, your strongest window is ${best.label} at ${formatSignedCurrency(best.stats.avgPnl)}/trade avg${worstIsNegative ? `, with ${worst.label} your softest spot at ${formatSignedCurrency(worst.stats.avgPnl)}/trade. Keep monitoring — patterns sharpen as sample size grows.` : `. Overall avg ${formatSignedCurrency(overallSummary.avgPnl)}/trade — consistent performance across your session.`}`,
+      title: `Best window: ${best.label}, no major drag detected in ${windowLabel}`,
+      body: `Across ${timedTrades.length} timed trades in the ${windowLabel} range, your strongest window is ${best.label} at ${formatSignedCurrency(best.stats.avgPnl)}/trade avg${worstIsNegative ? `, with ${worst.label} your softest spot at ${formatSignedCurrency(worst.stats.avgPnl)}/trade. Keep monitoring, patterns sharpen as sample size grows.` : `. Overall avg ${formatSignedCurrency(overallSummary.avgPnl)}/trade, consistent performance across your session.`}`,
       keyPhrases: [best.label, windowLabel, formatSignedCurrency(overallSummary.avgPnl)],
       tags: [
         { label: `${formatSignedCurrency(overallSummary.netPnl)} net`, tone: overallSummary.netPnl >= 0 ? 'positive' : 'negative' },
@@ -780,15 +780,15 @@ export function buildData(
         const edgeStatus = wr >= 55 && netPnl > 0
           ? `Edge is confirming on ${topSymbolName}. Keep conditions tight and risk consistent.`
           : wr < 45 && netPnl < 0
-            ? `Win rate and P&L are both pointing the wrong way. Review your ${topSymbolName} entries — either the edge has shifted or execution is breaking down.`
+            ? `Win rate and P&L are both pointing the wrong way. Review your ${topSymbolName} entries, either the edge has shifted or execution is breaking down.`
             : isBreakeven
               ? `No clear edge showing yet on ${topSymbolName}. Focus on trade quality over trade frequency.`
-              : `Mixed signals on ${topSymbolName} — monitor over the next ${Math.max(5, count)} trades before drawing conclusions.`;
+              : `Mixed signals on ${topSymbolName}, monitor over the next ${Math.max(5, count)} trades before drawing conclusions.`;
         return {
           type: (wr < 45 && netPnl < 0 ? 'risk' : netPnl > 0 ? 'edge' : 'pattern') as InsightType,
           badge: 'Instrument Review',
           frequency: `${count} ${topSymbolName} trade${count !== 1 ? 's' : ''} · ${wr}% win rate`,
-          title: `${topSymbolName} edge check — ${wr >= 55 && netPnl > 0 ? 'holding up' : wr < 45 && netPnl < 0 ? 'needs review' : 'mixed signals'}`,
+          title: `${topSymbolName} edge check, ${wr >= 55 && netPnl > 0 ? 'holding up' : wr < 45 && netPnl < 0 ? 'needs review' : 'mixed signals'}`,
           body: `${topSymbolName}: ${wr}% win rate, ${pnlPhrase}. ${edgeStatus}`,
           keyPhrases: [topSymbolName, formatSignedCurrency(netPnl), `${wr}%`],
           tags: [
@@ -815,7 +815,7 @@ export function buildData(
           type: 'risk' as const,
           badge: 'Instrument Drag',
           frequency: `${worstSymbol.sym} · ${worstSymbol.symTrades.length} trades · ${worstWr}% win rate`,
-          title: `${worstSymbol.sym} is your worst-performing instrument — consider a pause`,
+          title: `${worstSymbol.sym} is your worst-performing instrument, consider a pause`,
           body: `${worstSymbol.sym}: ${worstWr}% win rate, ${formatSignedCurrency(worstSymbol.stats.netPnl)} net across ${worstSymbol.symTrades.length} trade${worstSymbol.symTrades.length !== 1 ? 's' : ''} (${formatSignedCurrency(worstAvg)}/trade avg). Your other instruments are performing better. Pausing ${worstSymbol.sym} until the edge is validated is your highest-leverage move.`,
           keyPhrases: [worstSymbol.sym, formatSignedCurrency(worstSymbol.stats.netPnl), `${worstWr}%`],
           tags: [
@@ -856,8 +856,8 @@ export function buildData(
       body: (() => {
         const gap = Math.abs(psychStrongest.summary.avgPnl - psychWeakest.summary.avgPnl);
         const hardStop = gap > 30
-          ? ` That ${formatSignedCurrency(gap)} gap per trade is not noise — you should not be entering trades when you feel "${psychWeakest.state}".`
-          : ` Track this across more sessions — if the gap holds, this emotional state warrants a pre-session gate, not just a note.`;
+          ? ` That ${formatSignedCurrency(gap)} gap per trade is not noise, you should not be entering trades when you feel "${psychWeakest.state}".`
+          : ` Track this across more sessions, if the gap holds, this emotional state warrants a pre-session gate, not just a note.`;
         return `"${psychWeakest.state}" averaged ${formatSignedCurrency(psychWeakest.summary.avgPnl)} vs "${psychStrongest.state}" at ${formatSignedCurrency(psychStrongest.summary.avgPnl)} ${periodLabel}.${hardStop}`;
       })(),
       keyPhrases: [`"${psychWeakest.state}"`, formatSignedCurrency(psychWeakest.summary.avgPnl), `"${psychStrongest.state}"`, formatSignedCurrency(psychStrongest.summary.avgPnl)],
@@ -917,8 +917,8 @@ export function buildData(
               badge: worstIsNegative ? 'Day Pattern' : 'Day Pattern',
               frequency: `${periodTrades.length} trades across ${dayStats.length} days`,
               title: worstIsNegative
-                ? `${worst.day} is your weakest trading day — consider sitting it out`
-                : `${best.day} is your strongest day — lean into it`,
+                ? `${worst.day} is your weakest trading day, consider sitting it out`
+                : `${best.day} is your strongest day, lean into it`,
               body: `${best.day}: ${Math.round(best.stats.winRate)}% win rate, ${formatSignedCurrency(best.stats.avgPnl)}/trade avg (${best.count} trades). ${worst.day}: ${Math.round(worst.stats.winRate)}% win rate, ${formatSignedCurrency(worst.stats.avgPnl)}/trade avg (${worst.count} trades). ${formatSignedCurrency(gap)} avg gap between your best and worst day.${worstIsNegative ? ` Skipping ${worst.day} entirely is a simple rule with immediate P&L impact.` : ''}`,
               keyPhrases: [best.day, worst.day, formatSignedCurrency(gap)],
               tags: [
@@ -949,7 +949,7 @@ export function buildData(
           type: 'risk' as const,
           badge: 'Session Drag',
           frequency: `${worstSess.session} · ${worstSess.entries.length} trades · ${worstWr}% win rate`,
-          title: `${worstSess.session} session is your weakest window — consider skipping it`,
+          title: `${worstSess.session} session is your weakest window, consider skipping it`,
           body: `${worstSess.session}: ${worstWr}% win rate, ${formatSignedCurrency(worstSess.summary.netPnl)} net across ${worstSess.entries.length} trade${worstSess.entries.length !== 1 ? 's' : ''}. Your ${session} session is significantly stronger at ${wr}% win rate. Cutting ${worstSess.session} trades is your highest-leverage rule right now.`,
           keyPhrases: [worstSess.session, session, formatSignedCurrency(worstSess.summary.netPnl)],
           tags: [
@@ -970,7 +970,7 @@ export function buildData(
         title: isConfirmed
           ? `${session} is your strongest edge window ${periodLabel}`
           : `${session} leads by volume but edge isn't confirmed yet`,
-        body: `${session}: ${wr}% win rate, ${formatSignedCurrency(summary.netPnl)} net across ${count} trade${count !== 1 ? 's' : ''} (${formatSignedCurrency(summary.netPnl / Math.max(1, count))}/trade avg). ${isConfirmed ? `Clear session edge — prioritise ${session} entries and let the other sessions come to you.` : `Win rate and/or P&L needs to improve before this qualifies as a confirmed edge.`}`,
+        body: `${session}: ${wr}% win rate, ${formatSignedCurrency(summary.netPnl)} net across ${count} trade${count !== 1 ? 's' : ''} (${formatSignedCurrency(summary.netPnl / Math.max(1, count))}/trade avg). ${isConfirmed ? `Clear session edge, prioritise ${session} entries and let the other sessions come to you.` : `Win rate and/or P&L needs to improve before this qualifies as a confirmed edge.`}`,
         keyPhrases: [session, formatSignedCurrency(summary.netPnl), `${wr}%`],
         tags: [
           { label: `${formatSignedCurrency(summary.netPnl)} net`, tone: (summary.netPnl >= 0 ? 'positive' : 'negative') as TagTone },
@@ -994,7 +994,7 @@ export function buildData(
         type: 'pattern',
         badge: 'Confluence Signal',
         frequency: `${topConfluence.trades} trade${topConfluence.trades !== 1 ? 's' : ''} logged with "${topConfluence.label}"`,
-        title: `"${topConfluence.label}" — too early to read`,
+        title: `"${topConfluence.label}", too early to read`,
         body: `${topConfluence.trades} trade${topConfluence.trades !== 1 ? 's' : ''} is not a large enough sample to draw any conclusions. A single outcome can swing win rate from 0% to 100% and P&L by hundreds. Log at least ${MIN_CONFLUENCE} trades tagged "${topConfluence.label}" before treating any signal here as real.`,
         keyPhrases: [`"${topConfluence.label}"`, `${MIN_CONFLUENCE} trades`],
         tags: [
@@ -1014,7 +1014,7 @@ export function buildData(
         title: strongEdge
           ? `"${topConfluence.label}" is your highest-conviction confluence ${periodLabel}`
           : clearRisk
-            ? `"${topConfluence.label}" is underperforming — review before reuse`
+            ? `"${topConfluence.label}" is underperforming, review before reuse`
             : `"${topConfluence.label}" shows mixed results ${periodLabel}`,
         body: `Across ${topConfluence.trades} trades, "${topConfluence.label}" returned ${formatSignedCurrency(topConfluence.netPnl)} total (${formatSignedCurrency(topConfluence.avgPnl)} avg) with ${Math.round(topConfluence.winRate)}% win rate.`,
         keyPhrases: [
@@ -1055,9 +1055,9 @@ export function buildData(
     const confirmedAvg = confirmedEntries.length ? confirmedEntries.reduce((s, t) => s + Number(t.pnl ?? 0), 0) / confirmedEntries.length : null;
     if (earlyAvg !== null && confirmedAvg !== null && earlyEntries.length >= 2 && confirmedEntries.length >= 2) {
       const gap = Math.abs(confirmedAvg - earlyAvg);
-      focusItems.push(`Entry patience scored ${entryScore}/100. Your ${earlyEntries.length} early entries averaged ${formatSignedCurrency(earlyAvg)} per trade compared to ${formatSignedCurrency(confirmedAvg)} for entries placed after the opening window settled — a ${formatSignedCurrency(gap)} gap per trade. That difference is the measurable cost of anticipating rather than confirming.`);
+      focusItems.push(`Entry patience scored ${entryScore}/100. Your ${earlyEntries.length} early entries averaged ${formatSignedCurrency(earlyAvg)} per trade compared to ${formatSignedCurrency(confirmedAvg)} for entries placed after the opening window settled, a ${formatSignedCurrency(gap)} gap per trade. That difference is the measurable cost of anticipating rather than confirming.`);
     } else {
-      focusItems.push(`Entry patience is at ${entryScore}/100 — entries are being placed before the opening structure has formed. Define the specific price action condition that needs to appear before the order goes in, and treat anything that doesn't meet it as a pass, not a delayed entry.`);
+      focusItems.push(`Entry patience is at ${entryScore}/100, entries are being placed before the opening structure has formed. Define the specific price action condition that needs to appear before the order goes in, and treat anything that doesn't meet it as a pass, not a delayed entry.`);
     }
   }
 
@@ -1065,7 +1065,7 @@ export function buildData(
   const postLossItem = periodProcess.items.find(i => i.label === 'Post-loss mgmt');
   if (postLossItem && !postLossItem.noData && postLossItem.value < 65) {
     const lossCount = periodTrades.filter(t => Number(t.pnl ?? 0) < 0).length;
-    focusItems.push(`Post-loss management scored ${postLossItem.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this period. The data suggests re-entries are happening too quickly after losses — before sizing has reset or before the reactive state has cleared. Compound losses, where one bad trade leads immediately into another, are almost always a pacing problem, not an edge problem.`);
+    focusItems.push(`Post-loss management scored ${postLossItem.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this period. The data suggests re-entries are happening too quickly after losses, before sizing has reset or before the reactive state has cleared. Compound losses, where one bad trade leads immediately into another, are almost always a pacing problem, not an edge problem.`);
   }
 
   // Plan adherence
@@ -1073,14 +1073,14 @@ export function buildData(
   if (planScore < 75) {
     if (periodRuleReport.checked > 0 && periodRuleReport.mostBrokenRule) {
       const rule = periodRuleReport.mostBrokenRule;
-      focusItems.push(`Plan adherence is at ${planScore}/100. "${rule.label}" broke ${rule.failed} time${rule.failed !== 1 ? 's' : ''} this period and appeared on ${rule.dates.length} day${rule.dates.length !== 1 ? 's' : ''}. That is now the rule to protect first — make it visible before entry and require a deliberate pass/fail confirmation.`);
+      focusItems.push(`Plan adherence is at ${planScore}/100. "${rule.label}" broke ${rule.failed} time${rule.failed !== 1 ? 's' : ''} this period and appeared on ${rule.dates.length} day${rule.dates.length !== 1 ? 's' : ''}. That is now the rule to protect first, make it visible before entry and require a deliberate pass/fail confirmation.`);
     } else {
     const violations = periodTrades.filter(t => t.followed_plan === false);
     const violPnl = violations.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
     if (violations.length >= 2) {
-      focusItems.push(`Plan adherence is at ${planScore}/100. ${violations.length} of ${periodTrades.length} trades deviated from the stated plan and those ${violations.length} totalled ${formatSignedCurrency(violPnl)}. Drift almost never looks like ignoring the plan — it looks like entering a trade that's close enough and rationalising the missing conditions. The conditions that get skipped are the ones that mattered.`);
+      focusItems.push(`Plan adherence is at ${planScore}/100. ${violations.length} of ${periodTrades.length} trades deviated from the stated plan and those ${violations.length} totalled ${formatSignedCurrency(violPnl)}. Drift almost never looks like ignoring the plan, it looks like entering a trade that's close enough and rationalising the missing conditions. The conditions that get skipped are the ones that mattered.`);
     } else {
-      focusItems.push(`Plan adherence is at ${planScore}/100. The most common form of drift is entering a trade that partially meets criteria and rationalising the gap — the trade feels valid in the moment but the missing condition was load-bearing. Before each entry, state what specifically needs to be true, and if any one condition isn't present, that's the signal to pass.`);
+      focusItems.push(`Plan adherence is at ${planScore}/100. The most common form of drift is entering a trade that partially meets criteria and rationalising the gap, the trade feels valid in the moment but the missing condition was load-bearing. Before each entry, state what specifically needs to be true, and if any one condition isn't present, that's the signal to pass.`);
     }
   }
     }
@@ -1088,13 +1088,13 @@ export function buildData(
   // Size discipline
   const sizeScore = byLabel.get('Size discipline') ?? 0;
   if (sizeScore < 75) {
-    focusItems.push(`Size discipline scored ${sizeScore}/100. Discretionary size changes typically happen when conviction is high — but confidence peaks right before a trade fails as often as right before it works. At ${Math.round(periodSummary.winRate)}% win rate this period, consistency in sizing does more for your P&L than trying to optimise which trades get more size.`);
+    focusItems.push(`Size discipline scored ${sizeScore}/100. Discretionary size changes typically happen when conviction is high, but confidence peaks right before a trade fails as often as right before it works. At ${Math.round(periodSummary.winRate)}% win rate this period, consistency in sizing does more for your P&L than trying to optimise which trades get more size.`);
   }
 
   // Weakest confluence
   const MIN_CONFLUENCE_FOCUS = tf === '1W' ? 3 : tf === '1M' ? 5 : tf === '3M' ? 8 : 10;
   if (weakestConfluence && weakestConfluence.trades >= MIN_CONFLUENCE_FOCUS) {
-    focusItems.push(`"${weakestConfluence.label}" has appeared in ${weakestConfluence.trades} trades at ${Math.round(weakestConfluence.winRate)}% win rate and ${formatSignedCurrency(weakestConfluence.netPnl)} net — averaging ${formatSignedCurrency(weakestConfluence.avgPnl)} per trade. The confluence is subtracting from your edge rather than adding to it. Until the sample shows a consistent positive result, treat it as a secondary filter, not a standalone trigger.`);
+    focusItems.push(`"${weakestConfluence.label}" has appeared in ${weakestConfluence.trades} trades at ${Math.round(weakestConfluence.winRate)}% win rate and ${formatSignedCurrency(weakestConfluence.netPnl)} net, averaging ${formatSignedCurrency(weakestConfluence.avgPnl)} per trade. The confluence is subtracting from your edge rather than adding to it. Until the sample shows a consistent positive result, treat it as a secondary filter, not a standalone trigger.`);
   }
 
   const nextSunday = (() => {

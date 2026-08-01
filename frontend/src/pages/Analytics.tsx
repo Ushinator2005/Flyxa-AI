@@ -155,9 +155,9 @@ function getPeriodLabel(period: PeriodKey, offset: number, now: Date): string {
 
   if (period === '1W') {
     if (start.getFullYear() === endInclusive.getFullYear()) {
-      return `${fmt(start)} – ${fmt(endInclusive)}, ${start.getFullYear()}`;
+      return `${fmt(start)}, ${fmt(endInclusive)}, ${start.getFullYear()}`;
     }
-    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – ${endInclusive.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}, ${endInclusive.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }
 
   if (period === '1M') {
@@ -166,9 +166,9 @@ function getPeriodLabel(period: PeriodKey, offset: number, now: Date): string {
 
   if (period === '3M') {
     if (start.getFullYear() === endInclusive.getFullYear()) {
-      return `${fmt(start)} – ${fmt(endInclusive)}, ${start.getFullYear()}`;
+      return `${fmt(start)}, ${fmt(endInclusive)}, ${start.getFullYear()}`;
     }
-    return `${start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} – ${endInclusive.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+    return `${start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}, ${endInclusive.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
   }
 
   return '';
@@ -276,77 +276,6 @@ function formatHoldSeconds(seconds: number): string {
 
 // Diverging skyline — columns rise (green) or fall (red) from a shared zero
 // baseline whose position is proportional to the data's positive/negative range.
-function DivergingColumns({ rows }: { rows: Array<{ label: string; pnl: number; count: number }> }) {
-  const maxPos = Math.max(0, ...rows.map(r => r.pnl));
-  const maxNeg = Math.max(0, ...rows.map(r => -r.pnl));
-  const total = maxPos + maxNeg;
-
-  if (total <= 0 || rows.every(r => r.count === 0)) {
-    return <p style={{ margin: '18px 0 6px', fontSize: 12, color: 'var(--app-text-subtle)' }}>No trades in this period.</p>;
-  }
-
-  const baselinePct = (maxPos / total) * 100;
-
-  return (
-    <>
-      <div style={{ position: 'relative', height: 170, marginTop: 18 }}>
-        <span style={{ position: 'absolute', left: 0, right: 0, top: `${baselinePct}%`, height: 1, backgroundColor: 'var(--app-border)' }} />
-        <div style={{
-          position: 'absolute', inset: 0, display: 'grid', columnGap: 14,
-          gridTemplateColumns: `repeat(${rows.length}, 1fr)`,
-          gridTemplateRows: `${maxPos}fr ${maxNeg}fr`,
-        }}>
-          {rows.map((row, i) => {
-            if (row.count === 0) return null;
-            const positive = row.pnl >= 0;
-            const rowMax = positive ? maxPos : maxNeg;
-            const heightPct = rowMax > 0 ? Math.max(3, (Math.abs(row.pnl) / rowMax) * 76) : 0;
-            return (
-              <div
-                key={row.label}
-                title={`${row.label} · ${row.count} trade${row.count !== 1 ? 's' : ''} · ${formatSignedCurrency(row.pnl)}`}
-                style={{
-                  gridColumn: i + 1, gridRow: positive ? 1 : 2, minWidth: 0,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  justifyContent: positive ? 'flex-end' : 'flex-start',
-                }}
-              >
-                {positive && (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', color: DASHBOARD_GREEN, marginBottom: 6 }}>
-                    {formatSignedCurrency(row.pnl)}
-                  </span>
-                )}
-                <div style={{
-                  width: '100%', maxWidth: 46, height: `${heightPct}%`,
-                  backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9,
-                  borderRadius: positive ? '3px 3px 0 0' : '0 0 3px 3px',
-                }} />
-                {!positive && (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', color: DASHBOARD_RED, marginTop: 6 }}>
-                    {formatSignedCurrency(row.pnl)}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rows.length}, 1fr)`, columnGap: 14, marginTop: 12, borderTop: '1px solid var(--app-border)', paddingTop: 9 }}>
-        {rows.map(row => (
-          <div key={row.label} style={{ textAlign: 'center', minWidth: 0 }}>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: row.count > 0 ? 'var(--app-text-muted)' : 'var(--app-text-subtle)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {row.label}
-            </p>
-            <p style={{ margin: '3px 0 0', fontSize: 9.5, color: 'var(--app-text-subtle)' }}>
-              {row.count > 0 ? `${row.count} trade${row.count !== 1 ? 's' : ''}` : '--'}
-            </p>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
 export default function Analytics() {
   const { trades, loading } = useTrades();
   const { filterTradesBySelectedAccount, preferences, selectedAccountId } = useAppSettings();
@@ -391,7 +320,7 @@ export default function Analytics() {
   const filteredTrades = useMemo(() => {
     const range = periodRange;
     const next = accountTrades.filter(trade => {
-      if (!range) return true; // ALL — include everything
+      if (!range) return true; // ALL, include everything
       const tradeDate = parseTradeDateOnly(trade);
       if (!tradeDate) return false;
       // YTD: open-ended upper bound (today is the end); others: strict [start, end) range
@@ -585,16 +514,22 @@ export default function Analytics() {
     const daysInMonth = new Date(y, m, 0).getDate();
     const byDate = new Map(daily.map(d => [d.date, d]));
 
-    const days: AdherenceDay[] = Array.from({ length: daysInMonth }, (_, i) => {
-      const date = `${monthKey}-${String(i + 1).padStart(2, '0')}`;
+    // Weekdays only — weekends aren't tradable, so they never belong in the
+    // ribbon or any adherence figure (the daily-journal streak is the sole
+    // place weekends still count).
+    const days: AdherenceDay[] = [];
+    for (let dnum = 1; dnum <= daysInMonth; dnum++) {
+      const date = `${monthKey}-${String(dnum).padStart(2, '0')}`;
+      const weekday = new Date(`${date}T00:00:00`).getDay();
+      if (weekday === 0 || weekday === 6) continue;
       const d = byDate.get(date);
       const traded = !!d && d.checked > 0;
-      return {
+      days.push({
         date, traded,
         held: traded && d!.failed === 0,
         breaches: d ? d.failedRules.map(r => ({ id: r.ruleId, label: r.label })) : [],
-      };
-    });
+      });
+    }
 
     const trading = days.filter(d => d.traded);
     const tradingDays = trading.length;
@@ -1255,28 +1190,32 @@ export default function Analytics() {
           order="given" unit="sessions" sortLabel="by session"
         />
 
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <h3 style={KICKER}>P&amp;L by hold time</h3>
-          {holdTime.known > 0 ? (
-            <>
-              <DivergingColumns rows={holdTime.rows} />
-              <p style={{ margin: '10px 0 0', fontSize: 10.5, lineHeight: 1.5, color: 'var(--app-text-subtle)' }}>
+        {holdTime.known > 0 ? (
+          <LollipopDistribution
+            title="P&L by hold time"
+            rows={holdTime.rows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
+            order="given" unit="ranges" sortLabel="by duration"
+            note={
+              <>
                 Winners held <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgWinHold)}</b> avg
                 {' '}· losers <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgLossHold)}</b>
                 {metrics.avgLossHold > 0 && metrics.avgWinHold > 0 && metrics.avgLossHold > metrics.avgWinHold * 1.5 && (
-                  <> — <span style={{ color: DASHBOARD_RED }}>you sit in losers ~{(metrics.avgLossHold / metrics.avgWinHold).toFixed(1)}× longer than winners.</span></>
+                  <>, <span style={{ color: DASHBOARD_RED }}>you sit in losers ~{(metrics.avgLossHold / metrics.avgWinHold).toFixed(1)}× longer than winners.</span></>
                 )}
                 {holdTime.worst && holdTime.best && holdTime.worst.label !== holdTime.best.label && (
                   <> {holdTime.worst.label} holds are the leak ({formatSignedCurrency(holdTime.worst.pnl)}).</>
                 )}
-              </p>
-            </>
-          ) : (
-            <p style={{ margin: '18px 0 6px', fontSize: 12, color: 'var(--app-text-subtle)' }}>
-              No hold-time data in this period — durations come from scanned charts or the journal&apos;s entry/exit time fields.
+              </>
+            }
+          />
+        ) : (
+          <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]" style={{ padding: '20px 22px' }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '1.6px', textTransform: 'uppercase', color: 'var(--app-text-muted)' }}>P&amp;L by hold time</p>
+            <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--app-text-subtle)' }}>
+              No hold-time data in this period, durations come from scanned charts or the journal&apos;s entry/exit time fields.
             </p>
-          )}
-        </section>
+          </section>
+        )}
       </div>
 
       {/* P&L Distribution — dot plot */}

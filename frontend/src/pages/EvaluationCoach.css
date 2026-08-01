@@ -1418,14 +1418,22 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-top: 7px;
+  gap: 11px;
+  margin-top: 9px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--txt-3);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--txt-2);
 }
-.ec-evhd-meta em { font-style: normal; color: var(--txt-3); opacity: .5; }
-.ec-evhd-meta i { font-style: normal; color: var(--txt); }
+.ec-evhd-meta em { font-style: normal; color: var(--txt-3); opacity: .45; }
+.ec-evhd-meta i {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--txt);
+  font-variant-numeric: tabular-nums;
+}
+.ec-evhd-meta .ec-evhd-mll i { color: #FF7B6E; }
 .ec-phase {
   display: inline-flex;
   align-items: center;

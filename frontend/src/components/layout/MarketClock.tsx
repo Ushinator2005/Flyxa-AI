@@ -63,7 +63,7 @@ export default function MarketClock({ displayTimezone }: MarketClockProps) {
   const accent = timing.marketOpenNow ? '#22c55e' : '#f59e0b';
 
   const title = presetOption
-    ? `${presetOption.label} · ${timing.marketOpenNow ? `${detail} to close` : `opens in ${detail}`} — change in Settings`
+    ? `${presetOption.label} · ${timing.marketOpenNow ? `${detail} to close` : `opens in ${detail}`}, change in Settings`
     : undefined;
 
   return (

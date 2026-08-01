@@ -875,7 +875,7 @@ export default function Settings() {
     const { tradesRecovered, daysRecovered } = await recoverMissingTradesFromLocalBackup(user.id);
 
     if (tradesRecovered === 0 && daysRecovered === 0) {
-      setImportFeedback({ ok: true, msg: 'Already up to date — no missing trades found.' });
+      setImportFeedback({ ok: true, msg: 'Already up to date, no missing trades found.' });
       setTimeout(() => setImportFeedback(null), 4000);
       return;
     }
@@ -1666,17 +1666,17 @@ export default function Settings() {
         </div>
         <SectionPanel
           title="Membership"
-          subtitle="Your Flyxa subscription — plan status, checkout, and billing portal."
+          subtitle="Your Flyxa subscription, plan status, checkout, and billing portal."
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <p style={{ fontSize: '12px', color: T3, lineHeight: 1.6, maxWidth: 520 }}>
               {subscription.loading
                 ? 'Checking membership status…'
                 : !subscription.configured
-                  ? 'Billing is not switched on in this environment — all features are open.'
+                  ? 'Billing is not switched on in this environment, all features are open.'
                   : subscription.active
                     ? subscription.currentPeriodEnd
-                      ? `Membership active — renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
+                      ? `Membership active, renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
                       : 'Membership active.'
                     : 'No active membership on this account.'}
             </p>
@@ -2219,7 +2219,7 @@ export default function Settings() {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <p style={{ fontSize: '12px', color: T3, lineHeight: 1.6, maxWidth: 520 }}>
-                While on, each chart you scan downloads a <span style={{ color: T1, fontFamily: MONO }}>bundle.json</span> — drop
+                While on, each chart you scan downloads a <span style={{ color: T1, fontFamily: MONO }}>bundle.json</span>, drop
                 it into <span style={{ color: T1, fontFamily: MONO }}>scanner-evals/cases/</span>, correct any wrong fields, and
                 it becomes ground truth for <span style={{ color: T1, fontFamily: MONO }}>npm run evals</span>.
               </p>
@@ -2257,7 +2257,7 @@ export default function Settings() {
             </div>
             {evalCaptureOn && (
               <p style={{ marginTop: '10px', fontSize: '11px', color: AMBER, lineHeight: 1.6 }}>
-                Capture is on — the next scans will each download a JSON bundle.
+                Capture is on, the next scans will each download a JSON bundle.
               </p>
             )}
           </SectionPanel>
@@ -3695,7 +3695,7 @@ export default function Settings() {
                   {billingOffer.template.priceCadence === 'monthly' ? '/month' : ''} will be pre-filled.</>
               )}
               {billingOffer.template && billingOffer.template.priceAmount == null && (
-                <> No verified price for this program — you can add the cost in Billing.</>
+                <> No verified price for this program, you can add the cost in Billing.</>
               )}
             </p>
             <div className="mt-4 flex justify-end gap-2">

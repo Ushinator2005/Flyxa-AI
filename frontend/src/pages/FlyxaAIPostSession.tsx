@@ -644,7 +644,7 @@ export default function FlyxaAIPostSession() {
                                 <span style={{ color: biasColor(direction) }}>{direction}</span>
                                 {pct !== null
                                   ? <> → <span style={{ color: adherenceColor(pct), fontFamily: C.mono, fontWeight: 600 }}>{pct}% aligned</span> <span style={{ color: C.t2 }}>({total})</span></>
-                                  : <span style={{ color: C.t2 }}> — no trades</span>}
+                                  : <span style={{ color: C.t2 }}>, no trades</span>}
                               </span>
                             );
                           })}
@@ -798,7 +798,7 @@ export default function FlyxaAIPostSession() {
                           <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.09em', color: C.t2, fontFamily: C.mono, minWidth: 72, flexShrink: 0 }}>Pre-mortem</span>
                           <span style={{ fontSize: 12, lineHeight: 1.5, color: C.t1 }}>
                             You predicted: <span style={{ fontStyle: 'italic', color: C.t0 }}>"{ps.premortem.trim()}"</span>
-                            {' — '}<span style={{ color: netPnl < 0 ? C.amb : C.t2 }}>did it play out?</span>
+                            {', '}<span style={{ color: netPnl < 0 ? C.amb : C.t2 }}>did it play out?</span>
                           </span>
                         </div>
                       )}

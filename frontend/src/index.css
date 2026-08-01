@@ -261,6 +261,10 @@ html[data-theme='light'] .hm-neg-1 { background-color: rgba(255, 23, 68, 0.12); 
     min-height: 100svh;
     position: relative;
     background: var(--app-bg);
+    /* Match the marketing landing page's orange accent (not the app amber). */
+    --accent: #FF6B2B;
+    --amber: #FF6B2B;
+    --color-amber: #FF6B2B;
   }
 
   .auth-theme-toggle {
@@ -1045,9 +1049,13 @@ html[data-theme='light'] .glass-card {
 }
 
 html[data-theme='light'] .auth-shell {
+  /* Landing uses a muted orange on light sections. */
+  --accent: #C2551B;
+  --amber: #C2551B;
+  --color-amber: #C2551B;
   background:
-    radial-gradient(ellipse 70% 55% at 68% -8%, rgba(245, 158, 11, 0.09), transparent),
-    radial-gradient(ellipse 55% 65% at -8% 108%, rgba(245, 158, 11, 0.06), transparent),
+    radial-gradient(ellipse 70% 55% at 68% -8%, rgba(255, 107, 43, 0.09), transparent),
+    radial-gradient(ellipse 55% 65% at -8% 108%, rgba(255, 107, 43, 0.06), transparent),
     var(--app-bg);
 }
 

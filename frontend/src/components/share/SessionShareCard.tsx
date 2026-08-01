@@ -11,7 +11,7 @@ const PETAL_PATH = 'M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z';
 // The card is authored at a fixed size and merely scaled down to fit narrow
 // screens, so the exported design is pixel-identical on every device.
 const CARD_W = 780;
-const CARD_H = Math.round((CARD_W * 9) / 16); // 439 — locked 16:9
+const CARD_H = Math.round((CARD_W * 9) / 16); // 439, locked 16:9
 
 function petalTransform(rotation: number, scale: number): string {
   const offset = 50 * (1 - scale);
@@ -141,13 +141,13 @@ export default function SessionShareCard({ open, onClose, data }: {
     setBusy(false);
     if (!captured) return;
     const file = new File([captured.blob], 'flyxa-session.png', { type: 'image/png' });
-    const text = `Session recap · ${maskAmount ? '' : `${fmtMoney(data.netPnl)} · `}${data.winRate}% win rate — journaled with Flyxa`;
+    const text = `Session recap · ${maskAmount ? '' : `${fmtMoney(data.netPnl)} · `}${data.winRate}% win rate, journaled with Flyxa`;
 
     if (navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: 'Flyxa session recap', text });
         return;
-      } catch { /* sheet dismissed — fall through to desktop behavior */ }
+      } catch { /* sheet dismissed, fall through to desktop behavior */ }
     }
 
     if (platform === 'x') {
@@ -312,7 +312,7 @@ export default function SessionShareCard({ open, onClose, data }: {
           ))}
         </div>
         <p style={{ margin: '-4px 0 0', fontSize: 10.5, color: C.t2, lineHeight: 1.5 }}>
-          On your phone this opens the share sheet straight into the app. On desktop, X and Discord get the image on your clipboard — the others download it and open their upload page.
+          On your phone this opens the share sheet straight into the app. On desktop, X and Discord get the image on your clipboard, the others download it and open their upload page.
         </p>
 
         {/* ── Controls ── */}

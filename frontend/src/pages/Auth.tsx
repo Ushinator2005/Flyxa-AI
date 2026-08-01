@@ -8,7 +8,7 @@ import FlyxaLogo from '../components/common/FlyxaLogo.js';
 const features = [
   {
     title: 'Journal with context',
-    description: 'Chart, execution notes, and trade rationale — all in one place.',
+    description: 'Chart, execution notes, and trade rationale, all in one place.',
   },
   {
     title: 'Review without noise',

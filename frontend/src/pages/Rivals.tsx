@@ -141,11 +141,11 @@ function MovementBadge({ delta, period }: { delta: number; period: LeaderboardPe
 
 function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
   const stats = getPeriodStats(rival, period);
-  if (stats.tradeCount === 0) return 'No logged trades yet — the table moves when the journal fills.';
-  if (stats.ruleAdherence > 0 && stats.ruleAdherence < 80) return `Process under pressure — ${Math.round(stats.ruleAdherence)}% rule adherence.`;
-  if (stats.netPnl < 0) return 'Protect downside first — one clean day gets you back in motion.';
+  if (stats.tradeCount === 0) return 'No logged trades yet, the table moves when the journal fills.';
+  if (stats.ruleAdherence > 0 && stats.ruleAdherence < 80) return `Process under pressure, ${Math.round(stats.ruleAdherence)}% rule adherence.`;
+  if (stats.netPnl < 0) return 'Protect downside first, one clean day gets you back in motion.';
   if (stats.consistency < 65) return 'Profitable, but consistency is the fastest ranking lever.';
-  return 'Momentum intact — keep pressing the repeatable setup.';
+  return 'Momentum intact, keep pressing the repeatable setup.';
 }
 
 const prefersReducedMotion = () =>
@@ -418,7 +418,7 @@ export default function Rivals() {
             {activeLeague?.name ?? 'Rivals'}
           </h1>
           <p style={{ margin: '8px 0 0', fontSize: 13.5, color: LB.muted, lineHeight: 1.6 }}>
-            Ranked on <span className="rvc-verified"><Check size={12} strokeWidth={3} /> verified journal data</span> — no screenshots, no claims.
+            Ranked on <span className="rvc-verified"><Check size={12} strokeWidth={3} /> verified journal data</span>, no screenshots, no claims.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
@@ -566,7 +566,7 @@ export default function Rivals() {
               <div className="rvc-cd-head">Chasing <b>{myAhead.displayName}</b></div>
               <div className="rvc-cd-big" style={{ color: LB.amber }}>{formatMetricGap(myGap, metric)}</div>
               <div className="rvc-track"><div className="rvc-track-fill rvc-track-fill--amber" style={{ width: `${Math.max(4, Math.min(100, chaseFillPct))}%` }} /></div>
-              <div className="rvc-cd-note">{chaseFillPct}% of the way up the board — {formatMetricGap(myGap, metric)} to take #{myPosition - 1}.</div>
+              <div className="rvc-cd-note">{chaseFillPct}% of the way up the board, {formatMetricGap(myGap, metric)} to take #{myPosition - 1}.</div>
             </>) : (<>
               <div className="rvc-cd-head" style={{ color: LB.green }}>Leading the board</div>
               <div className="rvc-cd-big" style={{ color: LB.green }}>#1</div>
@@ -578,7 +578,7 @@ export default function Rivals() {
               <div className="rvc-cd-head">Defending <b>#{myPosition}</b> from <b>{behindRival.displayName}</b></div>
               <div className="rvc-cd-big" style={{ color: defendUrgent ? LB.red : LB.text }}>{formatMetricGap(defendGap, metric)}</div>
               <div className="rvc-track"><div className={`rvc-track-fill ${defendUrgent ? 'rvc-track-fill--red' : 'rvc-track-fill--green'}`} style={{ width: `${Math.max(4, defendCushion)}%` }} /></div>
-              <div className={`rvc-cd-note${defendUrgent ? ' rvc-cd-note--warn' : ''}`}>{defendUrgent ? 'Closing in fast — one red day flips the spot.' : 'A comfortable cushion, for now.'}</div>
+              <div className={`rvc-cd-note${defendUrgent ? ' rvc-cd-note--warn' : ''}`}>{defendUrgent ? 'Closing in fast, one red day flips the spot.' : 'A comfortable cushion, for now.'}</div>
             </>) : (<>
               <div className="rvc-cd-head">Back of the board</div>
               <div className="rvc-cd-note" style={{ marginTop: 8 }}>No one behind you yet. Invite more traders to raise the stakes.</div>
@@ -593,7 +593,7 @@ export default function Rivals() {
           The average funded trader clears a <b>{GHOST_WIN}% win rate</b>.{' '}
           {beatingGhost
             ? <>You're <span style={{ color: LB.green, fontWeight: 600 }}>ahead of that benchmark</span> at {myWin}%.</>
-            : <>You're at {myWin}% — <span style={{ color: LB.text, fontWeight: 600 }}>{GHOST_WIN - myWin} points</span> from clearing it.</>}
+            : <>You're at {myWin}%, <span style={{ color: LB.text, fontWeight: 600 }}>{GHOST_WIN - myWin} points</span> from clearing it.</>}
         </div>
       )}
 
@@ -629,7 +629,7 @@ export default function Rivals() {
           <div style={{ maxWidth: 420 }}>
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: LB.text }}>Your board is empty</h3>
             <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.6, color: LB.muted }}>
-              Rivals compares verified journal stats side by side — profit, consistency, and process. Invite a trading friend by their Flyxa username to start the table.
+              Rivals compares verified journal stats side by side, profit, consistency, and process. Invite a trading friend by their Flyxa username to start the table.
             </p>
           </div>
           <button type="button" onClick={() => setIsAddOpen(true)} style={{ ...btnPrimary, height: 40 }}><Plus size={14} /> Invite a trader</button>

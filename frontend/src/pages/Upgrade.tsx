@@ -59,7 +59,7 @@ export default function Upgrade() {
 
         {checkoutResult === 'success' && (
           <p style={{ marginTop: 14, fontSize: 12.5, fontWeight: 600, color: C.grn }}>
-            Payment received — your membership is being activated. This page updates within a minute.
+            Payment received, your membership is being activated. This page updates within a minute.
           </p>
         )}
 
@@ -86,7 +86,7 @@ export default function Upgrade() {
               <div key={title} style={{ display: 'flex', gap: 10 }}>
                 <span style={{ flexShrink: 0, fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: C.grn, marginTop: 1 }}>✓</span>
                 <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: C.t1 }}>
-                  <span style={{ color: C.t0, fontWeight: 600 }}>{title}</span> — {detail}
+                  <span style={{ color: C.t0, fontWeight: 600 }}>{title}</span>, {detail}
                 </p>
               </div>
             ))}
@@ -95,7 +95,7 @@ export default function Upgrade() {
           <div style={{ padding: '14px 20px 18px', borderTop: `1px solid ${C.b0}` }}>
             {!configured ? (
               <p style={{ fontSize: 12, color: C.t2, lineHeight: 1.6 }}>
-                Billing isn't switched on in this environment yet — all features are open.
+                Billing isn't switched on in this environment yet, all features are open.
               </p>
             ) : active ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>

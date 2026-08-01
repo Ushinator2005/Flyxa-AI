@@ -618,7 +618,7 @@ export default function FlyxaAIAsk() {
                   Ask one clean question.
                 </h1>
                 <p style={{ fontSize: 13, color: C.t1, marginTop: 8, maxWidth: 560, lineHeight: 1.7 }}>
-                  Ask anything in plain English — Flyxa AI analyses your actual trade history and thinks through the numbers.
+                  Ask anything in plain English, Flyxa AI analyses your actual trade history and thinks through the numbers.
                 </p>
               </div>
               {history.length > 0 && (
@@ -913,7 +913,7 @@ export default function FlyxaAIAsk() {
                   Ask anything about your trading
                 </div>
                 <div style={{ fontSize: 12.5, color: C.t2, maxWidth: 380, margin: '0 auto', lineHeight: 1.6 }}>
-                  Flyxa AI reads your actual trade data and reasons over it to give you genuine, personalised insights — not generic advice.
+                  Flyxa AI reads your actual trade data and reasons over it to give you genuine, personalised insights, not generic advice.
                 </div>
                 <div style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
                   {QUICK_QUESTIONS.slice(8).map(q => (

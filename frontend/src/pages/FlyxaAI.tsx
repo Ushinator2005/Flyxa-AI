@@ -330,8 +330,8 @@ export default function FlyxaAI() {
   const weekGrade = boundedScore >= 90 ? 'A' : boundedScore >= 75 ? 'B' : boundedScore >= 60 ? 'C' : 'D';
   const nextThreshold = weekGrade === 'A' ? null : weekGrade === 'B' ? 90 : weekGrade === 'C' ? 75 : 60;
   const gradeHint = nextThreshold === null
-    ? `Process score at ${boundedScore}/100 — all four metrics are holding. The focus now is protecting these conditions rather than changing anything that's working.`
-    : `${weakestProcess?.label ?? 'Execution quality'} is scoring ${weakestProcess?.value ?? boundedScore}/100 — the biggest single drag on the overall grade. Closing that specific gap is worth more than adding trades.`;
+    ? `Process score at ${boundedScore}/100, all four metrics are holding. The focus now is protecting these conditions rather than changing anything that's working.`
+    : `${weakestProcess?.label ?? 'Execution quality'} is scoring ${weakestProcess?.value ?? boundedScore}/100, the biggest single drag on the overall grade. Closing that specific gap is worth more than adding trades.`;
 
   const actionItems = useMemo(() => {
     const items: string[] = [];
@@ -339,31 +339,31 @@ export default function FlyxaAI() {
     const wp = weakestProcess;
 
     if (wp?.label === 'Entry patience') {
-      items.push(`Entry patience at ${wp.value}/100 — the trade idea is there but the timing is costing edge. The gap between anticipating a move and waiting for it to confirm is where this score lives. Until there's a specific condition defined that triggers the entry, you're relying on feel rather than criteria.`);
+      items.push(`Entry patience at ${wp.value}/100, the trade idea is there but the timing is costing edge. The gap between anticipating a move and waiting for it to confirm is where this score lives. Until there's a specific condition defined that triggers the entry, you're relying on feel rather than criteria.`);
     } else if (wp?.label === 'Post-loss mgmt') {
       const lossCount = wt.filter(t => Number(t.pnl ?? 0) < 0).length;
-      items.push(`Post-loss management at ${wp.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this week. The first loss is rarely the problem — it's what happens in the 30 minutes after it. Re-entering before you've reset the emotional state or the position sizing is where the real damage gets done. A loss doesn't clear itself by winning the next trade.`);
+      items.push(`Post-loss management at ${wp.value}/100 across ${lossCount} losing trade${lossCount !== 1 ? 's' : ''} this week. The first loss is rarely the problem, it's what happens in the 30 minutes after it. Re-entering before you've reset the emotional state or the position sizing is where the real damage gets done. A loss doesn't clear itself by winning the next trade.`);
     } else if (wp?.label === 'Size discipline') {
-      items.push(`Size discipline at ${wp.value}/100. If the conditions for sizing up aren't defined in advance and objective, the decisions are being made on confidence — and confidence tends to peak right before a trade fails just as often as right before it works. The edge in sizing comes from criteria, not from feel.`);
+      items.push(`Size discipline at ${wp.value}/100. If the conditions for sizing up aren't defined in advance and objective, the decisions are being made on confidence, and confidence tends to peak right before a trade fails just as often as right before it works. The edge in sizing comes from criteria, not from feel.`);
     } else if (wp?.label === 'Plan adherence') {
       const violations = wt.filter(t => t.followed_plan === false);
       const violPnl = violations.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
       if (violations.length > 0) {
-        items.push(`Plan adherence at ${wp.value}/100 — ${violations.length} trade${violations.length !== 1 ? 's' : ''} off-plan this week totalling ${formatSignedCurrency(violPnl)}. Every off-plan trade that produces a win makes the next deviation easier to justify. Every one that loses adds to the actual cost. The data has made its argument.`);
+        items.push(`Plan adherence at ${wp.value}/100, ${violations.length} trade${violations.length !== 1 ? 's' : ''} off-plan this week totalling ${formatSignedCurrency(violPnl)}. Every off-plan trade that produces a win makes the next deviation easier to justify. Every one that loses adds to the actual cost. The data has made its argument.`);
       } else {
-        items.push(`Plan adherence at ${wp.value}/100 — the gap is in coverage rather than outright violations. Trades logged without plan data count against the score because they can't be verified. Filling in the followed_plan field consistently is what gives this metric its signal.`);
+        items.push(`Plan adherence at ${wp.value}/100, the gap is in coverage rather than outright violations. Trades logged without plan data count against the score because they can't be verified. Filling in the followed_plan field consistently is what gives this metric its signal.`);
       }
     }
 
     const riskInsight = displayedInsights.find(i => i.type === 'risk');
     if (riskInsight) {
       const firstSentence = riskInsight.body.split(/[.!?]/)[0];
-      items.push(`${firstSentence}. That's not a hypothesis — it's the active risk pattern in the data this period.`);
+      items.push(`${firstSentence}. That's not a hypothesis, it's the active risk pattern in the data this period.`);
     }
     const edgeInsight = displayedInsights.find(i => i.type === 'edge');
     if (edgeInsight) {
       const firstSentence = edgeInsight.body.split(/[.!?]/)[0];
-      items.push(`${firstSentence}. That's the working edge right now — it deserves priority in terms of preparation and entry selection.`);
+      items.push(`${firstSentence}. That's the working edge right now, it deserves priority in terms of preparation and entry selection.`);
     }
 
     dedupedFocusItems.forEach(item => items.push(item));
@@ -405,7 +405,7 @@ export default function FlyxaAI() {
   const coachSubcopy = safeAccountTrades.length === 0
     ? 'Log a few trades and Flyxa will turn the journal into a practical debrief.'
     : smallSample
-      ? `Early read — only ${weeklyDebriefData.sessionCount} session${weeklyDebriefData.sessionCount !== 1 ? 's' : ''} in this period, so treat it directionally. ${primaryAction}`
+      ? `Early read, only ${weeklyDebriefData.sessionCount} session${weeklyDebriefData.sessionCount !== 1 ? 's' : ''} in this period, so treat it directionally. ${primaryAction}`
       : primaryAction;
   const gradeSoftBackground = weekGrade === 'A'
     ? 'rgba(34,214,138,0.10)'
@@ -693,7 +693,7 @@ function SummarySection({
 
         {thinCoverage && completeness && (
           <p className="mt-6 text-[11px] leading-relaxed" style={{ color: colors.t2 }}>
-            Data coverage: emotion tagged {completeness.emotionPct}% · plan logged {completeness.planPct}% — thin coverage limits this report's accuracy.{' '}
+            Data coverage: emotion tagged {completeness.emotionPct}% · plan logged {completeness.planPct}%, thin coverage limits this report's accuracy.{' '}
             <button type="button" className="font-semibold" style={{ color: colors.acc }} onClick={() => navigate('/journal')}>
               Fill journal gaps →
             </button>
@@ -782,7 +782,7 @@ function EmptyWeekReport({ prevPnl, prevLabel, timeframe }: { prevPnl: number; p
           Nothing to grade this {periodNoun}.
         </h2>
         <p className="mt-3 max-w-[540px] text-[13.5px] leading-7" style={{ color: colors.t1 }}>
-          A quiet {periodNoun} is not a failing one — scores and findings only
+          A quiet {periodNoun} is not a failing one, scores and findings only
           exist where there are trades. The report resumes with your next
           logged session.
         </p>
@@ -811,7 +811,7 @@ function InsightsListSection({ topInsights, lockedTokens, navigate }: { topInsig
 
                     {topInsights.length === 0 && (
                       <p className="px-5 pb-4 pt-4 text-[12.5px] leading-6 lg:px-7" style={{ color: colors.t1 }}>
-                        Not enough tagged data for firm findings this period — the
+                        Not enough tagged data for firm findings this period, the
                         row below shows what more logging unlocks.
                       </p>
                     )}

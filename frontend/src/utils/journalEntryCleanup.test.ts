@@ -75,7 +75,7 @@ describe('pruneEmptyJournalEntries', () => {
 });
 
 describe('blank trading days', () => {
-  it('keeps an explicit blank day — it signifies intent to trade with no trades taken', () => {
+  it('keeps an explicit blank day, it signifies intent to trade with no trades taken', () => {
     const entries = [
       { id: 'blank-day', date: '2026-07-20', trades: [], emotions: [], rules: [], isBlankDay: true },
       { id: 'empty-shell', date: '2026-07-19', trades: [], emotions: [], rules: [] },

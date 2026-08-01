@@ -41,7 +41,7 @@ export interface Mascot {
 
 export interface Rival {
   id: string;
-  userId?: string;        // Supabase auth UUID — present for backend rivals, absent for local/me
+  userId?: string;        // Supabase auth UUID, present for backend rivals, absent for local/me
   username: string;
   displayName: string;
   avatarInitials: string;

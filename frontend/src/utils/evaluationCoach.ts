@@ -70,10 +70,10 @@ export interface EvaluationProgress {
   minimumTradingDays: number;
   passProbability: number;
   probabilityFactors: {
-    targetScore: number;    // 0-100 — profit progress toward target (36% weight)
-    survivalScore: number;  // 0-100 — drawdown buffer health (26% weight)
-    recentWinRate: number;  // 0-100 — win rate over last 20 trades (12% weight)
-    dayQuality: number;     // 0-100 — % of days that were profitable (8% weight)
+    targetScore: number;    // 0-100, profit progress toward target (36% weight)
+    survivalScore: number;  // 0-100, drawdown buffer health (26% weight)
+    recentWinRate: number;  // 0-100, win rate over last 20 trades (12% weight)
+    dayQuality: number;     // 0-100, % of days that were profitable (8% weight)
   };
   status: 'on-track' | 'at-risk' | 'violated' | 'passed';
   warnings: string[];
@@ -424,7 +424,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
-    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $26,500 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
+    note: 'EOD trailing threshold, ratchets on end-of-day balance highs and locks at $26,500 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist, override the drawdown type if yours is one.',
   },
   {
     id: 'apex-50k',
@@ -442,7 +442,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
-    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $53,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
+    note: 'EOD trailing threshold, ratchets on end-of-day balance highs and locks at $53,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist, override the drawdown type if yours is one.',
   },
   {
     id: 'apex-100k',
@@ -460,7 +460,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
-    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $106,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
+    note: 'EOD trailing threshold, ratchets on end-of-day balance highs and locks at $106,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist, override the drawdown type if yours is one.',
   },
   {
     id: 'apex-150k',
@@ -478,7 +478,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/',
-    note: 'EOD trailing threshold — ratchets on end-of-day balance highs and locks at $159,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist — override the drawdown type if yours is one.',
+    note: 'EOD trailing threshold, ratchets on end-of-day balance highs and locks at $159,000 on Rithmic (Tradovate keeps trailing). No daily loss limit; minimum 1 trading day. Intraday-trailing account variants exist, override the drawdown type if yours is one.',
   },
 
   // ── FTMO Challenge (2-step) ─────────────────────────────────────────
@@ -593,7 +593,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 50_100,
     status: 'draft',
     sourceUrl: 'https://myfundedfutures.com',
-    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades) — locks at $50,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
+    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades), locks at $50,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
   },
   {
     id: 'mffu-100k',
@@ -610,7 +610,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 100_100,
     status: 'draft',
     sourceUrl: 'https://myfundedfutures.com',
-    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades) — locks at $100,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
+    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades), locks at $100,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
   },
   {
     id: 'mffu-150k',
@@ -627,7 +627,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 150_100,
     status: 'draft',
     sourceUrl: 'https://myfundedfutures.com',
-    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades) — locks at $150,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
+    note: 'Rapid plan. Real-time trailing drawdown (follows live equity including open-trade peaks, which Flyxa cannot see from closed trades), locks at $150,100. No daily loss limit. Minimum 2 trading days. Verify contract limits in your MFFU dashboard.',
   },
 
   // ── Take Profit Trader (Test) ───────────────────────────────────────
@@ -758,7 +758,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 25_000,
     status: 'draft',
     sourceUrl: 'https://lucidtrading.com',
-    note: 'LucidPro. EOD trailing MLL — updates at market close only and locks once the balance clears the Initial Trail Balance. No daily loss limit on the 25K. No consistency rule. Sources conflict on minimum days (1 vs 5) — verify in your Lucid dashboard.',
+    note: 'LucidPro. EOD trailing MLL, updates at market close only and locks once the balance clears the Initial Trail Balance. No daily loss limit on the 25K. No consistency rule. Sources conflict on minimum days (1 vs 5), verify in your Lucid dashboard.',
   },
   {
     id: 'lucid-50k',
@@ -777,7 +777,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 50_000,
     status: 'draft',
     sourceUrl: 'https://lucidtrading.com',
-    note: 'LucidPro. EOD trailing MLL — updates at market close only and locks once the balance clears the Initial Trail Balance. $1,200 fixed daily loss limit. No consistency rule. Sources conflict on minimum days (1 vs 5) — verify in your Lucid dashboard.',
+    note: 'LucidPro. EOD trailing MLL, updates at market close only and locks once the balance clears the Initial Trail Balance. $1,200 fixed daily loss limit. No consistency rule. Sources conflict on minimum days (1 vs 5), verify in your Lucid dashboard.',
   },
   {
     id: 'lucid-100k',
@@ -796,7 +796,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 100_000,
     status: 'draft',
     sourceUrl: 'https://lucidtrading.com',
-    note: 'LucidPro. EOD trailing MLL — updates at market close only and locks once the balance clears the Initial Trail Balance. $1,800 fixed daily loss limit. No consistency rule. Sources conflict on minimum days (1 vs 5) — verify in your Lucid dashboard.',
+    note: 'LucidPro. EOD trailing MLL, updates at market close only and locks once the balance clears the Initial Trail Balance. $1,800 fixed daily loss limit. No consistency rule. Sources conflict on minimum days (1 vs 5), verify in your Lucid dashboard.',
   },
   {
     id: 'lucid-150k',
@@ -815,7 +815,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     trailingStopsAt: 150_000,
     status: 'draft',
     sourceUrl: 'https://lucidtrading.com',
-    note: 'LucidPro. EOD trailing MLL — updates at market close only and locks once the balance clears the Initial Trail Balance. $2,700 fixed daily loss limit. No consistency rule. Sources conflict on minimum days (1 vs 5) — verify in your Lucid dashboard.',
+    note: 'LucidPro. EOD trailing MLL, updates at market close only and locks once the balance clears the Initial Trail Balance. $2,700 fixed daily loss limit. No consistency rule. Sources conflict on minimum days (1 vs 5), verify in your Lucid dashboard.',
   },
 
   // ── Tradeify (Growth) ───────────────────────────────────────────────
@@ -842,7 +842,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
-    note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $600 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
+    note: 'Growth plan. EOD trailing drawdown, keeps trailing through the whole evaluation (locks at start + $100 only once funded). $600 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
   {
     id: 'tradeify-growth-50k',
@@ -862,7 +862,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
-    note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $1,250 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
+    note: 'Growth plan. EOD trailing drawdown, keeps trailing through the whole evaluation (locks at start + $100 only once funded). $1,250 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
   {
     id: 'tradeify-growth-100k',
@@ -882,7 +882,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
-    note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $2,500 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
+    note: 'Growth plan. EOD trailing drawdown, keeps trailing through the whole evaluation (locks at start + $100 only once funded). $2,500 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
   {
     id: 'tradeify-growth-150k',
@@ -902,7 +902,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts',
-    note: 'Growth plan. EOD trailing drawdown — keeps trailing through the whole evaluation (locks at start + $100 only once funded). $3,750 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
+    note: 'Growth plan. EOD trailing drawdown, keeps trailing through the whole evaluation (locks at start + $100 only once funded). $3,750 fixed daily loss limit. No consistency rule; minimum 1 trading day.',
   },
 
   // ── TradeDay ────────────────────────────────────────────────────────
@@ -925,7 +925,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://www.tradeday.com',
-    note: 'Quick Pay (EOD) plan — verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
+    note: 'Quick Pay (EOD) plan, verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
   },
   {
     id: 'tradeday-100k',
@@ -943,7 +943,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://www.tradeday.com',
-    note: 'Quick Pay (EOD) plan — verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
+    note: 'Quick Pay (EOD) plan, verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
   },
   {
     id: 'tradeday-150k',
@@ -961,7 +961,7 @@ const STARTER_TEMPLATES: EvaluationTemplate[] = [
     status: 'verified',
     verifiedAt: '2026-07-22T00:00:00Z',
     sourceUrl: 'https://www.tradeday.com',
-    note: 'Quick Pay (EOD) plan — verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
+    note: 'Quick Pay (EOD) plan, verified against tradeday.com. EOD trailing max drawdown ratchets at settlement; no daily loss limit; minimum 5 trading days; no single day above 30% of total profit during the evaluation. Variants: Quick Pay Intraday trails in real time (override the drawdown type); Fast Pass is EOD with 3 min days and 45% consistency.',
   },
 
   // ── Custom ──────────────────────────────────────────────────────────
@@ -1327,7 +1327,7 @@ export function buildEvaluationAgentAlerts(
         severity: 'warning',
         title: 'Losers are held longer than winners',
         message: `Average losing hold is ${Math.round(avgLossHold)} minutes vs ${Math.round(avgWinHold)} for winners (${(avgLossHold / avgWinHold).toFixed(1)}×). That is hoping, not managing.`,
-        action: 'Exit at your invalidation — put a hard time stop on losing trades.',
+        action: 'Exit at your invalidation, put a hard time stop on losing trades.',
       });
     }
   }
@@ -1417,22 +1417,22 @@ export function computeDayVerdict(
 
   if (drawdownRemainingPct < 20 || dailyLimitHit || last3Losses) {
     if (drawdownRemainingPct < 20) {
-      return { verdict: 'no', reason: `Only ${drawdownRemainingPct}% buffer remaining — account at critical risk. Sit out and review.` };
+      return { verdict: 'no', reason: `Only ${drawdownRemainingPct}% buffer remaining, account at critical risk. Sit out and review.` };
     }
     if (dailyLimitHit) {
       return { verdict: 'no', reason: 'Daily loss limit reached. No more trading today.' };
     }
-    return { verdict: 'no', reason: 'Last 3 trades were all losses. Step away — review setup criteria before re-entering.' };
+    return { verdict: 'no', reason: 'Last 3 trades were all losses. Step away, review setup criteria before re-entering.' };
   }
 
   if (drawdownRemainingPct < 40 || last2AllNeg || todayIsWorstDow) {
     if (drawdownRemainingPct < 40) {
-      return { verdict: 'caution', reason: `Buffer at ${drawdownRemainingPct}% — use reduced size and only take A+ setups today.` };
+      return { verdict: 'caution', reason: `Buffer at ${drawdownRemainingPct}%, use reduced size and only take A+ setups today.` };
     }
     if (last2AllNeg) {
-      return { verdict: 'caution', reason: 'Last 2 sessions were net negative. Tighten criteria — wait for high-confluence entries only.' };
+      return { verdict: 'caution', reason: 'Last 2 sessions were net negative. Tighten criteria, wait for high-confluence entries only.' };
     }
-    return { verdict: 'caution', reason: `${todayDow}s are your weakest day in this eval. Be selective — only your highest-edge setups.` };
+    return { verdict: 'caution', reason: `${todayDow}s are your weakest day in this eval. Be selective, only your highest-edge setups.` };
   }
 
   return { verdict: 'yes', reason: `Buffer healthy at ${drawdownRemainingPct}%. Trade your plan and protect the buffer.` };

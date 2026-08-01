@@ -150,12 +150,12 @@ function getSuggestion(pattern: PatternItem): string {
   if (id.startsWith('auto-sym-risk-') && title.includes('entry quality')) {
     if (rr !== null && rr < 1.2 && sessLosses.length >= 2) {
       const breakevenWr = avgLoss > 0 ? Math.round((avgLoss / (avgWin + avgLoss)) * 100) : 0;
-      return `${sessionCount} ${instrument} trades at ${wr}% win rate — but the deeper problem is the reward-to-risk. Your average winner from this sample is ${fmt(avgWin)} and your average loser is ${fmt(avgLoss)}, giving you roughly a ${rr.toFixed(1)}:1 ratio. At that ratio you'd need to win around ${breakevenWr}% of trades just to break even, which means you're fighting two problems simultaneously: a low win rate and undersized winners. Look at your winning trades specifically and ask whether you're exiting too early or whether the entry was structurally cleaner — that distinction tells you whether this is a management problem or a selection problem.`;
+      return `${sessionCount} ${instrument} trades at ${wr}% win rate, but the deeper problem is the reward-to-risk. Your average winner from this sample is ${fmt(avgWin)} and your average loser is ${fmt(avgLoss)}, giving you roughly a ${rr.toFixed(1)}:1 ratio. At that ratio you'd need to win around ${breakevenWr}% of trades just to break even, which means you're fighting two problems simultaneously: a low win rate and undersized winners. Look at your winning trades specifically and ask whether you're exiting too early or whether the entry was structurally cleaner, that distinction tells you whether this is a management problem or a selection problem.`;
     }
     if (sessLosses.length > 0 && sessWins.length <= 1) {
-      return `${sessionCount} ${instrument} trades with only ${sessWins.length} winner in this sample. That's not a bad run — at this ratio the entry approach isn't producing an edge. Go through each losing trade and write down one thing that was present at entry that you'd now flag as a warning sign. You're looking for the variable that appears on losers but not on your winners. Once you find it, that becomes your first filter before any ${instrument} entry.`;
+      return `${sessionCount} ${instrument} trades with only ${sessWins.length} winner in this sample. That's not a bad run, at this ratio the entry approach isn't producing an edge. Go through each losing trade and write down one thing that was present at entry that you'd now flag as a warning sign. You're looking for the variable that appears on losers but not on your winners. Once you find it, that becomes your first filter before any ${instrument} entry.`;
     }
-    return `${sessionCount} trades on ${instrument} at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. Since ${instrument} is your primary instrument, the data can't tell you it's the wrong market — it can only tell you something in the approach isn't working. Compare your ${sessWins.length} winning trade${sessWins.length !== 1 ? 's' : ''} to your ${sessLosses.length} losing trade${sessLosses.length !== 1 ? 's' : ''}: entry timing, confluence quality, emotional state, and whether price was at a key level or in the middle of range. The edge is in what separates those two groups.`;
+    return `${sessionCount} trades on ${instrument} at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. Since ${instrument} is your primary instrument, the data can't tell you it's the wrong market, it can only tell you something in the approach isn't working. Compare your ${sessWins.length} winning trade${sessWins.length !== 1 ? 's' : ''} to your ${sessLosses.length} losing trade${sessLosses.length !== 1 ? 's' : ''}: entry timing, confluence quality, emotional state, and whether price was at a key level or in the middle of range. The edge is in what separates those two groups.`;
   }
 
   // ── Symbol risk — multi-instrument (underperformer) ─────────────
@@ -165,62 +165,62 @@ function getSuggestion(pattern: PatternItem): string {
       : trendImproving
         ? ` Your last ${recent.length} trades show slight improvement (avg ${formatSignedCurrency(recentAvg!)}), but not enough to offset the overall picture.`
         : '';
-    const rrNote = rr !== null ? ` Average winner ${fmt(avgWin)}, average loser ${fmt(avgLoss)} — a ${rr.toFixed(1)}:1 R:R ratio.` : '';
-    return `${sessionCount} ${instrument} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote}${trendNote} The useful question isn't whether to cut ${instrument}, it's whether you're applying the same entry conditions to ${instrument} that work on your other instruments or whether you've drifted. Take the last 3 ${instrument} losers and compare them to 3 winners on your better-performing instruments — look at where in structure you entered, how wide the stop was, and what your state was. That comparison is more useful than any general rule change.`;
+    const rrNote = rr !== null ? ` Average winner ${fmt(avgWin)}, average loser ${fmt(avgLoss)}, a ${rr.toFixed(1)}:1 R:R ratio.` : '';
+    return `${sessionCount} ${instrument} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote}${trendNote} The useful question isn't whether to cut ${instrument}, it's whether you're applying the same entry conditions to ${instrument} that work on your other instruments or whether you've drifted. Take the last 3 ${instrument} losers and compare them to 3 winners on your better-performing instruments, look at where in structure you entered, how wide the stop was, and what your state was. That comparison is more useful than any general rule change.`;
   }
 
   // ── Symbol edge ─────────────────────────────────────────────────
   if (id.startsWith('auto-sym-edge-')) {
-    const rrNote = rr !== null ? ` Average winner ${fmt(avgWin)} against average loser ${fmt(avgLoss)} — ${rr.toFixed(1)}:1 ratio, which compounds the win rate advantage.` : '';
+    const rrNote = rr !== null ? ` Average winner ${fmt(avgWin)} against average loser ${fmt(avgLoss)}, ${rr.toFixed(1)}:1 ratio, which compounds the win rate advantage.` : '';
     const trendNote = trendImproving
       ? ` Your most recent sessions are tracking above your earlier average (${formatSignedCurrency(recentAvg!)} vs ${formatSignedCurrency(olderAvg!)}), so the edge is building.`
       : trendWorsening
-        ? ` One thing to watch: your most recent ${recent.length} sessions are averaging ${formatSignedCurrency(recentAvg!)} — lower than earlier. Edges can drift; keep monitoring whether conditions are changing.`
+        ? ` One thing to watch: your most recent ${recent.length} sessions are averaging ${formatSignedCurrency(recentAvg!)}, lower than earlier. Edges can drift; keep monitoring whether conditions are changing.`
         : '';
-    return `${sessionCount} ${instrument} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote}${trendNote} The edge is statistically real at this sample size — the risk now is diluting it by entering lower-conviction versions of the same trade to stay active. Write down the specific conditions that were present in your clearest winners — not just "structure looked good" but the actual criteria. Anything that doesn't match those exactly is a different trade with a different (lower) expectation.`;
+    return `${sessionCount} ${instrument} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote}${trendNote} The edge is statistically real at this sample size, the risk now is diluting it by entering lower-conviction versions of the same trade to stay active. Write down the specific conditions that were present in your clearest winners, not just "structure looked good" but the actual criteria. Anything that doesn't match those exactly is a different trade with a different (lower) expectation.`;
   }
 
   // ── Session risk ─────────────────────────────────────────────────
   if (id.startsWith('auto-sess-risk-')) {
     const sessName = id.replace('auto-sess-risk-', '');
     const estLosses = Math.round(sessionCount * (1 - wr / 100));
-    const trendNote = trendWorsening ? ` Your most recent ${sessName} sessions are averaging ${formatSignedCurrency(recentAvg!)} — it's trending in the wrong direction.` : '';
-    return `${sessionCount} trades during ${sessName}, ${wr}% win rate, ${formatSignedCurrency(totalPnl)}.${trendNote} Roughly ${estLosses} of your ${sessionCount} entries here are losing. Before you reduce activity, check whether the losses cluster in a specific part of the session — first 15 minutes, around news events, or later when liquidity drops. If they do cluster, the fix is a time-based filter, not a blanket reduction. If they're spread evenly, the issue is likely the trade plan being applied in conditions that don't support it.`;
+    const trendNote = trendWorsening ? ` Your most recent ${sessName} sessions are averaging ${formatSignedCurrency(recentAvg!)}, it's trending in the wrong direction.` : '';
+    return `${sessionCount} trades during ${sessName}, ${wr}% win rate, ${formatSignedCurrency(totalPnl)}.${trendNote} Roughly ${estLosses} of your ${sessionCount} entries here are losing. Before you reduce activity, check whether the losses cluster in a specific part of the session, first 15 minutes, around news events, or later when liquidity drops. If they do cluster, the fix is a time-based filter, not a blanket reduction. If they're spread evenly, the issue is likely the trade plan being applied in conditions that don't support it.`;
   }
 
   // ── Session edge ─────────────────────────────────────────────────
   if (id.startsWith('auto-sess-edge-')) {
     const sessName = id.replace('auto-sess-edge-', '');
-    const rrNote = rr !== null ? ` Your sample shows ${fmt(avgWin)} average winners against ${fmt(avgLoss)} average losers — a ${rr.toFixed(1)}:1 ratio.` : '';
-    return `${sessionCount} ${sessName} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote} The edge is there — now look at whether your ${sessLosses.length} losers in this session share anything in common: entry time within the session, whether you were already up or down on the day, or specific market conditions. Knowing what turns a ${sessName} trade from a winner to a loser is what takes this edge from ${wr}% to something more consistent.`;
+    const rrNote = rr !== null ? ` Your sample shows ${fmt(avgWin)} average winners against ${fmt(avgLoss)} average losers, a ${rr.toFixed(1)}:1 ratio.` : '';
+    return `${sessionCount} ${sessName} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote} The edge is there, now look at whether your ${sessLosses.length} losers in this session share anything in common: entry time within the session, whether you were already up or down on the day, or specific market conditions. Knowing what turns a ${sessName} trade from a winner to a loser is what takes this edge from ${wr}% to something more consistent.`;
   }
 
   // ── Psychology risk ─────────────────────────────────────────────
   if (id.startsWith('auto-psych-risk-') && state) {
     const perTrade = sessionCount > 0 ? Math.abs(totalPnl / sessionCount) : 0;
     const rrNote = rr !== null ? ` Your average loss in this state (${fmt(avgLoss)}) is ${avgWin > 0 ? `larger than your average winner (${fmt(avgWin)})` : 'not being offset by meaningful winners'}.` : '';
-    return `${sessionCount} trades while "${state}" at ${wr}% win rate and ${formatSignedCurrency(totalPnl)} — averaging ${formatSignedCurrency(perTrade)} lost per trade in this state.${rrNote} This is not something you can trade through with more discipline at entry — the state itself is already degrading your decision-making before you place the order. The rule needs to be pre-entry: name your emotional state before each session. If it's "${state}", your only trade is to wait 15 minutes and reassess. If it's still there, the session is closed. ${sessionCount} trades is enough data to make this a hard rule, not a guideline.`;
+    return `${sessionCount} trades while "${state}" at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}, averaging ${formatSignedCurrency(perTrade)} lost per trade in this state.${rrNote} This is not something you can trade through with more discipline at entry, the state itself is already degrading your decision-making before you place the order. The rule needs to be pre-entry: name your emotional state before each session. If it's "${state}", your only trade is to wait 15 minutes and reassess. If it's still there, the session is closed. ${sessionCount} trades is enough data to make this a hard rule, not a guideline.`;
   }
 
   // ── Psychology edge ─────────────────────────────────────────────
   if (id.startsWith('auto-psych-edge-') && state) {
-    return `${sessionCount} trades while "${state}" at ${wr}% win rate and ${formatSignedCurrency(totalPnl)} — your best-performing emotional context by a meaningful margin. The practical question is what produces this state reliably. Think back to the sessions where you felt "${state}": what did you do the night before, how much preparation had you done, did you exercise, what time did you start? Even identifying one or two consistent inputs gives you something to engineer rather than just hope for.`;
+    return `${sessionCount} trades while "${state}" at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}, your best-performing emotional context by a meaningful margin. The practical question is what produces this state reliably. Think back to the sessions where you felt "${state}": what did you do the night before, how much preparation had you done, did you exercise, what time did you start? Even identifying one or two consistent inputs gives you something to engineer rather than just hope for.`;
   }
 
   // ── Day-of-week ──────────────────────────────────────────────────
   if (id.startsWith('auto-dow-risk-')) {
     const day = id.replace('auto-dow-risk-', '');
-    return `${sessionCount} ${day} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. Something about how you approach ${day}s is producing worse outcomes than your other days. This doesn't mean ${day} has less edge — it usually means your preparation or mental state is different. Think back to the last 3 ${day} sessions: were you more rushed, trading out of sequence, or carrying something from the weekend or end-of-week into the open? One practical test: start your next ${day} with a smaller position, treat the first trade as diagnostic, and see if the pattern holds at half size.`;
+    return `${sessionCount} ${day} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. Something about how you approach ${day}s is producing worse outcomes than your other days. This doesn't mean ${day} has less edge, it usually means your preparation or mental state is different. Think back to the last 3 ${day} sessions: were you more rushed, trading out of sequence, or carrying something from the weekend or end-of-week into the open? One practical test: start your next ${day} with a smaller position, treat the first trade as diagnostic, and see if the pattern holds at half size.`;
   }
   if (id.startsWith('auto-dow-edge-')) {
     const day = id.replace('auto-dow-edge-', '');
-    return `${sessionCount} ${day} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)} — your best performing day of the week. Think about what's structurally different about your ${day} sessions: are you better rested, have fewer distractions, or is the market character itself better suited to your style? Whatever's producing this, don't take it for granted. Document specifically what you do on a typical ${day} morning and treat it as a repeatable template.`;
+    return `${sessionCount} ${day} trades at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}, your best performing day of the week. Think about what's structurally different about your ${day} sessions: are you better rested, have fewer distractions, or is the market character itself better suited to your style? Whatever's producing this, don't take it for granted. Document specifically what you do on a typical ${day} morning and treat it as a repeatable template.`;
   }
 
   // ── Time-of-day ──────────────────────────────────────────────────
   if (id.startsWith('auto-hour-risk-')) {
     const hour = id.replace('auto-hour-risk-', '');
-    return `${sessionCount} trades entered around ${hour} at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. This time window is a consistent execution problem. The most common reason for a specific hour underperforming is that the trader is either chasing entries after a slow period or forcing activity before a natural close. Look at the specific entry context — were these trades planned, or were they taken because something moved and you felt you had to act? If most are reactive, a simple rule (no new entries between ${hour} and 30 minutes later) is worth testing.`;
+    return `${sessionCount} trades entered around ${hour} at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}. This time window is a consistent execution problem. The most common reason for a specific hour underperforming is that the trader is either chasing entries after a slow period or forcing activity before a natural close. Look at the specific entry context, were these trades planned, or were they taken because something moved and you felt you had to act? If most are reactive, a simple rule (no new entries between ${hour} and 30 minutes later) is worth testing.`;
   }
 
   // ── Overtrading ──────────────────────────────────────────────────
@@ -229,27 +229,27 @@ function getSuggestion(pattern: PatternItem): string {
     const wrTagHigh = tags.find(t => t.label.startsWith('4+ trades'));
     const lowWrStr = wrTagLow ? wrTagLow.label : '';
     const highWrStr = wrTagHigh ? wrTagHigh.label : '';
-    return `${lowWrStr} vs ${highWrStr}. The data says your edge is narrow, not broad — it lives in your best 1 or 2 trades per session, not in trading volume. Most traders overtrade because they feel uncomfortable watching the market move without a position. That discomfort is a cost you're currently paying in win rate. The fix is not "trade fewer" as a guideline — it's a hard cap: after your second trade each day, require the next entry to score meaningfully higher on your pre-trade checklist than a normal entry. That filter will kill 70% of the bad fourth and fifth trades automatically.`;
+    return `${lowWrStr} vs ${highWrStr}. The data says your edge is narrow, not broad, it lives in your best 1 or 2 trades per session, not in trading volume. Most traders overtrade because they feel uncomfortable watching the market move without a position. That discomfort is a cost you're currently paying in win rate. The fix is not "trade fewer" as a guideline, it's a hard cap: after your second trade each day, require the next entry to score meaningfully higher on your pre-trade checklist than a normal entry. That filter will kill 70% of the bad fourth and fifth trades automatically.`;
   }
 
   // ── Off-plan trades ──────────────────────────────────────────────
   if (id === 'auto-behav-offplan') {
     const onTag = tags.find(t => t.label.startsWith('On-plan'));
     const offTag = tags.find(t => t.label.startsWith('Off-plan'));
-    return `${onTag?.label ?? ''} vs ${offTag?.label ?? ''}. Your on-plan and off-plan trades are two different strategies with meaningfully different edge. The off-plan group isn't just "slightly worse" — it's a net negative that is directly reducing what your on-plan trades earn. Off-plan entries almost always come from one of three triggers: boredom after a winner, recovery attempt after a loser, or a live move you weren't positioned for. Identify which one accounts for most of your off-plan trades — that's the specific situation to build a rule around, not a general "stay in your plan" commitment.`;
+    return `${onTag?.label ?? ''} vs ${offTag?.label ?? ''}. Your on-plan and off-plan trades are two different strategies with meaningfully different edge. The off-plan group isn't just "slightly worse", it's a net negative that is directly reducing what your on-plan trades earn. Off-plan entries almost always come from one of three triggers: boredom after a winner, recovery attempt after a loser, or a live move you weren't positioned for. Identify which one accounts for most of your off-plan trades, that's the specific situation to build a rule around, not a general "stay in your plan" commitment.`;
   }
 
   // ── Post-loss behavior ───────────────────────────────────────────
   if (id === 'auto-behav-postloss') {
     const overallTag = tags.find(t => t.label.startsWith('Overall'));
     const postTag = tags.find(t => t.label.startsWith('Post-loss'));
-    return `${overallTag?.label ?? ''} overall, but ${postTag?.label ?? ''} on the trade immediately following a losing trade. Your decision-making is reliably degraded in the 5-15 minutes after a loss — this is extremely common and the data proves it's happening to you specifically. The rule this suggests is not complicated: after any losing trade, do not take the next entry for at least 10 minutes regardless of how clean it looks. Use that time to restate your session plan. If the next entry still meets your criteria after the pause, take it. Roughly half the time, you'll decide not to — and based on this data, that's the right call.`;
+    return `${overallTag?.label ?? ''} overall, but ${postTag?.label ?? ''} on the trade immediately following a losing trade. Your decision-making is reliably degraded in the 5-15 minutes after a loss, this is extremely common and the data proves it's happening to you specifically. The rule this suggests is not complicated: after any losing trade, do not take the next entry for at least 10 minutes regardless of how clean it looks. Use that time to restate your session plan. If the next entry still meets your criteria after the pause, take it. Roughly half the time, you'll decide not to, and based on this data, that's the right call.`;
   }
 
   // ── Generic fallback ────────────────────────────────────────────
   const rrNote = rr !== null ? ` Average winner ${fmt(avgWin)}, average loser ${fmt(avgLoss)} (${rr.toFixed(1)}:1 ratio).` : '';
   if (type === 'Risk' || status === 'Active') {
-    return `${sessionCount} occurrences at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote} The pattern is repeating — identify the one variable present in all instances and define a specific rule around it before the next occurrence.`;
+    return `${sessionCount} occurrences at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote} The pattern is repeating, identify the one variable present in all instances and define a specific rule around it before the next occurrence.`;
   }
   return `${sessionCount} occurrences at ${wr}% win rate and ${formatSignedCurrency(totalPnl)}.${rrNote} Document the exact conditions that produce this outcome so you can distinguish when it's valid from when it's noise.`;
 }
@@ -338,7 +338,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
           type: 'Risk',
           status: 'Active',
           title: `${symbol} entry quality needs a full audit`,
-          description: `${symbol} is your primary instrument, so a ${wr}% win rate and ${formatSignedCurrency(s.netPnl)} P&L points to an entry or execution problem — not the instrument itself. Dig into which specific confluences, times of entry, or emotional states are present on your losing trades vs winners. The answer is in the variables, not the ticker.`,
+          description: `${symbol} is your primary instrument, so a ${wr}% win rate and ${formatSignedCurrency(s.netPnl)} P&L points to an entry or execution problem, not the instrument itself. Dig into which specific confluences, times of entry, or emotional states are present on your losing trades vs winners. The answer is in the variables, not the ticker.`,
           firstSeen: s.firstSeen,
           sessionCount: group.length,
           totalPnl: s.netPnl,
@@ -353,8 +353,8 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
           id: `auto-sym-edge-${symbol}`,
           type: 'Edge',
           status: 'Confirmed',
-          title: `${symbol} edge is confirmed — protect your conditions`,
-          description: `${group.length} trades on ${symbol} returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate. Your edge on this instrument is holding. The priority now is keeping entry conditions tight — avoid adding new patterns or expanding into unfamiliar conditions while the edge is working.`,
+          title: `${symbol} edge is confirmed, protect your conditions`,
+          description: `${group.length} trades on ${symbol} returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate. Your edge on this instrument is holding. The priority now is keeping entry conditions tight, avoid adding new patterns or expanding into unfamiliar conditions while the edge is working.`,
           firstSeen: s.firstSeen,
           sessionCount: group.length,
           totalPnl: s.netPnl,
@@ -375,7 +375,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
         type: 'Risk',
         status: 'Active',
         title: `${symbol} is underperforming your other instruments`,
-        description: `Across ${group.length} trades, ${symbol} returned ${formatSignedCurrency(s.netPnl)} (${wr}% win rate) — the weakest performer in your instrument mix. Consider pausing ${symbol} trades until you can isolate what's breaking down.`,
+        description: `Across ${group.length} trades, ${symbol} returned ${formatSignedCurrency(s.netPnl)} (${wr}% win rate), the weakest performer in your instrument mix. Consider pausing ${symbol} trades until you can isolate what's breaking down.`,
         firstSeen: s.firstSeen,
         sessionCount: group.length,
         totalPnl: s.netPnl,
@@ -391,7 +391,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
         type: 'Edge',
         status: 'Confirmed',
         title: `${symbol} is your strongest instrument`,
-        description: `${group.length} trades on ${symbol} yielded ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate — your top-performing instrument over this period. Keep conditions tight and prioritise ${symbol} entries.`,
+        description: `${group.length} trades on ${symbol} yielded ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate, your top-performing instrument over this period. Keep conditions tight and prioritise ${symbol} entries.`,
         firstSeen: s.firstSeen,
         sessionCount: group.length,
         totalPnl: s.netPnl,
@@ -428,7 +428,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
         type: 'Risk',
         status: 'Active',
         title: `${session} is dragging your overall performance`,
-        description: `Your ${session} trades returned ${formatSignedCurrency(s.netPnl)} across ${group.length} trades (${wr}% win rate) — the weakest session in your mix. Consider reducing size or skipping entries during ${session} until execution improves.`,
+        description: `Your ${session} trades returned ${formatSignedCurrency(s.netPnl)} across ${group.length} trades (${wr}% win rate), the weakest session in your mix. Consider reducing size or skipping entries during ${session} until execution improves.`,
         firstSeen: s.firstSeen,
         sessionCount: group.length,
         totalPnl: s.netPnl,
@@ -444,7 +444,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
         type: 'Edge',
         status: 'Confirmed',
         title: `${session} is your strongest session`,
-        description: `${group.length} trades during ${session} returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate — your top-performing session. Protect this edge with consistent sizing and avoid diluting it with lower-conviction entries.`,
+        description: `${group.length} trades during ${session} returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate, your top-performing session. Protect this edge with consistent sizing and avoid diluting it with lower-conviction entries.`,
         firstSeen: s.firstSeen,
         sessionCount: group.length,
         totalPnl: s.netPnl,
@@ -469,7 +469,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
         type: 'Psychology',
         status: 'Active',
         title: `Trading when "${state}" is costing you money`,
-        description: `${group.length} trades logged while feeling "${state}" returned ${formatSignedCurrency(s.netPnl)} at ${Math.round(s.winRate)}% win rate. This emotional state correlates with underperformance — consider a no-trade rule when you feel this way.`,
+        description: `${group.length} trades logged while feeling "${state}" returned ${formatSignedCurrency(s.netPnl)} at ${Math.round(s.winRate)}% win rate. This emotional state correlates with underperformance, consider a no-trade rule when you feel this way.`,
         firstSeen: s.firstSeen,
         sessionCount: group.length,
         totalPnl: s.netPnl,
@@ -485,7 +485,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
         type: 'Psychology',
         status: 'Confirmed',
         title: `"${state}" is your optimal trading state`,
-        description: `${group.length} trades when feeling "${state}" returned ${formatSignedCurrency(s.netPnl)} at ${Math.round(s.winRate)}% win rate. This emotional state correlates with your best execution — note the conditions that produce it.`,
+        description: `${group.length} trades when feeling "${state}" returned ${formatSignedCurrency(s.netPnl)} at ${Math.round(s.winRate)}% win rate. This emotional state correlates with your best execution, note the conditions that produce it.`,
         firstSeen: s.firstSeen,
         sessionCount: group.length,
         totalPnl: s.netPnl,
@@ -741,7 +741,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
           type: 'Behaviour',
           status: 'Active',
           title: `${day}s are your worst trading day`,
-          description: `${group.length} ${day} trades returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate — significantly below your other days. Consider reducing size or standing aside on ${day}s until you understand what's breaking down.`,
+          description: `${group.length} ${day} trades returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate, significantly below your other days. Consider reducing size or standing aside on ${day}s until you understand what's breaking down.`,
           firstSeen: s.firstSeen, sessionCount: group.length, totalPnl: s.netPnl,
           tags: [{ label: day, sentiment: 'neutral' }, { label: `${wr}% win rate`, sentiment: 'negative' }, { label: `${group.length} trades`, sentiment: 'neutral' }],
           confidence, instrument: 'All', session: 'RTH open', sessions: s.sessions,
@@ -752,7 +752,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
           type: 'Behaviour',
           status: 'Confirmed',
           title: `${day}s are your strongest trading day`,
-          description: `${group.length} ${day} trades returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate — your best day of the week. Document what makes your ${day} sessions different and protect this edge.`,
+          description: `${group.length} ${day} trades returned ${formatSignedCurrency(s.netPnl)} at ${wr}% win rate, your best day of the week. Document what makes your ${day} sessions different and protect this edge.`,
           firstSeen: s.firstSeen, sessionCount: group.length, totalPnl: s.netPnl,
           tags: [{ label: day, sentiment: 'neutral' }, { label: `${wr}% win rate`, sentiment: 'positive' }, { label: `${group.length} trades`, sentiment: 'neutral' }],
           confidence, instrument: 'All', session: 'RTH open', sessions: s.sessions,
@@ -782,7 +782,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
           type: 'Behaviour',
           status: 'Active',
           title: `${hour} entries are a consistent leak`,
-          description: `${group.length} trades entered around ${hour} at ${wr}% win rate and ${formatSignedCurrency(s.netPnl)}. This hour is underperforming your overall average — a time-based filter here is worth testing.`,
+          description: `${group.length} trades entered around ${hour} at ${wr}% win rate and ${formatSignedCurrency(s.netPnl)}. This hour is underperforming your overall average, a time-based filter here is worth testing.`,
           firstSeen: s.firstSeen, sessionCount: group.length, totalPnl: s.netPnl,
           tags: [{ label: hour, sentiment: 'neutral' }, { label: `${wr}% win rate`, sentiment: 'negative' }, { label: `${group.length} trades`, sentiment: 'neutral' }],
           confidence, instrument: 'All', session: 'RTH open', sessions: s.sessions,
@@ -813,7 +813,7 @@ function detectPatternsFromTrades(trades: PatternTrade[], tf: DetectedTimeFrame)
           type: 'Behaviour',
           status: 'Active',
           title: 'Win rate drops sharply on high-volume days',
-          description: `Days with 1-2 trades: ${Math.round(lowWr)}% win rate. Days with 4+ trades: ${Math.round(highWr)}% win rate. Your edge is concentrated in selective entries — adding more trades per session actively reduces it.`,
+          description: `Days with 1-2 trades: ${Math.round(lowWr)}% win rate. Days with 4+ trades: ${Math.round(highWr)}% win rate. Your edge is concentrated in selective entries, adding more trades per session actively reduces it.`,
           firstSeen: dayStats[dayStats.length - 1].date,
           sessionCount: highVolDays.length,
           totalPnl: highVolDays.reduce((s, d) => s + d.pnl, 0) - lowVolDays.reduce((s, d) => s + d.pnl, 0),

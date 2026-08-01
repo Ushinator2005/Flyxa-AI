@@ -282,12 +282,12 @@ export default function TradeCheck() {
 
     // Profit target hit — caution to stop trading and lock in
     if (profitTarget !== null && sessionPnl >= profitTarget)
-      flags.push(flag('caution', `Target hit ${fmtMoney(profitTarget)} — protect gains`));
+      flags.push(flag('caution', `Target hit ${fmtMoney(profitTarget)}, protect gains`));
 
     if (maxTrades > 0 && tradeCount >= maxTrades)
       flags.push(flag('blocked', `Max trades (${tradeCount}/${maxTrades})`));
     else if (maxTrades > 0 && tradeCount === maxTrades - 1)
-      flags.push(flag('caution', `Last trade — cap is ${maxTrades}`));
+      flags.push(flag('caution', `Last trade, cap is ${maxTrades}`));
 
     if (timeWindowRule) {
       const now = getTimeZoneParts(new Date(), preferences.timezone).time;
@@ -302,7 +302,7 @@ export default function TradeCheck() {
     if (consec >= 2)
       flags.push(flag('blocked', `${consec} consecutive losses`));
     else if (consec === 1)
-      flags.push(flag('caution', 'Post-loss — confirm thesis'));
+      flags.push(flag('caution', 'Post-loss, confirm thesis'));
 
     if (cooldownMinutes && consec >= 1)
       flags.push(flag('blocked', `Trading Plan cooldown: wait ${cooldownMinutes} min after loss`));
@@ -364,7 +364,7 @@ export default function TradeCheck() {
     const activePlan = activePreSession?.sessionPlan ?? [];
     activePlan.slice(0, 2).forEach(item => list.push(item.rule));
     if (priorFlow?.tomorrowRule) list.push(priorFlow.tomorrowRule);
-    list.push('Respect your TP — no early exits');
+    list.push('Respect your TP, no early exits');
     list.push("Don't move SL into a loss");
     list.push('Stick to the plan, no improvising');
     return list.slice(0, 3);
@@ -385,7 +385,7 @@ export default function TradeCheck() {
 
     const color = score >= 65 ? C.green : score >= 40 ? C.amber : C.red;
     const msg =
-      gate.status === 'blocked' || score < 35 ? 'Step down — limits hit' :
+      gate.status === 'blocked' || score < 35 ? 'Step down, limits hit' :
       outcome === 'win' && score >= 70 ? 'Good trade. Edge intact.' :
       score >= 55 ? 'Proceed with caution.' :
       'Consider stepping down.';
@@ -448,7 +448,7 @@ export default function TradeCheck() {
           changed = true;
           return { ...rule, contractLimits: { ...rule.contractLimits, [sym]: v } };
         }
-        if (entries.length > 1) return rule; // multiple caps — edit on the Rules page
+        if (entries.length > 1) return rule; // multiple caps, edit on the Rules page
       }
       if (rule.value === String(v)) return rule;
       changed = true;
@@ -654,7 +654,7 @@ export default function TradeCheck() {
 
               {/* No limits set hint */}
               {gate.lossLimit === 0 && maxTrades === 0 && gate.profitTarget === null && (
-                <span style={{ fontSize: 10, color: C.subtle }}>no limits set — <button type="button" onClick={openLimitEditor} style={{ background: 'none', border: 'none', color: C.amber, cursor: 'pointer', fontSize: 10, padding: 0, fontFamily: C.sans }}>add limits</button></span>
+                <span style={{ fontSize: 10, color: C.subtle }}>no limits set, <button type="button" onClick={openLimitEditor} style={{ background: 'none', border: 'none', color: C.amber, cursor: 'pointer', fontSize: 10, padding: 0, fontFamily: C.sans }}>add limits</button></span>
               )}
             </>
           )}
@@ -756,7 +756,7 @@ export default function TradeCheck() {
                 textTransform: 'uppercase', width: '100%',
               }}
             >
-              New session — clear {sessionTrades.length} trade{sessionTrades.length !== 1 ? 's' : ''}
+              New session, clear {sessionTrades.length} trade{sessionTrades.length !== 1 ? 's' : ''}
             </button>
           )}
         </>
@@ -786,7 +786,7 @@ export default function TradeCheck() {
             </div>
             <button
               type="button"
-              title="Abort — back to Lens"
+              title="Abort, back to Lens"
               onClick={() => { setPhase('idle'); setPendingClose(null); }}
               style={{ background: 'none', border: 'none', color: C.subtle, fontSize: 12, cursor: 'pointer', padding: '2px 4px', lineHeight: 1 }}
             >✕</button>

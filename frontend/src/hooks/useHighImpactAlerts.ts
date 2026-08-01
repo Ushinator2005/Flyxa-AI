@@ -103,8 +103,8 @@ export function useHighImpactAlerts(displayTimezone: string) {
           bestDelta = delta;
           bestKey   = key;
           bestLabel = delta <= 0
-            ? `${ev.event} — just released`
-            : `${ev.event} — in ${Math.ceil(delta / 60_000)} min`;
+            ? `${ev.event}, just released`
+            : `${ev.event}, in ${Math.ceil(delta / 60_000)} min`;
         }
       }
 

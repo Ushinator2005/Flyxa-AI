@@ -473,7 +473,7 @@ export default function FlyxaAIPreSession() {
         source: 'Hard stop' as const,
         rule: riskLimits.noLossLimit
           ? `Stop after ${riskLimits.maxTrades} trades or when you feel the session is done.`
-          : `Stop at ${formatCurrency(-riskLimits.maxDailyLoss)} loss or after ${riskLimits.maxTrades} trades — whichever comes first.`,
+          : `Stop at ${formatCurrency(-riskLimits.maxDailyLoss)} loss or after ${riskLimits.maxTrades} trades, whichever comes first.`,
       },
     ].slice(0, 4);
   }, [activeRiskPatterns, confirmedEdgePatterns, prescriptions, priorFlow, recentBehavior.planAdherence, recentBehavior.revengeTagged, riskLimits.maxDailyLoss, riskLimits.maxTrades]);
@@ -890,7 +890,7 @@ export default function FlyxaAIPreSession() {
                     </p>
                     <p style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.6 }}>
                       Based on your {varianceCheck.winRatePct}% win rate over the last {varianceCheck.sample} trades.
-                      When it happens, it's the math working — not your edge failing.
+                      When it happens, it's the math working, not your edge failing.
                     </p>
                   </div>
                 </div>
@@ -904,7 +904,7 @@ export default function FlyxaAIPreSession() {
                 <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.b0}` }}>
                   <h2 style={{ fontSize: 13, fontWeight: 700, color: C.t0, marginBottom: 3 }}>Pre-mortem</h2>
                   <p style={{ fontSize: 11, color: C.t2 }}>
-                    The session has ended and finished red. What was the reason this most likely happened? Name it now — catch it live.
+                    The session has ended and finished red. What was the reason this most likely happened? Name it now, catch it live.
                   </p>
                 </div>
                 <div style={{ padding: '12px 16px' }}>
@@ -1080,7 +1080,7 @@ export default function FlyxaAIPreSession() {
                   checklistState['risk-accepted'] ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: C.grn }}>
-                        ✓ Risk accepted — whatever today costs, it's already priced in.
+                        ✓ Risk accepted, whatever today costs, it's already priced in.
                       </span>
                       <button type="button" onClick={() => toggleChecklist({ id: 'risk-accepted', label: 'Risk accepted' })}
                         style={{ background: 'none', border: 'none', color: C.t2, fontSize: 10, cursor: 'pointer', padding: 0 }}>
@@ -1159,7 +1159,7 @@ export default function FlyxaAIPreSession() {
                       /* All done */
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
                         <span style={{ fontSize: 18, color: C.grn }}>✓</span>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: C.grn }}>Oath complete — you're committed.</p>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.grn }}>Oath complete, you're committed.</p>
                       </div>
                     ) : (
                       <>
@@ -1368,7 +1368,7 @@ export default function FlyxaAIPreSession() {
                     </button>
                     {readiness.status === 'Stand Down' && (
                       <p style={{ marginTop: 8, fontSize: 11, color: C.t2, textAlign: 'center' }}>
-                        Your readiness score says stand down — launching anyway is a choice you're making.
+                        Your readiness score says stand down, launching anyway is a choice you're making.
                       </p>
                     )}
                   </>

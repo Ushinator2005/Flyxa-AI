@@ -20,7 +20,7 @@ function getCellBg(pnl: number | undefined): string {
   if (pnl < -200) return 'hm-neg-3';
   if (pnl < -50) return 'hm-neg-2';
   if (pnl < 0) return 'hm-neg-1';
-  return 'bg-slate-600/10'; // exactly $0 breakeven — neutral, not red
+  return 'bg-slate-600/10'; // exactly $0 breakeven, neutral, not red
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -204,7 +204,7 @@ function nextEmotionTone(current: EmotionTone): EmotionTone {
 
 function getTabPlaceholder(tab: JournalTab): string {
   if (tab === 'reflection') {
-    return 'What happened today? Be honest — this is just for you.';
+    return 'What happened today? Be honest, this is just for you.';
   }
   if (tab === 'lessons') {
     return 'What would you do differently next time?';

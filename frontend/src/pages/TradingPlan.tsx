@@ -319,7 +319,7 @@ export default function TradingPlan() {
             const statement =
               kind === 'max_daily_loss' ? 'I stop trading for the day the moment this is hit.' :
               kind === 'max_trades' ? 'Once the count is reached, the session is over.' :
-              kind === 'max_contracts' ? (limits.length > 0 ? 'I never size above these caps, win or lose.' : 'No per-instrument caps set yet — add them in edit.') :
+              kind === 'max_contracts' ? (limits.length > 0 ? 'I never size above these caps, win or lose.' : 'No per-instrument caps set yet, add them in edit.') :
               kind === 'min_rr' ? 'Setups paying less than this are not trades, they are donations.' :
               kind === 'time_window' ? 'Outside this window I am flat, by rule.' :
               kind === 'cooldown_after_loss' ? 'After a loss I stand down before the next entry.' :
@@ -405,7 +405,7 @@ export default function TradingPlan() {
                         </div>
                       ) : kind === 'max_contracts' ? (
                         <div className="tp-contract-limits">
-                          {Object.entries(rule.contractLimits ?? {}).length === 0 && <p className="tp-contract-empty">No limits set — add an asset below.</p>}
+                          {Object.entries(rule.contractLimits ?? {}).length === 0 && <p className="tp-contract-empty">No limits set, add an asset below.</p>}
                           {Object.entries(rule.contractLimits ?? {}).map(([sym, max]) => {
                             const contract = lookupContract(sym);
                             return (

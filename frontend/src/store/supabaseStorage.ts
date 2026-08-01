@@ -962,7 +962,7 @@ async function flushSave(userId: string, value: string): Promise<void> {
   // This means store_entries_backup is updated even if user_store fails, giving
   // the recovery path something to work with on the next load.
   const backupWritePromise = syncEntriesToTable(userId, entries, deletedTradeIds, deletedEntryDates)
-    .catch(() => { /* non-fatal — main store remains authoritative */ });
+    .catch(() => { /* non-fatal, main store remains authoritative */ });
 
   const { error } = await supabase.from('user_store').upsert(
     { user_id: userId, flyxa_data: sanitized, updated_at: now },
@@ -1299,7 +1299,7 @@ if (typeof window !== 'undefined') {
         },
         body,
       });
-    } catch { /* ignore — localStorage still has the data */ }
+    } catch { /* ignore, localStorage still has the data */ }
   };
 
   window.addEventListener('beforeunload', flushLatestOnExit);
@@ -1443,14 +1443,14 @@ export async function exposeRecoveryTools(): Promise<void> {
         const d = entry.date as string;
         if (existingDates.has(d)) {
           skipped.push(d);
-          console.warn(`Date ${d} already exists in main store — skipping (delete it first if you want to overwrite).`);
+          console.warn(`Date ${d} already exists in main store, skipping (delete it first if you want to overwrite).`);
         } else {
           newEntries.push(entry);
           added.push(d);
         }
       }
 
-      if (added.length === 0) { console.warn('Nothing to restore — all dates already present.', { skipped }); return; }
+      if (added.length === 0) { console.warn('Nothing to restore, all dates already present.', { skipped }); return; }
 
       const newBlob = { ...mainBlob, state: { ...mainState, entries: newEntries } };
       const newValue = sanitizeStoreValue(JSON.stringify(newBlob));
@@ -1558,7 +1558,7 @@ export const supabaseZustandStorage: StateStorage = {
                 };
               }
             }
-          } catch { /* non-fatal — continue with existing blob */ }
+          } catch { /* non-fatal, continue with existing blob */ }
         }
 
         const remoteEntries = (flyxaData as { state?: { entries?: unknown[] } })?.state?.entries;
@@ -1605,7 +1605,7 @@ export const supabaseZustandStorage: StateStorage = {
               void enqueueStoreSave(userId, mergedValue);
               return cacheStoreValueForUser(userId, mergedValue);
             }
-          } catch { /* non-fatal — return main store as-is */ }
+          } catch { /* non-fatal, return main store as-is */ }
           return cacheStoreValueForUser(userId, sanitizeStoreValue(JSON.stringify(flyxaData)), remoteSavedAt);
         }
 

@@ -351,7 +351,7 @@ export default function InSessionTradeCheckDock() {
 
             {/* Sub-label */}
             <p style={{ margin: '0 0 12px', fontSize: 9.5, fontWeight: 400, color: 'rgba(232,227,220,0.50)', lineHeight: 1.5 }}>
-              Log while it's fresh — your post-session review is waiting.
+              Log while it's fresh, your post-session review is waiting.
             </p>
 
             {/* CTA */}

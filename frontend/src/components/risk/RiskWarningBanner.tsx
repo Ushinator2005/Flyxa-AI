@@ -18,13 +18,13 @@ export default function RiskWarningBanner({ riskLevel, dailyStatus }: RiskWarnin
       bg: 'bg-amber-500/10 border-amber-500/30',
       text: 'text-amber-400',
       icon: <AlertTriangle size={16} />,
-      message: `Approaching daily loss limit — ${pct}% used`,
+      message: `Approaching daily loss limit, ${pct}% used`,
     },
     danger: {
       bg: 'bg-red-500/10 border-red-500/30',
       text: 'text-red-400',
       icon: <XCircle size={16} />,
-      message: `Near daily loss limit — ${pct}% used. Consider stopping.`,
+      message: `Near daily loss limit, ${pct}% used. Consider stopping.`,
     },
     locked: {
       bg: 'bg-red-900/30 border-red-600/50',

@@ -94,7 +94,7 @@ export default function RuleAdherenceCard({ data, onSelectDay, onSelectRule }: {
     return (
       <section style={card}>
         <p style={microLabel}>Plan adherence</p>
-        <p style={{ margin: '14px 0 2px', fontSize: 12, color: 'var(--app-text-subtle)' }}>No day-level rule checks yet — set rules in the Rules page.</p>
+        <p style={{ margin: '14px 0 2px', fontSize: 12, color: 'var(--app-text-subtle)' }}>No day-level rule checks yet, set rules in the Rules page.</p>
       </section>
     );
   }

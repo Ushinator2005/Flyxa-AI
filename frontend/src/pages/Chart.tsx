@@ -593,7 +593,7 @@ export default function Chart() {
                 <p style={{ fontSize: 11, color: 'var(--txt-3)' }}>{formatCurrency(savedConfig.accountBalance)} starting balance</p>
               </>
             ) : (
-              <p style={{ fontSize: 13, color: 'var(--txt-3)', fontStyle: 'italic' }}>No active session — start your first replay workspace.</p>
+              <p style={{ fontSize: 13, color: 'var(--txt-3)', fontStyle: 'italic' }}>No active session, start your first replay workspace.</p>
             )}
           </div>
           {savedConfig && (

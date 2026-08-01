@@ -10,8 +10,8 @@ export type MarketClockPreset = 'equities' | 'futures' | 'forex';
 
 export const MARKET_CLOCK_OPTIONS: Array<{ value: MarketClockPreset; label: string; detail: string }> = [
   { value: 'equities', label: 'US Equities', detail: 'NYSE regular hours · 9:30–16:00 ET' },
-  { value: 'futures', label: 'Futures (Globex)', detail: 'Sun 18:00 – Fri 17:00 ET, daily 17:00–18:00 break' },
-  { value: 'forex', label: 'Forex & Metals', detail: '24/5 · Sun 17:00 – Fri 17:00 ET' },
+  { value: 'futures', label: 'Futures (Globex)', detail: 'Sun 18:00, Fri 17:00 ET, daily 17:00–18:00 break' },
+  { value: 'forex', label: 'Forex & Metals', detail: '24/5 · Sun 17:00, Fri 17:00 ET' },
 ];
 
 export function getEtParts(now: Date) {

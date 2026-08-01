@@ -87,7 +87,7 @@ function NavItem({
       }}
     >
       {/* Icons only survive in the collapsed rail, where they ARE the nav.
-          Expanded, the labels carry it — icon rows read cluttered. */}
+          Expanded, the labels carry it, icon rows read cluttered. */}
       {collapsed && <Icon size={16} strokeWidth={1.5} />}
       {!collapsed && <span>{label}</span>}
     </NavLink>

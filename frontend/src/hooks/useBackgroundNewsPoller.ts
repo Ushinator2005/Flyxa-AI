@@ -118,7 +118,7 @@ export function useBackgroundNewsPoller(enabled: boolean) {
     async function run() {
       if (runningRef.current) return; // prevent concurrent runs
       runningRef.current = true;
-      try { await pollOnce(); } catch { /* silent — never crash the app */ }
+      try { await pollOnce(); } catch { /* silent, never crash the app */ }
       finally { runningRef.current = false; }
     }
 

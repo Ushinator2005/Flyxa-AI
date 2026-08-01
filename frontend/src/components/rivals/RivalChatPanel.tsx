@@ -141,7 +141,7 @@ export default function RivalChatPanel({ open, rival, myUserId, onClose }: Rival
           ) : messages.length === 0 ? (
             <div className="rival-chat-empty">
               <MessageSquare size={28} />
-              <span>No messages yet — say something!</span>
+              <span>No messages yet, say something!</span>
             </div>
           ) : (
             messages.map((msg, i) => {
