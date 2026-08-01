@@ -1105,7 +1105,7 @@ export default function Analytics() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         {/* Win rate + last-20 record in one card */}
         <section data-tour-id="analytics-win-loss" className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
           <div style={{ padding: '15px 18px 16px' }}>
