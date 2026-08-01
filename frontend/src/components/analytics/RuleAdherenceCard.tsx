@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useState } from 'react';
+import { CSSProperties } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rule adherence — a streak ribbon + rule breakdown, computed from one data
@@ -35,7 +35,7 @@ const STYLE = `
 .ra-seg:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
 .ra-seg:hover { opacity:1 !important; }
 .ra-barfill { transform-origin: left; animation: ra-bar 500ms cubic-bezier(.2,.7,.2,1) both; }
-.ra-rule { border:0; background:none; width:100%; text-align:left; cursor:pointer; padding:11px 0; border-top:1px solid rgba(255,255,255,0.05); }
+.ra-rule { border:0; background:none; width:100%; text-align:left; cursor:pointer; padding:7px 0; border-top:1px solid rgba(255,255,255,0.05); }
 .ra-rule:first-of-type { border-top:0; }
 .ra-rule:focus-visible { outline:2px solid var(--amber); outline-offset:2px; border-radius:3px; }
 @media (prefers-reduced-motion: reduce) {
@@ -44,43 +44,15 @@ const STYLE = `
 }
 `;
 
-// Count a number up over `ms`, respecting reduced motion (jumps to target).
-function useCountUp(target: number, ms: number): number {
-  const [v, setV] = useState(target);
-  const prefersReduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  useEffect(() => {
-    if (prefersReduced) { setV(target); return; }
-    let raf = 0, start = 0;
-    const tick = (t: number) => {
-      if (!start) start = t;
-      const p = Math.min(1, (t - start) / ms);
-      setV(Math.round(target * (1 - Math.pow(1 - p, 3))));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, ms, prefersReduced]);
-  return v;
-}
-
 const mono = 'var(--font-mono)';
-const microLabel: CSSProperties = { fontFamily: mono, fontSize: 9.5, letterSpacing: '1.6px', textTransform: 'uppercase', color: 'var(--app-text-muted)' };
+// Sentence-case, sans. Numbers below wear mono; labels do not shout.
+const microLabel: CSSProperties = { fontSize: 12, fontWeight: 500, color: 'var(--app-text-muted)' };
 
 function segFill(day: AdherenceDay): { bg: string; opacity: number } {
   if (!day.traded) return { bg: EMPTY, opacity: 1 };
   if (day.held) return { bg: GREEN, opacity: 0.85 };
   // Magnitude only via opacity — never width/height. 2+ breaks = full red.
   return { bg: RED, opacity: day.breaches.length >= 2 ? 1 : 0.7 };
-}
-
-function Counter({ value, label, color }: { value: number; label: string; color: string }) {
-  const shown = useCountUp(value, 800);
-  return (
-    <div style={{ background: 'var(--app-panel)', padding: '13px 15px' }}>
-      <div style={{ fontFamily: mono, fontSize: 20, letterSpacing: '-0.5px', color, lineHeight: 1 }}>{shown}</div>
-      <div style={{ fontFamily: mono, fontSize: 9.5, textTransform: 'uppercase', color: 'var(--app-text-muted)', marginTop: 6 }}>{label}</div>
-    </div>
-  );
 }
 
 export default function RuleAdherenceCard({ data, onSelectDay, onSelectRule }: {
@@ -99,35 +71,42 @@ export default function RuleAdherenceCard({ data, onSelectDay, onSelectRule }: {
     );
   }
 
-  const { summary, days, rules, callout } = data;
+  const { summary, days, rules } = data;
   const pct = Math.round(summary.adherence * 100);
   const firstDay = days[0]?.date.slice(-2).replace(/^0/, '');
   const midDay = days[Math.floor(days.length / 2)]?.date.slice(-2).replace(/^0/, '');
   const lastDay = days[days.length - 1]?.date.slice(-2).replace(/^0/, '');
-  const maxBreach = Math.max(1, ...rules.map(r => r.breaches));
+
+  // Split ranked breach rows from the rules that were never broken — the latter
+  // collapse to one muted line instead of a full green bar each.
+  const breached = rules.filter(r => r.breaches > 0);
+  const clean = rules.filter(r => r.breaches === 0);
+  const maxBreach = Math.max(1, ...breached.map(r => r.breaches));
+  // "More than the other N combined" — a note on the top row when it dominates,
+  // replacing the old callout that duplicated that same first row.
+  const topNote = breached[0] && breached[0].breaches > summary.breaches - breached[0].breaches && rules.length > 1
+    ? `More than the other ${rules.length - 1} combined`
+    : null;
 
   return (
     <section style={card}>
       <style>{STYLE}</style>
 
-      {/* 1 · Header */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: callout ? 13 : 15 }}>
+      {/* 1 · Header — label left; percentage + streak numbers fold in on the right */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <span style={{ ...microLabel }}>Plan adherence · {data.monthLabel}</span>
-        <span style={{ fontFamily: mono, fontSize: 10.5, color: 'var(--app-text-subtle)', whiteSpace: 'nowrap' }}>
-          {pct}% · {summary.cleanDays} of {summary.tradingDays}
-        </span>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontFamily: mono, fontSize: 11, color: 'var(--app-text)', whiteSpace: 'nowrap' }}>
+            {pct}% · {summary.cleanDays} of {summary.tradingDays}
+          </div>
+          <div style={{ fontFamily: mono, fontSize: 10, color: 'var(--app-text-muted)', whiteSpace: 'nowrap', marginTop: 3 }}>
+            streak <span style={{ color: GREEN }}>{summary.currentStreak}</span> · best <span style={{ color: GREEN }}>{summary.bestStreak}</span> · <span style={{ color: RED_TEXT }}>{summary.brokenDays}</span> broken
+          </div>
+        </div>
       </div>
 
-      {/* 5 · Callout (only when a real pattern exists) */}
-      {callout && (
-        <div style={{ background: 'var(--app-panel-strong)', borderLeft: '2px solid var(--amber)', borderRadius: '0 8px 8px 0', padding: '14px 16px', marginBottom: 15 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--app-text)' }}>{callout.text}</p>
-          <p style={{ margin: '5px 0 0', fontSize: 12.5, color: 'var(--app-text-muted)', lineHeight: 1.5 }}>{callout.detail}</p>
-        </div>
-      )}
-
-      {/* 2 · Ribbon */}
-      <div style={{ display: 'flex', gap: 2, height: 34 }}>
+      {/* 2 · Ribbon — thin ticks; clusters read fine at a fraction of the height */}
+      <div style={{ display: 'flex', gap: 2, height: 8 }}>
         {days.map((day, i) => {
           const { bg, opacity } = segFill(day);
           const label = `${day.date} · ${!day.traded ? 'no trades' : day.held ? 'all rules held' : `broke ${day.breaches.map(b => b.label).join(', ')}`}`;
@@ -144,36 +123,35 @@ export default function RuleAdherenceCard({ data, onSelectDay, onSelectRule }: {
           );
         })}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-        <span style={{ fontFamily: mono, fontSize: 9.5, color: 'var(--app-text-subtle)' }}>{firstDay}</span>
-        <span style={{ fontFamily: mono, fontSize: 9.5, color: 'var(--app-text-subtle)' }}>{midDay}</span>
-        <span style={{ fontFamily: mono, fontSize: 9.5, color: 'var(--app-text-subtle)' }}>{lastDay}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+        <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--app-text-muted)' }}>{firstDay}</span>
+        <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--app-text-muted)' }}>{midDay}</span>
+        <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--app-text-muted)' }}>{lastDay}</span>
       </div>
 
-      {/* 3 · Streak counters */}
-      <div style={{ display: 'flex', gap: 1, background: 'var(--app-border)', border: '1px solid var(--app-border)', borderRadius: 9, overflow: 'hidden', marginTop: 16 }}>
-        <div style={{ flex: 1 }}><Counter value={summary.currentStreak} label="Current streak" color={GREEN} /></div>
-        <div style={{ flex: 1 }}><Counter value={summary.bestStreak} label="Best streak" color={GREEN} /></div>
-        <div style={{ flex: 1 }}><Counter value={summary.brokenDays} label="Broken days" color={RED_TEXT} /></div>
-      </div>
-
-      {/* 4 · Rule breakdown */}
-      <div style={{ marginTop: 18 }}>
-        <p style={{ ...microLabel, marginBottom: 4 }}>Breaches by rule · {summary.breaches} total</p>
-        {rules.map((rule, i) => {
-          const zero = rule.breaches === 0;
-          return (
-            <button key={rule.id} type="button" className="ra-rule" onClick={() => onSelectRule?.(rule.id)} aria-label={`${rule.label}: ${rule.breaches} breach${rule.breaches === 1 ? '' : 'es'}`}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 46px', alignItems: 'baseline', gap: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--app-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rule.label}</span>
-                <span style={{ fontFamily: mono, fontSize: 12.5, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: zero ? GREEN : RED_TEXT }}>{rule.breaches}</span>
-              </div>
-              <div style={{ height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.06)', marginTop: 8, overflow: 'hidden' }}>
-                <div className="ra-barfill" style={{ height: '100%', borderRadius: 3, width: `${zero ? 100 : (rule.breaches / maxBreach) * 100}%`, background: zero ? GREEN : RED_BAR, animationDelay: `${i * 60}ms` }} />
-              </div>
-            </button>
-          );
-        })}
+      {/* 3 · Ranked breach rows — count on the label line, thin 3px bar */}
+      <div style={{ marginTop: 16 }}>
+        <p style={{ ...microLabel, marginBottom: 2 }}>Breaches by rule · {summary.breaches} total</p>
+        {breached.map((rule, i) => (
+          <button key={rule.id} type="button" className="ra-rule" onClick={() => onSelectRule?.(rule.id)} aria-label={`${rule.label}: ${rule.breaches} breach${rule.breaches === 1 ? '' : 'es'}`}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 34px', alignItems: 'baseline', gap: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--app-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {rule.label}
+                {i === 0 && topNote && <span style={{ fontSize: 10.5, fontWeight: 400, color: 'var(--app-text-muted)', marginLeft: 8 }}>{topNote}</span>}
+              </span>
+              <span style={{ fontFamily: mono, fontSize: 12.5, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: RED_TEXT }}>{rule.breaches}</span>
+            </div>
+            <div style={{ height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.06)', marginTop: 6, overflow: 'hidden' }}>
+              <div className="ra-barfill" style={{ height: '100%', borderRadius: 3, width: `${(rule.breaches / maxBreach) * 100}%`, background: RED_BAR, animationDelay: `${i * 60}ms` }} />
+            </div>
+          </button>
+        ))}
+        {clean.length > 0 && (
+          <p style={{ margin: '10px 0 0', fontSize: 11.5, color: 'var(--app-text-muted)', lineHeight: 1.5 }}>
+            <span style={{ color: GREEN }}>{clean.length} rule{clean.length === 1 ? '' : 's'} unbroken</span>
+            {' · '}{clean.map(r => r.label).join(', ')}
+          </p>
+        )}
       </div>
     </section>
   );

@@ -57,17 +57,94 @@ const TIME_WINDOW_OPTIONS: Array<{ value: TimeWindowMins; label: string }> = [
 const DASHBOARD_GREEN = '#34d399';
 const DASHBOARD_RED = '#f87171';
 
+// Tonal system. Chrome (axis ticks, captions) recedes, data sits above it, the
+// insight per section is brightest — but "recede" means muted, not illegible:
+// #8a8178 reads cleanly on the near-black ground where 0.4-opacity white did not.
+const CHROME = '#8a8178';                  // axis ticks, captions (== --app-text-muted)
+const GRID = 'rgba(255,255,255,0.06)';    // faint horizontal hairlines only
+const AXIS_TICK = { fill: CHROME, fontSize: 11 } as const;
+const AXIS_TICK_NUM = { fill: CHROME, fontSize: 11, fontFamily: 'var(--font-mono)' } as const;
+const LINE_STROKE = 2;                     // one stroke weight for every line
 
-// Mono uppercase section labels — the report/terminal voice used across Flyxa.
+// The section surface — data sections read far clearer boxed than as bands.
+const CARD: CSSProperties = {
+  borderRadius: 12,
+  border: '1px solid var(--app-border)',
+  background: 'var(--app-panel)',
+  padding: '20px 22px',
+};
+
+
+// Labels speak plainly; only the numbers wear mono. The old mono-uppercase
+// "terminal readout" voice made genuinely premium data feel like a data dump.
+// SECTION_TITLE — a standalone section heading. Kept white and legible: the
+// heading anchors the section; hierarchy comes from the muted captions/axes
+// beneath it, not from dimming the title itself.
+const SECTION_TITLE: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  fontWeight: 600,
+  letterSpacing: '-0.01em',
+  color: 'var(--app-text)',
+};
+// KICKER — a quiet kicker/label above a hero number or a KPI cell.
 const KICKER: CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
+  fontSize: 11,
   fontWeight: 500,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
+  letterSpacing: 0,
   color: 'var(--app-text-muted)',
 };
+
+// Sample-size honesty. A slice of a handful of trades is a hint, not a rule;
+// this decides how loudly an insight is allowed to speak.
+interface Confidence { tone: string; label: string; low: boolean; }
+function confidence(n: number): Confidence {
+  if (n >= 30) return { tone: 'var(--app-text-muted)', label: `${n} trades`, low: false };
+  if (n >= 12) return { tone: 'var(--app-text-muted)', label: `${n} trades`, low: false };
+  return { tone: '#E0A83C', label: `${n} trade${n === 1 ? '' : 's'} · low sample`, low: true };
+}
+
+// A small amber "low sample" chip, shown next to any claim built on thin data.
+function ConfidenceChip({ n }: { n: number }) {
+  const c = confidence(n);
+  if (!c.low) return null;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+      fontSize: 10, fontWeight: 500, color: c.tone,
+      border: `1px solid ${c.tone}`, borderRadius: 999, padding: '1px 7px', opacity: 0.9,
+    }}>
+      low sample · {n}
+    </span>
+  );
+}
+
+// The five overlapping "when/how you trade" P&L cuts now live behind one switch.
+const BREAKDOWN_DIMS = [
+  { key: 'weekday', label: 'Weekday' },
+  { key: 'session', label: 'Session' },
+  { key: 'hold', label: 'Hold time' },
+  { key: 'time', label: 'Time of day' },
+  { key: 'spread', label: 'Spread' },
+] as const;
+const DIM_SUBTITLE: Record<string, string> = {
+  weekday: 'Net P&L by day of the week',
+  session: 'Net P&L by market session',
+  hold: 'Net P&L by how long you held',
+  time: 'Average P&L in your most-traded windows',
+  spread: 'Every trade outcome by dollar result',
+};
+function segTab(active: boolean): CSSProperties {
+  return {
+    border: 0, cursor: 'pointer', borderRadius: 6, padding: '5px 11px',
+    fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
+    background: active ? 'var(--app-panel)' : 'transparent',
+    color: active ? 'var(--app-text)' : 'var(--app-text-muted)',
+    boxShadow: active ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
+    transition: 'color .15s ease, background .15s ease',
+  };
+}
 
 function parseTradeDateTime(trade: Trade): Date | null {
   const datePart = trade.trade_date || trade.created_at?.slice(0, 10);
@@ -290,6 +367,8 @@ export default function Analytics() {
   const [periodOffset, setPeriodOffset] = useState<number>(0);
   const [timeWindow, setTimeWindow] = useState<TimeWindowMins>(30);
   const [showAllConfluences, setShowAllConfluences] = useState(false);
+  // The five "when/how you trade" P&L cuts share one section; this picks which.
+  const [breakdownDim, setBreakdownDim] = useState<'weekday' | 'session' | 'hold' | 'time' | 'spread'>('weekday');
   const today = useMemo(() => new Date(), []);
 
   const handlePeriodChange = (key: PeriodKey) => {
@@ -882,6 +961,34 @@ export default function Analytics() {
   const periodSubtitle = getPeriodLabel(period, periodOffset, today);
   const winLossTotal = metrics.wins.length + metrics.losses.length;
 
+  // "What to fix this month" — one synthesized leak, its cost, and the net P&L
+  // you'd be looking at without it. Built from the same mistake-cost numbers as
+  // the section below so nothing contradicts, and honest about sample size.
+  const topFix = (() => {
+    const leak = mistakeCost.topLeak;
+    if (leak && leak.cost > 0) {
+      return {
+        kind: 'leak' as const,
+        label: leak.label,
+        cost: leak.cost,
+        count: leak.count,
+        projectedNet: metrics.netPnL + leak.cost,
+      };
+    }
+    // No behavioural leak logged — fall back to the most costly confluence.
+    const worst = weakestConfluences[0];
+    if (worst && worst.netPnL < 0) {
+      return {
+        kind: 'confluence' as const,
+        label: worst.label,
+        cost: Math.abs(worst.netPnL),
+        count: worst.trades,
+        projectedNet: metrics.netPnL + Math.abs(worst.netPnL),
+      };
+    }
+    return null;
+  })();
+
   // The KPI rail under the equity curve — one ruled strip, no floating boxes.
   const kpiCells: Array<{ label: string; value: ReactNode; color?: string; sub?: string; tip?: string }> = [
     {
@@ -929,7 +1036,7 @@ export default function Analytics() {
   ];
 
   return (
-    <div className="animate-fade-in space-y-4">
+    <div className="animate-fade-in space-y-7">
       <PageHeader
         data-tour-id="analytics-header"
         title="Analytics"
@@ -1010,6 +1117,37 @@ export default function Analytics() {
         </SectionPanel>
       ) : null}
 
+      {/* What to fix this month — the page's opening statement, not another
+          card. De-boxed masthead: presence comes from scale + whitespace, with a
+          single hairline separating it from the equity chart below. */}
+      {filteredTrades.length > 0 && topFix && (
+        <section style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: '18px 40px',
+          paddingBottom: 24, borderBottom: '1px solid var(--app-border)',
+        }}>
+          <div style={{ minWidth: 0, maxWidth: 620 }}>
+            <p style={{ ...KICKER, fontSize: 11.5, fontWeight: 600, letterSpacing: '0.02em', color: 'var(--amber)' }}>What to fix this month</p>
+            <p style={{ margin: '14px 0 0', fontSize: 27, fontWeight: 600, letterSpacing: '-0.025em', color: 'var(--app-text)', lineHeight: 1.08 }}>
+              {topFix.label}
+            </p>
+            <p style={{ margin: '10px 0 0', fontSize: 13.5, color: 'var(--app-text-muted)', lineHeight: 1.5 }}>
+              {topFix.kind === 'leak'
+                ? `${topFix.count}× this month`
+                : `${topFix.count} trade${topFix.count !== 1 ? 's' : ''}`}
+              {' · cost you '}
+              <span style={{ fontFamily: 'var(--font-mono)', color: DASHBOARD_RED }}>−{formatCurrency(topFix.cost)}</span>
+              {confidence(topFix.count).low && <span style={{ color: 'var(--app-text-subtle)' }}> · low sample, {topFix.count} trades</span>}
+            </p>
+          </div>
+          <div style={{ flexShrink: 0, textAlign: 'right' }}>
+            <p style={{ ...KICKER, fontSize: 10.5 }}>Net if fixed</p>
+            <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 31, fontWeight: 500, lineHeight: 1, letterSpacing: '-0.025em', color: topFix.projectedNet >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED }}>
+              {formatSignedCurrency(topFix.projectedNet)}
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* Performance terminal — net result, curve, and the KPI rail in one sheet */}
       <section data-tour-id="analytics-equity-curve" className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
         <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-4">
@@ -1040,12 +1178,13 @@ export default function Analytics() {
                     <stop offset="100%" stopColor={DASHBOARD_GREEN} stopOpacity={0.04} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="var(--app-panel-strong)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: 'var(--app-text-subtle)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={24} />
                 <YAxis
-                  tick={{ fill: 'var(--app-text-subtle)', fontSize: 12 }}
+                  tick={AXIS_TICK_NUM}
                   axisLine={false}
                   tickLine={false}
+                  width={54}
                   tickFormatter={value => `$${Number(value).toLocaleString()}`}
                 />
                 <Tooltip
@@ -1068,14 +1207,24 @@ export default function Analytics() {
                   type="monotone"
                   dataKey="cumulative"
                   stroke={DASHBOARD_GREEN}
-                  strokeWidth={3}
+                  strokeWidth={LINE_STROKE}
                   fill="url(#pnl-fill)"
                   dot={(props: { cx?: number; cy?: number; index?: number; payload?: { payoutAmount?: number } }) => {
                     const hasPayout = !!props.payload?.payoutAmount;
+                    // Emphasised endpoint — the current equity point is the brightest mark on the line.
+                    const isLast = props.index === equityCurveData.length - 1;
+                    if (isLast) {
+                      return (
+                        <g key="equity-endpoint">
+                          <circle cx={props.cx} cy={props.cy} r={7} fill={DASHBOARD_GREEN} fillOpacity={0.18} />
+                          <circle cx={props.cx} cy={props.cy} r={3.5} fill={DASHBOARD_GREEN} stroke="#0e0d0d" strokeWidth={2} />
+                        </g>
+                      );
+                    }
                     if (!hasPayout) return <g key={`${props.cx}-${props.cy}`} />;
                     return (
                       <g key={`dot-${props.index}-${props.cx}-${props.cy}`}>
-                        {hasPayout && <circle cx={props.cx} cy={props.cy} r={5} fill="#f59e0b" stroke="#0e0d0d" strokeWidth={1.5} />}
+                        <circle cx={props.cx} cy={props.cy} r={5} fill="#f59e0b" stroke="#0e0d0d" strokeWidth={1.5} />
                       </g>
                     );
                   }}
@@ -1093,19 +1242,19 @@ export default function Analytics() {
         <div data-tour-id="analytics-metrics" className="flex overflow-x-auto border-t border-[var(--app-border)]">
           {kpiCells.map((cell, i) => (
             <div key={cell.label} style={{ flex: '1 1 0', minWidth: 128, padding: '12px 18px', borderLeft: i === 0 ? 'none' : '1px solid var(--app-border)' }}>
-              <p style={{ ...KICKER, fontSize: 9, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--app-text-subtle)' }}>
+              <p style={{ ...KICKER, fontSize: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
                 {cell.label}{cell.tip && <InfoTooltip text={cell.tip} />}
               </p>
               <p style={{ margin: '7px 0 0', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', color: cell.color ?? 'var(--app-text)' }}>
                 {cell.value}
               </p>
-              {cell.sub && <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--app-text-subtle)', whiteSpace: 'nowrap' }}>{cell.sub}</p>}
+              {cell.sub && <p style={{ margin: '4px 0 0', fontSize: 10.5, color: 'var(--app-text-muted)', whiteSpace: 'nowrap' }}>{cell.sub}</p>}
             </div>
           ))}
         </div>
       </section>
 
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
         {/* Win rate + last-20 record in one card */}
         <section data-tour-id="analytics-win-loss" className="overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]">
           <div style={{ padding: '15px 18px 16px' }}>
@@ -1138,9 +1287,9 @@ export default function Analytics() {
                 </>
               )}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: DASHBOARD_GREEN }}>{metrics.wins.length} WINS</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', color: DASHBOARD_RED }}>{metrics.losses.length} LOSSES</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+              <span style={{ fontSize: 11.5, color: DASHBOARD_GREEN }}><b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{metrics.wins.length}</b> wins</span>
+              <span style={{ fontSize: 11.5, color: DASHBOARD_RED }}><b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{metrics.losses.length}</b> losses</span>
             </div>
           </div>
 
@@ -1164,11 +1313,11 @@ export default function Analytics() {
                 <span style={{ fontSize: 11, color: 'var(--app-text-subtle)' }}>No trades yet.</span>
               )}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 14px', marginTop: 13, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--app-text-subtle)' }}>
-              <span>CURRENT <b style={{ color: streakStats.currentType >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED }}>{streakStats.currentLength}{streakStats.currentType >= 0 ? 'W' : 'L'}</b></span>
-              <span>BEST <b style={{ color: DASHBOARD_GREEN }}>{streakStats.bestWin}W</b></span>
-              <span>WORST <b style={{ color: DASHBOARD_RED }}>{streakStats.worstLoss}L</b></span>
-              <span>MAX LOSS <b style={{ color: DASHBOARD_RED }}>{metrics.largestLoss < 0 ? formatCurrency(metrics.largestLoss) : '$0'}</b></span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: 14, fontSize: 11, color: CHROME }}>
+              <span>Current <b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: streakStats.currentType >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED }}>{streakStats.currentLength}{streakStats.currentType >= 0 ? 'W' : 'L'}</b></span>
+              <span>Best <b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: DASHBOARD_GREEN }}>{streakStats.bestWin}W</b></span>
+              <span>Worst <b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: DASHBOARD_RED }}>{streakStats.worstLoss}L</b></span>
+              <span>Max loss <b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: DASHBOARD_RED }}>{metrics.largestLoss < 0 ? formatCurrency(metrics.largestLoss) : '$0'}</b></span>
             </div>
           </div>
         </section>
@@ -1177,208 +1326,166 @@ export default function Analytics() {
         <RuleAdherenceCard data={adherenceData} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <LollipopDistribution
-          title="P&L by day of week"
-          rows={dayOfWeekRows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
-          order="given" unit="days" sortLabel="by weekday"
-        />
-
-        <LollipopDistribution
-          title="P&L by session"
-          rows={sessionRows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
-          order="given" unit="sessions" sortLabel="by session"
-        />
-
-        {holdTime.known > 0 ? (
-          <LollipopDistribution
-            title="P&L by hold time"
-            rows={holdTime.rows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
-            order="given" unit="ranges" sortLabel="by duration"
-            note={
-              <>
-                Winners held <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgWinHold)}</b> avg
-                {' '}· losers <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgLossHold)}</b>
-                {metrics.avgLossHold > 0 && metrics.avgWinHold > 0 && metrics.avgLossHold > metrics.avgWinHold * 1.5 && (
-                  <>, <span style={{ color: DASHBOARD_RED }}>you sit in losers ~{(metrics.avgLossHold / metrics.avgWinHold).toFixed(1)}× longer than winners.</span></>
-                )}
-                {holdTime.worst && holdTime.best && holdTime.worst.label !== holdTime.best.label && (
-                  <> {holdTime.worst.label} holds are the leak ({formatSignedCurrency(holdTime.worst.pnl)}).</>
-                )}
-              </>
-            }
-          />
-        ) : (
-          <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)]" style={{ padding: '20px 22px' }}>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '1.6px', textTransform: 'uppercase', color: 'var(--app-text-muted)' }}>P&amp;L by hold time</p>
-            <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--app-text-subtle)' }}>
-              No hold-time data in this period, durations come from scanned charts or the journal&apos;s entry/exit time fields.
-            </p>
-          </section>
-        )}
-      </div>
-
-      {/* P&L Distribution — dot plot */}
-      {pnlDistribution && (
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
+      {/* When you trade — five overlapping P&L cuts behind one switch (was five
+          separate cards) so 26 trades aren't sliced five ways on screen at once. */}
+      {filteredTrades.length > 0 && (
+        <section data-tour-id="analytics-time-of-day" style={CARD}>
+          <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: 18 }}>
             <div>
-              <h3 style={KICKER}>P&amp;L distribution</h3>
-              <p className="mt-1.5 text-xs text-[var(--app-text-muted)]">Trade outcomes by dollar result</p>
-              <div className="hidden">
-                <span style={{ color: metrics.winRate >= 50 ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 700, fontSize: 13 }}>
-                  {metrics.winRate.toFixed(0)}%
-                </span>
-                <span style={{ color: 'var(--app-text-muted)' }}>win rate</span>
-                <span style={{ color: 'var(--app-text-subtle)' }}>·</span>
-                <span style={{ color: 'var(--app-text)', fontWeight: 600 }}>
-                  {pnlDistribution.wins.length}W / {pnlDistribution.losses.length}L
-                </span>
-                <span style={{ color: 'var(--app-text-subtle)' }}>·</span>
-                <span style={{ color: metrics.avgPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 600 }}>
-                  {formatSignedCurrency(metrics.avgPnL)}
-                </span>
-                <span style={{ color: 'var(--app-text-muted)' }}>avg / trade</span>
+              <h3 style={SECTION_TITLE}>When you trade</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--app-text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {DIM_SUBTITLE[breakdownDim]}
+                <ConfidenceChip n={filteredTrades.length} />
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', background: 'var(--app-panel-strong)', borderRadius: 8, padding: 3 }}>
+              {BREAKDOWN_DIMS.map(d => (
+                <button key={d.key} type="button" onClick={() => setBreakdownDim(d.key)} style={segTab(breakdownDim === d.key)}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {breakdownDim === 'weekday' && (
+            <LollipopDistribution
+              chrome={false} showTitle={false}
+              title="P&L by day of week"
+              rows={dayOfWeekRows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
+              order="given" unit="days" sortLabel="by weekday"
+            />
+          )}
+
+          {breakdownDim === 'session' && (
+            <LollipopDistribution
+              chrome={false} showTitle={false}
+              title="P&L by session"
+              rows={sessionRows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
+              order="given" unit="sessions" sortLabel="by session"
+            />
+          )}
+
+          {breakdownDim === 'hold' && (holdTime.known > 0 ? (
+            <LollipopDistribution
+              chrome={false} showTitle={false}
+              title="P&L by hold time"
+              rows={holdTime.rows.map(r => ({ key: r.label, count: r.count, value: r.pnl }))}
+              order="given" unit="ranges" sortLabel="by duration"
+              note={
+                <>
+                  Winners held <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgWinHold)}</b> avg
+                  {' '}· losers <b style={{ color: 'var(--app-text)' }}>{formatHoldSeconds(metrics.avgLossHold)}</b>
+                  {metrics.avgLossHold > 0 && metrics.avgWinHold > 0 && metrics.avgLossHold > metrics.avgWinHold * 1.5 && (
+                    <>, <span style={{ color: DASHBOARD_RED }}>you sit in losers ~{(metrics.avgLossHold / metrics.avgWinHold).toFixed(1)}× longer than winners.</span></>
+                  )}
+                  {holdTime.worst && holdTime.best && holdTime.worst.label !== holdTime.best.label && (
+                    <> {holdTime.worst.label} holds are the leak ({formatSignedCurrency(holdTime.worst.pnl)}).</>
+                  )}
+                </>
+              }
+            />
+          ) : (
+            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--app-text-subtle)', padding: '16px 0' }}>
+              No hold-time data in this period. Durations come from scanned charts or the journal&apos;s entry / exit time fields.
+            </p>
+          ))}
+
+          {breakdownDim === 'time' && (
+            <div>
+              <div className="flex justify-end" style={{ marginTop: -4, marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 2, background: 'var(--app-panel-strong)', borderRadius: 8, padding: 3 }}>
+                  {TIME_WINDOW_OPTIONS.map(opt => (
+                    <button key={opt.value} type="button" onClick={() => setTimeWindow(opt.value)} style={segTab(timeWindow === opt.value)}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-x-auto -mx-1 px-1">
+                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${timeOfDayRows.length}, minmax(72px, 1fr))`, minWidth: `${timeOfDayRows.length * 80}px` }}>
+                  {timeOfDayRows.map(row => (
+                    <div key={row.label} className="text-center">
+                      <p className="mb-1.5 text-[11px] text-[var(--app-text-muted)] whitespace-nowrap">{row.label}</p>
+                      <div
+                        className="rounded-md px-1 py-2 text-xs font-medium whitespace-nowrap"
+                        style={{
+                          backgroundColor: row.avgPnL === null
+                            ? 'var(--app-panel-strong)'
+                            : row.avgPnL >= 0
+                              ? `rgba(52,211,153,${0.3 + (row.ratio * 0.42)})`
+                              : `rgba(248,113,113,${0.3 + (row.ratio * 0.42)})`,
+                          color: row.avgPnL === null ? '#6d82a7' : row.avgPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
+                        }}
+                      >
+                        {row.avgPnL === null ? '--' : formatSignedCurrency(row.avgPnL)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            {/* Size legend hint */}
-            <span className="hidden">
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', opacity: 0.5 }} />
-              <span style={{ width: 11, height: 11, borderRadius: '50%', background: 'currentColor', display: 'inline-block', opacity: 0.5 }} />
-              <span style={{ marginLeft: 3 }}>size = |P&amp;L|</span>
-            </span>
-          </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <ScatterChart margin={{ top: 28, right: 16, left: 16, bottom: 16 }}>
-              <CartesianGrid stroke="var(--app-panel-strong)" horizontal={false} />
-              <XAxis
-                dataKey="pnl"
-                type="number"
-                domain={[pnlDistribution.domainMin, pnlDistribution.domainMax]}
-                tick={{ fill: 'var(--app-text-subtle)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                tickCount={6}
-                tickFormatter={(v: number) => `$${Math.round(v).toLocaleString()}`}
-              />
-              <YAxis dataKey="y" type="number" hide domain={[0, 1]} />
-              {/* dot area scales with |P&L|: ~2px to ~7px radius */}
-              <ZAxis dataKey="size" range={[14, 160]} />
-              <ReferenceLine
-                x={0}
-                stroke="var(--accent)"
-                strokeDasharray="4 4"
-                label={(props: any) => {
-                  const vb = props?.viewBox;
-                  if (!vb) return <g/>;
-                  return (
-                    <text x={vb.x} y={14}
-                      fill="var(--accent)" fontSize={10} fontWeight={700}
-                      textAnchor="middle">
-                      $0
-                    </text>
-                  );
-                }}
-              />
-              <Tooltip
-                cursor={false}
-                content={({ payload }) => {
-                  const item = payload?.[0]?.payload as { pnl?: number; isPositive?: boolean } | undefined;
-                  if (item == null || item.pnl == null) return null;
-                  return (
-                    <div style={{
-                      background: 'var(--app-panel)', border: '1px solid var(--app-border)',
-                      borderRadius: 10, padding: '8px 12px',
-                    }}>
-                      <p style={{ color: item.isPositive ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 600, fontSize: 13 }}>
-                        {formatSignedCurrency(item.pnl)}
-                      </p>
-                      <p style={{ color: 'var(--app-text-muted)', fontSize: 11, marginTop: 2 }}>
-                        {item.isPositive ? 'Win' : 'Loss'}
-                      </p>
-                    </div>
-                  );
-                }}
-              />
-              <Scatter data={pnlDistribution.losses} fill={DASHBOARD_RED} fillOpacity={0.75} />
-              <Scatter data={pnlDistribution.wins} fill={DASHBOARD_GREEN} fillOpacity={0.75} />
-            </ScatterChart>
-          </ResponsiveContainer>
+          )}
+
+          {breakdownDim === 'spread' && (pnlDistribution ? (
+            <ResponsiveContainer width="100%" height={190}>
+              <ScatterChart margin={{ top: 28, right: 16, left: 16, bottom: 16 }}>
+                <XAxis
+                  dataKey="pnl"
+                  type="number"
+                  domain={[pnlDistribution.domainMin, pnlDistribution.domainMax]}
+                  tick={AXIS_TICK_NUM}
+                  axisLine={false}
+                  tickLine={false}
+                  tickCount={6}
+                  tickFormatter={(v: number) => `$${Math.round(v).toLocaleString()}`}
+                />
+                <YAxis dataKey="y" type="number" hide domain={[0, 1]} />
+                <ZAxis dataKey="size" range={[14, 160]} />
+                <ReferenceLine
+                  x={0}
+                  stroke="var(--accent)"
+                  strokeDasharray="4 4"
+                  label={(props: any) => {
+                    const vb = props?.viewBox;
+                    if (!vb) return <g/>;
+                    return (
+                      <text x={vb.x} y={14} fill="var(--accent)" fontSize={10} fontWeight={700} textAnchor="middle">$0</text>
+                    );
+                  }}
+                />
+                <Tooltip
+                  cursor={false}
+                  content={({ payload }) => {
+                    const item = payload?.[0]?.payload as { pnl?: number; isPositive?: boolean } | undefined;
+                    if (item == null || item.pnl == null) return null;
+                    return (
+                      <div style={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 10, padding: '8px 12px' }}>
+                        <p style={{ color: item.isPositive ? DASHBOARD_GREEN : DASHBOARD_RED, fontWeight: 600, fontSize: 13 }}>{formatSignedCurrency(item.pnl)}</p>
+                        <p style={{ color: 'var(--app-text-muted)', fontSize: 11, marginTop: 2 }}>{item.isPositive ? 'Win' : 'Loss'}</p>
+                      </div>
+                    );
+                  }}
+                />
+                <Scatter data={pnlDistribution.losses} fill={DASHBOARD_RED} fillOpacity={0.75} />
+                <Scatter data={pnlDistribution.wins} fill={DASHBOARD_GREEN} fillOpacity={0.75} />
+              </ScatterChart>
+            </ResponsiveContainer>
+          ) : (
+            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--app-text-subtle)', padding: '16px 0' }}>
+              Not enough trades in this period to plot a spread.
+            </p>
+          ))}
         </section>
       )}
 
-      <section data-tour-id="analytics-time-of-day" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-        <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+      <section data-tour-id="analytics-confluence" style={CARD}>
+        <div className="flex items-start justify-between gap-3" style={{ marginBottom: 6 }}>
           <div>
-            <h3 style={KICKER}>P&amp;L by time of day</h3>
-            <p className="text-xs text-[var(--app-text-muted)] mt-1.5">
-              Avg P&amp;L in your most traded {timeWindow === 60 ? '1-hr' : `${timeWindow}-min`} windows
-            </p>
+            <h3 style={SECTION_TITLE}>Confluence performance</h3>
+            <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--app-text-muted)' }}>Which conditions are helping vs hurting your P&amp;L</p>
           </div>
-          <div className="flex items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-0.5">
-            {TIME_WINDOW_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setTimeWindow(opt.value)}
-                className="rounded px-2.5 py-1 text-xs font-medium transition-colors"
-                style={{
-                  background: timeWindow === opt.value ? 'var(--accent, #60a5fa)' : 'transparent',
-                  color: timeWindow === opt.value ? '#fff' : 'var(--app-text-muted)',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="overflow-x-auto -mx-1 px-1">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${timeOfDayRows.length}, minmax(72px, 1fr))`, minWidth: `${timeOfDayRows.length * 80}px` }}>
-            {timeOfDayRows.map(row => (
-              <div key={row.label} className="text-center">
-                <p className="mb-1.5 text-[11px] text-[var(--app-text-muted)] whitespace-nowrap">{row.label}</p>
-                <div
-                  className="rounded-md px-1 py-2 text-xs font-medium whitespace-nowrap"
-                  style={{
-                    backgroundColor: row.avgPnL === null
-                      ? 'var(--app-panel-strong)'
-                      : row.avgPnL >= 0
-                        ? `rgba(52,211,153,${0.3 + (row.ratio * 0.42)})`
-                        : `rgba(248,113,113,${0.3 + (row.ratio * 0.42)})`,
-                    color: row.avgPnL === null ? '#6d82a7' : row.avgPnL >= 0 ? DASHBOARD_GREEN : DASHBOARD_RED,
-                  }}
-                >
-                  {row.avgPnL === null ? '--' : formatSignedCurrency(row.avgPnL)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="hidden">
-          <span className="text-xs text-[var(--app-text-muted)]">Mon-Fri</span>
-          <div className="flex items-center gap-2 text-xs text-[var(--app-text-muted)]">
-            <span>Loss</span>
-            <span className="h-3 w-6 rounded bg-red-900/60" />
-            <span className="h-3 w-6 rounded bg-red-400" />
-            <span className="h-3 w-6 rounded bg-[var(--app-panel-strong)]" />
-            <span className="h-3 w-6 rounded bg-emerald-900/60" />
-            <span className="h-3 w-6 rounded bg-emerald-400" />
-            <span className="h-3 w-6 rounded bg-emerald-400" />
-            <span>Profit</span>
-          </div>
-        </div>
-      </section>
-
-      <section data-tour-id="analytics-confluence" className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-        <div className="mb-1 flex items-start justify-between gap-3">
-          <div>
-            <h3 style={KICKER}>Confluence performance</h3>
-            <p className="mt-1.5 text-xs text-[var(--app-text-muted)]">Which conditions are helping vs. hurting your P&amp;L</p>
-          </div>
-          <span style={{ flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--app-text-subtle)' }}>
-            {confluenceRows.length} TRACKED
+          <span style={{ flexShrink: 0, fontSize: 11, color: 'var(--app-text-muted)' }}>
+            {confluenceRows.length} tracked
           </span>
         </div>
 
@@ -1394,7 +1501,10 @@ export default function Analytics() {
               </span>
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--app-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</p>
-                <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
+                <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--app-text-muted)' }}>
+                  {row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win
+                  {confidence(row.trades).low && <span style={{ color: '#E0A83C' }}> · low sample</span>}
+                </p>
               </div>
               <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden', display: 'flex', justifyContent: positive ? 'flex-start' : 'flex-end' }}>
                 <div style={{ width: `${Math.max(2, (Math.abs(row.netPnL) / maxAbs) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9 }} />
@@ -1405,12 +1515,12 @@ export default function Analytics() {
             </div>
           );
           return (
-            <div className="mt-4">
-              <p style={{ margin: '0 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: DASHBOARD_GREEN }}>MOST PROFITABLE</p>
+            <div className="mt-5">
+              <p style={{ margin: '0 0 3px', fontSize: 11, fontWeight: 600, color: DASHBOARD_GREEN }}>Most profitable</p>
               {strongestConfluences.length > 0
                 ? strongestConfluences.map((row, i) => ledgerRow(row, i + 1, true))
                 : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
-              <p style={{ margin: '16px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: DASHBOARD_RED }}>MOST COSTLY</p>
+              <p style={{ margin: '20px 0 3px', fontSize: 11, fontWeight: 600, color: DASHBOARD_RED }}>Most costly</p>
               {weakestConfluences.length > 0
                 ? weakestConfluences.map((row, i) => ledgerRow(row, i + 1, false))
                 : <p style={{ margin: 0, padding: '10px 0', fontSize: 11, color: 'var(--app-text-subtle)', borderTop: '1px solid var(--app-border)' }}>None this period.</p>}
@@ -1425,7 +1535,10 @@ export default function Analytics() {
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: 'var(--app-text-subtle)' }}>{String(rank).padStart(2, '0')}</span>
                       <div style={{ minWidth: 0 }}>
                         <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--app-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</p>
-                        <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win</p>
+                        <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--app-text-muted)' }}>
+                  {row.trades} trade{row.trades !== 1 ? 's' : ''} · {row.winRate.toFixed(0)}% win
+                  {confidence(row.trades).low && <span style={{ color: '#E0A83C' }}> · low sample</span>}
+                </p>
                       </div>
                       <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden', display: 'flex', justifyContent: positive ? 'flex-start' : 'flex-end' }}>
                         <div style={{ width: `${Math.max(2, (Math.abs(row.netPnL) / allMaxAbs) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: positive ? DASHBOARD_GREEN : DASHBOARD_RED, opacity: 0.9 }} />
@@ -1438,14 +1551,14 @@ export default function Analytics() {
                   <>
                     {showAllConfluences && (
                       <>
-                        <p style={{ margin: '16px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.1em', color: 'var(--app-text-subtle)' }}>ALL CONFLUENCES</p>
+                        <p style={{ margin: '20px 0 3px', fontSize: 11, fontWeight: 600, color: CHROME }}>All confluences</p>
                         {allSorted.map((row, i) => fullRow(row, i + 1))}
                       </>
                     )}
                     <button
                       type="button"
                       onClick={() => setShowAllConfluences(v => !v)}
-                      style={{ marginTop: 14, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '8px 0', borderTop: '1px solid var(--app-border)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--app-text-muted)' }}
+                      style={{ marginTop: 14, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderTop: '1px solid var(--app-border)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 500, color: 'var(--app-text-muted)' }}
                     >
                       {showAllConfluences ? 'Show less' : `See all ${confluenceRows.length} confluences`}
                       <span style={{ display: 'inline-block', transition: 'transform 0.15s', transform: showAllConfluences ? 'rotate(180deg)' : 'none', fontSize: 9 }}>▾</span>
@@ -1459,15 +1572,15 @@ export default function Analytics() {
       </section>
 
       {mistakeCost.topRows.length > 0 && (
-        <section className="rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
-          <div className="mb-2 flex items-start justify-between gap-4">
+        <section style={CARD}>
+          <div className="flex items-start justify-between gap-4" style={{ marginBottom: 8 }}>
             <div>
-              <h3 style={KICKER}>Mistake cost</h3>
-              <p className="mt-1.5 text-xs text-[var(--app-text-muted)]">Top recurring leaks this period</p>
+              <h3 style={SECTION_TITLE}>Mistake cost</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--app-text-muted)' }}>Top recurring leaks this period</p>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <p style={{ ...KICKER, fontSize: 9, color: 'var(--app-text-subtle)' }}>Avoidable loss</p>
-              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 500, lineHeight: 1, color: DASHBOARD_RED }}>
+              <p style={{ ...KICKER, fontSize: 10 }}>Avoidable loss</p>
+              <p style={{ margin: '5px 0 0', fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500, lineHeight: 1, color: DASHBOARD_RED }}>
                 −{formatCurrency(mistakeCost.avoidableCost)}
               </p>
             </div>
@@ -1485,7 +1598,7 @@ export default function Analytics() {
                   <div style={{ height: 5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
                     <div style={{ width: `${Math.max(2, (cost / maxCost) * 100)}%`, height: '100%', borderRadius: 2, backgroundColor: DASHBOARD_RED, opacity: dim ? 0.5 : 0.9 }} />
                   </div>
-                  <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--app-text-subtle)' }}>{count}×</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--app-text-muted)' }}>{count}×</span>
                   <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap', color: DASHBOARD_RED }}>
                     −{formatCurrency(cost)}
                   </span>
@@ -1500,8 +1613,8 @@ export default function Analytics() {
             })()}
           </div>
 
-          <p className="mt-3 text-xs text-[var(--app-text-muted)]">
-            Fixing the top leak first would have the highest impact: <span className="text-[var(--app-text)]">{mistakeCost.topLeak?.label}</span>.
+          <p style={{ margin: '14px 0 0', fontSize: 11.5, color: 'var(--app-text-muted)' }}>
+            Fixing the top leak first would have the highest impact: <span style={{ color: 'var(--app-text)', fontWeight: 500 }}>{mistakeCost.topLeak?.label}</span>.
           </p>
         </section>
       )}

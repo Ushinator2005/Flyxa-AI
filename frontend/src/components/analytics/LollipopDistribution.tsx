@@ -34,7 +34,7 @@ function fmtSigned(v: number): string {
 // One injected stylesheet covers hover, focus, the grow animation, reduced
 // motion and the <480px stack. Duplicated across instances is harmless.
 const STYLE = `
-.lolli-row { display:grid; grid-template-columns:46px 1fr 78px; gap:12px; align-items:center;
+.lolli-row { display:grid; grid-template-columns:62px 1fr 78px; gap:12px; align-items:center;
   padding:11px 0; border:0; background:none; width:100%; text-align:left; cursor:pointer;
   border-top:1px solid rgba(255,255,255,0.05); font-family:inherit; }
 .lolli-row:first-of-type { border-top:0; }
@@ -60,6 +60,7 @@ const STYLE = `
 
 export default function LollipopDistribution({
   title, rows, order, unit, sortLabel, loading = false, onSelect, note,
+  chrome = true, showTitle = true,
 }: {
   title: string;
   rows: LollipopRow[];
@@ -69,6 +70,8 @@ export default function LollipopDistribution({
   loading?: boolean;
   onSelect?: (key: string) => void;
   note?: ReactNode;           // optional insight line rendered beneath the rows
+  chrome?: boolean;           // false → boxless, sits inside a parent band
+  showTitle?: boolean;        // false → parent already labels this view
 }) {
   const ordered = useMemo(
     () => (order === 'value' ? [...rows].sort((a, b) => b.value - a.value) : rows),
@@ -91,19 +94,21 @@ export default function LollipopDistribution({
     ? '…'
     : `${rows.length} ${unit} · ${totalTrades} trades · net ${fmtSigned(net)} · ${sortLabel}`;
 
-  const card: CSSProperties = {
-    background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 12,
-    padding: '20px 22px 22px', fontFamily: 'var(--font-sans)',
-  };
+  const card: CSSProperties = chrome
+    ? {
+        background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 12,
+        padding: '20px 22px 22px', fontFamily: 'var(--font-sans)',
+      }
+    : { fontFamily: 'var(--font-sans)' };
   const mono = 'var(--font-mono)';
 
   return (
     <section style={card}>
       <style>{STYLE}</style>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: callout ? 14 : 6 }}>
-        <span style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '1.6px', textTransform: 'uppercase', color: 'var(--app-text-muted)', whiteSpace: 'nowrap' }}>{title}</span>
-        <span style={{ fontFamily: mono, fontSize: 10.5, color: 'var(--app-text-subtle)', textAlign: 'right' }}>{context}</span>
+      {/* Header — sentence-case title, quiet context. Mono stays on the numbers only. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: showTitle ? 'space-between' : 'flex-end', gap: 12, marginBottom: callout ? 14 : 6 }}>
+        {showTitle && <span style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--app-text)', whiteSpace: 'nowrap' }}>{title}</span>}
+        <span style={{ fontSize: 11, color: 'var(--app-text-muted)', textAlign: 'right' }}>{context}</span>
       </div>
 
       {/* Callout */}
@@ -122,7 +127,7 @@ export default function LollipopDistribution({
           const offset = empty || loading ? 0 : (Math.abs(row.value) / maxAbs) * MAX_REACH;
           const dotColor = empty ? 'rgba(255,255,255,0.18)' : positive ? 'var(--green)' : NEG_TEXT;
           const stemColor = positive ? POS_STEM : NEG_STEM;
-          const keyColor = empty ? 'var(--app-text-subtle)' : 'var(--app-text-muted)';
+          const keyColor = empty ? 'var(--app-text-subtle)' : 'var(--app-text)';
           const valColor = empty ? 'var(--app-text-subtle)' : positive ? 'var(--green)' : NEG_TEXT;
 
           return (
@@ -132,11 +137,12 @@ export default function LollipopDistribution({
               className="lolli-row"
               onClick={() => onSelect?.(row.key)}
               aria-label={`${row.key}: ${empty ? 'no trades' : `${fmtSigned(row.value)} across ${row.count} trade${row.count === 1 ? '' : 's'}`}`}
+              style={empty ? { opacity: 0.4 } : undefined}
             >
-              {/* Key + count */}
+              {/* Key + count — sentence-case label, mono only on the trade count */}
               <span className="lolli-key" style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontFamily: mono, fontSize: 11.5, textTransform: 'uppercase', color: keyColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.key}</span>
-                <span style={{ display: 'block', fontFamily: mono, fontSize: 9.5, color: 'var(--app-text-subtle)', marginTop: 2 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: keyColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.key}</span>
+                <span style={{ display: 'block', fontFamily: mono, fontSize: 10.5, color: 'var(--app-text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
                   {empty ? '—' : `${row.count} trade${row.count === 1 ? '' : 's'}`}
                 </span>
               </span>
@@ -160,15 +166,16 @@ export default function LollipopDistribution({
                     }}
                   />
                 )}
-                {/* dot */}
-                {!loading && (
+                {/* dot — never drawn for empty categories: a marker on the zero
+                    axis reads as a real $0 data point, which it is not. */}
+                {!loading && !empty && (
                   <span
                     className="lolli-dot"
                     style={{
                       position: 'absolute', top: '50%', width: 9, height: 9, borderRadius: '50%',
                       background: dotColor, transform: 'translate(-50%,-50%)',
                       left: `${50 + (positive ? offset : -offset)}%`,
-                      animationDelay: `${(empty ? 0 : 500) + i * 60}ms`,
+                      animationDelay: `${500 + i * 60}ms`,
                     }}
                   />
                 )}
