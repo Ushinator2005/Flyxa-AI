@@ -5,22 +5,6 @@ import { waitlistApi } from '../services/api.js';
 import ThemeToggle from '../components/common/ThemeToggle.js';
 import FlyxaLogo from '../components/common/FlyxaLogo.js';
 
-const features = [
-  {
-    title: 'Journal with context',
-    description: 'Chart, execution notes, and trade rationale, all in one place.',
-  },
-  {
-    title: 'Review without noise',
-    description: 'Spot patterns in discipline, risk, and follow-through more clearly.',
-  },
-  {
-    title: 'Built for real routines',
-    description: 'A calm workspace for the work you do after the close.',
-  },
-];
-
-
 export default function Auth() {
   const { signIn, signInWithGoogle, resetPassword } = useAuth();
   // Private beta: the second tab collects waitlist emails instead of creating
@@ -637,35 +621,27 @@ export default function Auth() {
 
       <div className="auth-layout">
 
-        {/* ── Left panel ── */}
+        {/* ── Left panel — editorial: brand, one serif statement, footer ── */}
         <section className="auth-left">
           <div className="auth-left-inner">
-            <FlyxaLogo
-              size={72}
-              showWordmark
-              className="auth-logo"
-              wordmarkClassName="text-[3rem] font-bold tracking-[-0.05em]"
-              subtitleClassName="text-[12px] tracking-[0.5em]"
-            />
+            <a className="auth-brandrow" href="/landing/index.html" aria-label="Back to Flyxa">
+              <FlyxaLogo size={30} />
+              <span className="auth-brand-word">Flyxa</span>
+            </a>
 
             <div className="auth-hero">
-              <h1 className="auth-headline">
-                Your edge is already<br />
-                in your history.<br />
-                <span className="auth-headline-em">Stop guessing.</span>
-              </h1>
-              <p className="auth-subhead">
-                Do the work after the close. Build an edge that compounds.
-              </p>
+              <h1 className="auth-headline">Your edge is already in your history.</h1>
+              <p className="auth-subhead">Do the work after the close. Build an edge that compounds.</p>
+              <div className="auth-left-hint">
+                <kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>L</kbd>
+                <span>log a trade from anywhere, in about 15 seconds</span>
+              </div>
             </div>
 
-            <div className="auth-features">
-              {features.map((f) => (
-                <div key={f.title} className="auth-feature-item">
-                  <p className="auth-feature-title">{f.title}</p>
-                  <p className="auth-feature-desc">{f.description}</p>
-                </div>
-              ))}
+            <div className="auth-left-foot">
+              <a href="/landing/Terms.html">Terms</a>
+              <a href="/landing/Privacy.html">Privacy</a>
+              <a href="mailto:team@flyxa.app">Contact</a>
             </div>
           </div>
         </section>
@@ -690,7 +666,7 @@ export default function Auth() {
             {/* Greeting */}
             <div className="auth-card-greeting">
               <p className="auth-card-title">
-                {tab === 'login' ? 'Welcome back' : 'Flyxa is in private beta'}
+                {tab === 'login' ? 'Sign in' : 'Join the waitlist'}
               </p>
               <p className="auth-card-subtitle">
                 {tab === 'login' ? 'Sign in to continue to Flyxa.' : 'Join the waitlist and we’ll email you when your spot opens.'}
