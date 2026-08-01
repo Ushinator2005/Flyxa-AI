@@ -95,7 +95,9 @@ When the trader's recent journal writing is provided, read it the way a performa
 - When you make a tone-based read, QUOTE the exact phrase and its date as evidence. Never claim a tone shift you cannot quote. If the writing shows no deviation, say nothing about tone rather than inventing one.
 - Join the linguistic read to the numbers: when the writing shows tilt and the stats show its cost, connect them into one causal line. That connection — "you wrote X on the 14th, and your next three trades gave back $Y" — is the most valuable sentence you can produce.
 
-Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis. Do not create a new permanent trading rule after every reviewed trade; only recommend a hard rule when repeated historical evidence supports it.`,
+Do not write generic coaching advice. Do not restate what is already visible in the trade data. Write what the trader cannot see without this analysis. Do not create a new permanent trading rule after every reviewed trade; only recommend a hard rule when repeated historical evidence supports it.
+
+Formatting: never use em-dashes or en-dashes anywhere in your output. Use commas, colons, or shorter sentences. Plain human sentences only.`,
     messages: [
       {
         role: 'user',
@@ -451,7 +453,8 @@ Rules:
 - If the user asks about account-specific data, explain you cannot see their private data from the chat widget.
 - If the question is unrelated to Flyxa, gently steer back to Flyxa and what the product does.
 - Do not invent features that Flyxa does not clearly have.
-- Keep responses in plain text, usually 2-6 short sentences.`,
+- Keep responses in plain text, usually 2-6 short sentences.
+- Never use em-dashes or en-dashes; use commas or shorter sentences. Plain human sentences only.`,
     messages: [
       ...history
         .filter(message => message.content.trim() !== '')
@@ -591,7 +594,8 @@ HARD RULES:
 - "footer" MUST state the sample size (trades / sessions / weeks / tags) the answer used.
 - If a breakdown has fewer than 5 samples, say so in verdictNote or directive.sub.
 - Inline markup allowed in verdict/verdictNote/label/directive text: **bold**, ~amber phrase~. Signed money/percent (+$338, −$485, +9%) auto-colour, so write them plainly.
-- Prop-firm rules may appear under activePropFirmRule / availableTopstepRules — use them; never claim a matching rule is unavailable.
+- Prop-firm rules may appear under activePropFirmRule / availableTopstepRules; use them, and never claim a matching rule is unavailable.
+- Never use em-dashes or en-dashes (— or –) anywhere in any field. Use commas, colons, or shorter sentences instead. Plain human sentences only.
 
 TRADE STATISTICS (JSON):
 ${statsJson}`,
