@@ -1,0 +1,12 @@
+<svg width="64" height="64" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Search/browser favicon: the Flyxa petal mark on a solid black tile so the
+       light petals read on white backgrounds (Google SERP). The transparent
+       in-app mark lives in logo.svg and is intentionally left untouched. -->
+  <rect width="100" height="100" rx="22" fill="#0A0908"/>
+  <g transform="translate(14 14) scale(0.72)">
+    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#F97316"/>
+    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#E8E3DC" transform="rotate(-90 50 50) translate(9 9) scale(0.82)"/>
+    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#E8E3DC" transform="rotate(90 50 50) translate(6 6) scale(0.88)"/>
+    <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="#E8E3DC" transform="rotate(180 50 50) translate(18 18) scale(0.64)"/>
+  </g>
+</svg>

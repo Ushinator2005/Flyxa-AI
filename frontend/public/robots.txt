@@ -1,0 +1,6 @@
+# https://www.flyxa.app
+User-agent: *
+Allow: /
+Disallow: /charting_library/
+
+Sitemap: https://www.flyxa.app/sitemap.xml
