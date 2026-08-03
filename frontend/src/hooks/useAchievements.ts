@@ -7,6 +7,7 @@ export interface Achievement {
   label: string;
   description: string;
   icon: string;
+  condition: string;
   category: 'milestone' | 'streak' | 'discipline' | 'session' | 'consistency';
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
   progress: number;
@@ -117,6 +118,7 @@ function mapAchievement(item: StoreAchievement): Achievement {
     label: item.title,
     description: item.description,
     icon: mapIcon(item.icon),
+    condition: item.condition,
     category: mapCategory(item.id),
     rarity: mapRarity(item.progress),
     progress: Math.max(0, Math.min(100, item.progress)),

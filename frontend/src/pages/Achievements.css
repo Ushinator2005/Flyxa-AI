@@ -1,24 +1,31 @@
 /* ══════════════════════════════════════════════════════════════
-   Achievements.css — one accent, one badge language.
-   Unlocked = amber border + tinted icon + ✓. Locked = dimmed + mini bar.
+   Achievements.css — hexagon emblems, no icon set.
+   Meaning lives in the threshold face and the category material.
+   Locked = hollow. In progress = category rim. Earned = struck + tick.
    ══════════════════════════════════════════════════════════════ */
 
 .achv-page {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 24px 24px 80px;
-  color: var(--txt, var(--app-text));
+  padding: 22px 24px 52px;
+  color: var(--app-text);
   font-family: var(--font-sans);
+  font-size: 13px;
 }
 
+@keyframes achv-rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+@keyframes achv-grow { to { transform: scaleX(1); } }
+
+/* micro-label: DM Sans 10 / 700 / 0.09em — the repo's real label */
 .achv-lbl {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 1.6px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--txt-3, var(--app-text-subtle));
+  color: var(--app-text-muted);
 }
-.achv-lbl.strong { color: var(--txt, var(--app-text)); letter-spacing: 1.8px; }
+.achv-lbl.strong { color: var(--app-text); }
 
 /* ── Header ───────────────────────────────────────────────────── */
 .achv-hd {
@@ -26,77 +33,42 @@
   align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px 20px;
-  margin-bottom: 16px;
+  gap: 14px 20px;
+  margin-bottom: 15px;
 }
-.achv-hd h1 { font-size: 21px; font-weight: 700; letter-spacing: -.4px; margin: 0; }
-.achv-hd p {
-  font-size: 13px;
-  color: var(--txt-2, var(--app-text-muted));
-  margin: 6px 0 0;
-  max-width: 480px;
-  line-height: 1.6;
-}
+.achv-hd h1 { font-family: var(--font-sans); font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+.achv-hd p { font-size: 12px; color: var(--app-text-muted); margin: 5px 0 0; max-width: 470px; line-height: 1.55; }
 .achv-prog { text-align: right; flex: none; }
-.achv-prog b {
-  font: 500 26px/1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--txt, var(--app-text));
-}
-.achv-prog b span { font-size: 14px; color: var(--txt-3, var(--app-text-subtle)); }
-.achv-prog-bar {
-  width: 150px;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.08);
-  margin-top: 9px;
-  margin-left: auto;
-  overflow: hidden;
-}
-.achv-prog-bar i { display: block; height: 100%; border-radius: 2px; background: var(--amber); max-width: 100%; }
-.achv-prog small {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--txt-3, var(--app-text-subtle));
-  margin-top: 7px;
-  letter-spacing: 1px;
-}
+.achv-prog b { font-family: var(--font-mono); font-size: 24px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; color: var(--app-text); }
+.achv-prog b span { font-size: 14px; color: var(--app-text-muted); }
+.achv-prog-bar { width: 140px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin: 8px 0 0 auto; overflow: hidden; }
+.achv-prog-bar i { display: block; height: 100%; width: var(--p); border-radius: 2px; background: #f59e0b; transform-origin: left; transform: scaleX(0); animation: achv-grow 1s cubic-bezier(.3, .8, .3, 1) .25s forwards; }
+.achv-prog small { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--app-text-muted); margin-top: 6px; letter-spacing: 0.06em; }
 
 /* ── Live streaks strip ───────────────────────────────────────── */
 .achv-streaks {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  background: var(--surface-1, var(--app-panel));
-  border: 1px solid var(--border, var(--app-border));
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 11px;
 }
-.achv-stk { padding: 16px 20px; border-right: 1px solid var(--border, var(--app-border)); min-width: 0; }
+.achv-stk { padding: 13px 16px; border-right: 1px solid var(--app-border); min-width: 0; }
 .achv-stk:last-child { border-right: none; }
-.achv-stk .achv-lbl { display: block; margin-bottom: 10px; }
+.achv-stk .achv-lbl { display: block; margin-bottom: 8px; }
 .achv-stk-v { display: flex; align-items: baseline; gap: 7px; }
-.achv-stk-v b { font: 500 22px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--txt, var(--app-text)); }
-.achv-stk.live .achv-stk-v b { color: var(--amber); }
-.achv-stk-v span { font: 500 10.5px/1 var(--font-mono); color: var(--txt-2, var(--app-text-muted)); }
-.achv-stk small {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--txt-3, var(--app-text-subtle));
-  margin-top: 8px;
-  line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.achv-stk small b { color: var(--txt-2, var(--app-text-muted)); font-weight: 500; }
+.achv-stk-v b { font-family: var(--font-mono); font-size: 20px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; color: var(--app-text-muted); }
+.achv-stk.live .achv-stk-v b { color: #f59e0b; }
+.achv-stk-v span { font-family: var(--font-mono); font-size: 11px; color: var(--app-text-muted); }
+.achv-stk small { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--app-text-muted); margin-top: 6px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.achv-stk small b { color: var(--app-text); font-weight: 500; }
 
-/* ── Closest to unlock ledger ─────────────────────────────────── */
+/* ── Closest to unlock ─────────────────────────────────────────── */
 .achv-chase {
-  background: var(--surface-1, var(--app-panel));
-  border: 1px solid var(--border, var(--app-border));
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 22px;
@@ -106,108 +78,129 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 20px;
-  border-bottom: 1px solid var(--border, var(--app-border));
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--app-border);
 }
-.achv-chase-hd b { font-size: 13.5px; font-weight: 600; }
-.achv-chase-hd span { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--txt-3, var(--app-text-subtle)); }
+.achv-chase-hd b { font-size: 13px; font-weight: 600; }
 .achv-ch {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px 90px;
+  grid-template-columns: minmax(0, 1fr) 190px 74px;
   align-items: center;
-  gap: 20px;
-  padding: 13px 20px;
+  gap: 16px;
+  padding: 11px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 .achv-ch:first-of-type { border-top: none; }
-.achv-ch-t b { font-size: 13px; font-weight: 600; display: block; }
-.achv-ch-t span { font-size: 12px; color: var(--txt-2, var(--app-text-muted)); display: block; margin-top: 2px; }
+.achv-ch-t b { font-size: 12px; font-weight: 600; display: block; }
+.achv-ch-t span { font-size: 11px; color: var(--app-text-muted); display: block; margin-top: 1px; }
 .achv-ch-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
-.achv-ch-bar i { display: block; height: 100%; border-radius: 2px; background: var(--amber); max-width: 100%; }
-.achv-ch-pct {
-  font: 500 11.5px/1.2 var(--font-mono);
-  color: var(--txt, var(--app-text));
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.achv-ch-pct small { display: block; font-size: 9.5px; color: var(--txt-3, var(--app-text-subtle)); margin-top: 3px; letter-spacing: .5px; }
+.achv-ch-bar i { display: block; height: 100%; width: var(--p); border-radius: 2px; background: #f59e0b; transform-origin: left; transform: scaleX(0); animation: achv-grow .9s cubic-bezier(.3, .8, .3, 1) var(--d) forwards; }
+.achv-ch-pct { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.achv-ch-pct small { display: block; font-size: 10px; color: var(--app-text-muted); margin-top: 2px; }
 
-/* ── Badge groups ─────────────────────────────────────────────── */
-.achv-grp { margin-bottom: 22px; }
-.achv-grp-hd { display: flex; align-items: baseline; gap: 12px; margin: 0 2px 10px; }
-.achv-grp-hd > span:last-child { font-family: var(--font-mono); font-size: 10px; color: var(--txt-3, var(--app-text-subtle)); }
-.achv-badges {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
+/* ── Badge groups — one amber accent, no rainbow ──────────────── */
+.achv-grp { margin-bottom: 17px; }
+.achv-grp-hd { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 9px; }
+.achv-ct { font-family: var(--font-mono); font-size: 10px; color: var(--app-text-muted); }
+.achv-ct.full { color: #34d399; }
+.achv-badges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 
+/* the card — two children: badge, then .achv-bt (title/desc/status) */
 .achv-bd {
-  background: var(--surface-1, var(--app-panel));
-  border: 1px solid var(--border, var(--app-border));
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 13px 14px;
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  position: relative;
   min-width: 0;
+  position: relative;
+  opacity: 0;
+  animation: achv-rise .4s cubic-bezier(.2, .9, .3, 1) var(--d) forwards;
+  transition: border-color .16s;
 }
-.achv-bd-ic {
-  width: 32px;
-  height: 32px;
+.achv-bt { flex: 1; min-width: 0; }
+.achv-bd b { font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--app-text-muted); display: block; }
+
+/* the badge — hexagon emblem that fills amber with progress.
+   The rim is a second clipped layer since clip-path removes borders. */
+.achv-bg {
+  position: relative;
+  width: 38px;
+  height: 42px;
   flex: none;
-  border-radius: 8px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--txt-2, var(--app-text-muted));
+  display: grid;
+  place-items: center;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: rgba(255, 255, 255, 0.10);
+  transition: background .18s;
 }
-.achv-bd-t { min-width: 0; flex: 1; }
-.achv-bd-t b { font-size: 12.5px; font-weight: 600; display: block; letter-spacing: -.1px; }
-.achv-bd-t > span { font-size: 11px; color: var(--txt-2, var(--app-text-muted)); display: block; margin-top: 3px; line-height: 1.5; }
-.achv-bd-t small {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--txt-3, var(--app-text-subtle));
-  display: block;
-  margin-top: 7px;
-  letter-spacing: .6px;
-}
-.achv-bd-mini { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin-top: 9px; overflow: hidden; }
-.achv-bd-mini i { display: block; height: 100%; border-radius: 2px; background: var(--amber); max-width: 100%; }
-
-/* unlocked */
-.achv-bd.won { border-color: rgba(245, 158, 11, 0.35); }
-.achv-bd.won .achv-bd-ic { background: rgba(245, 158, 11, 0.12); color: var(--amber); }
-.achv-bd.won::after {
-  content: '✓';
+.achv-bg::before {
+  content: '';
   position: absolute;
-  top: 10px;
-  right: 12px;
+  inset: 1.5px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: var(--app-panel);
+  transition: background .18s;
+}
+.achv-bg-check {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--amber);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: #141312;
 }
 
-/* locked */
-.achv-bd.lk { opacity: .55; }
-.achv-bd.lk .achv-bd-t b { color: var(--txt-2, var(--app-text-muted)); }
+/* in progress — amber rim, interior fills from the bottom to --p */
+.achv-bd.ip .achv-bg { background: rgba(245, 158, 11, 0.40); }
+.achv-bd.ip .achv-bg::before { background: linear-gradient(to top, #f59e0b var(--p), transparent var(--p)), var(--app-panel); }
+
+/* earned — struck amber with a light-to-dark sheen, dark tick */
+.achv-bd.won .achv-bg { background: #f59e0b; }
+.achv-bd.won .achv-bg::before { background: linear-gradient(163deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.04) 44%, rgba(0, 0, 0, 0.28) 100%), #f59e0b; }
+
+.achv-ds {
+  font-size: 11px;
+  color: var(--app-text-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+  min-height: 32px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* one fixed-height status row */
+.achv-st { display: flex; align-items: center; margin-top: 9px; height: 13px; }
+.achv-st time { font-family: var(--font-mono); font-size: 10px; color: #f59e0b; letter-spacing: 0.04em; }
+.achv-pct { font-family: var(--font-mono); font-size: 10.5px; color: #f59e0b; font-variant-numeric: tabular-nums; }
+.achv-pct.z { color: var(--app-text-muted); }
+
+/* earned card — faint amber wash + border */
+.achv-bd.won { border-color: rgba(245, 158, 11, 0.32); background: linear-gradient(150deg, rgba(245, 158, 11, 0.05), transparent 58%), var(--app-panel); }
+.achv-bd.won b { color: var(--app-text); }
+.achv-bd.ip b { color: var(--app-text); }
 
 @media (max-width: 980px) {
   .achv-streaks { grid-template-columns: 1fr 1fr; }
-  .achv-stk { border-bottom: 1px solid var(--border, var(--app-border)); }
+  .achv-stk { border-bottom: 1px solid var(--app-border); }
   .achv-stk:nth-child(2n) { border-right: none; }
   .achv-stk:nth-last-child(-n+2) { border-bottom: none; }
   .achv-badges { grid-template-columns: 1fr 1fr; }
-  .achv-ch { grid-template-columns: minmax(0, 1fr) 90px; }
+  .achv-ch { grid-template-columns: minmax(0, 1fr) 76px; }
   .achv-ch-bar { display: none; }
 }
 @media (max-width: 560px) {
-  .achv-badges { grid-template-columns: 1fr; }
-  .achv-streaks { grid-template-columns: 1fr; }
+  .achv-badges, .achv-streaks { grid-template-columns: 1fr; }
   .achv-stk { border-right: none; }
-  .achv-stk:nth-last-child(-n+2) { border-bottom: 1px solid var(--border, var(--app-border)); }
+  .achv-stk:nth-last-child(-n+2) { border-bottom: 1px solid var(--app-border); }
   .achv-stk:last-child { border-bottom: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; }
+  .achv-bd { opacity: 1; }
+  .achv-prog-bar i, .achv-ch-bar i, .achv-mini i { transform: scaleX(1); }
 }

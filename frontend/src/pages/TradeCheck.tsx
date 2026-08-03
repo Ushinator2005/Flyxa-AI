@@ -318,7 +318,7 @@ export default function TradeCheck() {
     else if (preSession?.readiness?.status === 'Caution')
       flags.push(flag('caution', 'Pre-session caution'));
     else if (!preSession)
-      flags.push(flag('caution', 'No pre-session brief'));
+      flags.push(flag('blocked', 'Locked until pre-session is done'));
 
     const prescriptions = preSession?.prescriptions ?? [];
     if (prescriptions.some(rule => rule.type === 'post_loss_pause' && rule.value === true) && consec >= 1)

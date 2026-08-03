@@ -138,13 +138,15 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 function EquitySpark({ points, target, floor, floorSeries, dates }: {
   points: number[]; target: number; floor: number; floorSeries?: number[]; dates?: string[];
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hoverI, setHoverI] = useState<number | null>(null);
   if (points.length < 2 || !Number.isFinite(target) || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
   const floors = floorSeries && floorSeries.length === points.length && floorSeries.every(v => Number.isFinite(v))
     ? floorSeries
     : null;
   // Taller viewBox to match the enlarged .ec-spark render height — a squat
   // viewBox stretched vertically fattens every stroke.
-  const W = 340, H = 164, PAD = 10;
+  const W = 340, H = 210, PAD = 10;
   const lo = Math.min(...points, ...(floors ?? [floor]));
   const hi = Math.max(...points, target);
   const span = hi - lo || 1;
@@ -186,9 +188,31 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
     return Number.isNaN(parsed.getTime()) ? slice : parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  // MLL value at a given session index (stepped series, or the flat floor).
+  const floorAt = (i: number) => (floors ? floors[i] : floor);
+
+  // Map a pointer position to the nearest session. The SVG stretches with
+  // preserveAspectRatio="none", so the mapping is off the container's own width.
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    const idx = Math.max(0, Math.min(points.length - 1, Math.round(frac * (points.length - 1))));
+    setHoverI(idx);
+  };
+
+  const hoverLeftPct = hoverI === null ? 0 : (x(hoverI) / W) * 100;
+  const hoverTx = hoverLeftPct < 20 ? '0%' : hoverLeftPct > 80 ? '-100%' : '-50%';
+
   return (
     <div>
-      <div style={{ position: 'relative' }}>
+      <div
+        ref={wrapRef}
+        style={{ position: 'relative', cursor: 'crosshair' }}
+        onMouseMove={onMove}
+        onMouseLeave={() => setHoverI(null)}
+      >
         <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
           <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".38" strokeDasharray="3 5" strokeWidth="1" />
           {floorPath
@@ -198,6 +222,48 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
           <path d={path} fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
           <circle cx={x(points.length - 1)} cy={y(last)} r="3" fill="var(--amber)" />
         </svg>
+        {/* Hover marks as HTML overlays: perfectly round (SVG circles distort
+            under preserveAspectRatio="none") and their left/top glide smoothly
+            between sessions via CSS transition instead of snapping. */}
+        {hoverI !== null && (
+          <>
+            <div style={{
+              position: 'absolute', top: `${(PAD / H) * 100}%`, bottom: `${(PAD / H) * 100}%`,
+              left: `${hoverLeftPct}%`, width: 1, background: 'var(--txt-2)', opacity: 0.4,
+              pointerEvents: 'none', transition: 'left 90ms ease-out',
+            }} />
+            <div style={{
+              position: 'absolute', left: `${hoverLeftPct}%`, top: `${(y(floorAt(hoverI)) / H) * 100}%`,
+              width: 5, height: 5, borderRadius: '50%', background: '#FF7B6E',
+              transform: 'translate(-50%,-50%)', pointerEvents: 'none',
+              transition: 'left 90ms ease-out, top 90ms ease-out',
+            }} />
+            <div style={{
+              position: 'absolute', left: `${hoverLeftPct}%`, top: `${(y(points[hoverI]) / H) * 100}%`,
+              width: 6, height: 6, borderRadius: '50%', background: 'var(--amber)',
+              boxShadow: '0 0 0 2px var(--app-panel)',
+              transform: 'translate(-50%,-50%)', pointerEvents: 'none',
+              transition: 'left 90ms ease-out, top 90ms ease-out',
+            }} />
+          </>
+        )}
+        {hoverI !== null && (
+          <div style={{
+            position: 'absolute', top: 2, left: `${hoverLeftPct}%`, transform: `translateX(${hoverTx})`,
+            pointerEvents: 'none', zIndex: 6, whiteSpace: 'nowrap',
+            background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 6,
+            padding: '5px 8px', boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+            fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums',
+          }}>
+            {dates && dates[hoverI] && (
+              <div style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))', marginBottom: 3 }}>
+                {fmtAxisDate(dates[hoverI])}
+              </div>
+            )}
+            <div style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--amber)' }}>{money(points[hoverI])}</div>
+            <div style={{ fontSize: 9.5, color: '#FF7B6E', marginTop: 2 }}>MLL {money(floorAt(hoverI))}</div>
+          </div>
+        )}
         {/* Line labels pinned to the lines they describe. The balance label
             drops out when it would sit on top of the target/floor labels —
             e.g. a passed run finishing right at target. */}
@@ -217,9 +283,6 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
             {fmtAxisDate(dates[0])}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
-            {dates.length} SESSION{dates.length !== 1 ? 'S' : ''}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
             {fmtAxisDate(dates[dates.length - 1])}
@@ -744,7 +807,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
         {/* ── Hero: pass probability + drivers | equity path ─────────── */}
         <div className="ec-hero">
           <div className="ec-prob">
-            <span className="ec-metric-lbl">Pass probability</span>
+            <span className="ec-metric-lbl ec-section-lbl">Pass probability</span>
             <div className="ec-prob-big" style={{ color: probColor }}>
               <b>{progress.passProbability}</b><span>%</span>
             </div>
@@ -761,7 +824,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
           </div>
           <div className="ec-hero-chart">
             <div className="ec-hero-chart-head">
-              <span className="ec-metric-lbl">Equity path</span>
+              <span className="ec-metric-lbl ec-section-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
                 {money(progress.currentBalance - progress.drawdownFloor)} above MLL ·{' '}
                 <b>{progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`}</b>
@@ -775,7 +838,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
 
         {/* ── Ledger strip: the four numbers that decide the eval ────── */}
         <div className="ec-metric-grid">
-          <div className="ec-metric-card">
+          <div className="ec-metric-card ec-metric-card--primary">
             <span className="ec-metric-lbl">Profit needed</span>
             <strong className="ec-metric-val">{money(progress.targetRemaining)}</strong>
             <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>
@@ -836,7 +899,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
         <section className="ec-dir">
           <img src="/logo.svg" alt="" className="ec-dir-glyph" />
           <div className="ec-dir-body">
-            <span className="ec-metric-lbl">Next session strategy</span>
+            <span className="ec-metric-lbl ec-section-lbl">Next session strategy</span>
             <p className={missionLoading ? 'loading' : undefined}>{missionDisplay}</p>
           </div>
           <button type="button" className="ec-dir-ask" onClick={() => navigate('/flyxa-ai/ask')}>
