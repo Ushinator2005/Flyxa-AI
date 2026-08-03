@@ -8,6 +8,14 @@ import { C } from '../../utils/theme.js';
 
 const PETAL_PATH = 'M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z';
 
+// On touch devices the native share sheet has a "Save Image" / "Save to Photos"
+// action, which is the natural way to keep an image on a phone. A raw file
+// download is awkward there, so we prefer the share sheet on coarse pointers.
+const SUPPORTS_IMAGE_SHARE = typeof navigator !== 'undefined'
+  && typeof navigator.canShare === 'function'
+  && typeof window !== 'undefined'
+  && window.matchMedia?.('(pointer: coarse)').matches === true;
+
 // The card is authored at a fixed size and merely scaled down to fit narrow
 // screens, so the exported design is pixel-identical on every device.
 const CARD_W = 780;
@@ -112,6 +120,31 @@ export default function SessionShareCard({ open, onClose, data }: {
     setBusy(false);
     if (captured) downloadDataUrl(captured.dataUrl);
   }, [capture, downloadDataUrl]);
+
+  // Mobile: open the native share sheet so the user can pick "Save Image" /
+  // "Save to Photos". Falls back to a download if sharing fails (but not when
+  // the user simply dismisses the sheet).
+  const saveImage = useCallback(async () => {
+    setBusy(true);
+    const captured = await capture();
+    setBusy(false);
+    if (!captured) return;
+    const file = new File(
+      [captured.blob],
+      `flyxa-session-${data.dateLabel.replace(/[^\w]+/g, '-').toLowerCase()}.png`,
+      { type: 'image/png' },
+    );
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Flyxa session recap' });
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return; // user closed the sheet
+        // any other failure falls through to a plain download
+      }
+    }
+    downloadDataUrl(captured.dataUrl);
+  }, [capture, downloadDataUrl, data.dateLabel]);
 
   const copyBlob = useCallback(async (blob: Blob): Promise<boolean> => {
     try {
@@ -325,9 +358,9 @@ export default function SessionShareCard({ open, onClose, data }: {
             style={{ padding: '9px 16px', borderRadius: 7, border: `1px solid ${C.b1}`, background: C.d1, color: copied ? C.grn : C.t0, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
             {copied ? 'Copied ✓' : 'Copy image'}
           </button>
-          <button type="button" onClick={download} disabled={busy}
+          <button type="button" onClick={SUPPORTS_IMAGE_SHARE ? saveImage : download} disabled={busy}
             style={{ padding: '9px 18px', borderRadius: 7, border: 'none', background: C.acc, color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            {busy ? 'Rendering…' : 'Download PNG'}
+            {busy ? 'Rendering…' : SUPPORTS_IMAGE_SHARE ? 'Save image' : 'Download PNG'}
           </button>
           <button type="button" onClick={onClose}
             style={{ padding: '9px 10px', background: 'none', border: 'none', color: C.t2, fontSize: 12, cursor: 'pointer' }}>
