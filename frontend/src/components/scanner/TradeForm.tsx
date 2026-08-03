@@ -653,8 +653,13 @@ export default function TradeForm({
             <div>
               <label className="label">Accounts</label>
               <div style={{ display: 'grid', gap: 6 }}>
-                {accounts.filter(a => a.status !== 'Blown' && a.id !== DEFAULT_ACCOUNT_ID).map(account => {
+                {(() => {
                   const selectedAccountIds = normalizeAccountIds(form.accountIds, form.accountId || getDefaultTradeAccountId());
+                  // Hide blown accounts from new allocation, but keep any this trade is
+                  // already linked to, so blowing an account never unlinks its trades.
+                  return accounts
+                    .filter(a => a.id !== DEFAULT_ACCOUNT_ID && (a.status !== 'Blown' || selectedAccountIds.includes(a.id)))
+                    .map(account => {
                   const checked = selectedAccountIds.includes(account.id);
                   return (
                     <label
@@ -685,7 +690,8 @@ export default function TradeForm({
                       <span style={{ color: T3, fontSize: 10 }}>{account.status}</span>
                     </label>
                   );
-                })}
+                  });
+                })()}
               </div>
               <p style={{ marginTop: 5, fontSize: 10, color: T3 }}>Copy trades can be linked to every account that took the same execution.</p>
             </div>
