@@ -24,7 +24,8 @@ import LoadingSpinner from '../components/common/LoadingSpinner.js';
 import { Trade } from '../types/index.js';
 import { getMarketTiming } from '../utils/marketHours.js';
 import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
-import { isLivePreSession } from '../utils/sessionLifecycle.js';
+import { getPreSessionDate } from '../utils/sessionLifecycle.js';
+import { getTimeZoneParts } from '../utils/calendarTime.js';
 
 // ── Design tokens ────────────────────────────────────────────────
 const COBALT      = '#60a5fa';
@@ -171,14 +172,22 @@ export default function Dashboard() {
 
   // High-impact event toasts are mounted app-wide in Layout.
 
-  // Pre-session brief prompt — shows daily until dismissed or started.
+  // Pre-session brief prompt — shows daily until dismissed or a brief is
+  // recorded for today. A brief counts whether it is still live, has ended
+  // (moved to post-session), or is already saved to history; otherwise the
+  // prompt wrongly reappears the moment you finish the session.
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const preSession = useFlyxaStore(state => state.preSession);
-  const sessionStartedToday = isLivePreSession(preSession) && preSession.startedAt.startsWith(todayKey);
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
+  const sessionTimezone = preferences?.timezone ?? 'America/New_York';
+  const todaySessionKey = getTimeZoneParts(new Date(), sessionTimezone).date;
+  const briefRecordedToday =
+    (preSession != null && getPreSessionDate(preSession, sessionTimezone) === todaySessionKey)
+    || preSessionHistory[todaySessionKey] != null;
   const [preSessionDismissed, setPreSessionDismissed] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('flyxa_presession_done_date') === todayKey
   );
-  const preSessionDone = preSessionDismissed || sessionStartedToday;
+  const preSessionDone = preSessionDismissed || briefRecordedToday;
   const dismissPreSession = useCallback(() => {
     localStorage.setItem('flyxa_presession_done_date', todayKey);
     setPreSessionDismissed(true);
