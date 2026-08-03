@@ -297,4 +297,6 @@ export interface AppPreferences {
   marketClock?: 'equities' | 'futures' | 'forex';
   // Time display across the header clock and news wire: 12-hour or 24-hour.
   clockFormat?: '12h' | '24h';
+  // Let the scanner read zone boxes without needing an exact colour match.
+  scannerAutoDetect?: boolean;
 }

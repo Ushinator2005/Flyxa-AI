@@ -242,6 +242,86 @@ function ColorPickerPanel({ value, opacity, onColorChange, onOpacityChange }: Co
   );
 }
 
+interface ColorSwatchPickerProps {
+  value: string;
+  onChange: (hex: string) => void;
+  size?: number;
+  radius?: number;
+  ariaLabel?: string;
+}
+
+/**
+ * A bare colour swatch that opens the TradingView-style palette popover.
+ * Use when the surrounding layout supplies its own label/hex text.
+ */
+export function ColorSwatchPicker({ value, onChange, size = 28, radius = 7, ariaLabel }: ColorSwatchPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [opacity, setOpacity] = useState(100);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      const insideTrigger = rootRef.current?.contains(target) ?? false;
+      const insidePanel = panelRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insidePanel) setOpen(false);
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open]);
+
+  function handleToggle() {
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const panelH = 340;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top = spaceBelow >= panelH + 8 ? rect.bottom + 6 : Math.max(8, rect.top - panelH - 6);
+      let left = rect.left;
+      if (left + PICKER_WIDTH > window.innerWidth - 8) left = window.innerWidth - PICKER_WIDTH - 8;
+      setPopoverPos({ top, left: Math.max(8, left) });
+    }
+    setOpen(o => !o);
+  }
+
+  const hex = value.startsWith('#') ? value : `#${value}`;
+
+  return (
+    <span ref={rootRef} style={{ display: 'inline-block', position: 'relative', lineHeight: 0 }}>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={ariaLabel}
+        onClick={handleToggle}
+        style={{
+          display: 'block',
+          width: size,
+          height: size,
+          borderRadius: radius,
+          background: hex,
+          border: `1px solid ${open ? 'rgba(245,158,11,0.6)' : 'rgba(255,255,255,0.16)'}`,
+          cursor: 'pointer',
+          padding: 0,
+        }}
+      />
+      {open && popoverPos && createPortal(
+        <div ref={panelRef} style={{ position: 'fixed', top: popoverPos.top, left: popoverPos.left, zIndex: 9999 }}>
+          <ColorPickerPanel
+            value={hex}
+            opacity={opacity}
+            onColorChange={color => onChange(color)}
+            onOpacityChange={setOpacity}
+          />
+        </div>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
 interface ColorPickerFieldProps {
   label: string;
   hint?: string;

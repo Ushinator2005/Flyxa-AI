@@ -1,20 +1,8 @@
 import { useMemo } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import {
-  Trophy, Flame, Zap, Crown, Shield, ShieldCheck, Target, Award, TrendingUp,
-  CheckCircle, Star, Calendar, Ruler, DollarSign, Gem, Snowflake,
-  ClipboardCheck, ListChecks, PenLine,
-} from 'lucide-react';
 import { useAchievements } from '../hooks/useAchievements.js';
 import type { Achievement as AchievementItem } from '../hooks/useAchievements.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import './Achievements.css';
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  Zap, Flame, Crown, Shield, ShieldCheck, Target, Award, TrendingUp,
-  CheckCircle, Star, Calendar, Trophy, Ruler, DollarSign, Gem, Snowflake,
-  ClipboardCheck, ListChecks, PenLine,
-};
 
 const GROUPS: Array<{ value: AchievementItem['category']; label: string }> = [
   { value: 'milestone', label: 'Milestones' },
@@ -24,9 +12,21 @@ const GROUPS: Array<{ value: AchievementItem['category']; label: string }> = [
   { value: 'consistency', label: 'Consistency' },
 ];
 
-function AchievementIcon({ name, size = 15 }: { name: string; size?: number }) {
-  const Icon = ICON_MAP[name] ?? Trophy;
-  return <Icon size={size} strokeWidth={1.8} />;
+function parseCondition(condition: string): { key: string; target: number } {
+  const [key, , val] = condition.split(' ');
+  const target = Number.parseFloat(val);
+  return { key, target: Number.isFinite(target) && target > 0 ? target : 1 };
+}
+
+function statusCount(a: AchievementItem): { text: string; muted: boolean } {
+  const { key, target } = parseCondition(a.condition);
+  if (a.key === 'funded') return { text: 'No passed account yet', muted: true };
+  if (a.progress <= 0) return { text: 'Not started', muted: true };
+  const current = Math.round((a.progress / 100) * target);
+  if (key === 'totalPnL') {
+    return { text: `$${current.toLocaleString('en-US')} of $${target.toLocaleString('en-US')}`, muted: false };
+  }
+  return { text: `${current} of ${target}`, muted: false };
 }
 
 function fmtUnlockDate(unlockedAt: string | null): string {
@@ -35,6 +35,8 @@ function fmtUnlockDate(unlockedAt: string | null): string {
     .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     .toUpperCase();
 }
+
+const cssVars = (vars: Record<string, string>) => vars as React.CSSProperties;
 
 /** Consecutive-day journal streak: any day with trades or a post-session note. */
 function journalStreaks(dates: string[]): { current: number; best: number } {
@@ -50,7 +52,6 @@ function journalStreaks(dates: string[]): { current: number; best: number } {
     best = Math.max(best, run);
   }
 
-  // Current streak only counts if it reaches today or yesterday.
   const todayMs = toMs(new Date().toISOString().slice(0, 10));
   const lastMs = toMs(sorted[sorted.length - 1]);
   if (todayMs - lastMs > DAY) return { current: 0, best };
@@ -62,22 +63,26 @@ function journalStreaks(dates: string[]): { current: number; best: number } {
   return { current, best };
 }
 
-function BadgeCard({ achievement }: { achievement: AchievementItem }) {
-  const unlocked = achievement.unlocked;
+function BadgeCard({ achievement, index }: { achievement: AchievementItem; index: number }) {
+  const state = achievement.unlocked ? 'won' : achievement.progress > 0 ? 'ip' : '';
+  const status = statusCount(achievement);
+  const delay = `${(0.05 + index * 0.05).toFixed(2)}s`;
+  const fill = achievement.unlocked ? 100 : Math.round(achievement.progress);
+
   return (
-    <article className={`achv-bd${unlocked ? ' won' : ' lk'}`}>
-      <div className="achv-bd-ic"><AchievementIcon name={achievement.icon} /></div>
-      <div className="achv-bd-t">
+    <article className={`achv-bd ${state}`.trim()} style={cssVars({ '--d': delay })}>
+      <span className="achv-bg" style={cssVars({ '--p': `${fill}%` })} aria-hidden="true">
+        {achievement.unlocked && <span className="achv-bg-check">✓</span>}
+      </span>
+      <span className="achv-bt">
         <b>{achievement.label}</b>
-        <span>{achievement.description}</span>
-        {unlocked
-          ? <small>UNLOCKED {fmtUnlockDate(achievement.unlockedAt)}</small>
-          : (
-            <div className="achv-bd-mini" aria-hidden="true">
-              <i style={{ width: `${Math.round(achievement.progress)}%` }} />
-            </div>
-          )}
-      </div>
+        <span className="achv-ds">{achievement.description}</span>
+        <span className="achv-st">
+          {achievement.unlocked
+            ? <time>UNLOCKED {fmtUnlockDate(achievement.unlockedAt)}</time>
+            : <span className={`achv-pct ${status.muted ? 'z' : ''}`.trim()}>{status.text}</span>}
+        </span>
+      </span>
     </article>
   );
 }
@@ -155,12 +160,12 @@ export default function Achievements() {
         </div>
         <div className="achv-prog">
           <b>{unlockedCount}<span> / {totalCount}</span></b>
-          <div className="achv-prog-bar"><i style={{ width: `${progressPct}%` }} /></div>
+          <div className="achv-prog-bar"><i style={cssVars({ '--p': `${progressPct}%` })} /></div>
           <small>{progressPct}% COMPLETE</small>
         </div>
       </header>
 
-      {/* ── Live streaks: a data strip, not trophies ── */}
+      {/* ── Live streaks: current state, not trophies ── */}
       <div className="achv-streaks">
         {streakCells.map(cell => (
           <div key={cell.label} className={`achv-stk${cell.value > 0 ? ' live' : ''}`}>
@@ -176,21 +181,24 @@ export default function Achievements() {
         <div className="achv-chase">
           <div className="achv-chase-hd">
             <b>Closest to unlock</b>
-            <span>BASED ON CURRENT PROGRESS</span>
+            <span className="achv-lbl">Based on current progress</span>
           </div>
-          {nextTargets.map(achievement => (
-            <div key={achievement.key} className="achv-ch">
-              <div className="achv-ch-t">
-                <b>{achievement.label}</b>
-                <span>{achievement.description}</span>
+          {nextTargets.map((achievement, i) => {
+            const pct = Math.round(achievement.progress);
+            return (
+              <div key={achievement.key} className="achv-ch">
+                <div className="achv-ch-t">
+                  <b>{achievement.label}</b>
+                  <span>{achievement.description}</span>
+                </div>
+                <div className="achv-ch-bar"><i style={cssVars({ '--p': `${pct}%`, '--d': `${(0.4 + i * 0.1).toFixed(1)}s` })} /></div>
+                <div className="achv-ch-pct">
+                  {pct}%
+                  <small>{100 - pct}% TO GO</small>
+                </div>
               </div>
-              <div className="achv-ch-bar"><i style={{ width: `${Math.round(achievement.progress)}%` }} /></div>
-              <div className="achv-ch-pct">
-                {Math.round(achievement.progress)}%
-                <small>{100 - Math.round(achievement.progress)}% TO GO</small>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -199,11 +207,11 @@ export default function Achievements() {
         <section key={group.value} className="achv-grp">
           <div className="achv-grp-hd">
             <span className="achv-lbl strong">{group.label}</span>
-            <span>{group.unlocked} of {group.items.length}</span>
+            <span className={`achv-ct${group.unlocked === group.items.length ? ' full' : ''}`}>{group.unlocked} of {group.items.length}</span>
           </div>
           <div className="achv-badges">
-            {group.items.map(achievement => (
-              <BadgeCard key={achievement.key} achievement={achievement} />
+            {group.items.map((achievement, i) => (
+              <BadgeCard key={achievement.key} achievement={achievement} index={i} />
             ))}
           </div>
         </section>

@@ -51,6 +51,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
     stopLoss: '#C0392B',
     takeProfit: '#1A6B5A',
   },
+  scannerAutoDetect: true,
 };
 
 const DEFAULT_CONFLUENCE_OPTIONS = [

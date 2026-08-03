@@ -32,6 +32,7 @@ const pageNames: Record<string, string> = {
   '/psychology': 'Psychology Tracker',
   '/goals': 'Goals',
   '/rivals': 'Rivals',
+  '/achievements': 'Achievements',
   '/session': 'Session',
   '/billing': 'Billing',
   '/evaluation-coach': 'Evaluation Coach',
