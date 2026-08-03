@@ -293,7 +293,17 @@ export function useRivals() {
   const rivals = useMemo(() => {
     const remoteIds = new Set(backendRivals.map(rival => rival.username.toLowerCase()));
     const localOnly = resolvedRivals.filter((rival) => !rival.isMe && !remoteIds.has(rival.username.toLowerCase()));
-    return [myRival, ...backendRivals, ...localOnly];
+    const combined = [myRival, ...backendRivals, ...localOnly];
+    // One row per trader. Duplicate accepted-request rows or stale local copies
+    // of the same handle would otherwise stack the same person on the board and
+    // appear to multiply as the page re-fetches. Keep the first (freshest) copy.
+    const seen = new Set<string>();
+    return combined.filter((rival) => {
+      const key = (rival.username || rival.id).toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [backendRivals, myRival, resolvedRivals]);
 
   const addRival = async (username: string) => {
