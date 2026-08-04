@@ -350,7 +350,7 @@ export default function EvaluationCoach() {
   const entries = useFlyxaStore(state => state.entries);
   const activeAccountId = useFlyxaStore(state => state.activeAccountId);
   const updateAccount = useFlyxaStore(state => state.updateAccount);
-  const { accounts: tradingAccounts, decorateTrades, selectedAccountId: appSelectedId, preferences } = useAppSettings();
+  const { accounts: tradingAccounts, decorateTrades, selectedAccountId: appSelectedId, preferences, updateAccount: updateTradingAccount } = useAppSettings();
 
   const statusById = useMemo(
     () => new Map(tradingAccounts.map(ta => [ta.id, ta.status])),
@@ -467,6 +467,20 @@ export default function EvaluationCoach() {
     }),
     [allTrades, evaluationAccounts, statusById],
   );
+
+  // ── Auto-blow on MLL breach ─────────────────────────────────────
+  // A prop firm fails the account the moment its balance drops to or below the
+  // Maximum Loss Limit, so reflect that here without manual action. Guarded on
+  // drawdownUsed > 0 so a misconfigured account (no real MLL) never trips it.
+  // Trades stay linked to the blown account. Self-terminating: once the status
+  // is Blown the condition no longer matches.
+  useEffect(() => {
+    for (const { account, progress: p, status } of comparisons) {
+      if (status === 'Eval' && p.drawdownUsed > 0 && p.drawdownRemaining <= 0) {
+        updateTradingAccount(account.id, { status: 'Blown' });
+      }
+    }
+  }, [comparisons, updateTradingAccount]);
 
   // ── Behavioral warnings ─────────────────────────────────────────
   const behavioralWarnings = useMemo(() => computeBehavioralWarnings(accountTrades), [accountTrades]);
