@@ -1184,12 +1184,12 @@ export default function FlyxaAIPreSession() {
                     )}
                   </div>
 
-                  {/* Hold-to-commit — card footer. Keyed by item so each new
-                      commitment starts from an empty hold. */}
+                  {/* Type-to-commit — card footer. Keyed by item so each new
+                      commitment starts from an empty typing test. */}
                   {activeOathIdx !== -1 && (
-                    <HoldToCommit
+                    <TypeToCommit
                       key={activeOathItems[activeOathIdx].id}
-                      label="Hold to commit"
+                      target={activeOathItems[activeOathIdx].label}
                       onCommit={() => toggleChecklist(activeOathItems[activeOathIdx])}
                     />
                   )}
@@ -1518,6 +1518,77 @@ function HoldToCommit({ label, onCommit }: { label: string; onCommit: () => void
         {done ? 'Committed ✓' : progress > 0 ? 'Keep holding…' : label}
       </span>
     </button>
+  );
+}
+
+// Type-to-commit: the trader must type the commitment out, verbatim, like a
+// typing test. Deliberate friction that forces them to read and internalise
+// each line rather than mindlessly holding a button. Pasting is blocked.
+const TYPE_COMMIT_DELAY_MS = 260;
+
+function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [done, setDone] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const firedRef = useRef(false);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const normalize = (value: string) => value.replace(/\s+/g, ' ').replace(/\s+$/, '').toLowerCase();
+  const matches = typed.trim().length > 0 && normalize(typed) === normalize(target);
+
+  useEffect(() => {
+    if (!matches || firedRef.current) return;
+    firedRef.current = true;
+    setDone(true);
+    const timer = setTimeout(onCommit, TYPE_COMMIT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [matches, onCommit]);
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      style={{ padding: '13px 16px', borderTop: `1px solid ${C.b0}`, backgroundColor: C.d3, cursor: 'text' }}
+    >
+      <p style={{ fontSize: 9, fontWeight: 700, color: done ? C.grn : C.acc, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 9 }}>
+        {done ? 'Committed ✓' : 'Type it out to commit'}
+      </p>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13.5, lineHeight: 1.85, display: 'flex', flexWrap: 'wrap' }}>
+        {target.split('').map((ch, i) => {
+          const typedCh = typed[i];
+          const isCaret = i === typed.length && !done;
+          const ok = typedCh != null && typedCh.toLowerCase() === ch.toLowerCase();
+          const bad = typedCh != null && !ok;
+          return (
+            <span
+              key={i}
+              style={{
+                color: ok ? C.t0 : bad ? C.red : C.t2,
+                backgroundColor: bad ? `${C.red}22` : 'transparent',
+                boxShadow: isCaret ? `inset 2px 0 0 ${C.acc}` : 'none',
+                opacity: typedCh == null && !isCaret ? 0.5 : 1,
+                whiteSpace: 'pre',
+              }}
+            >{ch}</span>
+          );
+        })}
+        {typed.length >= target.length && !done && (
+          <span style={{ boxShadow: `inset 2px 0 0 ${C.acc}`, whiteSpace: 'pre' }}> </span>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        value={typed}
+        onChange={event => { if (!firedRef.current) setTyped(event.target.value); }}
+        onPaste={event => event.preventDefault()}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        aria-label="Type the commitment to accept it"
+        style={{ position: 'absolute', width: 1, height: 1, padding: 0, border: 'none', opacity: 0 }}
+      />
+    </div>
   );
 }
 
