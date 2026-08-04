@@ -177,6 +177,7 @@ export default function FlyxaAIPreSession() {
   const { settings } = useRisk();
 
   const storedPreSession = useFlyxaStore(state => state.preSession);
+  const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
   const setPreSessionAction = useFlyxaStore(state => state.setPreSession);
   const setPreSessionForDate = useFlyxaStore(state => state.setPreSessionForDate);
   const storedOathItems = useFlyxaStore(state => state.oathItems);
@@ -641,7 +642,12 @@ export default function FlyxaAIPreSession() {
   // pre-open window before today's session. justCommittedRef keeps a fresh
   // commit flowing to /session instead of the locked screen.
   const marketClosedForToday = !rthTiming.marketOpenNow && rthTiming.minutesUntilOpen > 120;
-  const preSessionLocked = sessionAlreadyStarted && !marketClosedForToday && !justCommittedRef.current;
+  // "Completed" = today's brief was committed, whether the session is still live
+  // or has already ended/moved to post-session (endedAt set). The committed brief
+  // lives in preSessionHistory[today] with a commitment, so it survives the live
+  // slot ending. Falls back to the live check for the just-committed case.
+  const preSessionCompletedToday = Boolean(preSessionHistory[todayIso]?.commitment) || sessionAlreadyStarted;
+  const preSessionLocked = preSessionCompletedToday && !marketClosedForToday && !justCommittedRef.current;
 
   const startSession = () => {
     if (sessionAlreadyStarted) { navigate('/session'); return; }
@@ -690,21 +696,55 @@ export default function FlyxaAIPreSession() {
   }
 
   if (preSessionLocked) {
+    const committed = preSessionHistory[todayIso];
+    const committedState = (committed?.checklistState ?? {}) as ChecklistState;
+    const oathsAccepted = activeOathItems.filter(item => Boolean(committedState[item.id])).length;
+    const committedAtIso = committed?.commitment?.committedAt;
+    const committedTime = committedAtIso
+      ? new Date(committedAtIso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : null;
+    const lockReadiness = (committed?.readiness as { status?: string } | undefined)?.status ?? null;
+    const facts = [
+      committedTime ? `Committed ${committedTime}` : null,
+      `${oathsAccepted}/${activeOathItems.length} oaths`,
+      lockReadiness,
+    ].filter(Boolean) as string[];
+
     return (
-      <div className="animate-fade-in" style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 420, width: '100%', textAlign: 'center', border: `1px solid ${C.b0}`, borderRadius: 12, backgroundColor: C.d1, padding: '34px 28px' }}>
-          <div style={{ width: 46, height: 46, borderRadius: '50%', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: `${C.grn}18`, border: `1px solid ${C.grn}55`, color: C.grn, fontSize: 22 }}>✓</div>
-          <h1 style={{ fontSize: 17, fontWeight: 700, color: C.t0, marginBottom: 8 }}>Pre-session already completed</h1>
-          <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 22 }}>
-            You've locked in today's brief. You can't run another pre-session until the market closes.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/post-session')}
-            style={{ width: '100%', padding: '11px 16px', border: 'none', borderRadius: 8, backgroundColor: C.acc, color: '#000', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', cursor: 'pointer' }}
-          >
-            Go to post-session
-          </button>
+      <div className="animate-fade-in" style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ maxWidth: 440, width: '100%', backgroundColor: C.d1, border: `1px solid ${C.b0}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ height: 2, background: C.acc, opacity: 0.7 }} />
+          <div style={{ padding: '34px 32px 30px', textAlign: 'center' }}>
+            <p style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.acc, marginBottom: 22 }}>Session locked</p>
+
+            {/* Focal emblem — a padlock in the single amber accent */}
+            <div style={{ width: 62, height: 62, borderRadius: 15, margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: `${C.acc}14`, border: `1px solid ${C.acc}3a` }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.acc} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+              </svg>
+            </div>
+
+            <h1 style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.01em', color: C.t0, marginBottom: 9 }}>Today's brief is locked in</h1>
+            <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.65, marginBottom: 20, maxWidth: 330, marginInline: 'auto' }}>
+              You've made your commitments for the session. The next brief opens once the market closes.
+            </p>
+
+            {facts.length > 0 && (
+              <div style={{ fontFamily: 'monospace', fontSize: 11, color: C.t2, marginBottom: 24, letterSpacing: '0.02em' }}>
+                {facts.join('  ·  ')}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => navigate('/post-session')}
+              style={{ width: '100%', padding: '12px 16px', border: 'none', borderRadius: 9, backgroundColor: C.acc, color: '#000', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+            >
+              Go to post-session
+              <span style={{ fontSize: 15, lineHeight: 1 }}>{'→'}</span>
+            </button>
+          </div>
         </div>
       </div>
     );
