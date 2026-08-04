@@ -67,13 +67,14 @@ router.post('/ask-flyxa-data', authMiddleware, aiQuotaMiddleware, async (req: Au
     const stats = (req.body.stats && typeof req.body.stats === 'object' && !Array.isArray(req.body.stats))
       ? (req.body.stats as Record<string, unknown>)
       : {};
+    const trades = Array.isArray(req.body.trades) ? (req.body.trades as unknown[]) : [];
 
     if (!question.trim()) {
       res.status(400).json({ error: 'question is required' });
       return;
     }
 
-    const { reply, spec } = await answerTradeDataQuery(question, stats);
+    const { reply, spec } = await answerTradeDataQuery(question, stats, trades);
     res.json({ reply, spec });
   } catch (err) {
     next(err);

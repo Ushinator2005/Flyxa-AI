@@ -564,10 +564,39 @@ export default function FlyxaAIAsk() {
     };
     const sampleSize = trades.length;
 
+    // Scanned trade data only — the objective, scanner-captured facts (prices,
+    // times, hold time, TP/SL distances, contracts, result). The model can
+    // compute anything from these (re-entry timing, sequences, hold patterns).
+    // Personal/subjective fields (notes, psychology, emotion) and the daily
+    // journal are intentionally excluded.
+    const scannedTrades = trades.map(t => ({
+      date: t.trade_date,
+      entryTime: t.trade_time,
+      exitTime: t.close_time,
+      durationSec: t.trade_length_seconds,
+      symbol: t.symbol,
+      direction: t.direction,
+      entry: t.entry_price,
+      sl: t.sl_price,
+      tp: t.tp_price,
+      exit: t.exit_price,
+      exitReason: t.exit_reason,
+      tpPoints: typeof t.tp_price === 'number' && typeof t.entry_price === 'number' && t.tp_price > 0 ? Math.abs(t.tp_price - t.entry_price) : undefined,
+      slPoints: typeof t.sl_price === 'number' && typeof t.entry_price === 'number' && t.sl_price > 0 ? Math.abs(t.entry_price - t.sl_price) : undefined,
+      timeframeMin: t.timeframe_minutes,
+      contracts: t.contract_size,
+      pnl: t.pnl,
+      commission: t.commission,
+      result: (t.pnl ?? 0) > 0 ? 'win' : (t.pnl ?? 0) < 0 ? 'loss' : 'be',
+      session: t.session,
+      confluences: t.confluences,
+    }));
+
     try {
       const { reply, spec } = await api.post<{ reply: string; spec?: FlyxaAnswerSpec | null }>('/api/ai/ask-flyxa-data', {
         question: trimmed,
         stats,
+        trades: scannedTrades,
       });
       addAskHistoryEntry({ id: crypto.randomUUID(), question: trimmed, reply, spec: spec ?? null, sampleSize, createdAt: new Date().toISOString() });
     } catch (err: unknown) {

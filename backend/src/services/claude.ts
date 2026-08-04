@@ -491,7 +491,8 @@ export interface FlyxaAnswerResult {
 
 export async function answerTradeDataQuery(
   question: string,
-  stats: Record<string, unknown>
+  stats: Record<string, unknown>,
+  trades: unknown[] = []
 ): Promise<FlyxaAnswerResult> {
   const trimmed = question.trim();
   if (!trimmed) throw new Error('Question is required');
@@ -539,12 +540,15 @@ export async function answerTradeDataQuery(
   }
 
   const statsJson = JSON.stringify(stats, null, 2);
+  const tradesJson = JSON.stringify(Array.isArray(trades) ? trades.slice(-150) : [], null, 0);
 
   const response = await anthropic.messages.create({
     model: MODEL,
     temperature: 0.2,
     max_tokens: 1400,
-    system: `You are Flyxa AI — a sharp, brutally honest trading performance analyst embedded in a trade journal.
+    // Cache the whole instructions + data block: it's identical across a user's
+    // questions within the 5-minute window, so follow-ups bill the data at ~10%.
+    system: [{ type: 'text' as const, cache_control: { type: 'ephemeral' as const }, text: `You are Flyxa AI — a sharp, brutally honest trading performance analyst embedded in a trade journal.
 
 You DO NOT write prose or layout. You classify the user's question into one shape, then return a JSON "answer spec" that the app renders into fixed visual blocks. Return ONLY the JSON object — no prose, no markdown, no code fences.
 
@@ -555,6 +559,7 @@ QUESTION SHAPES (pick exactly one for "shape"):
 - "diagnosis"    why something keeps happening      (e.g. "why do I lose on Asia?")
 - "ranking"      order items by a measure           (e.g. "which setups make me money?")
 - "journal"      surface the user's own words        (e.g. "what was I thinking on my worst days?")
+- "text"         a simple, direct, or advisory question that a sentence or two fully answers, where a chart or split adds nothing (e.g. "how many trades did I take today?", "what's my most traded symbol?", "should I stop after 2 losses?")
 - "no_data"      the answer isn't in their data      (e.g. asking about an instrument they've never traded)
 
 OUTPUT SCHEMA (a FlyxaAnswerSpec):
@@ -587,8 +592,12 @@ TYPICAL FLOWS:
 - journal     → verdict, quotes, directive
 - no_data     → verdict, empty (verdict = an honest "I can't answer that from your data")
 
+PLAIN TEXT ANSWERS:
+- For shape "text", return ONLY { "shape": "text", "reply": "<your answer in 1 to 4 plain, conversational sentences>" }. No blocks, no verdict, no footer. You may use **bold**, ~amber phrase~, and plain signed money/percent (they auto-colour).
+- Choose "text" when the question is simple, conversational, or advisory and a visual would add no clarity. Reserve the visual shapes for when a chart, split, ranking, trend, or breakdown genuinely helps the trader see something. Do not force a visual onto a simple question; let the complexity of the question decide.
+
 HARD RULES:
-- Use ONLY numbers present in the STATS JSON. Never invent a figure. If a needed number isn't there, use shape "no_data" or omit that block and caveat in verdictNote.
+- Use ONLY data present in the STATS or SCANNED TRADES JSON below. You MAY compute new figures directly from the SCANNED TRADES array: counts, averages, win rates, time between trades (from date + entryTime + durationSec), hold times, TP/SL point distances, sequences, streaks, re-entry timing, and so on. Never invent or estimate a number the data cannot support. If the data genuinely cannot answer, use shape "no_data".
 - "verdict" is the literal answer, never "Based on your data…".
 - Never exceed 2 data blocks (split/hero/chart/causes/ranked/empty). pills and quotes don't count.
 - "footer" MUST state the sample size (trades / sessions / weeks / tags) the answer used.
@@ -597,9 +606,12 @@ HARD RULES:
 - Prop-firm rules may appear under activePropFirmRule / availableTopstepRules; use them, and never claim a matching rule is unavailable.
 - Never use em-dashes or en-dashes (— or –) anywhere in any field. Use commas, colons, or shorter sentences instead. Plain human sentences only.
 
-TRADE STATISTICS (JSON):
-${statsJson}`,
-    messages: [{ role: 'user', content: `Question: ${trimmed}\n\nReturn only the FlyxaAnswerSpec JSON.` }],
+PRE-AGGREGATED STATS (JSON):
+${statsJson}
+
+SCANNED TRADES (JSON, oldest first. Each trade holds the objective, scanner-captured facts: date, entryTime, exitTime, durationSec (hold time in seconds), symbol, direction, entry, sl, tp, exit, exitReason, tpPoints, slPoints, timeframeMin, contracts, pnl, commission, result, session, confluences). Compute anything you need from this.
+${tradesJson}` }],
+    messages: [{ role: 'user', content: `Question: ${trimmed}\n\nReturn only the JSON object for the chosen shape.` }],
   });
 
   const text = response.content
@@ -610,10 +622,32 @@ ${statsJson}`,
 
   if (!text) throw new Error('No response from Claude');
 
-  // Parse the spec. Strip any accidental code fences, then validate the essentials.
+  // A "text" shape is a plain conversational answer with no visual: return it as
+  // prose (spec null) so the client renders paragraphs instead of blocks.
+  const loose = extractJsonObject(text);
+  if (loose && loose.shape === 'text' && typeof loose.reply === 'string' && loose.reply.trim()) {
+    return { spec: null, reply: String(loose.reply).trim() };
+  }
+
+  // Otherwise parse the structured spec. Strip fences, validate the essentials.
   const spec = parseAnswerSpec(text);
   const reply = spec ? flattenSpecToText(spec) : text;
   return { spec, reply };
+}
+
+/** Parse a JSON object from the model's raw text, without spec validation. */
+function extractJsonObject(raw: string): Record<string, unknown> | null {
+  let body = raw.trim();
+  const fence = body.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) body = fence[1].trim();
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  try {
+    return JSON.parse(body.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 /** Extract and lightly validate a FlyxaAnswerSpec from the model's raw text. */

@@ -205,6 +205,39 @@ export function computeAllStats(trades: Trade[]): Record<string, unknown> {
     sampleSize: withDuration.length,
   };
 
+  // ── Re-entry timing (gap between one trade's exit and the next entry) ──
+  // Entry time = trade_time; exit time = entry + trade_length_seconds. Only
+  // same-day, consecutive pairs count, so overnight gaps never pollute the
+  // interval. This is what answers "how often do I re-enter within N minutes
+  // of getting stopped" and how those quick re-entries perform.
+  const reentryGaps: Array<{ gapMin: number; afterLoss: boolean; next: Trade }> = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const cur = sorted[i];
+    if (!prev.trade_date || prev.trade_date !== cur.trade_date) continue;
+    const prevEntry = new Date(`${prev.trade_date}T${prev.trade_time || '00:00'}:00`).getTime();
+    const curEntry = new Date(`${cur.trade_date}T${cur.trade_time || '00:00'}:00`).getTime();
+    if (Number.isNaN(prevEntry) || Number.isNaN(curEntry)) continue;
+    const prevExit = prevEntry + (prev.trade_length_seconds ?? 0) * 1000;
+    const gapMin = Math.round((curEntry - prevExit) / 60000);
+    if (gapMin < 0) continue;
+    reentryGaps.push({ gapMin, afterLoss: (prev.pnl ?? 0) < 0, next: cur });
+  }
+  const afterLossGaps = reentryGaps.filter(g => g.afterLoss);
+  const within10 = afterLossGaps.filter(g => g.gapMin <= 10);
+  const sortedGaps = afterLossGaps.map(g => g.gapMin).sort((a, b) => a - b);
+  const medianGap = sortedGaps.length ? sortedGaps[Math.floor((sortedGaps.length - 1) / 2)] : null;
+  const reentryTiming = afterLossGaps.length >= 3 ? {
+    reentriesAfterLoss: afterLossGaps.length,
+    medianMinutesToReentry: medianGap,
+    within10min: within10.length,
+    pctWithin10min: Math.round((within10.length / afterLossGaps.length) * 100),
+    quickReentryPerformance: within10.length >= 3 ? statRow(within10.map(g => g.next)) : null,
+    patientReentryPerformance: (afterLossGaps.length - within10.length) >= 3
+      ? statRow(afterLossGaps.filter(g => g.gapMin > 10).map(g => g.next))
+      : null,
+  } : null;
+
   return {
     overview,
     bySession,
@@ -219,5 +252,6 @@ export function computeAllStats(trades: Trade[]): Record<string, unknown> {
     trend,
     topConfluences,
     duration,
+    reentryTiming,
   };
 }
