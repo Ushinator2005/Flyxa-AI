@@ -1959,14 +1959,14 @@ export default function Settings() {
                 {editing && (
                   <div style={{ paddingBottom: 18 }}>
                     {([
-                      ['Account name', <input key="n" style={STG_TXT} value={account.name} onChange={e => updateAccount(account.id, { name: e.target.value })} placeholder="Account name" />],
-                      ['Firm', <input key="f" style={STG_TXT} value={account.broker ?? ''} onChange={e => updateAccount(account.id, { broker: e.target.value })} placeholder="Firm" />],
-                      ['Starting balance', <input key="s" type="number" min="0" step="1000" style={STG_TXT} value={account.startingBalance ?? ''} onChange={e => { const v = parseFloat(e.target.value); updateAccount(account.id, { startingBalance: Number.isFinite(v) && v >= 0 ? v : undefined }); }} placeholder="e.g. 100000" />],
-                      ['Target balance', <input key="t" type="number" min="0" step="1000" style={STG_TXT} value={account.id in draftTargetBalances ? draftTargetBalances[account.id] : String(account.targetBalance ?? '')} onChange={e => setDraftTargetBalances(prev => ({ ...prev, [account.id]: e.target.value }))} onBlur={e => { const v = parseFloat(e.target.value); updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined }); setDraftTargetBalances(prev => { const next = { ...prev }; delete next[account.id]; return next; }); }} placeholder="e.g. 110000" />],
+                      ['Account name', <input key="n" style={{ ...STG_TXT, borderBottom: 'none' }} value={account.name} onChange={e => updateAccount(account.id, { name: e.target.value })} placeholder="Account name" />],
+                      ['Firm', <input key="f" style={{ ...STG_TXT, borderBottom: 'none' }} value={account.broker ?? ''} onChange={e => updateAccount(account.id, { broker: e.target.value })} placeholder="Firm" />],
+                      ['Starting balance', <input key="s" type="number" min="0" step="1000" style={{ ...STG_TXT, borderBottom: 'none' }} value={account.startingBalance ?? ''} onChange={e => { const v = parseFloat(e.target.value); updateAccount(account.id, { startingBalance: Number.isFinite(v) && v >= 0 ? v : undefined }); }} placeholder="e.g. 100000" />],
+                      ['Target balance', <input key="t" type="number" min="0" step="1000" style={{ ...STG_TXT, borderBottom: 'none' }} value={account.id in draftTargetBalances ? draftTargetBalances[account.id] : String(account.targetBalance ?? '')} onChange={e => setDraftTargetBalances(prev => ({ ...prev, [account.id]: e.target.value }))} onBlur={e => { const v = parseFloat(e.target.value); updateAccount(account.id, { targetBalance: Number.isFinite(v) && v >= 0 ? v : undefined }); setDraftTargetBalances(prev => { const next = { ...prev }; delete next[account.id]; return next; }); }} placeholder="e.g. 110000" />],
                       ['Account type', <StyledSelect key="ty" value={account.type} onChange={v => updateAccount(account.id, { type: v as TradingAccountType })}>{ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</StyledSelect>],
                       ['Status', <StatusSelect key="st" value={account.status} onChange={status => updateAccount(account.id, { status })} />],
                     ] as Array<[string, React.ReactNode]>).map(([label, ctl]) => (
-                      <div key={label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,244px)', gap: 34, alignItems: 'center', padding: '11px 0', borderTop: `1px solid ${BORDER}` }}>
+                      <div key={label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,244px)', gap: 34, alignItems: 'center', padding: '9px 0' }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: T1 }}>{label}</span>
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{ctl}</div>
                       </div>
