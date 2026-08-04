@@ -629,8 +629,23 @@ export default function FlyxaAIPreSession() {
     return getTimeZoneParts(new Date(storedPreSession.startedAt), preferences.timezone).date === todayIso;
   }, [storedPreSession, todayIso, preferences.timezone]);
 
+  // Once today's pre-session is committed, it can't be filled out again until the
+  // market has closed for the day. Send the trader straight to post-session
+  // instead of letting them start a second brief. "Closed for the day" = market
+  // is shut and the next open is well away (post-close / overnight), not the
+  // short pre-open window before today's session.
+  const justCommittedRef = useRef(false);
+  // Today's pre-session is committed and the market has not closed yet, so it
+  // can't be filled out again this session. "Closed for the day" = market is
+  // shut and the next open is well away (post-close / overnight), not the short
+  // pre-open window before today's session. justCommittedRef keeps a fresh
+  // commit flowing to /session instead of the locked screen.
+  const marketClosedForToday = !rthTiming.marketOpenNow && rthTiming.minutesUntilOpen > 120;
+  const preSessionLocked = sessionAlreadyStarted && !marketClosedForToday && !justCommittedRef.current;
+
   const startSession = () => {
     if (sessionAlreadyStarted) { navigate('/session'); return; }
+    justCommittedRef.current = true;
     const committedAt = new Date().toISOString();
     const parsedLoss = parseFloat(sessionMaxLoss);
     const parsedTarget = parseFloat(sessionTarget);
@@ -670,6 +685,27 @@ export default function FlyxaAIPreSession() {
     return (
       <div className="animate-fade-in flex h-[calc(100vh-3.5rem)] items-center justify-center rounded-2xl" style={{ backgroundColor: C.d0 }}>
         <LoadingSpinner size="lg" label="Preparing your pre-session brief..." />
+      </div>
+    );
+  }
+
+  if (preSessionLocked) {
+    return (
+      <div className="animate-fade-in" style={{ height: 'calc(100vh - 3.5rem)', backgroundColor: C.d0, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ maxWidth: 420, width: '100%', textAlign: 'center', border: `1px solid ${C.b0}`, borderRadius: 12, backgroundColor: C.d1, padding: '34px 28px' }}>
+          <div style={{ width: 46, height: 46, borderRadius: '50%', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: `${C.grn}18`, border: `1px solid ${C.grn}55`, color: C.grn, fontSize: 22 }}>✓</div>
+          <h1 style={{ fontSize: 17, fontWeight: 700, color: C.t0, marginBottom: 8 }}>Pre-session already completed</h1>
+          <p style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 22 }}>
+            You've locked in today's brief. You can't run another pre-session until the market closes.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/post-session')}
+            style={{ width: '100%', padding: '11px 16px', border: 'none', borderRadius: 8, backgroundColor: C.acc, color: '#000', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', cursor: 'pointer' }}
+          >
+            Go to post-session
+          </button>
+        </div>
       </div>
     );
   }
