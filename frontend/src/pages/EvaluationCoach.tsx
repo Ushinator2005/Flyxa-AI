@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ShieldCheck, Trophy } from 'lucide-react';
-import useFlyxaStore from '../store/flyxaStore.js';
+import useFlyxaStore, { DEFAULT_ACCOUNT_ID } from '../store/flyxaStore.js';
 import type { Account, Trade } from '../store/types.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
 import { aiApi } from '../services/api.js';
@@ -357,9 +357,9 @@ export default function EvaluationCoach() {
     [tradingAccounts],
   );
 
-  const EVAL_STATUSES = new Set(['Eval', 'Passed', 'Blown']);
+  const EVAL_STATUSES = new Set(['Eval', 'Passed', 'Blown', 'Funded', 'Live']);
   const evaluationAccounts = useMemo(
-    () => accounts.filter(a => EVAL_STATUSES.has(statusById.get(a.id) ?? '') || a.type === 'eval' || a.phase === 'eval'),
+    () => accounts.filter(a => a.id !== DEFAULT_ACCOUNT_ID && (EVAL_STATUSES.has(statusById.get(a.id) ?? '') || a.type === 'eval' || a.phase === 'eval')),
     [accounts, statusById],
   );
 
@@ -482,6 +482,22 @@ export default function EvaluationCoach() {
     }
   }, [comparisons, updateTradingAccount]);
 
+  // ── Auto-fund on pass ───────────────────────────────────────────
+  // When an eval account meets its pass criteria, move it to funded in place:
+  // status Funded, balance re-based to 0 (funded profit tracks from zero), and
+  // the eval's MLL dollar amount carried onto the account so the drawdown stays
+  // the same. Guarded on the store phase so it can't loop while the status model
+  // catches up; self-terminating once the account is funded.
+  useEffect(() => {
+    for (const { account, progress: p, status } of comparisons) {
+      if (status === 'Eval' && account.phase !== 'funded' && p.status === 'passed') {
+        const mll = account.maxDrawdown || inferEvaluationTemplate(account).maxDrawdown;
+        updateAccount(account.id, { phase: 'funded', type: 'live', startingBalance: 0, maxDrawdown: mll });
+        updateTradingAccount(account.id, { status: 'Funded' });
+      }
+    }
+  }, [comparisons, updateAccount, updateTradingAccount]);
+
   // ── Behavioral warnings ─────────────────────────────────────────
   const behavioralWarnings = useMemo(() => computeBehavioralWarnings(accountTrades), [accountTrades]);
 
@@ -535,7 +551,12 @@ export default function EvaluationCoach() {
 
   if (!selected || !progress) return <EmptyEvaluation />;
 
-  if (progress.status === 'passed' && !dismissPass) {
+  const currentStatus = statusById.get(selected.id) ?? 'Eval';
+  const isFunded = currentStatus === 'Funded' || currentStatus === 'Live';
+
+  // Funded accounts don't "pass" again; they chase payouts, so skip the eval
+  // pass screen and reframe the view below.
+  if (progress.status === 'passed' && !dismissPass && !isFunded) {
     // Rebuild the equity run here — the main-view series below is computed
     // after this early return.
     const passStart = Number(selected.size) > 0
@@ -561,9 +582,10 @@ export default function EvaluationCoach() {
   const maxDrawdown = selected.maxDrawdown || activeTemplate.maxDrawdown;
   const dailyLimit = selected.dailyLossLimit || activeTemplate.dailyLossLimit;
 
-  const selStatus = statusById.get(selected.id) ?? 'Eval';
+  const selStatus = currentStatus;
   const triggerColor = STATUS_COLOR[selStatus] ?? 'var(--txt-3)';
   const dropEval   = comparisons.filter(c => c.status === 'Eval');
+  const dropFunded = comparisons.filter(c => c.status === 'Funded' || c.status === 'Live');
   const dropPassed = comparisons.filter(c => c.status === 'Passed');
   const dropBlown  = comparisons.filter(c => c.status === 'Blown');
 
@@ -600,6 +622,24 @@ export default function EvaluationCoach() {
     return pts;
   })();
   const targetBalance = startBalance + Number(target);
+
+  // ── Funded payout view (real rules only, no invented profit target) ──
+  // Withdrawable = profit above the starting balance (the trailing MLL locks at
+  // start on funded accounts, so that profit is what's yours to take). Readiness
+  // blends buffer health, consistency compliance, and minimum-day progress.
+  const withdrawable = Math.max(0, progress.currentBalance - startBalance);
+  const consistencyOk = progress.consistencyLimitPct === null || progress.consistencyPct === null || progress.consistencyPct <= progress.consistencyLimitPct;
+  const consistencyScore = progress.consistencyLimitPct === null || progress.consistencyPct === null
+    ? 100
+    : Math.max(0, Math.min(100, Math.round((progress.consistencyLimitPct / Math.max(progress.consistencyPct, 1)) * 100)));
+  const daysScore = progress.minimumTradingDays > 0 ? Math.min(100, Math.round((progress.tradingDays / progress.minimumTradingDays) * 100)) : 100;
+  const payoutReadinessPct = Math.round(progress.probabilityFactors.survivalScore * 0.4 + consistencyScore * 0.3 + daysScore * 0.3);
+  const payoutReady = withdrawable > 0 && consistencyOk && daysMet && progress.drawdownRemaining > 0;
+  const heroPct = isFunded ? payoutReadinessPct : progress.passProbability;
+  const heroColor = heroPct >= 65 ? 'var(--green)' : heroPct >= 40 ? 'var(--amber)' : 'var(--red)';
+  const heroLabel = isFunded
+    ? (payoutReady ? 'Payout ready' : heroPct >= 65 ? 'On track' : heroPct >= 40 ? 'Building' : 'Not yet')
+    : probLabel;
 
   // ── Pace ────────────────────────────────────────────────────────
   const avgDailyPnl = progress.tradingDays > 0 ? progress.netPnl / progress.tradingDays : 0;
@@ -792,6 +832,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               {acctDropOpen && (
                 <div className="ec-acct-menu">
                   {dropEval.map(({ account }) => <DropRow key={account.id} account={account} />)}
+                  {dropFunded.length > 0 && (<><div className="ec-acct-sep">Funded</div>{dropFunded.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
                   {dropPassed.length > 0 && (<><div className="ec-acct-sep">Passed</div>{dropPassed.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
                   {dropBlown.length > 0 && (<><div className="ec-acct-sep">Blown</div>{dropBlown.map(({ account }) => <DropRow key={account.id} account={account} />)}</>)}
                 </div>
@@ -821,12 +862,12 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
         {/* ── Hero: pass probability + drivers | equity path ─────────── */}
         <div className="ec-hero">
           <div className="ec-prob">
-            <span className="ec-metric-lbl ec-section-lbl">Pass probability</span>
-            <div className="ec-prob-big" style={{ color: probColor }}>
-              <b>{progress.passProbability}</b><span>%</span>
+            <span className="ec-metric-lbl ec-section-lbl">{isFunded ? 'Payout readiness' : 'Pass probability'}</span>
+            <div className="ec-prob-big" style={{ color: heroColor }}>
+              <b>{heroPct}</b><span>%</span>
             </div>
-            <span className="ec-prob-verdict" style={{ color: probColor }}>{probLabel}</span>
-            <div className="ec-prob-bar"><i style={{ width: `${progress.passProbability}%`, background: probColor }} /></div>
+            <span className="ec-prob-verdict" style={{ color: heroColor }}>{heroLabel}</span>
+            <div className="ec-prob-bar"><i style={{ width: `${heroPct}%`, background: heroColor }} /></div>
             <div className="ec-drv">
               {probabilityDrivers.map(driver => (
                 <div key={driver.label} className={`ec-drv-r${driver === weakestDriver ? ' weak' : ''}`}>
@@ -841,7 +882,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               <span className="ec-metric-lbl ec-section-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
                 {money(progress.currentBalance - progress.drawdownFloor)} above MLL ·{' '}
-                <b>{progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`}</b>
+                <b>{isFunded ? `${money(withdrawable)} withdrawable` : (progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`)}</b>
               </span>
             </div>
             {equityPoints.length >= 2
@@ -853,10 +894,16 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
         {/* ── Ledger strip: the four numbers that decide the eval ────── */}
         <div className="ec-metric-grid">
           <div className="ec-metric-card ec-metric-card--primary">
-            <span className="ec-metric-lbl">Profit needed</span>
-            <strong className="ec-metric-val">{money(progress.targetRemaining)}</strong>
-            <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>
-            <span className="ec-metric-sub">{targetProgressPct}% of {money(target)} target</span>
+            <span className="ec-metric-lbl">{isFunded ? 'Withdrawable profit' : 'Profit needed'}</span>
+            <strong className="ec-metric-val">{money(isFunded ? withdrawable : progress.targetRemaining)}</strong>
+            {isFunded ? (
+              <span className="ec-metric-sub">{payoutReady ? 'Eligible to withdraw' : 'Profit above your starting balance'}</span>
+            ) : (
+              <>
+                <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>
+                <span className="ec-metric-sub">{targetProgressPct}% of {money(target)} target</span>
+              </>
+            )}
           </div>
 
           <div
@@ -903,9 +950,17 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
           )}
 
           <div className="ec-metric-card">
-            <span className="ec-metric-lbl">Pace to target</span>
-            <strong className="ec-metric-val">{paceHeadline}</strong>
-            <span className="ec-metric-sub">{paceDetail}</span>
+            <span className="ec-metric-lbl">{isFunded ? 'Payout status' : 'Pace to target'}</span>
+            <strong className="ec-metric-val">{isFunded ? (payoutReady ? 'Ready' : !consistencyOk ? 'Consistency' : !daysMet ? 'More days' : 'Build profit') : paceHeadline}</strong>
+            <span className="ec-metric-sub">{isFunded
+              ? (payoutReady
+                ? 'Consistency, minimum days, and buffer all clear.'
+                : !consistencyOk
+                  ? 'One day is too large a share of total profit for a payout.'
+                  : !daysMet
+                    ? `${Math.max(0, progress.minimumTradingDays - progress.tradingDays)} more trading day${s(Math.max(0, progress.minimumTradingDays - progress.tradingDays))} required.`
+                    : 'Keep building withdrawable profit while staying above the MLL.')
+              : paceDetail}</span>
           </div>
         </div>
 
