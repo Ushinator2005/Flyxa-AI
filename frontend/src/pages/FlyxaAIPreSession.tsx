@@ -1607,6 +1607,12 @@ function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => vo
   const [done, setDone] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const firedRef = useRef(false);
+  // onCommit is a fresh closure every render; keep it in a ref so the commit
+  // effect can depend only on `matches`. Otherwise setDone's re-render changes
+  // onCommit, the effect cleans up, and the pending timer is cleared before it
+  // fires, so the commitment never advances.
+  const onCommitRef = useRef(onCommit);
+  useEffect(() => { onCommitRef.current = onCommit; });
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -1617,9 +1623,9 @@ function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => vo
     if (!matches || firedRef.current) return;
     firedRef.current = true;
     setDone(true);
-    const timer = setTimeout(onCommit, TYPE_COMMIT_DELAY_MS);
+    const timer = setTimeout(() => onCommitRef.current(), TYPE_COMMIT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [matches, onCommit]);
+  }, [matches]);
 
   return (
     <div
