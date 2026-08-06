@@ -1051,6 +1051,10 @@ function resolveDrawdownType(account: Account, template: EvaluationTemplate): 's
 }
 
 function resolveTrailingStopsAt(account: Account, template: EvaluationTemplate): number | null {
+  // Funded accounts: the trailing MLL locks at the funding balance (the account's
+  // starting balance), not the eval's account size. Once locked there, profit
+  // above the start is safe to withdraw.
+  if (account.phase === 'funded') return account.startingBalance;
   return account.trailingStopsAt ?? template.trailingStopsAt ?? null;
 }
 

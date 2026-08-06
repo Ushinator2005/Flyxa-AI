@@ -136,11 +136,12 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 // MLL (dashed, below — stepped when it trails the trader's highs) and the
 // profit target (dashed, above).
 function EquitySpark({ points, target, floor, floorSeries, dates }: {
-  points: number[]; target: number; floor: number; floorSeries?: number[]; dates?: string[];
+  points: number[]; target?: number; floor: number; floorSeries?: number[]; dates?: string[];
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hoverI, setHoverI] = useState<number | null>(null);
-  if (points.length < 2 || !Number.isFinite(target) || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
+  if (points.length < 2 || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
+  const hasTarget = typeof target === 'number' && Number.isFinite(target);
   const floors = floorSeries && floorSeries.length === points.length && floorSeries.every(v => Number.isFinite(v))
     ? floorSeries
     : null;
@@ -148,7 +149,7 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
   // viewBox stretched vertically fattens every stroke.
   const W = 340, H = 210, PAD = 10;
   const lo = Math.min(...points, ...(floors ?? [floor]));
-  const hi = Math.max(...points, target);
+  const hi = Math.max(...points, ...(hasTarget ? [target as number] : []));
   const span = hi - lo || 1;
   const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = (v: number) => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
@@ -214,11 +215,11 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
         onMouseLeave={() => setHoverI(null)}
       >
         <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
-          <line x1={PAD} x2={W - PAD} y1={y(target)} y2={y(target)} stroke="var(--green)" strokeOpacity=".38" strokeDasharray="3 5" strokeWidth="1" />
-          {floorPath
-            ? <path d={floorPath} fill="none" stroke="var(--red)" strokeOpacity=".45" strokeDasharray="3 5" strokeWidth="1" />
-            : <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".4" strokeDasharray="3 5" strokeWidth="1" />}
+          {hasTarget && <line x1={PAD} x2={W - PAD} y1={y(target as number)} y2={y(target as number)} stroke="var(--green)" strokeOpacity=".38" strokeDasharray="3 5" strokeWidth="1" />}
           <path d={fillPath} fill="rgba(245,158,11,0.05)" stroke="none" />
+          {floorPath
+            ? <path d={floorPath} fill="none" stroke="var(--red)" strokeOpacity=".34" strokeWidth="1.25" strokeLinejoin="round" strokeLinecap="round" />
+            : <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".32" strokeWidth="1.25" />}
           <path d={path} fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
           <circle cx={x(points.length - 1)} cy={y(last)} r="3" fill="var(--amber)" />
         </svg>
@@ -267,13 +268,15 @@ function EquitySpark({ points, target, floor, floorSeries, dates }: {
         {/* Line labels pinned to the lines they describe. The balance label
             drops out when it would sit on top of the target/floor labels —
             e.g. a passed run finishing right at target. */}
-        <span style={{ ...labelStyle('var(--green)'), top: `calc(${pct(target)}% + 2px)` }}>
-          {money(target)}
-        </span>
+        {hasTarget && (
+          <span style={{ ...labelStyle('var(--green)'), top: `calc(${pct(target as number)}% + 2px)` }}>
+            {money(target as number)}
+          </span>
+        )}
         <span style={{ ...labelStyle('var(--red)'), top: `calc(${pct(floor)}% - 13px)` }}>
           {money(floor)}
         </span>
-        {Math.abs(pct(last) - pct(target)) > 16 && Math.abs(pct(last) - pct(floor)) > 16 && (
+        {(!hasTarget || Math.abs(pct(last) - pct(target as number)) > 16) && Math.abs(pct(last) - pct(floor)) > 16 && (
           <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
             {money(last)}
           </span>
@@ -579,6 +582,9 @@ export default function EvaluationCoach() {
 
   const activeTemplate = inferEvaluationTemplate(selected);
   const target = selected.profitTarget ?? activeTemplate.profitTarget;
+  // Funded accounts have no profit target to pass; only show one if the user
+  // explicitly set a payout goal on the account.
+  const showTarget = !isFunded || (selected.profitTarget != null && Number(selected.profitTarget) > 0);
   const maxDrawdown = selected.maxDrawdown || activeTemplate.maxDrawdown;
   const dailyLimit = selected.dailyLossLimit || activeTemplate.dailyLossLimit;
 
@@ -701,7 +707,7 @@ export default function EvaluationCoach() {
     : null;
   // ── Probability drivers ────────────────────────────────────────
   const probabilityDrivers = [
-    { label: 'Target progress', value: progress.probabilityFactors.targetScore },
+    ...(showTarget ? [{ label: 'Target progress', value: progress.probabilityFactors.targetScore }] : []),
     { label: 'Buffer health', value: progress.probabilityFactors.survivalScore },
     { label: 'Recent win rate', value: progress.probabilityFactors.recentWinRate },
     { label: 'Green days', value: progress.probabilityFactors.dayQuality },
@@ -842,8 +848,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               {firmMeta && <><span>{firmMeta}</span><em>·</em></>}
               <span>Balance <i>{money(progress.currentBalance)}</i></span>
               <em>·</em>
-              <span>Target <i>{money(targetBalance)}</i></span>
-              <em>·</em>
+              {showTarget && (<><span>Target <i>{money(targetBalance)}</i></span><em>·</em></>)}
               <span className="ec-evhd-mll" title={progress.floorLocked
                 ? 'The MLL has stopped trailing. The account is closed if balance touches this.'
                 : `${ddTypeLabel} MLL. The account is closed if balance touches this.`}
@@ -886,7 +891,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               </span>
             </div>
             {equityPoints.length >= 2
-              ? <EquitySpark points={equityPoints} target={targetBalance} floor={Number(progress.drawdownFloor)} floorSeries={mllSeries} dates={equityDates} />
+              ? <EquitySpark points={equityPoints} target={showTarget ? targetBalance : undefined} floor={Number(progress.drawdownFloor)} floorSeries={mllSeries} dates={equityDates} />
               : <p className="ec-no-data">No sessions recorded yet, the balance line starts with your first trade.</p>}
           </div>
         </div>
