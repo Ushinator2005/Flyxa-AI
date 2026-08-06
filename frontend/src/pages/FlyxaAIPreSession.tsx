@@ -1616,8 +1616,21 @@ function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => vo
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const normalize = (value: string) => value.replace(/\s+/g, ' ').replace(/\s+$/, '').toLowerCase();
-  const matches = typed.trim().length > 0 && normalize(typed) === normalize(target);
+  // Forgiving match: this is the trader typing out what they'll do, not a rigid
+  // typing test. Compare word by word, ignoring case and punctuation, so a
+  // skipped comma or period never blocks it. Words light up as they're typed;
+  // it commits once every word is there.
+  const cleanTarget = target.replace(/\s+/g, ' ').trim();
+  const words = cleanTarget.split(' ');
+  const canon = (value: string) => value.toLowerCase().replace(/[^a-z0-9\s]/gi, '');
+  const goalWords = words.map(word => canon(word).trim()).filter(Boolean);
+  const typedWords = canon(typed).split(/\s+/).filter(Boolean);
+  let matchedWords = 0;
+  for (let i = 0; i < goalWords.length; i += 1) {
+    if (typedWords[i] === goalWords[i]) matchedWords += 1;
+    else break;
+  }
+  const matches = goalWords.length > 0 && matchedWords >= goalWords.length;
 
   useEffect(() => {
     if (!matches || firedRef.current) return;
@@ -1636,32 +1649,26 @@ function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => vo
         {done ? 'Committed ✓' : 'Type it out to commit'}
       </p>
       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13.5, lineHeight: 1.85, display: 'flex', flexWrap: 'wrap' }}>
-        {target.split('').map((ch, i) => {
-          const typedCh = typed[i];
-          const isCaret = i === typed.length && !done;
-          const ok = typedCh != null && typedCh.toLowerCase() === ch.toLowerCase();
-          const bad = typedCh != null && !ok;
+        {words.map((word, i) => {
+          const doneWord = i < matchedWords;
+          const isCurrent = i === matchedWords && !done;
           return (
             <span
               key={i}
               style={{
-                color: ok ? C.t0 : bad ? C.red : C.t2,
-                backgroundColor: bad ? `${C.red}22` : 'transparent',
-                boxShadow: isCaret ? `inset 2px 0 0 ${C.acc}` : 'none',
-                opacity: typedCh == null && !isCaret ? 0.5 : 1,
+                color: doneWord ? C.t0 : C.t2,
+                opacity: doneWord ? 1 : isCurrent ? 0.9 : 0.45,
+                boxShadow: isCurrent ? `inset 2px 0 0 ${C.acc}` : 'none',
                 whiteSpace: 'pre',
               }}
-            >{ch}</span>
+            >{i < words.length - 1 ? `${word} ` : word}</span>
           );
         })}
-        {typed.length >= target.length && !done && (
-          <span style={{ boxShadow: `inset 2px 0 0 ${C.acc}`, whiteSpace: 'pre' }}> </span>
-        )}
       </div>
       <input
         ref={inputRef}
         value={typed}
-        onChange={event => { if (!firedRef.current) setTyped(event.target.value); }}
+        onChange={event => { if (!firedRef.current) setTyped(event.target.value.slice(0, cleanTarget.length + 40)); }}
         onPaste={event => event.preventDefault()}
         autoComplete="off"
         autoCorrect="off"
