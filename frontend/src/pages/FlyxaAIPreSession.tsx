@@ -211,9 +211,11 @@ export default function FlyxaAIPreSession() {
   useEffect(() => { prevStepRef.current = step; }, [step]);
 
   useEffect(() => {
-    // 1s tick keeps the market-open countdown alive; rthTiming itself is
-    // minute-resolution, seconds are derived from the wall clock.
-    const interval = window.setInterval(() => setNow(new Date()), 1000);
+    // The live per-second countdown lives in <LiveMarketClock>, so the page only
+    // needs `now` at minute/day resolution (todayIso, market open/close state).
+    // A slow tick keeps the heavy page from re-rendering every second, which was
+    // making typing in the oath lag.
+    const interval = window.setInterval(() => setNow(new Date()), 20000);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -789,21 +791,8 @@ export default function FlyxaAIPreSession() {
               }}>{tab.label}</button>
             ))}
           </div>
-          {/* Market-open countdown */}
-          <div style={{ textAlign: 'right', minWidth: 96 }}>
-            {rthTiming.marketOpenNow ? (
-              <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: C.grn, lineHeight: 1 }}>Market open</div>
-            ) : (
-              <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 600, color: C.t0, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                {rthTiming.minutesUntilOpen >= 90
-                  ? `${Math.floor(rthTiming.minutesUntilOpen / 60)}h ${String(rthTiming.minutesUntilOpen % 60).padStart(2, '0')}m`
-                  : `${String(Math.max(0, rthTiming.minutesUntilOpen - 1)).padStart(2, '0')}:${String(59 - now.getSeconds()).padStart(2, '0')}`}
-              </div>
-            )}
-            <div style={{ fontSize: 9, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2, marginTop: 4 }}>
-              {rthTiming.marketOpenNow ? 'Regular hours' : 'Until open'} · {etDateLabel(now)}
-            </div>
-          </div>
+          {/* Market-open countdown — self-ticking so it doesn't re-render the page */}
+          <LiveMarketClock marketClock={preferences.marketClock ?? 'equities'} />
         </div>
       </header>
 
@@ -1677,6 +1666,34 @@ function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => vo
         aria-label="Type the commitment to accept it"
         style={{ position: 'absolute', width: 1, height: 1, padding: 0, border: 'none', opacity: 0 }}
       />
+    </div>
+  );
+}
+
+// Self-ticking market countdown. Kept in its own component so the once-a-second
+// update only re-renders this small node, not the whole (heavy) pre-session page
+// — which was making typing in the oath feel laggy.
+function LiveMarketClock({ marketClock }: { marketClock: 'equities' | 'futures' | 'forex' }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const timing = getMarketTiming(now, marketClock);
+  return (
+    <div style={{ textAlign: 'right', minWidth: 96 }}>
+      {timing.marketOpenNow ? (
+        <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: C.grn, lineHeight: 1 }}>Market open</div>
+      ) : (
+        <div style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 600, color: C.t0, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+          {timing.minutesUntilOpen >= 90
+            ? `${Math.floor(timing.minutesUntilOpen / 60)}h ${String(timing.minutesUntilOpen % 60).padStart(2, '0')}m`
+            : `${String(Math.max(0, timing.minutesUntilOpen - 1)).padStart(2, '0')}:${String(59 - now.getSeconds()).padStart(2, '0')}`}
+        </div>
+      )}
+      <div style={{ fontSize: 9, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.t2, marginTop: 4 }}>
+        {timing.marketOpenNow ? 'Regular hours' : 'Until open'} · {etDateLabel(now)}
+      </div>
     </div>
   );
 }
