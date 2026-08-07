@@ -850,6 +850,71 @@ Return only JSON:
   }
 }
 
+// Same-candle tiebreaker. When entry and exit land on ONE candle the tick order
+// of the two wicks is unknowable, but the POST-ENTRY direction usually isn't:
+// anchor on the entry, ignore anything on the stop side that formed before the
+// entry, and use where the candle CLOSED (plus where the entry sits in the range)
+// to decide TP vs SL. A short entered near the high that closes down to the
+// target is a win, not a stop-out from the pre-entry high wick.
+async function resolveSameCandleExit(
+  base64Image: string,
+  mimeType: string,
+  focusImages: Array<{ base64Image: string; mimeType: string; label: string }>,
+  trade: {
+    direction: 'Long' | 'Short';
+    entry: number;
+    stop: number;
+    target: number;
+  },
+  boxBounds?: { leftRatio: number; rightRatio: number },
+): Promise<{ exit_reason: 'TP' | 'SL' | null; confidence: 'high' | 'medium' | 'low'; evidence: string | null }> {
+  const isLong = trade.direction === 'Long';
+  const bounds = boxBounds
+    ? `The entry candle is at the left edge of the colored position tool, near ${Math.round(boxBounds.leftRatio * 100)}% of the image width. Judge only that one candle.`
+    : 'Judge only the entry candle at the left edge of the colored position tool.';
+  const prompt = `A ${trade.direction} futures trade entered AND exited inside ONE candle, so its stop and target wicks are on the same candle and their tick order is not directly visible. Resolve the outcome from the POST-ENTRY direction, not from which wick looks longer. Do not change any price.
+
+Trade:
+- Direction: ${trade.direction}
+- Entry: ${trade.entry}
+- Stop (SL): ${trade.stop}
+- Target (TP): ${trade.target}
+
+${bounds}
+
+Method, in order:
+1. The entry at ${trade.entry} is the reference point. Any part of the candle's range on the STOP side that formed BEFORE the entry is NOT a stop-out. Only movement AFTER the entry can hit a level.
+2. Find where the entry sits in the candle: near its open, its high, or its low.
+3. Read the candle's CLOSE. Relative to the entry, the close is the reliable signal of where price went after entry:
+${isLong
+  ? `   - Long: a close toward/at the TARGET (${trade.target}, the upper side, a green push up) means price rose to target after entry -> TP. A close toward/at the STOP (${trade.stop}, lower side) -> SL.`
+  : `   - Short: a close toward/at the TARGET (${trade.target}, the lower side, a red push down near the low) means price fell to target after entry -> TP. A close toward/at the STOP (${trade.stop}, upper side) -> SL.`}
+4. Cross-check with the entry position: if the entry sits at the extreme ${isLong ? 'LOW (entered near the bottom of the candle)' : 'HIGH (entered near the top of the candle)'}, then after entry price could only travel toward the TARGET, so return TP.
+Only return SL if the evidence genuinely shows price moved to the stop AFTER the entry.
+
+Return only JSON:
+{
+  "exit_reason": "TP" or "SL" or null,
+  "confidence": "high" or "medium" or "low",
+  "first_touch_candle_index": 0,
+  "evidence": "how the close and entry position imply the post-entry direction"
+}`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? '');
+    const { text } = await generateWithFallback(genAI, prompt, mimeType, base64Image, focusImages, { responseSchema: VERIFY_EXIT_SCHEMA });
+    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    return {
+      exit_reason: parseExitReason(parsed.exit_reason),
+      confidence: parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low',
+      evidence: typeof parsed.evidence === 'string' ? parsed.evidence : null,
+    };
+  } catch {
+    return { exit_reason: null, confidence: 'low', evidence: null };
+  }
+}
+
 async function detectBoundaryTouch(
   base64Image: string,
   mimeType: string,
@@ -1111,9 +1176,23 @@ export async function analyzeChartImage(
       boundaryConfidence = targetTouch.confidence;
       boundaryEvidence = targetTouch.evidence;
     } else if (stopConfirmed && targetConfirmed && stopIndex === targetIndex) {
-      verificationWarnings.push(
-        `SL and TP were both detected on candle ${stopIndex}; intrabar order cannot be determined from the screenshot.`
-      );
+      // Same-candle span: the intrabar tick order is unknowable, but the
+      // post-entry direction usually is. Anchor on the entry and read where the
+      // candle closed to decide TP vs SL, instead of giving up.
+      const sameCandle = await resolveSameCandleExit(base64Image, mimeType, exitImages, tradeForVerification, boxBounds);
+      if (sameCandle.exit_reason) {
+        boundaryExit = sameCandle.exit_reason;
+        boundaryIndex = stopIndex;
+        boundaryConfidence = sameCandle.confidence === 'high' ? 'medium' : sameCandle.confidence;
+        boundaryEvidence = sameCandle.evidence;
+        verificationWarnings.push(
+          `SL and TP both hit on candle ${stopIndex}; resolved to ${sameCandle.exit_reason} from the post-entry direction (${sameCandle.evidence ?? 'candle close'}). Verify Win/Loss manually.`
+        );
+      } else {
+        verificationWarnings.push(
+          `SL and TP were both detected on candle ${stopIndex}; intrabar order cannot be determined from the screenshot.`
+        );
+      }
     }
 
     // First touch decides the exit. The independent first-touch pass no longer
