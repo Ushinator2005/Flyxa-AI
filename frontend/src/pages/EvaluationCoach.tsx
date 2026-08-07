@@ -11,6 +11,7 @@ import {
   computeEvaluationProgress,
   computeMllSeries,
   inferEvaluationTemplate,
+  resolveMaxDrawdown,
   tradesForAccount,
 } from '../utils/evaluationCoach.js';
 import './EvaluationCoach.css';
@@ -494,7 +495,7 @@ export default function EvaluationCoach() {
   useEffect(() => {
     for (const { account, progress: p, status } of comparisons) {
       if (status === 'Eval' && account.phase !== 'funded' && p.status === 'passed') {
-        const mll = account.maxDrawdown || inferEvaluationTemplate(account).maxDrawdown;
+        const mll = resolveMaxDrawdown(account, inferEvaluationTemplate(account));
         updateAccount(account.id, { phase: 'funded', type: 'live', startingBalance: 0, maxDrawdown: mll });
         updateTradingAccount(account.id, { status: 'Funded' });
       }
@@ -585,7 +586,7 @@ export default function EvaluationCoach() {
   // Funded accounts have no profit target to pass; only show one if the user
   // explicitly set a payout goal on the account.
   const showTarget = !isFunded || (selected.profitTarget != null && Number(selected.profitTarget) > 0);
-  const maxDrawdown = selected.maxDrawdown || activeTemplate.maxDrawdown;
+  const maxDrawdown = resolveMaxDrawdown(selected, activeTemplate);
   const dailyLimit = selected.dailyLossLimit || activeTemplate.dailyLossLimit;
 
   const selStatus = currentStatus;

@@ -1058,6 +1058,15 @@ function resolveTrailingStopsAt(account: Account, template: EvaluationTemplate):
   return account.trailingStopsAt ?? template.trailingStopsAt ?? null;
 }
 
+export function resolveMaxDrawdown(account: Account, template: EvaluationTemplate): number {
+  // A verified firm template carries the firm's real MLL, so use it — a stale
+  // account default (the generic 3000 seed) must never override Topstep's actual
+  // $2,000 on a 50K, etc. Custom/unknown-firm accounts keep their own configured
+  // drawdown, since there the account limits are the source of truth.
+  if (template.firm !== 'Custom') return template.maxDrawdown || account.maxDrawdown;
+  return account.maxDrawdown || template.maxDrawdown;
+}
+
 /**
  * The MLL over time, aligned with the equity sparkline: index 0 is the floor
  * before any trading, then one value per trading day (ascending), sampled as
@@ -1069,7 +1078,7 @@ function resolveTrailingStopsAt(account: Account, template: EvaluationTemplate):
 export function computeMllSeries(account: Account, allTrades: Trade[], now = new Date()): number[] {
   const trades = tradesForAccount(allTrades, account.id).sort((a, b) => dateTime(a) - dateTime(b));
   const template = inferEvaluationTemplate(account);
-  const maxDrawdown = account.maxDrawdown || template.maxDrawdown;
+  const maxDrawdown = resolveMaxDrawdown(account, template);
   const drawdownType = resolveDrawdownType(account, template);
   const trailingStopsAt = resolveTrailingStopsAt(account, template);
   const today = localDateSlice(now);
@@ -1089,7 +1098,11 @@ export function computeMllSeries(account: Account, allTrades: Trade[], now = new
       return;
     }
     if (trade.date !== today) eodPeak = Math.max(eodPeak, equity);
-    const peak = drawdownType === 'intraday_trailing' ? intradayPeak : eodPeak;
+    // Funded accounts lock at the starting balance once profitable, so trail the
+    // intraday peak (the firm counts today's profit immediately) instead of
+    // waiting for the day to settle. Otherwise a profitable Day 1 leaves the
+    // floor sitting at start − MLL while the firm already shows it locked.
+    const peak = drawdownType === 'intraday_trailing' || account.phase === 'funded' ? intradayPeak : eodPeak;
     let floor = peak - maxDrawdown;
     if (trailingStopsAt !== null) floor = Math.min(floor, trailingStopsAt);
     floors.push(Math.max(startingFloor, floor));
@@ -1106,7 +1119,7 @@ export function computeEvaluationProgress(
   const template = inferEvaluationTemplate(account);
   const profitTarget = account.profitTarget ?? template.profitTarget;
   const dailyLimit = account.dailyLossLimit || template.dailyLossLimit;
-  const maxDrawdown = account.maxDrawdown || template.maxDrawdown;
+  const maxDrawdown = resolveMaxDrawdown(account, template);
   const minimumTradingDays = account.minimumTradingDays ?? template.minimumTradingDays;
   const drawdownType = resolveDrawdownType(account, template);
   const trailingStopsAt = resolveTrailingStopsAt(account, template);

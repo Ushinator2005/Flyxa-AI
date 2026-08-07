@@ -32,7 +32,7 @@ import { scanChart } from '../utils/scanChart.js';
 import { maybeCaptureCorrection, maybeCaptureScanBundle } from '../utils/scannerEvalCapture.js';
 import { uploadScreenshot } from '../utils/uploadScreenshot.js';
 import { evaluateEntryRules, summarizeRuleEvaluations } from '../utils/tradingRules.js';
-import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, tradesForAccount } from '../utils/evaluationCoach.js';
+import { computeDayVerdict, computeEvaluationProgress, inferEvaluationTemplate, resolveMaxDrawdown, tradesForAccount } from '../utils/evaluationCoach.js';
 import { flushSupabaseStoreNow, saveStoreStatePatchNow, deleteTradingDayEverywhere } from '../store/supabaseStorage.js';
 import CSVImportModal from '../components/common/CSVImportModal.js';
 import SessionShareCard from '../components/share/SessionShareCard.js';
@@ -665,7 +665,7 @@ function DailyReflectionBlock({ entry, onMutateEntry }: {
     const allTrades = decorateTrades(storeEntries.flatMap(e => e.trades));
     const progress = computeEvaluationProgress(evalAccount, allTrades);
     const activeTemplate = inferEvaluationTemplate(evalAccount);
-    const maxDrawdown = evalAccount.maxDrawdown || activeTemplate.maxDrawdown;
+    const maxDrawdown = resolveMaxDrawdown(evalAccount, activeTemplate);
     const dailyLimit = evalAccount.dailyLossLimit || activeTemplate.dailyLossLimit;
     const drawdownRemainingPct = maxDrawdown > 0 ? Math.min(100, Math.round((progress.drawdownRemaining / maxDrawdown) * 100)) : 100;
     const dailyLimitHit = dailyLimit > 0 && progress.dailyLossRemaining <= 0;
