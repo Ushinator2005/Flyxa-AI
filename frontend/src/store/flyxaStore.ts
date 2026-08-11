@@ -78,6 +78,9 @@ interface FlyxaStateData {
   newsSources: Record<string, boolean>;
   journalMoods: Record<string, string>;
   journalTitles: Record<string, string>;
+  // Funded payout path per account id. Kept as a keyed map (not on the account
+  // object) so it survives the account-list rebuild AppSettings runs on hydrate.
+  payoutPaths: Record<string, string>;
   weeklyReflections: Record<string, string>;
   confluenceCategoryOverrides: Record<string, string>;
   rivals: StoredRival[];
@@ -146,6 +149,7 @@ export interface FlyxaStore extends FlyxaStateData {
   setEntries: (entries: JournalEntry[], options?: { notifyAchievements?: boolean }) => void;
   hydrateSharedData: (payload: Partial<FlyxaStateData>) => void;
   setJournalMood: (entryId: string, mood: string) => void;
+  setPayoutPathFor: (accountId: string, pathId: string) => void;
   setJournalTitle: (entryId: string, title: string) => void;
   setWeeklyReflection: (weekKey: string, text: string) => void;
   setConfluenceCategoryOverrides: (overrides: Record<string, string>) => void;
@@ -503,6 +507,7 @@ export function getInitialState(): FlyxaStateData {
     newsSources: DEFAULT_NEWS_SOURCES,
     journalMoods: {},
     journalTitles: {},
+    payoutPaths: {},
     weeklyReflections: {},
     confluenceCategoryOverrides: {},
     rivals: [],
@@ -896,6 +901,10 @@ const useFlyxaStore = create<FlyxaStore>()(
         journalMoods: { ...state.journalMoods, [entryId]: mood },
       })),
 
+      setPayoutPathFor: (accountId, pathId) => set((state) => ({
+        payoutPaths: { ...state.payoutPaths, [accountId]: pathId },
+      })),
+
       setJournalTitle: (entryId, title) => set((state) => ({
         journalTitles: { ...state.journalTitles, [entryId]: title },
       })),
@@ -1054,6 +1063,10 @@ const useFlyxaStore = create<FlyxaStore>()(
           let nextAccounts = payload.accounts && payload.accounts.length
             ? payload.accounts.map(incoming => {
                 const existing = state.accounts.find(a => a.id === incoming.id);
+                // Payouts live only on the store account, so carry them across the
+                // AppSettings-driven rebuild. The payout-path choice now travels on
+                // the incoming payload itself (from the TradingAccount), so it must
+                // NOT be preserved here or a fresh selection is reverted to the old.
                 return existing?.payouts?.length ? { ...incoming, payouts: existing.payouts } : incoming;
               })
             : state.accounts;
@@ -1101,6 +1114,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             scannerColors: payload.scannerColors ?? state.scannerColors,
             newsSources: payload.newsSources ?? state.newsSources,
             journalMoods: payload.journalMoods ?? state.journalMoods,
+            payoutPaths: payload.payoutPaths ?? state.payoutPaths,
             journalTitles: payload.journalTitles ?? state.journalTitles,
             weeklyReflections: payload.weeklyReflections ?? state.weeklyReflections,
             confluenceCategoryOverrides: payload.confluenceCategoryOverrides ?? state.confluenceCategoryOverrides,
@@ -1200,6 +1214,9 @@ const useFlyxaStore = create<FlyxaStore>()(
           journalTitles: (persisted.journalTitles && Object.keys(persisted.journalTitles).length > 0)
             ? persisted.journalTitles
             : base.journalTitles,
+          payoutPaths: (persisted.payoutPaths && Object.keys(persisted.payoutPaths).length > 0)
+            ? persisted.payoutPaths
+            : base.payoutPaths,
           weeklyReflections: (persisted.weeklyReflections && Object.keys(persisted.weeklyReflections).length > 0)
             ? persisted.weeklyReflections
             : base.weeklyReflections,
@@ -1264,6 +1281,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         scannerColors: state.scannerColors,
         newsSources: state.newsSources,
         journalMoods: state.journalMoods,
+        payoutPaths: state.payoutPaths,
         journalTitles: state.journalTitles,
         weeklyReflections: state.weeklyReflections,
         confluenceCategoryOverrides: state.confluenceCategoryOverrides,

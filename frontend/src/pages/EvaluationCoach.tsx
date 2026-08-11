@@ -389,6 +389,11 @@ export default function EvaluationCoach() {
   const updateAccount = useFlyxaStore(state => state.updateAccount);
   const { accounts: tradingAccounts, decorateTrades, selectedAccountId: appSelectedId, preferences, updateAccount: updateTradingAccount } = useAppSettings();
 
+  // Funded payout-path choice, kept in a keyed store map (not on the account
+  // object, which AppSettings rebuilds on every hydrate and would wipe).
+  const payoutPaths = useFlyxaStore(state => state.payoutPaths);
+  const setPayoutPath = useFlyxaStore(state => state.setPayoutPathFor);
+
   const statusById = useMemo(
     () => new Map(tradingAccounts.map(ta => [ta.id, ta.status])),
     [tradingAccounts],
@@ -603,10 +608,10 @@ export default function EvaluationCoach() {
     // firms are NOT auto-prompted: the choice is a one-time setup the trader
     // makes from the readiness card's controls (tabs / "change"), never a modal
     // that reappears on every visit.
-    if (fp.paths.length === 1 && selected.payoutPath !== fp.paths[0].id) {
-      updateAccount(selected.id, { payoutPath: fp.paths[0].id });
+    if (fp.paths.length === 1 && payoutPaths[selected.id] !== fp.paths[0].id) {
+      setPayoutPath(selected.id, fp.paths[0].id);
     }
-  }, [selected?.id, selected?.payoutPath, selected?.firm, statusById, updateAccount]);
+  }, [selected?.id, selected?.firm, statusById, setPayoutPath, payoutPaths]);
 
   if (!selected || !progress) return <EmptyEvaluation />;
 
@@ -705,7 +710,7 @@ export default function EvaluationCoach() {
   // (the effect above ensures one is set once the account is funded).
   const firmPayout = getFirmPayoutPaths(selected.firm);
   const availablePaths: FundedPath[] = firmPayout?.paths ?? [];
-  const chosenPath = getPathById(selected.firm, selected.payoutPath)
+  const chosenPath = getPathById(selected.firm, payoutPaths[selected.id])
     ?? (availablePaths.length === 1 ? availablePaths[0] : null);
 
   // Readiness is computed only against the gates the chosen path actually has.
@@ -979,7 +984,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
                       {availablePaths.map(p => (
                         <button key={p.id} type="button"
                           className={`ec-pr-tab${p.id === chosenPath?.id ? ' on' : ''}`}
-                          onClick={() => updateAccount(selected.id, { payoutPath: p.id })}>
+                          onClick={() => setPayoutPath(selected.id, p.id)}>
                           {p.name}
                         </button>
                       ))}
@@ -1238,7 +1243,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
                 return (
                   <button key={p.id} type="button"
                     className={`ec-pathmodal-opt${active ? ' on' : ''}`}
-                    onClick={() => { updateAccount(selected.id, { payoutPath: p.id }); setPathModalOpen(false); }}>
+                    onClick={() => { setPayoutPath(selected.id, p.id); setPathModalOpen(false); }}>
                     <div className="ec-pathmodal-opt-hd">
                       <span className="ec-pathmodal-opt-name">{p.name}{p.legacy ? ' · legacy' : ''}</span>
                       <span className="ec-pathmodal-tags">
