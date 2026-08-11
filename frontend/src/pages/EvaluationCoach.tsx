@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ShieldCheck, Trophy } from 'lucide-react';
+import { ChevronDown, ShieldCheck } from 'lucide-react';
 import useFlyxaStore, { DEFAULT_ACCOUNT_ID } from '../store/flyxaStore.js';
 import type { Account, Trade } from '../store/types.js';
 import { useAppSettings } from '../contexts/AppSettingsContext.js';
@@ -14,6 +14,9 @@ import {
   resolveMaxDrawdown,
   tradesForAccount,
 } from '../utils/evaluationCoach.js';
+import { getFirmPayoutPaths, getPathById, resolveBySize } from '../data/fundedPayoutPaths.js';
+import type { FundedPath } from '../data/fundedPayoutPaths.js';
+import { computePayoutReadiness } from '../utils/payoutReadiness.js';
 import './EvaluationCoach.css';
 
 const money = (value: number) => (Number.isFinite(value) ? value : 0).toLocaleString('en-US', {
@@ -21,6 +24,11 @@ const money = (value: number) => (Number.isFinite(value) ? value : 0).toLocaleSt
 });
 
 const tradeNet = (trade: Trade) => Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
+
+const shortDay = (slice: string) => {
+  const d = new Date(`${slice}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? slice : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 const roundTo = (value: number, step = 25) => {
   if (!Number.isFinite(value) || value <= 0) return 0;
@@ -133,203 +141,228 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-// The whole evaluation in one picture: the balance line running between the
-// MLL (dashed, below — stepped when it trails the trader's highs) and the
-// profit target (dashed, above).
-function EquitySpark({ points, target, floor, floorSeries, dates }: {
-  points: number[]; target?: number; floor: number; floorSeries?: number[]; dates?: string[];
+
+// Equity chart shared by every account state. Both series share ONE y-scale so
+// the gap between the equity line and the MLL floor chasing it — the buffer — is
+// literally the shaded band between them. An eval account also gets a dashed
+// profit-target line; a funded account has none. Uniform-scale SVG (no
+// preserveAspectRatio="none", which distorts text and stroke widths), so labels
+// can live inside the SVG.
+function EquityChart({ points, floors, dates, start, target, locked, biggest }: {
+  points: number[]; floors: number[]; dates: string[]; start: number; target?: number;
+  locked: boolean; biggest: { date: string; pnl: number; pct: number | null };
 }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [hoverI, setHoverI] = useState<number | null>(null);
-  if (points.length < 2 || !Number.isFinite(floor) || points.some(v => !Number.isFinite(v))) return null;
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  if (points.length < 2 || points.some(v => !Number.isFinite(v))) return null;
+  const W = 1000, H = 300, X0 = 74, X1 = 944, Y0 = 34, Y1 = 246;
+  const floorsSafe = floors.length === points.length && floors.every(v => Number.isFinite(v))
+    ? floors : points.map(() => start);
   const hasTarget = typeof target === 'number' && Number.isFinite(target);
-  const floors = floorSeries && floorSeries.length === points.length && floorSeries.every(v => Number.isFinite(v))
-    ? floorSeries
-    : null;
-  // Taller viewBox to match the enlarged .ec-spark render height — a squat
-  // viewBox stretched vertically fattens every stroke.
-  const W = 340, H = 210, PAD = 10;
-  const lo = Math.min(...points, ...(floors ?? [floor]));
-  const hi = Math.max(...points, ...(hasTarget ? [target as number] : []));
-  const span = hi - lo || 1;
-  const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
-  const y = (v: number) => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
-  const path = points.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
-  // Soft amber fill between the balance line and the MLL — the buffer, visualized.
-  const fillPath = `${path} L${x(points.length - 1).toFixed(1)} ${y(floor).toFixed(1)} L${x(0).toFixed(1)} ${y(floor).toFixed(1)} Z`;
-  // Step path: the MLL holds through each day and ratchets as a day settles.
-  const floorPath = floors
-    ? floors.map((v, i) => i === 0
-        ? `M${x(0).toFixed(1)} ${y(v).toFixed(1)}`
-        : `L${x(i).toFixed(1)} ${y(floors[i - 1]).toFixed(1)} L${x(i).toFixed(1)} ${y(v).toFixed(1)}`)
-      .join(' ')
-    : null;
+  const endValue = points[points.length - 1] - start;
+
+  // Symmetric-ish scale around the starting balance, so START sits mid-plot and
+  // the three gridlines read +half / START / −half like a signed axis. The
+  // target, when shown, is pulled into the range so it is always on-screen.
+  const vHi = Math.max(...points, ...(hasTarget ? [target as number] : []));
+  const vLo = Math.min(...points, ...floorsSafe);
+  const half = Math.max(vHi - start, start - vLo, 1) * 1.12;
+  const top = start + half, bot = start - half;
+  const y = (v: number) => Y0 + ((top - v) / (top - bot)) * (Y1 - Y0);
+  const x = (i: number) => X0 + (i / (points.length - 1)) * (X1 - X0);
+
+  const eqPath = points.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const flPath = floorsSafe.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  // Band: down the equity line, back along the floor, closed.
+  const bandPath = `${eqPath} ${floorsSafe.map((_, k) => {
+    const i = points.length - 1 - k;
+    return `L${x(i).toFixed(1)},${y(floorsSafe[i]).toFixed(1)}`;
+  }).join(' ')} Z`;
+
   const last = points[points.length - 1];
+  const floorMax = Math.max(...floorsSafe);
+  const lockIdx = locked ? floorsSafe.findIndex(v => Math.abs(v - floorMax) < 1) : -1;
+  const bIdx = biggest.pnl > 0 ? dates.indexOf(biggest.date) + 1 : -1;
 
-  // Percent positions for HTML overlays (SVG text would distort under
-  // preserveAspectRatio="none").
-  const pct = (v: number) => (y(v) / H) * 100;
-  // Weight capped at 500 — DM Mono has no bolder cut, and synthetic bold
-  // renders thick and fuzzy.
-  const labelStyle = (color: string): React.CSSProperties => ({
-    position: 'absolute',
-    right: 8,
-    fontFamily: 'var(--font-mono)',
-    fontSize: 9.5,
-    fontWeight: 500,
-    letterSpacing: '0.07em',
-    color,
-    background: 'var(--app-panel)',
-    padding: '0 4px',
-    lineHeight: '13px',
-    pointerEvents: 'none',
-  });
-
-  const fmtAxisDate = (slice: string) => {
-    const parsed = new Date(`${slice}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? slice : parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmtDate = (slice: string) => {
+    const d = new Date(`${slice}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? slice : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
   };
-
-  // MLL value at a given session index (stepped series, or the flat floor).
-  const floorAt = (i: number) => (floors ? floors[i] : floor);
-
-  // Map a pointer position to the nearest session. The SVG stretches with
-  // preserveAspectRatio="none", so the mapping is off the container's own width.
-  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const frac = (e.clientX - rect.left) / rect.width;
-    const idx = Math.max(0, Math.min(points.length - 1, Math.round(frac * (points.length - 1))));
-    setHoverI(idx);
-  };
-
-  const hoverLeftPct = hoverI === null ? 0 : (x(hoverI) / W) * 100;
-  const hoverTx = hoverLeftPct < 20 ? '0%' : hoverLeftPct > 80 ? '-100%' : '-50%';
 
   return (
-    <div>
-      <div
-        ref={wrapRef}
-        style={{ position: 'relative', cursor: 'crosshair' }}
-        onMouseMove={onMove}
-        onMouseLeave={() => setHoverI(null)}
-      >
-        <svg viewBox={`0 0 ${W} ${H}`} className="ec-spark" preserveAspectRatio="none" aria-hidden="true">
-          {hasTarget && <line x1={PAD} x2={W - PAD} y1={y(target as number)} y2={y(target as number)} stroke="var(--green)" strokeOpacity=".38" strokeDasharray="3 5" strokeWidth="1" />}
-          <path d={fillPath} fill="rgba(245,158,11,0.05)" stroke="none" />
-          {floorPath
-            ? <path d={floorPath} fill="none" stroke="var(--red)" strokeOpacity=".34" strokeWidth="1.25" strokeLinejoin="round" strokeLinecap="round" />
-            : <line x1={PAD} x2={W - PAD} y1={y(floor)} y2={y(floor)} stroke="var(--red)" strokeOpacity=".32" strokeWidth="1.25" />}
-          <path d={path} fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-          <circle cx={x(points.length - 1)} cy={y(last)} r="3" fill="var(--amber)" />
-        </svg>
-        {/* Hover marks as HTML overlays: perfectly round (SVG circles distort
-            under preserveAspectRatio="none") and their left/top glide smoothly
-            between sessions via CSS transition instead of snapping. */}
-        {hoverI !== null && (
+    <div className="ec-fc">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label={`Equity is ${money(endValue)} relative to the starting balance, plotted against the maximum loss limit${locked ? ', which has locked' : ' trailing behind it'}.`}>
+        <defs>
+          <linearGradient id="ecfcband" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="var(--amber)" stopOpacity="0.20" />
+            <stop offset="1" stopColor="var(--amber)" stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
+
+        <line className="ec-fc-gl" x1={X0} y1={y(top - half * 0.02)} x2={X1} y2={y(top - half * 0.02)} />
+        <line className="ec-fc-gl zero" x1={X0} y1={y(start)} x2={X1} y2={y(start)} />
+        <line className="ec-fc-gl" x1={X0} y1={y(bot + half * 0.02)} x2={X1} y2={y(bot + half * 0.02)} />
+        <text className="ec-fc-ax" x={X0 - 8} y={y(top - half * 0.02) + 4} textAnchor="end">+{money(half * 0.98)}</text>
+        <text className="ec-fc-ax" x={X0 - 8} y={y(start) + 4} textAnchor="end">START</text>
+        <text className="ec-fc-ax" x={X0 - 8} y={y(bot + half * 0.02) + 4} textAnchor="end">&minus;{money(half * 0.98)}</text>
+
+        {hasTarget && (target as number) < top && (
           <>
-            <div style={{
-              position: 'absolute', top: `${(PAD / H) * 100}%`, bottom: `${(PAD / H) * 100}%`,
-              left: `${hoverLeftPct}%`, width: 1, background: 'var(--txt-2)', opacity: 0.4,
-              pointerEvents: 'none', transition: 'left 90ms ease-out',
-            }} />
-            <div style={{
-              position: 'absolute', left: `${hoverLeftPct}%`, top: `${(y(floorAt(hoverI)) / H) * 100}%`,
-              width: 5, height: 5, borderRadius: '50%', background: '#FF7B6E',
-              transform: 'translate(-50%,-50%)', pointerEvents: 'none',
-              transition: 'left 90ms ease-out, top 90ms ease-out',
-            }} />
-            <div style={{
-              position: 'absolute', left: `${hoverLeftPct}%`, top: `${(y(points[hoverI]) / H) * 100}%`,
-              width: 6, height: 6, borderRadius: '50%', background: 'var(--amber)',
-              boxShadow: '0 0 0 2px var(--app-panel)',
-              transform: 'translate(-50%,-50%)', pointerEvents: 'none',
-              transition: 'left 90ms ease-out, top 90ms ease-out',
-            }} />
+            <line className="ec-fc-target" x1={X0} y1={y(target as number)} x2={X1} y2={y(target as number)} />
+            <text className="ec-fc-targetlbl" x={X0 + 4} y={y(target as number) - 6} textAnchor="start">
+              Target {money((target as number) - start)}
+            </text>
           </>
         )}
-        {hoverI !== null && (
-          <div style={{
-            position: 'absolute', top: 2, left: `${hoverLeftPct}%`, transform: `translateX(${hoverTx})`,
-            pointerEvents: 'none', zIndex: 6, whiteSpace: 'nowrap',
-            background: 'var(--app-panel)', border: '1px solid var(--app-border)', borderRadius: 6,
-            padding: '5px 8px', boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-            fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums',
-          }}>
-            {dates && dates[hoverI] && (
-              <div style={{ fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))', marginBottom: 3 }}>
-                {fmtAxisDate(dates[hoverI])}
-              </div>
-            )}
-            <div style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--amber)' }}>{money(points[hoverI])}</div>
-            <div style={{ fontSize: 9.5, color: '#FF7B6E', marginTop: 2 }}>MLL {money(floorAt(hoverI))}</div>
-          </div>
+
+        <path className="ec-fc-band" d={bandPath} fill="url(#ecfcband)" />
+        <path className="ec-fc-floor" d={flPath} />
+        <path className="ec-fc-eq" d={eqPath} />
+
+        {bIdx >= 1 && biggest.pct !== null && (
+          <>
+            <line className="ec-fc-spike" x1={x(bIdx)} y1={y(points[bIdx]) + 6} x2={x(bIdx)} y2={y(start) - 4} />
+            <text className="ec-fc-note" x={x(bIdx) + 12} y={y(points[bIdx]) + 30}>
+              +{money(biggest.pnl)} · {biggest.pct}% of profit
+            </text>
+          </>
         )}
-        {/* Line labels pinned to the lines they describe. The balance label
-            drops out when it would sit on top of the target/floor labels —
-            e.g. a passed run finishing right at target. */}
-        {hasTarget && (
-          <span style={{ ...labelStyle('var(--green)'), top: `calc(${pct(target as number)}% + 2px)` }}>
-            {money(target as number)}
-          </span>
+        {lockIdx >= 0 && (
+          <text className="ec-fc-note lock" x={x(lockIdx) + 12} y={y(floorMax) + 16}>MLL LOCKED</text>
         )}
-        <span style={{ ...labelStyle('var(--red)'), top: `calc(${pct(floor)}% - 13px)` }}>
-          {money(floor)}
-        </span>
-        {(!hasTarget || Math.abs(pct(last) - pct(target as number)) > 16) && Math.abs(pct(last) - pct(floor)) > 16 && (
-          <span style={{ ...labelStyle('var(--amber)'), top: `calc(${pct(last)}% - 5px)`, right: 16 }}>
-            {money(last)}
-          </span>
-        )}
-      </div>
-      {dates && dates.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
-            {fmtAxisDate(dates[0])}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.06em', color: 'var(--txt-3, var(--app-text-subtle))' }}>
-            {fmtAxisDate(dates[dates.length - 1])}
-          </span>
-        </div>
-      )}
+
+        {points.map((v, i) => (i < points.length - 1
+          ? <circle key={i} className="ec-fc-dot" cx={x(i)} cy={y(v)} r="3.4" />
+          : null))}
+        <circle className="ec-fc-end" cx={x(points.length - 1)} cy={y(last)} r="4" />
+        <text className="ec-fc-val" x={X1 - 6} y={y(last) - 12} textAnchor="end">{money(endValue)}</text>
+
+        {points.map((_, i) => (
+          <text key={i} className="ec-fc-ax" x={x(i)} y={Y1 + 24}
+            textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}>
+            {i === 0 ? 'OPEN' : fmtDate(dates[i - 1])}
+          </text>
+        ))}
+
+        {/* Invisible hit-targets: hovering a notch reveals its value. Larger
+            than the visible dot so the point is easy to land on. */}
+        {points.map((v, i) => (
+          <circle key={`hit-${i}`} cx={x(i)} cy={y(v)} r="20" fill="transparent" style={{ cursor: 'pointer' }}
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(h => (h === i ? null : h))} />
+        ))}
+        {hoverIdx !== null && (() => {
+          const i = hoverIdx;
+          const cx = x(i), cy = y(points[i]);
+          const eq = points[i] - start;
+          const fl = floorsSafe[i] - start;
+          const sign = (n: number) => (n > 0 ? '+' : '') + money(n);
+          const boxW = 168, boxH = 54;
+          const bx = Math.min(Math.max(cx - boxW / 2, X0), X1 - boxW);
+          const by = Math.max(cy - boxH - 16, 4);
+          return (
+            <g pointerEvents="none">
+              <circle className="ec-fc-hoverdot" cx={cx} cy={cy} r="5.5" />
+              <rect className="ec-fc-tipbox" x={bx} y={by} width={boxW} height={boxH} rx="7" />
+              <text className="ec-fc-tipdate" x={bx + 13} y={by + 18}>{i === 0 ? 'OPEN' : fmtDate(dates[i - 1])}</text>
+              <text className="ec-fc-tipeq" x={bx + 13} y={by + 35}>Equity {sign(eq)}</text>
+              <text className="ec-fc-tipmll" x={bx + 13} y={by + 48}>MLL {sign(fl)}</text>
+            </g>
+          );
+        })()}
+      </svg>
     </div>
   );
 }
 
-function PassScreen({ account, progress, equity, onDismiss, onMarkFunded }: {
+// The pass screen as a statement document: left-aligned masthead, the verdict,
+// three statement rows bound to the exact stats we render, the run as a chart,
+// and the trader's own words from the passing day. Built to be worth
+// screenshotting. Everything is derived from the same source as the figures.
+function PassScreen({ account, progress, equity, quote, onDismiss, onMarkFunded }: {
   account: Account; progress: EvaluationProgress; onDismiss: () => void; onMarkFunded: () => void;
-  equity?: { points: number[]; target: number; floor: number; dates: string[] };
+  equity?: { points: number[]; floors: number[]; target: number; start: number; dates: string[] };
+  quote?: { date: string; text: string } | null;
 }) {
   // When the floor is unlocked, used + remaining equals the configured max
-  // drawdown exactly — a safe base even when account.maxDrawdown is unset.
-  const pct = Math.round((progress.drawdownUsed / (account.maxDrawdown || progress.drawdownUsed + progress.drawdownRemaining || 1)) * 100);
+  // drawdown exactly, a safe base even when account.maxDrawdown is unset.
+  const buffer = account.maxDrawdown || (progress.drawdownUsed + progress.drawdownRemaining) || 0;
+  const pct = Math.round((progress.drawdownUsed / (buffer || 1)) * 100);
+  const targetProfit = equity ? equity.target - equity.start : Number(account.profitTarget ?? 0);
+
+  const fmtDay = (slice: string, withYear = false) => {
+    const d = new Date(`${slice}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? slice
+      : d.toLocaleDateString('en-US', withYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  };
+  const dateRange = equity && equity.dates.length
+    ? `${fmtDay(equity.dates[0])} to ${fmtDay(equity.dates[equity.dates.length - 1], true)}`
+    : '';
+
+  // Closest the run came to the floor (the run minimum), from the two series.
+  // This is a different quantity from drawdown-used-at-the-instant (pct above).
+  let closest: { date: string; gap: number } | null = null;
+  if (equity && equity.floors.length === equity.points.length) {
+    for (let i = 1; i < equity.points.length; i += 1) {
+      const gap = equity.points[i] - equity.floors[i];
+      if (Number.isFinite(gap) && (closest === null || gap < closest.gap)) {
+        closest = { date: equity.dates[i - 1], gap };
+      }
+    }
+  }
+
+  const claim = `You cleared the ${money(targetProfit)} target in ${progress.tradingDays} trading day${progress.tradingDays !== 1 ? 's' : ''} and finished with your ${money(buffer)} buffer ${pct === 0 ? 'fully intact' : `${pct}% used`}.`;
+
   return (
-    <div className="ec-pass" data-tour-id="evaluation-overview">
-      <div className="ec-pass-inner">
-        <div className="ec-pass-medal"><Trophy size={22} /></div>
-        <p className="ec-pass-kicker"><span className="ec-pass-rule" />Evaluation complete<span className="ec-pass-rule" /></p>
-        <h1 className="ec-pass-title">Passed.</h1>
-        <p className="ec-pass-sub">{account.name} · {account.firm}</p>
+    <div className="ec-pd" data-tour-id="evaluation-overview">
+      <div className="ec-pd-doc">
+        <div className="ec-pd-mast">
+          <span className="ec-pd-brand"><img src="/logo.svg" alt="" /><b>Flyxa</b></span>
+          <span className="ec-pd-ref">{[account.firm, account.size ? money(account.size) : null].filter(Boolean).join(' · ')}</span>
+        </div>
+        <div className="ec-pd-rule" />
+
+        <div className="ec-pd-lede">
+          <div className="ec-pd-kick">Evaluation complete</div>
+          <h1 className="ec-pd-title">Passed.</h1>
+          <p className="ec-pd-who">{account.name}{dateRange ? ` · ${dateRange}` : ''}</p>
+          <p className="ec-pd-claim">{claim}</p>
+        </div>
+        <div className="ec-pd-rule" />
+
+        <div className="ec-pd-stmt">
+          <div className="ec-pd-row"><span className="ec-pd-k">Net profit</span><span className="ec-pd-rref">Target {money(targetProfit)}</span><span className="ec-pd-v g">{money(progress.netPnl)}</span></div>
+          <div className="ec-pd-row"><span className="ec-pd-k">Trading days</span><span className="ec-pd-rref">Minimum {progress.minimumTradingDays}</span><span className="ec-pd-v">{progress.tradingDays}</span></div>
+          <div className="ec-pd-row"><span className="ec-pd-k">Drawdown used</span><span className="ec-pd-rref">Of a {money(buffer)} buffer</span><span className="ec-pd-v">{pct}%</span></div>
+        </div>
+        <div className="ec-pd-rule" />
+
         {equity && equity.points.length >= 2 && (
-          <div className="ec-pass-proof">
-            <div className="ec-pass-proof-head">
-              <span>The run</span>
-              <span>Target cleared</span>
-            </div>
-            <EquitySpark points={equity.points} target={equity.target} floor={equity.floor} dates={equity.dates} />
-          </div>
+          <>
+            <div className="ec-pd-runhd"><span className="ec-pd-lbl">The run</span><span className="ec-pd-ok">Target cleared</span></div>
+            <EquityChart points={equity.points} floors={equity.floors} dates={equity.dates} start={equity.start} target={equity.target} locked={progress.floorLocked} biggest={{ date: '', pnl: 0, pct: null }} />
+            {closest && closest.gap > 0 && (
+              <p className="ec-pd-cap">The run came closest to the floor on {fmtDay(closest.date)}, with <b>{money(closest.gap)}</b> still in hand.</p>
+            )}
+            <div className="ec-pd-rule" />
+          </>
         )}
-        <div className="ec-pass-stats">
-          <div className="ec-pass-stat"><strong className="ec-pass-pos">{money(progress.netPnl)}</strong><span>Net profit</span></div>
-          <div className="ec-pass-stat"><strong>{progress.tradingDays}</strong><span>Trading days</span></div>
-          <div className="ec-pass-stat"><strong>{pct}%</strong><span>Drawdown used</span></div>
+
+        {quote && quote.text && (
+          <>
+            <div className="ec-pd-words">
+              <time>{fmtDay(quote.date).toUpperCase()}</time>
+              <q>{quote.text}</q>
+            </div>
+            <div className="ec-pd-rule" />
+          </>
+        )}
+
+        <div className="ec-pd-act">
+          <button type="button" className="ec-pd-cta" onClick={onMarkFunded}>Move to funded account</button>
+          <button type="button" className="ec-pd-stay" onClick={onDismiss}>Stay on this view</button>
         </div>
-        <p className="ec-pass-note">Verify the result in your firm's dashboard before requesting a funded account.</p>
-        <div className="ec-pass-actions">
-          <button type="button" className="ec-pass-btn-primary" onClick={onMarkFunded}>Move to funded account</button>
-          <button type="button" className="ec-pass-btn-ghost" onClick={onDismiss}>Stay on this view</button>
-        </div>
+        <p className="ec-pd-note">Verify the result in your firm's dashboard before requesting a funded account.</p>
       </div>
     </div>
   );
@@ -553,6 +586,26 @@ export default function EvaluationCoach() {
     return () => clearTimeout(timer);
   }, [debriefWhat, selectedId]);
 
+  // ── Funded payout path: prompt on funding ────────────────────────
+  // When an account is funded, it needs a payout path. Single-path firms (e.g.
+  // Take Profit Trader) are auto-set silently; multi-path firms open a chooser
+  // so the readiness view reflects the trader's actual funded plan, not a guess.
+  // Hooks must precede the early returns below, so this reads status directly.
+  const [pathModalOpen, setPathModalOpen] = useState(false);
+  useEffect(() => {
+    if (!selected) return;
+    const st = statusById.get(selected.id) ?? 'Eval';
+    const funded = st === 'Funded' || st === 'Live';
+    if (!funded) { setPathModalOpen(false); return; }
+    const fp = getFirmPayoutPaths(selected.firm);
+    if (!fp) return;
+    if (fp.paths.length === 1) {
+      if (selected.payoutPath !== fp.paths[0].id) updateAccount(selected.id, { payoutPath: fp.paths[0].id });
+      return;
+    }
+    if (!getPathById(selected.firm, selected.payoutPath)) setPathModalOpen(true);
+  }, [selected?.id, selected?.payoutPath, selected?.firm, statusById, updateAccount]);
+
   if (!selected || !progress) return <EmptyEvaluation />;
 
   const currentStatus = statusById.get(selected.id) ?? 'Eval';
@@ -571,10 +624,15 @@ export default function EvaluationCoach() {
     const passPoints = [passBal];
     for (const d of passDates) { passBal += Number(byDayMap.get(d) ?? 0); passPoints.push(passBal); }
     const passTarget = passStart + Number(selected.profitTarget ?? inferEvaluationTemplate(selected).profitTarget);
+    // The trader's own words from the passing day, if journaled (else the most
+    // recent reflection). Dropped entirely when there is none, never faked.
+    const passLastDate = passDates[passDates.length - 1];
+    const passQuoteSrc = recentJournalReflections.find(r => r.date === passLastDate) ?? recentJournalReflections[0] ?? null;
     return (
       <PassScreen
         account={selected} progress={progress}
-        equity={{ points: passPoints, target: passTarget, floor: Number(progress.drawdownFloor), dates: passDates }}
+        equity={{ points: passPoints, floors: mllSeries, target: passTarget, start: passStart, dates: passDates }}
+        quote={passQuoteSrc ? { date: passQuoteSrc.date, text: passQuoteSrc.post } : null}
         onDismiss={() => setDismissPass(true)}
         onMarkFunded={() => { updateAccount(selected.id, { phase: 'funded', type: 'live' }); setDismissPass(true); }}
       />
@@ -630,23 +688,58 @@ export default function EvaluationCoach() {
   })();
   const targetBalance = startBalance + Number(target);
 
-  // ── Funded payout view (real rules only, no invented profit target) ──
+  // ── Funded payout view (path-driven, real firm rules only) ──────
   // Withdrawable = profit above the starting balance (the trailing MLL locks at
-  // start on funded accounts, so that profit is what's yours to take). Readiness
-  // blends buffer health, consistency compliance, and minimum-day progress.
+  // start on funded accounts, so that profit is what's yours to take).
   const withdrawable = Math.max(0, progress.currentBalance - startBalance);
-  const consistencyOk = progress.consistencyLimitPct === null || progress.consistencyPct === null || progress.consistencyPct <= progress.consistencyLimitPct;
-  const consistencyScore = progress.consistencyLimitPct === null || progress.consistencyPct === null
-    ? 100
-    : Math.max(0, Math.min(100, Math.round((progress.consistencyLimitPct / Math.max(progress.consistencyPct, 1)) * 100)));
-  const daysScore = progress.minimumTradingDays > 0 ? Math.min(100, Math.round((progress.tradingDays / progress.minimumTradingDays) * 100)) : 100;
-  const payoutReadinessPct = Math.round(progress.probabilityFactors.survivalScore * 0.4 + consistencyScore * 0.3 + daysScore * 0.3);
-  const payoutReady = withdrawable > 0 && consistencyOk && daysMet && progress.drawdownRemaining > 0;
-  const heroPct = isFunded ? payoutReadinessPct : progress.passProbability;
+  // Biggest single profitable day: the number a consistency rule watches.
+  const biggestDay = [...byDayMap.entries()].reduce<{ date: string; pnl: number }>(
+    (best, [date, pnl]) => (pnl > best.pnl ? { date, pnl } : best),
+    { date: '', pnl: 0 },
+  );
+
+  // The firm's funded payout paths and the trader's chosen one. Single-path
+  // firms fall back to their only path; multi-path firms use the stored choice
+  // (the effect above ensures one is set once the account is funded).
+  const firmPayout = getFirmPayoutPaths(selected.firm);
+  const availablePaths: FundedPath[] = firmPayout?.paths ?? [];
+  const chosenPath = getPathById(selected.firm, selected.payoutPath)
+    ?? (availablePaths.length === 1 ? availablePaths[0] : null);
+
+  // Readiness is computed only against the gates the chosen path actually has.
+  const payoutReadiness = isFunded && chosenPath
+    ? computePayoutReadiness(chosenPath, {
+        dayPnls: [...byDayMap.values()],
+        tradingDays: progress.tradingDays,
+        withdrawable,
+        drawdownRemaining: progress.drawdownRemaining,
+        size: Number(selected.size) || 0,
+        consistencyActualPct: progress.consistencyPct,
+      })
+    : null;
+
+  const payoutReady = payoutReadiness ? payoutReadiness.payoutReady : false;
+  const heroPct = isFunded ? (payoutReadiness?.readyPct ?? 0) : progress.passProbability;
   const heroColor = heroPct >= 65 ? 'var(--green)' : heroPct >= 40 ? 'var(--amber)' : 'var(--red)';
-  const heroLabel = isFunded
-    ? (payoutReady ? 'Payout ready' : heroPct >= 65 ? 'On track' : heroPct >= 40 ? 'Building' : 'Not yet')
-    : probLabel;
+
+  // Consistency profit gap (only when the chosen path has a consistency rule and
+  // it is currently unmet): profit needed for the biggest day to fall under the
+  // cap. biggestDay / cap% is the total profit at which that day equals the cap.
+  const consistencyCap = chosenPath?.consistencyPct ?? null;
+  const consistencyRow = payoutReadiness?.rows.find(r => r.key === 'consistency');
+  const consistencyGap = consistencyCap && consistencyRow && !consistencyRow.met && progress.consistencyPct
+    ? Math.max(0, Math.round(biggestDay.pnl / (consistencyCap / 100)) - withdrawable)
+    : 0;
+
+  // Verdict names the one requirement blocking the payout on the chosen path.
+  const fundedVerdict = !chosenPath
+    ? 'Choose your payout path'
+    : payoutReady
+      ? 'Payout ready'
+      : payoutReadiness?.blocking
+        ? `Blocked on ${payoutReadiness.blocking.toLowerCase()}`
+        : 'Building toward payout';
+  const heroLabel = isFunded ? fundedVerdict : probLabel;
 
   // ── Pace ────────────────────────────────────────────────────────
   const avgDailyPnl = progress.tradingDays > 0 ? progress.netPnl / progress.tradingDays : 0;
@@ -874,14 +967,62 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             </div>
             <span className="ec-prob-verdict" style={{ color: heroColor }}>{heroLabel}</span>
             <div className="ec-prob-bar"><i style={{ width: `${heroPct}%`, background: heroColor }} /></div>
-            <div className="ec-drv">
-              {probabilityDrivers.map(driver => (
-                <div key={driver.label} className={`ec-drv-r${driver === weakestDriver ? ' weak' : ''}`}>
-                  {driver.label}
-                  <b>{Math.round(driver.value)}%</b>
-                </div>
-              ))}
-            </div>
+            {isFunded ? (
+              <>
+                {/* Path switcher: Topstep-style firms switch per cycle inline;
+                    others show the chosen plan with a "change" affordance. */}
+                {availablePaths.length > 1 && (
+                  firmPayout?.switchablePerCycle ? (
+                    <div className="ec-pr-tabs">
+                      {availablePaths.map(p => (
+                        <button key={p.id} type="button"
+                          className={`ec-pr-tab${p.id === chosenPath?.id ? ' on' : ''}`}
+                          onClick={() => updateAccount(selected.id, { payoutPath: p.id })}>
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="ec-pr-plan">
+                      <span>{chosenPath ? chosenPath.name : 'No path chosen'}</span>
+                      <button type="button" className="ec-pr-change" onClick={() => setPathModalOpen(true)}>change</button>
+                    </div>
+                  )
+                )}
+                {payoutReadiness ? (
+                  <>
+                    <div className="ec-pr">
+                      {payoutReadiness.rows.map((row, i) => {
+                        const isBlocker = !row.met && payoutReadiness.rows.findIndex(r => !r.met) === i;
+                        return (
+                          <div key={row.key} className={`ec-pr-r${row.met ? ' ok' : ''}${isBlocker ? ' block' : ''}`}>
+                            <span className="ec-pr-mk" aria-hidden="true">{row.met ? '✓' : ''}</span>
+                            <span className="ec-pr-n">{row.label}</span>
+                            <span className="ec-pr-d">{row.detail}</span>
+                            <span className="ec-pr-s">{row.met ? 'Met' : `${Math.round(row.progress * 100)}%`}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {consistencyGap > 0 && (
+                      <p className="ec-rd-cap">Clearing consistency needs <b>{money(consistencyGap)}</b> more profit.</p>
+                    )}
+                    {chosenPath?.note && <p className="ec-pr-note">{chosenPath.note}</p>}
+                  </>
+                ) : (
+                  <p className="ec-rd-cap">Choose your payout path to see readiness.</p>
+                )}
+              </>
+            ) : (
+              <div className="ec-drv">
+                {probabilityDrivers.map(driver => (
+                  <div key={driver.label} className={`ec-drv-r${driver === weakestDriver ? ' weak' : ''}`}>
+                    {driver.label}
+                    <b>{Math.round(driver.value)}%</b>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="ec-hero-chart">
             <div className="ec-hero-chart-head">
@@ -891,9 +1032,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
                 <b>{isFunded ? `${money(withdrawable)} withdrawable` : (progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`)}</b>
               </span>
             </div>
-            {equityPoints.length >= 2
-              ? <EquitySpark points={equityPoints} target={showTarget ? targetBalance : undefined} floor={Number(progress.drawdownFloor)} floorSeries={mllSeries} dates={equityDates} />
-              : <p className="ec-no-data">No sessions recorded yet, the balance line starts with your first trade.</p>}
+            {equityPoints.length < 2
+              ? <p className="ec-no-data">No sessions recorded yet, the balance line starts with your first trade.</p>
+              : <EquityChart points={equityPoints} floors={mllSeries} dates={equityDates} start={startBalance} target={showTarget ? targetBalance : undefined} locked={progress.floorLocked} biggest={{ date: biggestDay.date, pnl: biggestDay.pnl, pct: progress.consistencyPct }} />}
           </div>
         </div>
 
@@ -924,7 +1065,9 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(progress.drawdownRemaining)}</strong>
             <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%` }} /></div>
             <span className="ec-metric-sub">
-              {drawdownUsedPct}% of buffer used{!progress.floorLocked && progress.trailingStopsAt !== null ? ` · locks at ${money(progress.trailingStopsAt)}` : ''}
+              {drawdownUsedPct}% of buffer used{isFunded && progress.floorLocked
+                ? '. Equals withdrawable once the floor locks.'
+                : !progress.floorLocked && progress.trailingStopsAt !== null ? ` · locks at ${money(progress.trailingStopsAt)}` : ''}
             </span>
           </div>
 
@@ -957,15 +1100,20 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
 
           <div className="ec-metric-card">
             <span className="ec-metric-lbl">{isFunded ? 'Payout status' : 'Pace to target'}</span>
-            <strong className="ec-metric-val">{isFunded ? (payoutReady ? 'Ready' : !consistencyOk ? 'Consistency' : !daysMet ? 'More days' : 'Build profit') : paceHeadline}</strong>
+            <strong className="ec-metric-val">{isFunded ? (payoutReady ? 'Ready' : (payoutReadiness?.blocking ?? (chosenPath ? 'Building' : 'Pick path'))) : paceHeadline}</strong>
             <span className="ec-metric-sub">{isFunded
               ? (payoutReady
-                ? 'Consistency, minimum days, and buffer all clear.'
-                : !consistencyOk
-                  ? 'One day is too large a share of total profit for a payout.'
-                  : !daysMet
-                    ? `${Math.max(0, progress.minimumTradingDays - progress.tradingDays)} more trading day${s(Math.max(0, progress.minimumTradingDays - progress.tradingDays))} required.`
-                    : 'Keep building withdrawable profit while staying above the MLL.')
+                ? `All ${chosenPath?.name ?? ''} payout requirements are met.`.replace('  ', ' ')
+                : payoutReadiness
+                  ? (() => {
+                      const b = payoutReadiness.rows.find(r => !r.met);
+                      if (!b) return 'Keep building withdrawable profit while staying above the MLL.';
+                      if (b.key === 'consistency' && consistencyGap > 0) {
+                        return `${biggestDay.date ? shortDay(biggestDay.date) : 'Your biggest day'} is ${progress.consistencyPct}% of profit; ${money(consistencyGap)} more clears the ${consistencyCap}% cap.`;
+                      }
+                      return `${b.label}: ${b.detail}.`;
+                    })()
+                  : 'Choose your payout path to track readiness.')
               : paceDetail}</span>
           </div>
         </div>
@@ -1055,6 +1203,41 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
           Firm rules can change. Flyxa's presets are monitoring aids, not the legal source of truth. Verify every limit against your firm dashboard and agreement.
         </p>
       </div>
+
+      {/* ── Payout path chooser (fires when a multi-path firm is funded) ── */}
+      {pathModalOpen && availablePaths.length > 1 && (
+        <div className="ec-pathmodal-backdrop" onClick={() => { if (chosenPath) setPathModalOpen(false); }}>
+          <div className="ec-pathmodal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="ec-pathmodal-hd">
+              <h2>Choose your payout path</h2>
+              <p>{selected.firm} funds on more than one plan. Pick the one this account is on so Flyxa tracks the right payout rules.</p>
+            </div>
+            <div className="ec-pathmodal-list">
+              {availablePaths.map(p => {
+                const active = p.id === chosenPath?.id;
+                const wdMin = p.winningDays ? resolveBySize(p.winningDays.min, Number(selected.size) || 0) : 0;
+                return (
+                  <button key={p.id} type="button"
+                    className={`ec-pathmodal-opt${active ? ' on' : ''}`}
+                    onClick={() => { updateAccount(selected.id, { payoutPath: p.id }); setPathModalOpen(false); }}>
+                    <div className="ec-pathmodal-opt-hd">
+                      <span className="ec-pathmodal-opt-name">{p.name}{p.legacy ? ' · legacy' : ''}</span>
+                      <span className="ec-pathmodal-tags">
+                        {p.winningDays && <span className="ec-pathmodal-tag">{p.winningDays.count} winning days{wdMin > 1 ? ` · ≥${money(wdMin)}` : ''}</span>}
+                        {typeof p.minTradingDays === 'number' && <span className="ec-pathmodal-tag">{p.minTradingDays} days</span>}
+                        {typeof p.consistencyPct === 'number' && <span className="ec-pathmodal-tag">{p.consistencyPct}% consistency</span>}
+                        {p.buffer && <span className="ec-pathmodal-tag">safety net</span>}
+                      </span>
+                    </div>
+                    <p className="ec-pathmodal-opt-blurb">{p.blurb}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="ec-pathmodal-ft">You can change this anytime from the readiness card.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

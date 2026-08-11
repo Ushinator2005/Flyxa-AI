@@ -125,6 +125,10 @@ export interface Account {
   evaluationPath?: 'standard' | 'no_activation_fee';
   dailyLossMode?: 'none' | 'purchase_fixed' | 'personal';
   coachingNotes?: string;
+  // Which funded-payout path the trader is pursuing once funded (firm-specific
+  // id, e.g. Topstep 'standard' | 'consistency'). Chosen when the account is
+  // moved to funded; drives the payout-readiness view. Undefined until picked.
+  payoutPath?: string;
 }
 
 export interface Achievement {
