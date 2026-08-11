@@ -218,7 +218,7 @@ function SidebarContent({ onNavClick, collapsed }: { onNavClick?: () => void; co
           <path d="M52 48 C60 30 74 14 91 7 C87 25 72 41 52 48 Z" fill="var(--app-text)" transform="rotate(180 50 50) translate(18 18) scale(0.64)" />
         </svg>
         {!collapsed && (
-          <span style={{ marginLeft: 10, fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--app-text)', letterSpacing: '-0.01em' }}>
+          <span style={{ marginLeft: 10, fontFamily: "'Newsreader', Georgia, serif", fontSize: 22, fontWeight: 400, color: 'var(--app-text)', letterSpacing: '0' }}>
             Flyxa
           </span>
         )}
