@@ -307,34 +307,6 @@ export default function FlyxaAIPreSession() {
     return { sessions: recent.length, breached };
   }, [journalEntries, riskRules, todayIso]);
 
-  // Variance inoculation: from the trader's own win rate, how often is a
-  // losing streak *expected*? Knowing "a 3-loss streak is normal every ~N
-  // trades" before the session is what stops the third loss from reading as
-  // "my edge is broken" — the trigger for most tilt spirals.
-  const varianceCheck = useMemo(() => {
-    const decided = [...accountTrades]
-      .filter(trade => trade && Boolean(tradeDateKey(trade)) && (trade.pnl - (trade.commission ?? 0)) !== 0)
-      .sort((a, b) => {
-        const dateCompare = tradeDateKey(a).localeCompare(tradeDateKey(b));
-        return dateCompare !== 0 ? dateCompare : (a.trade_time ?? '').localeCompare(b.trade_time ?? '');
-      })
-      .slice(-30);
-    if (decided.length < 10) return null;
-    const wins = decided.filter(trade => (trade.pnl - (trade.commission ?? 0)) > 0).length;
-    const winRate = wins / decided.length;
-    const lossRate = 1 - winRate;
-    if (winRate <= 0 || winRate >= 1) return null;
-    const streak = 3;
-    // Expected number of trades until a run of `streak` consecutive losses.
-    const expectedEvery = Math.round((1 - Math.pow(lossRate, streak)) / (winRate * Math.pow(lossRate, streak)));
-    return {
-      winRatePct: Math.round(winRate * 100),
-      streak,
-      expectedEvery,
-      sample: decided.length,
-    };
-  }, [accountTrades]);
-
   const riskLimits = useMemo(() => {
     const planDailyLoss = enabledPlanRuleValue(riskRules, 'max_daily_loss');
     const planMaxTrades = enabledPlanRuleValue(riskRules, 'max_trades');
@@ -847,7 +819,7 @@ export default function FlyxaAIPreSession() {
       {/* ── Step content ── */}
       <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px' }}>
         <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div key={step} className={slideDirection === 'fwd' ? 'ps-step-fwd' : 'ps-step-back'} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div key={step} className={slideDirection === 'fwd' ? 'ps-step-fwd' : 'ps-step-back'} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 
           {/* ─── STEP 1: Mindset ─── */}
           {step === 1 && (
@@ -933,31 +905,6 @@ export default function FlyxaAIPreSession() {
                       Last session {formatSignedCurrency(lastSession.netPnl)}
                     </span>
                   )}
-                </div>
-              )}
-
-              {/* ── Variance check — losing streaks are scheduled by the math,
-                    not caused by a broken edge. The focal number forces the
-                    read; a sentence would get skimmed. ── */}
-              {varianceCheck && (
-                <div style={{ border: `1px solid ${C.b0}`, borderRadius: 8, backgroundColor: C.d1, display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
-                  <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, borderRight: `1px solid ${C.b0}`, flexShrink: 0, minWidth: 118 }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 30, fontWeight: 700, color: C.acc, lineHeight: 1 }}>
-                      ~{varianceCheck.expectedEvery.toLocaleString()}
-                    </span>
-                    <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.t1, textAlign: 'center', lineHeight: 1.5 }}>
-                      trades between<br />{varianceCheck.streak}-loss streaks
-                    </span>
-                  </div>
-                  <div style={{ padding: '13px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5, maxWidth: 520 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: C.t0, lineHeight: 1.5 }}>
-                      A {varianceCheck.streak}-loss streak is normal for you about every {varianceCheck.expectedEvery.toLocaleString()} trades.
-                    </p>
-                    <p style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.6 }}>
-                      Based on your {varianceCheck.winRatePct}% win rate over the last {varianceCheck.sample} trades.
-                      When it happens, it's the math working, not your edge failing.
-                    </p>
-                  </div>
                 </div>
               )}
 
