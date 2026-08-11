@@ -1249,12 +1249,12 @@ export default function FlyxaAIPreSession() {
                     )}
                   </div>
 
-                  {/* Type-to-commit — card footer. Keyed by item so each new
-                      commitment starts from an empty typing test. */}
+                  {/* Hold-to-commit — card footer. Keyed by item so each new
+                      commitment starts from a fresh, un-held button. */}
                   {activeOathIdx !== -1 && (
-                    <TypeToCommit
+                    <HoldToCommit
                       key={activeOathItems[activeOathIdx].id}
-                      target={activeOathItems[activeOathIdx].label}
+                      label="Hold to commit"
                       onCommit={() => toggleChecklist(activeOathItems[activeOathIdx])}
                     />
                   )}
@@ -1583,90 +1583,6 @@ function HoldToCommit({ label, onCommit }: { label: string; onCommit: () => void
         {done ? 'Committed ✓' : progress > 0 ? 'Keep holding…' : label}
       </span>
     </button>
-  );
-}
-
-// Type-to-commit: the trader must type the commitment out, verbatim, like a
-// typing test. Deliberate friction that forces them to read and internalise
-// each line rather than mindlessly holding a button. Pasting is blocked.
-const TYPE_COMMIT_DELAY_MS = 260;
-
-function TypeToCommit({ target, onCommit }: { target: string; onCommit: () => void }) {
-  const [typed, setTyped] = useState('');
-  const [done, setDone] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const firedRef = useRef(false);
-  // onCommit is a fresh closure every render; keep it in a ref so the commit
-  // effect can depend only on `matches`. Otherwise setDone's re-render changes
-  // onCommit, the effect cleans up, and the pending timer is cleared before it
-  // fires, so the commitment never advances.
-  const onCommitRef = useRef(onCommit);
-  useEffect(() => { onCommitRef.current = onCommit; });
-
-  useEffect(() => { inputRef.current?.focus(); }, []);
-
-  // Forgiving match: this is the trader typing out what they'll do, not a rigid
-  // typing test. Compare word by word, ignoring case and punctuation, so a
-  // skipped comma or period never blocks it. Words light up as they're typed;
-  // it commits once every word is there.
-  const cleanTarget = target.replace(/\s+/g, ' ').trim();
-  const words = cleanTarget.split(' ');
-  const canon = (value: string) => value.toLowerCase().replace(/[^a-z0-9\s]/gi, '');
-  const goalWords = words.map(word => canon(word).trim()).filter(Boolean);
-  const typedWords = canon(typed).split(/\s+/).filter(Boolean);
-  let matchedWords = 0;
-  for (let i = 0; i < goalWords.length; i += 1) {
-    if (typedWords[i] === goalWords[i]) matchedWords += 1;
-    else break;
-  }
-  const matches = goalWords.length > 0 && matchedWords >= goalWords.length;
-
-  useEffect(() => {
-    if (!matches || firedRef.current) return;
-    firedRef.current = true;
-    setDone(true);
-    const timer = setTimeout(() => onCommitRef.current(), TYPE_COMMIT_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [matches]);
-
-  return (
-    <div
-      onClick={() => inputRef.current?.focus()}
-      style={{ padding: '13px 16px', borderTop: `1px solid ${C.b0}`, backgroundColor: C.d3, cursor: 'text' }}
-    >
-      <p style={{ fontSize: 9, fontWeight: 700, color: done ? C.grn : C.acc, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 9 }}>
-        {done ? 'Committed ✓' : 'Type it out to commit'}
-      </p>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13.5, lineHeight: 1.85, display: 'flex', flexWrap: 'wrap' }}>
-        {words.map((word, i) => {
-          const doneWord = i < matchedWords;
-          const isCurrent = i === matchedWords && !done;
-          return (
-            <span
-              key={i}
-              style={{
-                color: doneWord ? C.t0 : C.t2,
-                opacity: doneWord ? 1 : isCurrent ? 0.9 : 0.45,
-                boxShadow: isCurrent ? `inset 2px 0 0 ${C.acc}` : 'none',
-                whiteSpace: 'pre',
-              }}
-            >{i < words.length - 1 ? `${word} ` : word}</span>
-          );
-        })}
-      </div>
-      <input
-        ref={inputRef}
-        value={typed}
-        onChange={event => { if (!firedRef.current) setTyped(event.target.value.slice(0, cleanTarget.length + 40)); }}
-        onPaste={event => event.preventDefault()}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        aria-label="Type the commitment to accept it"
-        style={{ position: 'absolute', width: 1, height: 1, padding: 0, border: 'none', opacity: 0 }}
-      />
-    </div>
   );
 }
 
