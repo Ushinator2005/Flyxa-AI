@@ -599,11 +599,13 @@ export default function EvaluationCoach() {
     if (!funded) { setPathModalOpen(false); return; }
     const fp = getFirmPayoutPaths(selected.firm);
     if (!fp) return;
-    if (fp.paths.length === 1) {
-      if (selected.payoutPath !== fp.paths[0].id) updateAccount(selected.id, { payoutPath: fp.paths[0].id });
-      return;
+    // Single-path firms have nothing to choose, so set it silently. Multi-path
+    // firms are NOT auto-prompted: the choice is a one-time setup the trader
+    // makes from the readiness card's controls (tabs / "change"), never a modal
+    // that reappears on every visit.
+    if (fp.paths.length === 1 && selected.payoutPath !== fp.paths[0].id) {
+      updateAccount(selected.id, { payoutPath: fp.paths[0].id });
     }
-    if (!getPathById(selected.firm, selected.payoutPath)) setPathModalOpen(true);
   }, [selected?.id, selected?.payoutPath, selected?.firm, statusById, updateAccount]);
 
   if (!selected || !progress) return <EmptyEvaluation />;
@@ -997,8 +999,10 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
                         return (
                           <div key={row.key} className={`ec-pr-r${row.met ? ' ok' : ''}${isBlocker ? ' block' : ''}`}>
                             <span className="ec-pr-mk" aria-hidden="true">{row.met ? '✓' : ''}</span>
-                            <span className="ec-pr-n">{row.label}</span>
-                            <span className="ec-pr-d">{row.detail}</span>
+                            <span className="ec-pr-main">
+                              <span className="ec-pr-n">{row.label}</span>
+                              <span className="ec-pr-d">{row.detail}</span>
+                            </span>
                             <span className="ec-pr-s">{row.met ? 'Met' : `${Math.round(row.progress * 100)}%`}</span>
                           </div>
                         );
@@ -1071,7 +1075,22 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             </span>
           </div>
 
-          {dailyLimit > 0 ? (
+          {isFunded && payoutReadiness && payoutReadiness.rows.length > 0 ? (
+            /* Funded: the chosen path's primary payout gate, whatever it is
+               (winning days, consistency, trading days, safety net…). Never the
+               eval's minimum-days rule, which does not apply once funded. */
+            (() => {
+              const gate = payoutReadiness.rows[0];
+              return (
+                <div className="ec-metric-card">
+                  <span className="ec-metric-lbl">{gate.label}</span>
+                  <strong className="ec-metric-val" style={!gate.met ? { color: 'var(--amber)' } : undefined}>{gate.big}</strong>
+                  <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${Math.round(gate.progress * 100)}%` }} /></div>
+                  <span className="ec-metric-sub">{gate.met ? `${gate.label} requirement met` : gate.detail}</span>
+                </div>
+              );
+            })()
+          ) : dailyLimit > 0 ? (
             <div className="ec-metric-card">
               <span className="ec-metric-lbl">Daily budget left</span>
               <strong className="ec-metric-val" style={dailyRemainingPct < 35 ? { color: 'var(--red)' } : undefined}>{money(dailyRemaining ?? 0)}</strong>

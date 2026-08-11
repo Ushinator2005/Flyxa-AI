@@ -20,6 +20,8 @@ export interface PayoutRequirementRow {
   met: boolean;
   /** 0–1 progress toward this requirement. */
   progress: number;
+  /** Compact headline figure for a metric card, e.g. "4/5", "73%", "$2,913". */
+  big: string;
 }
 
 export interface PayoutReadiness {
@@ -64,6 +66,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
       detail: `${have} of ${need}${thresholdLabel}`,
       met: have >= need,
       progress: clamp01(have / need),
+      big: `${have}/${need}`,
     });
   }
 
@@ -76,6 +79,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
       detail: `${ctx.tradingDays} of ${need}`,
       met: ctx.tradingDays >= need,
       progress: clamp01(ctx.tradingDays / need),
+      big: `${ctx.tradingDays}/${need}`,
     });
   }
 
@@ -92,6 +96,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
         : `Biggest day ${Math.round(actual)}% of profit · cap ${pct}%`,
       met,
       progress: actual === null ? 0 : clamp01(pct / Math.max(actual, 1)),
+      big: actual === null ? '—' : `${Math.round(actual)}%`,
     });
   }
 
@@ -108,6 +113,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
           : 'No profit above the net yet',
       met,
       progress: met ? 1 : 0,
+      big: money(Math.max(0, ctx.withdrawable)),
     });
   }
 
@@ -121,6 +127,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
         detail: ctx.withdrawable > 0 ? 'Positive this cycle' : 'Not positive yet',
         met: ctx.withdrawable > 0,
         progress: ctx.withdrawable > 0 ? 1 : 0,
+        big: money(Math.max(0, ctx.withdrawable)),
       });
     } else {
       rows.push({
@@ -129,6 +136,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
         detail: `${money(Math.max(0, ctx.withdrawable))} of ${money(goal)}`,
         met: ctx.withdrawable >= goal,
         progress: clamp01(ctx.withdrawable / goal),
+        big: money(Math.max(0, ctx.withdrawable)),
       });
     }
   }
@@ -141,6 +149,7 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
       detail: ctx.withdrawable > 0 ? 'Positive' : 'Not positive yet',
       met: ctx.withdrawable > 0,
       progress: ctx.withdrawable > 0 ? 1 : 0,
+      big: money(Math.max(0, ctx.withdrawable)),
     });
   }
 

@@ -1484,18 +1484,19 @@
 /* ── Funded: payout requirement rows ───────────────────────────── */
 .ec-pr { margin-top: 14px; display: flex; flex-direction: column; }
 .ec-pr-r {
-  display: grid; grid-template-columns: 16px auto minmax(0, 1fr) auto; gap: 8px;
-  align-items: baseline; padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 4px 8px;
+  align-items: baseline; padding: 9px 0; border-top: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 12.5px; color: var(--txt-2);
 }
 .ec-pr-r:first-child { border-top: 1px solid var(--border); }
 .ec-pr-mk { color: var(--green); font-size: 11px; text-align: center; }
-.ec-pr-n { color: var(--txt); font-weight: 600; white-space: nowrap; }
+.ec-pr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ec-pr-n { color: var(--txt); font-weight: 600; }
 .ec-pr-d {
-  color: var(--txt-2); font-family: var(--font-mono); font-size: 11px;
-  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--txt-2); font-family: var(--font-mono); font-size: 10.5px;
+  font-variant-numeric: tabular-nums; line-height: 1.4;
 }
-.ec-pr-s { margin-left: auto; font: 500 11px/1 var(--font-mono); color: var(--txt-3); font-variant-numeric: tabular-nums; }
+.ec-pr-s { font: 500 11px/1 var(--font-mono); color: var(--txt-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ec-pr-r.ok .ec-pr-s { color: var(--green); }
 .ec-pr-r.block .ec-pr-n,
 .ec-pr-r.block .ec-pr-d,
