@@ -4971,6 +4971,19 @@
 .rvt-h2r .d { font-family: var(--font-mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
 .rvt-h2r .d.up { color: var(--green); } .rvt-h2r .d.dn { color: var(--red); }
 
+/* Your standing: rank + gap per board metric. Row brightens when you lead. */
+.rvt-sg { margin-top: 16px; }
+.rvt-sr { display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1.5fr); gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.055); }
+.rvt-sr:first-child { border-top: 1px solid var(--app-border); }
+.rvt-sr .k { font-size: 13px; color: var(--app-text-muted); letter-spacing: -0.005em; }
+.rvt-sr.lead .k { color: var(--app-text); }
+.rvt-sr .rank { font-family: var(--font-mono); font-size: 12.5px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+.rvt-sr.lead .rank { color: var(--green); }
+.rvt-sr .rank em { font-style: normal; opacity: 0.55; }
+.rvt-sr .gap { font-size: 12.5px; text-align: right; color: var(--app-text-muted); }
+.rvt-sr .gap b { font-family: var(--font-mono); font-weight: 600; color: var(--app-text); font-variant-numeric: tabular-nums; }
+.rvt-sr.lead .gap b { color: var(--green); }
+
 @media (max-width: 760px) {
   .rvt-thead, .rvt-row { grid-template-columns: 26px 32px minmax(0, 1fr) 82px 92px; gap: 10px; }
   /* Fold Avg R and Win into the name sub-line on narrow screens by hiding

@@ -285,11 +285,9 @@ export default function Rivals() {
     setLeagueBuilderOpen(false);
   }
 
-  // Current user's standing and the traders directly ahead / behind (used by
-  // the read and the head-to-head).
+  // Current user's standing and the trader directly ahead (used by the read).
   const myPosition = ranked.findIndex(rival => rival.id === currentUser.id) + 1;
   const myAhead = myPosition > 1 ? ranked[myPosition - 2] : null;
-  const behindRival = ranked[myPosition] ?? null; // myPosition is 1-based
   const hasRivals = ranked.length >= 2;
 
   const activity = buildActivityFeed(ranked, leagueRivals, metric, period);
@@ -408,14 +406,37 @@ export default function Rivals() {
         );
       })()}
 
-      {/* ── The read + head-to-head against the trader directly ahead ── */}
+      {/* ── The read + your rank on each board metric ── */}
       {hasRivals && (() => {
         const st = (r: Rival) => getPeriodStats(r, period);
         const me = st(currentUser);
-        const foe = myAhead ?? behindRival; // the trader directly ahead, or the challenger if leading
         const lowest = ranked.reduce((lo, r) => (st(r).ruleAdherence < st(lo).ruleAdherence ? r : lo), ranked[0]);
         const myAvgR = me.avgR;
         const bestAvgR = myAvgR != null && ranked.every(r => (st(r).avgR ?? -Infinity) <= myAvgR);
+
+        // Your standing: for each board metric, your rank across everyone and
+        // the signed gap — either your lead over 2nd, or the leader's over you.
+        const board = ranked.map(r => ({ r, s: st(r) }));
+        const standing = (
+          label: string,
+          val: (s: RivalPeriodStats) => number,
+          fmt: (v: number) => string,
+        ) => {
+          const meVal = val(me);
+          const rank = 1 + board.filter(b => val(b.s) > meVal).length;
+          const youLead = rank === 1;
+          const rival = (youLead ? board.filter(b => b.r.id !== currentUser.id) : board)
+            .reduce((a, b) => (val(b.s) > val(a.s) ? b : a));
+          const gap = Math.abs(meVal - val(rival.s));
+          return { label, rank, youLead, phrase: youLead ? 'you lead by' : `${rival.r.displayName} leads by`, gapText: fmt(gap) };
+        };
+        const standings = [
+          standing('Net P&L', s => s.netPnl, v => formatCurrency(v).replace('+', '')),
+          standing('Avg R', s => s.avgR ?? 0, v => v.toFixed(2)),
+          standing('Win rate', s => s.winRate, v => `${Math.round(v)}`),
+          standing('Rules held', s => s.ruleAdherence, v => `${Math.round(v)}`),
+        ];
+
         return (
           <div className="rvt-read rvc-fade">
             <div className="rvt-col">
@@ -429,27 +450,18 @@ export default function Rivals() {
                 ? <p>Your {myAvgR.toFixed(2)}R is the best average trade on the board. You trail on money, not on edge.</p>
                 : <p>Your process holds at {Math.round(me.ruleAdherence)}%. The board rewards steadier rule-following over more trades.</p>}
             </div>
-            {foe && (
-              <div className="rvt-col">
-                <h2>You vs {foe.displayName}</h2>
-                <div className="rvt-h2h">
-                  <div className="rvt-hh"><span>Measure</span><span>{foe.displayName}</span><span>You</span><span>Gap</span></div>
-                  {([
-                    ['Net P&L', formatCurrency(st(foe).netPnl).replace('+', ''), formatCurrency(me.netPnl).replace('+', ''), h2hDelta('money', me.netPnl - st(foe).netPnl)],
-                    ['Avg R', `${avgRText(foe, period)}R`, `${avgRText(currentUser, period)}R`, h2hDelta('r', (me.avgR ?? 0) - (st(foe).avgR ?? 0))],
-                    ['Win rate', `${Math.round(st(foe).winRate)}%`, `${Math.round(me.winRate)}%`, h2hDelta('pts', Math.round(me.winRate) - Math.round(st(foe).winRate))],
-                    ['Rules held', `${Math.round(st(foe).ruleAdherence)}%`, `${Math.round(me.ruleAdherence)}%`, h2hDelta('pts', Math.round(me.ruleAdherence) - Math.round(st(foe).ruleAdherence))],
-                  ] as const).map(([k, them, mine, d]) => (
-                    <div key={k} className="rvt-h2r">
-                      <span className="k">{k}</span>
-                      <span className="v">{them}</span>
-                      <span className="v me">{mine}</span>
-                      <span className={`d ${d.up ? 'up' : 'dn'}`}>{d.txt}</span>
-                    </div>
-                  ))}
-                </div>
+            <div className="rvt-col">
+              <h2>Your standing</h2>
+              <div className="rvt-sg">
+                {standings.map(row => (
+                  <div key={row.label} className={`rvt-sr${row.youLead ? ' lead' : ''}`}>
+                    <span className="k">{row.label}</span>
+                    <span className="rank">{ordinal(row.rank)} <em>of {ranked.length}</em></span>
+                    <span className="gap">{row.phrase} <b>{row.gapText}</b></span>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         );
       })()}
