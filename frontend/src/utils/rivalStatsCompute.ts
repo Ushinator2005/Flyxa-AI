@@ -16,7 +16,13 @@ export function clampScore(value: number): number {
 }
 
 export function isoDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
+  // Use LOCAL date parts, not toISOString() (which is UTC). Trade dates are
+  // logged in the trader's local day, so a UTC conversion shifts the whole
+  // window back a day in eastern timezones and drops "today" from the period.
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, '0');
+  const d = String(value.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function daysAgo(days: number): string {
@@ -200,22 +206,34 @@ export function buildLifetimeXpEvents(
   return events;
 }
 
+// Calendar-aligned bounds for each leaderboard period: this day / week / month /
+// quarter / year, running from the start of the period up to today (not a
+// rolling look-back). `previous` returns the whole prior calendar period, used
+// for trend/movement comparisons.
 export function periodBounds(period: Exclude<LeaderboardPeriod, 'allTime'>, previous = false): [string, string] {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  let start = new Date(now);
-  let end = new Date(now);
-  if (period === 'week') {
-    const mondayOffset = (now.getDay() + 6) % 7;
-    start.setDate(now.getDate() - mondayOffset - (previous ? 7 : 0));
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  let start: Date;
+  let end: Date;
+  if (period === 'day') {
+    start = new Date(y, m, d - (previous ? 1 : 0));
     end = new Date(start);
-    end.setDate(start.getDate() + 6);
+  } else if (period === 'week') {
+    // Monday-based week.
+    const mondayOffset = (now.getDay() + 6) % 7;
+    start = new Date(y, m, d - mondayOffset - (previous ? 7 : 0));
+    end = previous ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6) : now;
   } else if (period === 'month') {
-    start.setDate(now.getDate() - (previous ? 59 : 29));
-    end.setDate(now.getDate() - (previous ? 30 : 0));
+    start = new Date(y, m - (previous ? 1 : 0), 1);
+    end = previous ? new Date(y, m, 0) : now;
+  } else if (period === 'quarter') {
+    const qStartMonth = (Math.floor(m / 3) - (previous ? 1 : 0)) * 3;
+    start = new Date(y, qStartMonth, 1);
+    end = previous ? new Date(y, qStartMonth + 3, 0) : now;
   } else {
-    start = new Date(now.getFullYear(), now.getMonth() - (previous ? 1 : 0), 1);
-    end = new Date(now.getFullYear(), now.getMonth() - (previous ? 0 : -1), 0);
+    start = new Date(y - (previous ? 1 : 0), 0, 1);
+    end = previous ? new Date(y - 1, 11, 31) : now;
   }
   return [isoDate(start), isoDate(end)];
 }

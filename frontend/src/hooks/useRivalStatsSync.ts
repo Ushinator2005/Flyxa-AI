@@ -88,19 +88,25 @@ export function useRivalStatsSync() {
     for (const event of earnedXpEvents) merged[event.id] ??= event;
     const lifetimeXp = Object.values(merged).reduce((sum, event) => sum + event.points, 0);
 
+    const dayBounds = periodBounds('day');
     const weekBounds = periodBounds('week');
     const monthBounds = periodBounds('month');
-    const seasonBounds = periodBounds('season');
+    const quarterBounds = periodBounds('quarter');
+    const yearBounds = periodBounds('year');
     const localPeriods = {
       allTime: { ...computePeriodStats(allSavedTrades), ruleAdherence: periodRuleAdherence(entries, riskRules) },
+      day: { ...computePeriodStats(allSavedTrades, dayBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, dayBounds) },
       week: { ...computePeriodStats(allSavedTrades, weekBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, weekBounds) },
       month: { ...computePeriodStats(allSavedTrades, monthBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, monthBounds) },
-      season: { ...computePeriodStats(allSavedTrades, seasonBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, seasonBounds) },
+      quarter: { ...computePeriodStats(allSavedTrades, quarterBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, quarterBounds) },
+      year: { ...computePeriodStats(allSavedTrades, yearBounds), ruleAdherence: periodRuleAdherence(entries, riskRules, yearBounds) },
     };
     const localPreviousPeriods = {
+      day: computePeriodStats(allSavedTrades, periodBounds('day', true)),
       week: computePeriodStats(allSavedTrades, periodBounds('week', true)),
       month: computePeriodStats(allSavedTrades, periodBounds('month', true)),
-      season: computePeriodStats(allSavedTrades, periodBounds('season', true)),
+      quarter: computePeriodStats(allSavedTrades, periodBounds('quarter', true)),
+      year: computePeriodStats(allSavedTrades, periodBounds('year', true)),
     };
     const periods = localPeriods;
     const previousPeriods = localPreviousPeriods;

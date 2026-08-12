@@ -1,5 +1,5 @@
 export type MascotStage = 'seed' | 'rookie' | 'veteran' | 'elite' | 'apex';
-export type LeaderboardPeriod = 'week' | 'month' | 'season' | 'allTime';
+export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'allTime';
 
 export interface RivalPeriodStats {
   netPnl: number;

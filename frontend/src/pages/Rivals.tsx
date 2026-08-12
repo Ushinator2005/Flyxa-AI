@@ -1,35 +1,87 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import {
-  ArrowUp, ArrowDown, Bell, Check, ChevronDown, Clock3,
-  MessageCircle, Minus, Plus, Share2, Users, X,
+  Bell, Check, ChevronDown, Clock3,
+  MessageCircle, Plus, Users, X,
 } from 'lucide-react';
 import { useRivals } from '../hooks/useRivals.js';
 import type { LeaderboardMetric, LeaderboardPeriod, Rival, RivalPeriodStats } from '../types/rivals.js';
-import type { RivalRequestResponse, SharedTradeRecord } from '../services/api.js';
-import { tradeSharesApi } from '../services/api.js';
-import { useTrades } from '../hooks/useTrades.js';
+import type { RivalRequestResponse } from '../services/api.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import type { PrivateLeague } from '../store/types.js';
 import AddRivalModal from '../components/rivals/AddRivalModal.js';
 import RivalChatPanel from '../components/rivals/RivalChatPanel.js';
-import ScreenshotImportModal from '../components/scanner/ScreenshotImportModal.js';
 import '../components/rivals/rivals.css';
 
 type League = PrivateLeague;
 
 const PERIODS: Array<{ value: LeaderboardPeriod; label: string }> = [
-  { value: 'week', label: '7D' },
-  { value: 'month', label: '30D' },
-  { value: 'season', label: 'Season' },
-  { value: 'allTime', label: 'All' },
+  { value: 'day', label: 'Daily' },
+  { value: 'week', label: 'Weekly' },
+  { value: 'month', label: 'Monthly' },
+  { value: 'year', label: 'Yearly' },
+  { value: 'allTime', label: 'All time' },
 ];
 
 const MODES: Array<{ value: LeaderboardMetric; label: string; help?: string }> = [
   { value: 'netPnl', label: 'Net P&L' },
+  { value: 'avgR', label: 'Avg R' },
   { value: 'winRate', label: 'Win rate' },
-  { value: 'consistency', label: 'Consistency' },
   { value: 'processScore', label: 'Process' },
 ];
+
+// Rules-held (process) colour bands: >=70 green, 50-69 amber, <50 red. Three
+// bands so a healthy board is not a christmas tree.
+const procColor = (v: number) => (v >= 70 ? 'var(--green)' : v >= 50 ? 'var(--amber)' : 'var(--red)');
+const procBand = (v: number) => (v >= 70 ? 'g' : v >= 50 ? 'a' : 'r_');
+
+// Head-to-head delta: a signed figure whose sign drives colour. `kind` sets the
+// unit (money / R / points). No em dashes: uses a minus sign for negatives.
+function h2hDelta(kind: 'money' | 'r' | 'pts', delta: number): { txt: string; up: boolean } {
+  const up = delta >= 0;
+  const sign = up ? '+' : '−';
+  const txt = kind === 'money'
+    ? `${sign}$${Math.abs(Math.round(delta)).toLocaleString('en-US')}`
+    : kind === 'r'
+      ? `${sign}${Math.abs(delta).toFixed(2)}`
+      : `${sign}${Math.abs(Math.round(delta))}`;
+  return { txt, up };
+}
+
+const ordinal = (n: number): string => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+};
+
+// Natural-language phrase for a period, e.g. "today", "this month".
+const periodPhrase = (p: LeaderboardPeriod): string => ({
+  day: 'today', week: 'this week', month: 'this month',
+  quarter: 'this quarter', year: 'this year', allTime: 'all time',
+}[p]);
+
+// Cumulative-R trajectory: the rival's curve (solid amber) over the viewer's
+// (dashed grey). Shape comes from each period's equity curve; the endpoint R is
+// the checkable figure shown in the legend. One line only in solo mode.
+function RivalCurve({ them, me, solo }: { them: number[]; me: number[]; solo: boolean }) {
+  const W = 420, H = 130, X0 = 10, X1 = 410, Y0 = 12, Y1 = 108;
+  const all = [...them, ...(solo ? [] : me), 0];
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const span = hi - lo || 1;
+  const pts = (s: number[]) => (s.length < 2 ? '' : s.map((v, i) =>
+    `${(X0 + (i / (s.length - 1)) * (X1 - X0)).toFixed(0)},${(Y1 - ((v - lo) / span) * (Y1 - Y0)).toFixed(0)}`).join(' '));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="rvd-crv" aria-hidden="true">
+      <line x1={X0} y1={Y1} x2={X1} y2={Y1} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+      {!solo && me.length >= 2 && (
+        <polyline fill="none" stroke="var(--app-text-muted)" strokeWidth="1.75" strokeDasharray="4 4" strokeLinejoin="round" points={pts(me)} />
+      )}
+      {them.length >= 2 && (
+        <polyline fill="none" stroke="var(--amber)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={pts(them)} />
+      )}
+      <text x={X0} y={126} fontSize="10.5" fill="var(--app-text-muted)" letterSpacing="0.05em">0R</text>
+    </svg>
+  );
+}
 
 const EMPTY_PERIOD: RivalPeriodStats = {
   netPnl: 0, winRate: 0, avgR: null, tradeCount: 0, tradingDays: 0, greenDays: 0,
@@ -45,7 +97,7 @@ function getPeriodStats(rival: Rival, period: LeaderboardPeriod): RivalPeriodSta
   const saved = rival.mascot.stats.periods?.[period];
   if (saved) return saved;
   // Only fall back to top-level all-time stats for 'allTime'.
-  // For week/month/season with no period data, return empty so the filter is clearly reflected.
+  // For the rolling windows with no period data, return empty so the filter is clearly reflected.
   if (period === 'allTime') {
     return {
       ...EMPTY_PERIOD,
@@ -64,9 +116,9 @@ function metricValue(rival: Rival, metric: LeaderboardMetric, period: Leaderboar
   if (metric === 'consistency') return stats.consistency;
   if (metric === 'riskAdjusted') return stats.riskAdjusted;
   if (metric === 'journalStreak') return rival.mascot.stats.dailyJournalStreak;
-  if (metric === 'processScore') return rival.mascot.stats.processScore;
+  if (metric === 'processScore') return stats.ruleAdherence;
   if (metric === 'winRate') return stats.winRate;
-  if (metric === 'avgR') return rival.mascot.stats.avgR ?? 0;
+  if (metric === 'avgR') return stats.avgR ?? 0;
   if (metric === 'dailyJournal') return rival.mascot.stats.dailyJournalScore;
   if (metric === 'tradingJournal') return rival.mascot.stats.tradingJournalScore;
   return rival.mascot.stats.backtestSessions;
@@ -82,28 +134,12 @@ const LB = {
   rowYou: 'var(--amber-dim)',
 };
 
-function seasonLabel(): string {
-  const now = new Date();
-  return now.toLocaleString('en-US', { month: 'long' });
-}
-
-function winsLosses(rival: Rival, period: LeaderboardPeriod): [number, number] {
-  const s = getPeriodStats(rival, period);
-  const wins = Math.round(s.tradeCount * (s.winRate / 100));
-  return [wins, Math.max(0, s.tradeCount - wins)];
-}
 
 function avgRText(rival: Rival, period: LeaderboardPeriod): string {
   const r = getPeriodStats(rival, period).avgR ?? rival.mascot.stats.avgR ?? null;
   return r == null ? '—' : r.toFixed(2);
 }
 
-function formatMetricGap(value: number, metric: LeaderboardMetric): string {
-  if (metric === 'netPnl') return formatCurrency(Math.max(0, value)).replace('+', '');
-  if (metric === 'riskAdjusted') return `${Math.max(0, value).toFixed(2)}x`;
-  if (metric === 'journalStreak') return `${Math.ceil(Math.max(0, value))} days`;
-  return `${Math.ceil(Math.max(0, value))} points`;
-}
 
 function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, period: LeaderboardPeriod): number {
   if (period === 'allTime') return 0;
@@ -123,67 +159,6 @@ function rankMovement(rival: Rival, rivals: Rival[], metric: LeaderboardMetric, 
 
 // Rank movement pill: ▲n (up, green), ▼n (down, red), — (flat, muted).
 // Hidden entirely for all-time (no prior period to compare against).
-function MovementBadge({ delta, period }: { delta: number; period: LeaderboardPeriod }) {
-  if (period === 'allTime') return null;
-  const flat = delta === 0;
-  const up = delta > 0;
-  const color = flat ? LB.subtle : up ? LB.green : LB.red;
-  return (
-    <span
-      title={flat ? 'No rank change this period' : `${up ? 'Up' : 'Down'} ${Math.abs(delta)} this period`}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color }}
-    >
-      {flat ? <Minus size={11} /> : up ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
-      {!flat && Math.abs(delta)}
-    </span>
-  );
-}
-
-function coachingInsight(rival: Rival, period: LeaderboardPeriod): string {
-  const stats = getPeriodStats(rival, period);
-  if (stats.tradeCount === 0) return 'No logged trades yet, the table moves when the journal fills.';
-  if (stats.ruleAdherence > 0 && stats.ruleAdherence < 80) return `Process under pressure, ${Math.round(stats.ruleAdherence)}% rule adherence.`;
-  if (stats.netPnl < 0) return 'Protect downside first, one clean day gets you back in motion.';
-  if (stats.consistency < 65) return 'Profitable, but consistency is the fastest ranking lever.';
-  return 'Momentum intact, keep pressing the repeatable setup.';
-}
-
-const prefersReducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-/** Re-renders on an interval — drives the live season countdown. */
-function useTicker(ms: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), ms);
-    return () => window.clearInterval(id);
-  }, [ms]);
-  return now;
-}
-
-/** Animates a number toward `target` (~700ms). Skips under reduced motion. */
-function useCountUp(target: number): number {
-  const [value, setValue] = useState(target);
-  const fromRef = useRef(target);
-  useEffect(() => {
-    if (prefersReducedMotion()) { setValue(target); fromRef.current = target; return; }
-    const from = fromRef.current;
-    if (from === target) return;
-    const start = performance.now();
-    const dur = 700;
-    let raf = 0;
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / dur);
-      const eased = 1 - Math.pow(1 - p, 3);
-      setValue(from + (target - from) * eased);
-      if (p < 1) raf = requestAnimationFrame(tick);
-      else fromRef.current = target;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target]);
-  return value;
-}
 
 /** Trailing consecutive green days from a period's daily P&L — powers the 🔥 marker. */
 function hotStreak(stats: RivalPeriodStats): number {
@@ -194,12 +169,6 @@ function hotStreak(stats: RivalPeriodStats): number {
     else break;
   }
   return streak;
-}
-
-/** Count-up numeric display with a formatter (currency, %, etc.). */
-function CountUp({ target, format }: { target: number; format: (n: number) => string }) {
-  const v = useCountUp(target);
-  return <>{format(v)}</>;
 }
 
 // Tone drives colour: green for gains/streaks, red for slips/losing days,
@@ -237,18 +206,17 @@ function buildActivityFeed(
 }
 
 /** The single hero stat for a metric — used big on the podium. */
-function heroStat(stats: RivalPeriodStats, rival: Rival, metric: LeaderboardMetric): { value: string; tone: 'up' | 'down' | 'neutral'; label: string } {
-  if (metric === 'winRate') return { value: `${Math.round(stats.winRate)}%`, tone: stats.winRate >= 50 ? 'up' : 'neutral', label: 'Win rate' };
-  if (metric === 'consistency') return { value: `${Math.round(stats.consistency)}`, tone: stats.consistency >= 65 ? 'up' : 'neutral', label: 'Consistency' };
-  if (metric === 'processScore') return { value: `${Math.round(rival.mascot.stats.processScore)}`, tone: rival.mascot.stats.processScore >= 65 ? 'up' : 'neutral', label: 'Process' };
-  return { value: formatCurrency(stats.netPnl), tone: stats.netPnl > 0 ? 'up' : stats.netPnl < 0 ? 'down' : 'neutral', label: 'Net P&L' };
-}
-
 export default function Rivals() {
   const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
-  const { trades: allMyTrades } = useTrades();
-  const [period, setPeriod] = useState<LeaderboardPeriod>('season');
+  const [period, setPeriod] = useState<LeaderboardPeriod>('month');
   const [metric, setMetric] = useState<LeaderboardMetric>('netPnl');
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
+  // Sorting lives on the column headers: click a column to sort by it, click the
+  // active column again to flip direction. The board (rank, ordering) re-derives.
+  const onSort = (m: LeaderboardMetric) => {
+    if (m === metric) setSortDir(d => (d === 'desc' ? 'asc' : 'desc'));
+    else { setMetric(m); setSortDir('desc'); }
+  };
   const [selectedRivalId, setSelectedRivalId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -262,16 +230,7 @@ export default function Rivals() {
   const leagues = useFlyxaStore(state => state.privateLeagues);
   const setPrivateLeagues = useFlyxaStore(state => state.setPrivateLeagues);
   const [activeLeagueId, setActiveLeagueId] = useState('all');
-  const [inspectorTab, setInspectorTab] = useState<'overview' | 'progress' | 'trades'>('overview');
-  const [sharedTrades, setSharedTrades] = useState<SharedTradeRecord[]>([]);
-  const [sharesLoading, setSharesLoading] = useState(false);
-  const [viewingSharedTrade, setViewingSharedTrade] = useState<SharedTradeRecord | null>(null);
-  const [sharePickerOpen, setSharePickerOpen] = useState(false);
-  const [sharingBusy, setSharingBusy] = useState<string | null>(null);
-  const [sharedSet, setSharedSet] = useState<Set<string>>(new Set());
   const [activityExpanded, setActivityExpanded] = useState(false);
-  const prevRivalIdRef = useRef<string | null>(null);
-  const nowMs = useTicker(1000); // live season countdown
 
   // One-time migration: leagues used to live in localStorage only. Move them into
   // the store (synced to Supabase) and drop the legacy key.
@@ -291,59 +250,17 @@ export default function Rivals() {
   const leagueRivals = activeLeague
     ? rivals.filter(rival => rival.isMe || activeLeague.memberIds.includes(rival.id))
     : rivals;
-  const ranked = useMemo(
-    () => [...leagueRivals].sort((a, b) => metricValue(b, metric, period) - metricValue(a, metric, period)),
-    [leagueRivals, metric, period],
-  );
+  const ranked = useMemo(() => {
+    const dir = sortDir === 'desc' ? 1 : -1;
+    return [...leagueRivals].sort((a, b) => (metricValue(b, metric, period) - metricValue(a, metric, period)) * dir);
+  }, [leagueRivals, metric, period, sortDir]);
   const selectedRival = rivals.find(rival => rival.id === selectedRivalId) ?? currentUser;
   const pendingRequests = rivalRequests.filter(request => request.status === 'pending');
-
-  // Reset share state when switching rivals
-  useEffect(() => {
-    if (prevRivalIdRef.current === selectedRivalId) return;
-    prevRivalIdRef.current = selectedRivalId;
-    setSharedSet(new Set());
-    setSharePickerOpen(false);
-  }, [selectedRivalId]);
-
-  // Load trades shared WITH me by the selected rival when the Trades tab is open
-  useEffect(() => {
-    if (inspectorTab !== 'trades') return;
-    const rivalUserId = rivals.find(r => r.id === selectedRivalId)?.userId;
-    if (!rivalUserId) { setSharedTrades([]); return; }
-    setSharesLoading(true);
-    tradeSharesApi.getSharedWithMe()
-      .then(data => setSharedTrades(data.filter(s => s.sharedByUserId === rivalUserId)))
-      .catch(() => setSharedTrades([]))
-      .finally(() => setSharesLoading(false));
-  }, [inspectorTab, selectedRivalId, rivals]);
-
-  async function handleShareTrade(tradeId: string) {
-    const rivalUserId = rivals.find(r => r.id === selectedRivalId)?.userId;
-    if (!rivalUserId) return;
-    const trade = allMyTrades.find(t => t.id === tradeId);
-    if (!trade) return;
-    setSharingBusy(tradeId);
-    try {
-      await tradeSharesApi.share(tradeId, rivalUserId, trade);
-      setSharedSet(prev => new Set([...prev, tradeId]));
-    } finally {
-      setSharingBusy(null);
-    }
-  }
 
   if (!currentUser || !selectedRival) return null;
 
   const selectedStats = getPeriodStats(selectedRival, period);
-  const selectedPeriodLabel = PERIODS.find(item => item.value === period)?.label ?? 'selected period';
-  const metricLabel = MODES.find(mode => mode.value === metric)?.label ?? 'Net P&L';
-
   const selectedPosition = ranked.findIndex(rival => rival.id === selectedRival.id) + 1;
-  const aheadRival = selectedPosition > 1 ? ranked[selectedPosition - 2] : null;
-  const selectedGap = aheadRival
-    ? Math.max(0, metricValue(aheadRival, metric, period) - metricValue(selectedRival, metric, period))
-    : 0;
-  const selectedMovement = rankMovement(selectedRival, leagueRivals, metric, period);
 
   async function handleRequestAction(id: string, action: 'accept' | 'decline' | 'cancel') {
     setRequestBusyId(id);
@@ -361,66 +278,26 @@ export default function Rivals() {
     setLeagueBuilderOpen(false);
   }
 
-  // Current user's own standing — drives the "your standing" hook bar.
+  // Current user's standing and the traders directly ahead / behind (used by
+  // the read and the head-to-head).
   const myPosition = ranked.findIndex(rival => rival.id === currentUser.id) + 1;
   const myAhead = myPosition > 1 ? ranked[myPosition - 2] : null;
-  const myGap = myAhead
-    ? Math.max(0, metricValue(myAhead, metric, period) - metricValue(currentUser, metric, period))
-    : 0;
-  const hasRivals = ranked.length >= 2;
-  // Podium shows the top three; the table below is "the rest of the field"
-  // (ranks 4+) so no one is ever rendered twice.
-  const fieldRivals = ranked.slice(3);
-
-  // Live countdown to the season lock (first of next month).
-  const seasonEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).getTime();
-  const msLeft = Math.max(0, seasonEnd - nowMs);
-  const cd = {
-    d: Math.floor(msLeft / 86400000),
-    h: Math.floor((msLeft % 86400000) / 3600000),
-    m: Math.floor((msLeft % 3600000) / 60000),
-    s: Math.floor((msLeft % 60000) / 1000),
-  };
-
-  // Chase (person ahead) and Defend (person directly behind).
-  const myValue = metricValue(currentUser, metric, period);
   const behindRival = ranked[myPosition] ?? null; // myPosition is 1-based
-  const defendGap = behindRival ? Math.max(0, myValue - metricValue(behindRival, metric, period)) : 0;
-  const boardValues = ranked.map(r => metricValue(r, metric, period));
-  const boardMin = Math.min(...boardValues, 0);
-  const boardMax = Math.max(...boardValues, 1);
-  const boardSpan = boardMax - boardMin || 1;
-  const chaseFillPct = Math.round(((myValue - boardMin) / boardSpan) * 100);
-  // Defend bar: how much of your lead over #below remains before they catch you.
-  const defendCushion = behindRival
-    ? Math.min(100, Math.round((defendGap / (Math.abs(myValue - boardMin) || 1)) * 100))
-    : 100;
-  const defendUrgent = behindRival ? defendGap < boardSpan * 0.12 : false;
+  const hasRivals = ranked.length >= 2;
 
   const activity = buildActivityFeed(ranked, leagueRivals, metric, period);
 
-  // Ghost benchmark — the disciplined baseline a funded trader clears.
-  const GHOST_WIN = 55;
-  const myWin = Math.round(getPeriodStats(currentUser, period).winRate);
-  const beatingGhost = myWin >= GHOST_WIN;
-
   const btnGhost: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 14px', borderRadius: 9, background: 'var(--app-panel-strong)', border: `1px solid ${LB.border}`, color: LB.text, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
   const btnPrimary: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 9, background: LB.amber, border: 'none', color: '#000', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' };
-  const kicker: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.14em', textTransform: 'uppercase', color: LB.subtle };
 
   return (
     <div className="rv2-page" style={{ color: LB.text }}>
 
       {/* ── Header ── */}
-      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, padding: '2px 2px 18px' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 className="rvc-display" style={{ margin: 0, fontSize: 30, color: LB.text }}>
-            {activeLeague?.name ?? 'Rivals'}
-          </h1>
-          <p style={{ margin: '8px 0 0', fontSize: 13.5, color: LB.muted, lineHeight: 1.6 }}>
-            Ranked on <span className="rvc-verified"><Check size={12} strokeWidth={3} /> verified journal data</span>, no screenshots, no claims.
-          </p>
-        </div>
+      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, padding: '2px 2px 20px' }}>
+        <h1 style={{ margin: 0, minWidth: 0, fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', color: LB.text, lineHeight: 1.1 }}>
+          {activeLeague?.name ?? 'Rivals'}
+        </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
           <button type="button" onClick={() => setLeagueBuilderOpen(open => !open)} style={btnGhost}>Edit league</button>
           <button type="button" onClick={() => setIsAddOpen(true)} style={btnPrimary}>Invite traders</button>
@@ -460,13 +337,7 @@ export default function Rivals() {
       )}
 
       {/* ── Controls: text tabs + period ── */}
-      <div data-tour-id="rivals-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', margin: '4px 0 6px' }}>
-        <div className="rvc-tabs">
-          {MODES.map(mode => (
-            <button type="button" key={mode.value} title={mode.help} onClick={() => setMetric(mode.value)}
-              className={`rvc-tab${metric === mode.value ? ' on' : ''}`}>{mode.label}</button>
-          ))}
-        </div>
+      <div data-tour-id="rivals-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap', margin: '4px 0 6px' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {leagues.length > 0 && (
             <div className="rvc-period">
@@ -483,119 +354,104 @@ export default function Rivals() {
         </div>
       </div>
 
-      {/* ── Countdown: a bare live clock between two hairlines ── */}
-      {hasRivals && (<>
-        <hr className="rvc-rule" style={{ marginTop: 8 }} />
-        <div className="rvc-count rvc-fade">
-          <div className="rvc-count-clock">
-            {([['Days', cd.d], ['Hrs', cd.h], ['Min', cd.m], ['Sec', cd.s]] as const).map(([label, val], idx) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'flex-end', gap: 20 }}>
-                {idx > 0 && <span className="rvc-count-colon">:</span>}
-                <div className="rvc-count-seg">
-                  <span className="rvc-count-num">{idx === 0 ? val : String(val).padStart(2, '0')}</span>
-                  <span className="rvc-count-label">{label}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 13, color: LB.muted, textAlign: 'right', maxWidth: 320, lineHeight: 1.55 }}>
-            {seasonLabel()} board locks then. <b style={{ color: LB.text, fontWeight: 600 }}>The champion</b> takes the trophy shelf and the hall of fame.
-          </div>
-        </div>
-        <hr className="rvc-rule" style={{ marginBottom: 22 }} />
-      </>)}
+      {hasRivals && <hr className="rvc-rule" style={{ marginTop: 8, marginBottom: 22 }} />}
 
-      {/* ── One ranked ladder: 1 → 2 → 3 in a single column ── */}
+      {/* ── Standings table: rank · avatar · trader+share · P&L · Avg R · Win · Rules held ── */}
       {hasRivals && (() => {
-        const metricNum = (r: Rival) => metric === 'netPnl' ? getPeriodStats(r, period).netPnl : metric === 'winRate' ? getPeriodStats(r, period).winRate : metric === 'consistency' ? getPeriodStats(r, period).consistency : r.mascot.stats.processScore;
-        const fmtMetric = (n: number) => metric === 'netPnl' ? formatCurrency(n) : metric === 'winRate' ? `${Math.round(n)}%` : `${Math.round(n)}`;
-        const toneColor = (r: Rival) => { const t = heroStat(getPeriodStats(r, period), r, metric).tone; return t === 'up' ? LB.green : t === 'down' ? LB.red : LB.text; };
+        const st = (r: Rival) => getPeriodStats(r, period);
+        const pnlColor = (v: number) => (v > 0 ? LB.green : v < 0 ? LB.red : LB.muted);
+        const cols: Array<[LeaderboardMetric, string]> = [['netPnl', 'Net P&L'], ['avgR', 'Avg R'], ['winRate', 'Win'], ['processScore', 'Rules held']];
         return (
-          <div className="rvc-ladder rvc-fade">
-            {ranked.slice(0, 3).map((rival, i) => {
-              const rank = i + 1;
-              const isChamp = i === 0;
-              const s = getPeriodStats(rival, period);
-              const streak = hotStreak(s);
+          <div className="rvc-fade" data-tour-id="rivals-standings">
+            <div className="rvt-thead">
+              <span /><span /><span>Trader</span>
+              {cols.map(([m, label]) => (
+                <button key={m} type="button" className={`rvt-r rvt-sort${metric === m ? ' on' : ''}`} onClick={() => onSort(m)}>
+                  {label}{metric === m && <span className="rvt-arw">{sortDir === 'desc' ? '▾' : '▴'}</span>}
+                </button>
+              ))}
+            </div>
+            {ranked.map((r, i) => {
+              const s = st(r);
+              const adh = Math.round(s.ruleAdherence);
               return (
-                <button
-                  key={rival.id}
-                  type="button"
-                  onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
-                  className={`rvc-rung${isChamp ? ' rvc-rung--champ' : ''}${rival.isMe ? ' rvc-rung--you' : ''}`}
-                >
-                  <span className="rvc-rung-num">{rank}</span>
-                  <div style={{ minWidth: 0 }}>
-                    {isChamp && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 9 }}>
-                        <span className="rvc-champmark">Champion</span>
-                        {streak >= 2 && <span className="rvc-streak">{streak}-day streak</span>}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <RivalAvatar rival={rival} large={isChamp} />
-                      <span className="rvc-rung-name">{rival.displayName}</span>
-                      <Check size={isChamp ? 13 : 11} strokeWidth={3} color={LB.green} aria-label="Verified" />
-                      {rival.isMe && <span className="rvc-you">YOU</span>}
-                    </div>
-                    <div className="rvc-rung-sub">
-                      {Math.round(s.winRate)}% win<span className="rvc-dot">·</span>{avgRText(rival, period)}R avg
-                      {isChamp
-                        ? <><span className="rvc-dot">·</span><b style={{ color: s.ruleAdherence >= 80 ? LB.green : 'var(--app-text)' }}>{Math.round(s.ruleAdherence)}% rule adherence</b></>
-                        : <><span className="rvc-dot">·</span>{Math.round(s.ruleAdherence)}% rules</>}
+                <button key={r.id} type="button" className={`rvt-row${r.isMe ? ' you' : ''}`}
+                  onClick={() => { setSelectedRivalId(r.id); setInspectorOpen(true); }}>
+                  <span className="rvt-rk">{i + 1}</span>
+                  <span className="rvt-av" aria-hidden="true">
+                    {r.avatarUrl ? <img src={r.avatarUrl} alt="" /> : (r.displayName[0] ?? '?').toLowerCase()}
+                  </span>
+                  <div className="rvt-who">
+                    <div className="rvt-nm">
+                      <b>{r.displayName}</b>
+                      {r.isMe && <span className="rvt-youtag">YOU</span>}
                     </div>
                   </div>
-                  <div className="rvc-rung-right">
-                    <div className="rvc-rung-pnl" style={{ color: toneColor(rival) }}>
-                      {isChamp ? <CountUp target={metricNum(rival)} format={fmtMetric} /> : fmtMetric(metricNum(rival))}
-                    </div>
-                    <MovementBadge delta={rankMovement(rival, leagueRivals, metric, period)} period={period} />
-                  </div>
+                  <span className="rvt-pnl" style={{ color: pnlColor(s.netPnl) }}>{formatCurrency(s.netPnl)}</span>
+                  <span className="rvt-cell">{avgRText(r, period)}R</span>
+                  <span className="rvt-cell">{Math.round(s.winRate)}%</span>
+                  <span className={`rvt-proc ${procBand(adh)}`}>
+                    <span className="rvt-bar"><i style={{ width: `${Math.min(100, adh)}%` }} /></span>
+                    <span className="rvt-pv">{adh}%</span>
+                  </span>
                 </button>
               );
             })}
+            {ranked.length < 5 && (
+              <div className="rvt-inv">
+                <span>A league of <b>{ranked.length}</b> is a small sample. Five or more makes the ranking mean something.</span>
+                <button type="button" onClick={() => setIsAddOpen(true)}>Invite traders</button>
+              </div>
+            )}
           </div>
         );
       })()}
 
-      {/* ── Chase & Defend — bare, split by a hairline ── */}
-      {hasRivals && (myAhead || behindRival) && (
-        <div className="rvc-cd rvc-fade" style={{ marginTop: 26 }}>
-          <div className="rvc-cd-col">
-            {myAhead ? (<>
-              <div className="rvc-cd-head">Chasing <b>{myAhead.displayName}</b></div>
-              <div className="rvc-cd-big" style={{ color: LB.amber }}>{formatMetricGap(myGap, metric)}</div>
-              <div className="rvc-track"><div className="rvc-track-fill rvc-track-fill--amber" style={{ width: `${Math.max(4, Math.min(100, chaseFillPct))}%` }} /></div>
-              <div className="rvc-cd-note">{chaseFillPct}% of the way up the board, {formatMetricGap(myGap, metric)} to take #{myPosition - 1}.</div>
-            </>) : (<>
-              <div className="rvc-cd-head" style={{ color: LB.green }}>Leading the board</div>
-              <div className="rvc-cd-big" style={{ color: LB.green }}>#1</div>
-              <div className="rvc-cd-note">Hold the top until the board locks to take the season.</div>
-            </>)}
+      {/* ── The read + head-to-head against the trader directly ahead ── */}
+      {hasRivals && (() => {
+        const st = (r: Rival) => getPeriodStats(r, period);
+        const me = st(currentUser);
+        const foe = myAhead ?? behindRival; // the trader directly ahead, or the challenger if leading
+        const lowest = ranked.reduce((lo, r) => (st(r).ruleAdherence < st(lo).ruleAdherence ? r : lo), ranked[0]);
+        const myAvgR = me.avgR;
+        const bestAvgR = myAvgR != null && ranked.every(r => (st(r).avgR ?? -Infinity) <= myAvgR);
+        return (
+          <div className="rvt-read rvc-fade">
+            <div className="rvt-col">
+              <h2>The read</h2>
+              {myAhead ? (
+                <p>You are <b style={{ color: LB.amber }}>{formatCurrency(Math.max(0, st(myAhead).netPnl - me.netPnl)).replace('+', '')}</b> behind {myAhead.displayName}, who holds rules on <b style={{ color: procColor(st(myAhead).ruleAdherence) }}>{Math.round(st(myAhead).ruleAdherence)}%</b> of trades{lowest.id === myAhead.id ? ', the lowest here' : ''}.</p>
+              ) : (
+                <p>You lead the board on {(MODES.find(m => m.value === metric)?.label ?? 'this metric').toLowerCase()}. Hold it by keeping your process clean.</p>
+              )}
+              {bestAvgR
+                ? <p>Your {myAvgR.toFixed(2)}R is the best average trade on the board. You trail on money, not on edge.</p>
+                : <p>Your process holds at {Math.round(me.ruleAdherence)}%. The board rewards steadier rule-following over more trades.</p>}
+            </div>
+            {foe && (
+              <div className="rvt-col">
+                <h2>You vs {foe.displayName}</h2>
+                <div className="rvt-h2h">
+                  <div className="rvt-hh"><span>Measure</span><span>{foe.displayName}</span><span>You</span><span>Gap</span></div>
+                  {([
+                    ['Net P&L', formatCurrency(st(foe).netPnl).replace('+', ''), formatCurrency(me.netPnl).replace('+', ''), h2hDelta('money', me.netPnl - st(foe).netPnl)],
+                    ['Avg R', `${avgRText(foe, period)}R`, `${avgRText(currentUser, period)}R`, h2hDelta('r', (me.avgR ?? 0) - (st(foe).avgR ?? 0))],
+                    ['Win rate', `${Math.round(st(foe).winRate)}%`, `${Math.round(me.winRate)}%`, h2hDelta('pts', Math.round(me.winRate) - Math.round(st(foe).winRate))],
+                    ['Rules held', `${Math.round(st(foe).ruleAdherence)}%`, `${Math.round(me.ruleAdherence)}%`, h2hDelta('pts', Math.round(me.ruleAdherence) - Math.round(st(foe).ruleAdherence))],
+                  ] as const).map(([k, them, mine, d]) => (
+                    <div key={k} className="rvt-h2r">
+                      <span className="k">{k}</span>
+                      <span className="v">{them}</span>
+                      <span className="v me">{mine}</span>
+                      <span className={`d ${d.up ? 'up' : 'dn'}`}>{d.txt}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="rvc-cd-col">
-            {behindRival ? (<>
-              <div className="rvc-cd-head">Defending <b>#{myPosition}</b> from <b>{behindRival.displayName}</b></div>
-              <div className="rvc-cd-big" style={{ color: defendUrgent ? LB.red : LB.text }}>{formatMetricGap(defendGap, metric)}</div>
-              <div className="rvc-track"><div className={`rvc-track-fill ${defendUrgent ? 'rvc-track-fill--red' : 'rvc-track-fill--green'}`} style={{ width: `${Math.max(4, defendCushion)}%` }} /></div>
-              <div className={`rvc-cd-note${defendUrgent ? ' rvc-cd-note--warn' : ''}`}>{defendUrgent ? 'Closing in fast, one red day flips the spot.' : 'A comfortable cushion, for now.'}</div>
-            </>) : (<>
-              <div className="rvc-cd-head">Back of the board</div>
-              <div className="rvc-cd-note" style={{ marginTop: 8 }}>No one behind you yet. Invite more traders to raise the stakes.</div>
-            </>)}
-          </div>
-        </div>
-      )}
-
-      {/* ── Benchmark: one quiet sentence ── */}
-      {hasRivals && (
-        <div className="rvc-bench rvc-fade" style={{ marginTop: 22 }}>
-          The average funded trader clears a <b>{GHOST_WIN}% win rate</b>.{' '}
-          {beatingGhost
-            ? <>You're <span style={{ color: LB.green, fontWeight: 600 }}>ahead of that benchmark</span> at {myWin}%.</>
-            : <>You're at {myWin}%, <span style={{ color: LB.text, fontWeight: 600 }}>{GHOST_WIN - myWin} points</span> from clearing it.</>}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Recent: a calm footnote — restrained type, quiet timestamps ── */}
       {hasRivals && activity.length > 0 && (() => {
@@ -636,70 +492,10 @@ export default function Rivals() {
         </div>
       )}
 
-      {/* ── The rest of the field: ranks 4+ (podium already shows the top 3) ── */}
-      {hasRivals && fieldRivals.length > 0 && (
-      <div style={{ background: LB.card, border: `1px solid ${LB.border}`, borderRadius: 14, overflow: 'hidden' }} data-tour-id="rivals-standings">
-        {(() => {
-          const cols = '52px minmax(0, 1fr) 150px 110px 110px 130px';
-          return (
-            <>
-              <div style={{ ...kicker, display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', padding: '12px 22px', borderBottom: `1px solid ${LB.border}` }}>
-                <span>Place</span><span>Trader</span><span>{selectedPeriodLabel} W - L</span><span>Win rate</span><span>Avg R</span>
-                <span style={{ textAlign: 'right' }}>{metricLabel}</span>
-              </div>
-              {fieldRivals.map((rival, i) => {
-                const index = i + 3; // real rank index (podium took 0-2)
-                const s = getPeriodStats(rival, period);
-                const [w, l] = winsLosses(rival, period);
-                return (
-                  <button key={rival.id} type="button" onClick={() => { setSelectedRivalId(rival.id); setInspectorOpen(true); }}
-                    style={{ width: '100%', display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'center', textAlign: 'left', padding: '14px 22px', borderTop: i === 0 ? 'none' : `1px solid ${LB.border}`, borderLeft: rival.isMe ? `2px solid ${LB.amber}` : '2px solid transparent', background: rival.isMe ? LB.rowYou : 'transparent', color: LB.text, cursor: 'pointer', font: 'inherit' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.muted }}>{index + 1}</span>
-                      <MovementBadge delta={rankMovement(rival, leagueRivals, metric, period)} period={period} />
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                      <RivalAvatar rival={rival} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <b style={{ fontSize: 13.5, fontWeight: 600, color: LB.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rival.displayName}</b>
-                          {rival.isMe && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 600, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, border: `1px solid ${LB.amber}`, color: LB.amber }}>YOU</span>}
-                        </div>
-                        <div style={{ fontSize: 11.5, color: LB.muted }}>@{rival.username}</div>
-                      </div>
-                    </div>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.text, display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
-                      <span style={{ borderBottom: `2px solid ${LB.green}`, paddingBottom: 2 }}>{w}</span>
-                      <span style={{ color: LB.subtle }}>-</span>
-                      <span>{l}</span>
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.text }}>{Math.round(s.winRate)}%</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: LB.text }}>{avgRText(rival, period)}</span>
-                    <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500, color: s.netPnl > 0 ? LB.green : s.netPnl < 0 ? LB.red : LB.text }}>{formatCurrency(s.netPnl)}</span>
-                  </button>
-                );
-              })}
-              <button type="button" onClick={() => setIsAddOpen(true)} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '15px 0', borderTop: `1px solid ${LB.border}`, background: 'transparent', border: 'none', color: LB.muted, fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.04em', cursor: 'pointer' }}>
-                <Plus size={13} /> Add a rival to the board
-              </button>
-            </>
-          );
-        })()}
-      </div>
-      )}
-
-      {/* ── Grow-the-board CTA when the podium is the whole field ── */}
-      {hasRivals && fieldRivals.length === 0 && (
-        <button type="button" onClick={() => setIsAddOpen(true)}
-          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', borderRadius: 14, border: `1px dashed ${LB.border}`, background: 'transparent', color: LB.muted, fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.04em', cursor: 'pointer' }}>
-          <Plus size={14} /> Invite more traders to grow the board
-        </button>
-      )}
-
       {/* ── Inspector drawer (opens on row click / Show my place) ── */}
       {inspectorOpen && (
         <div onClick={() => setInspectorOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end' }}>
-          <aside className="rv2-me" data-tour-id="rivals-detail" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: 'min(380px, 92vw)', height: '100%', overflowY: 'auto', borderRadius: 0 }}>
+          <aside className="rv2-me" data-tour-id="rivals-detail" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: 'min(460px, 92vw)', height: '100%', overflowY: 'auto', borderRadius: 0 }}>
             <button type="button" onClick={() => setInspectorOpen(false)} aria-label="Close" style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: '50%', border: `1px solid ${LB.border}`, background: 'var(--app-panel-strong)', color: LB.muted, cursor: 'pointer', zIndex: 2 }}>✕</button>
           <div className="rv2-me-hd">
             <RivalAvatar rival={selectedRival} large />
@@ -714,193 +510,68 @@ export default function Rivals() {
             )}
           </div>
 
-          <div className="rv-inspector-tabs">
-            <button type="button" className={inspectorTab === 'overview' ? 'active' : ''} onClick={() => setInspectorTab('overview')}>Overview</button>
-            <button type="button" className={inspectorTab === 'progress' ? 'active' : ''} onClick={() => setInspectorTab('progress')}>Progress</button>
-            <button type="button" className={inspectorTab === 'trades' ? 'active' : ''} onClick={() => setInspectorTab('trades')}>Trades</button>
-          </div>
+          {(() => {
+            // The drawer opens as a comparison, not a profile: the four board
+            // metrics, their value, your value, the signed gap. Own row goes
+            // solo (You/Gap hidden via .solo). All from real period stats.
+            const meStats = getPeriodStats(currentUser, period);
+            const isSolo = Boolean(selectedRival.isMe);
+            const cmp: Array<[string, string, string, ReturnType<typeof h2hDelta>]> = [
+              ['Net P&L', formatCurrency(selectedStats.netPnl), formatCurrency(meStats.netPnl), h2hDelta('money', meStats.netPnl - selectedStats.netPnl)],
+              ['Avg R', `${avgRText(selectedRival, period)}R`, `${avgRText(currentUser, period)}R`, h2hDelta('r', (meStats.avgR ?? 0) - (selectedStats.avgR ?? 0))],
+              ['Win rate', `${Math.round(selectedStats.winRate)}%`, `${Math.round(meStats.winRate)}%`, h2hDelta('pts', Math.round(meStats.winRate) - Math.round(selectedStats.winRate))],
+              ['Rules held', `${Math.round(selectedStats.ruleAdherence)}%`, `${Math.round(meStats.ruleAdherence)}%`, h2hDelta('pts', Math.round(meStats.ruleAdherence) - Math.round(selectedStats.ruleAdherence))],
+            ];
+            // Cumulative R endpoint = trades x avg R (reconciles with the table).
+            const themR = Math.round(selectedStats.tradeCount * (selectedStats.avgR ?? 0));
+            const meR = Math.round(meStats.tradeCount * (meStats.avgR ?? 0));
+            const signR = (n: number) => `${n >= 0 ? '+' : ''}${n}R`;
+            return (
+            <div className={`rvd${isSolo ? ' solo' : ''}`}>
+              <div className="rvd-meta">{ordinal(selectedPosition)} of {ranked.length} · {selectedStats.tradeCount} trade{selectedStats.tradeCount === 1 ? '' : 's'} {periodPhrase(period)}</div>
 
-          {inspectorTab === 'overview' ? (
-            <>
-              <div className="rv2-me-rank">
-                <b>#{selectedPosition}<span> of {ranked.length}</span></b>
-                <i>
-                  {selectedMovement > 0 ? `▲ ${selectedMovement} THIS ${period === 'week' ? 'WEEK' : 'PERIOD'}`
-                    : selectedMovement < 0 ? `▼ ${Math.abs(selectedMovement)} THIS ${period === 'week' ? 'WEEK' : 'PERIOD'}`
-                    : 'NO RANK CHANGE'}
-                </i>
-              </div>
-              <div className="rv2-gap">
-                {aheadRival
-                  ? <><b>{formatMetricGap(selectedGap, metric)}</b> behind #{selectedPosition - 1} on {metricLabel.toLowerCase()}</>
-                  : <>Leading this board on <b>{metricLabel.toLowerCase()}</b></>}
-              </div>
-              <div className="rv2-kv">
-                <div className="rv2-kv-cell">
-                  <span className="rv2-lbl">{selectedPeriodLabel} P&amp;L</span>
-                  <b className={selectedStats.netPnl > 0 ? 'pos' : selectedStats.netPnl < 0 ? 'neg' : ''}>{formatCurrency(selectedStats.netPnl)}</b>
-                </div>
-                <div className="rv2-kv-cell"><span className="rv2-lbl">Trades</span><b>{selectedStats.tradeCount}</b></div>
-                <div className="rv2-kv-cell"><span className="rv2-lbl">Win rate</span><b>{selectedStats.winRate}%</b></div>
-                <div className="rv2-kv-cell"><span className="rv2-lbl">Consistency</span><b>{selectedStats.consistency}/100</b></div>
-                <div className="rv2-kv-cell">
-                  <span className="rv2-lbl">Rule adherence</span>
-                  <b>{selectedStats.ruleAdherence > 0 ? `${Math.round(selectedStats.ruleAdherence)}%` : '—'}</b>
-                </div>
-                <div className="rv2-kv-cell">
-                  <span className="rv2-lbl">Green days</span>
-                  <b>{selectedStats.greenDays}{selectedStats.tradingDays > 0 ? ` of ${selectedStats.tradingDays}` : ''}</b>
-                </div>
-              </div>
-              <div className="rv2-me-note">{coachingInsight(selectedRival, period)}</div>
-            </>
-          ) : inspectorTab === 'progress' ? (
-            (() => {
-              const weekStats = getPeriodStats(selectedRival, 'week');
-              const habits = [
-                { label: 'Document every trade', pct: Math.round(selectedRival.mascot.stats.tradingJournalScore), value: `${Math.round(selectedRival.mascot.stats.tradingJournalScore)}%` },
-                { label: 'Verified rule adherence', pct: Math.round(weekStats.ruleAdherence), value: `${Math.round(weekStats.ruleAdherence)}%` },
-                { label: 'Build a green streak', pct: Math.round((weekStats.greenDays / 5) * 100), value: `${Math.min(weekStats.greenDays, 5)}/5` },
-              ];
-              const milestones = [
-                { label: 'Five green days', done: selectedStats.greenDays >= 5 },
-                { label: '90% rule adherence', done: selectedStats.ruleAdherence >= 90 },
-                { label: 'Controlled drawdown', done: selectedStats.maxDrawdown <= Math.max(100, Math.abs(selectedStats.netPnl) * .3) },
-                { label: '10 documented trades', done: selectedStats.tradeCount >= 10 },
-                { label: '60% win rate', done: selectedStats.winRate >= 60 },
-                { label: '75 consistency score', done: selectedStats.consistency >= 75 },
-              ];
-              const doneCount = milestones.filter(m => m.done).length;
-              return (
-                <div className="rv2-prog">
-                  <div className="rv2-sec-hd"><span>Weekly habits</span><span>RESETS MONDAY</span></div>
-                  {habits.map(habit => (
-                    <div key={habit.label} className="rv2-hab">
-                      <span className="rv2-hab-name">{habit.label}</span>
-                      <span className="rv2-cb"><i style={{ width: `${Math.max(0, Math.min(100, habit.pct))}%` }} /></span>
-                      <b>{habit.value}</b>
-                    </div>
-                  ))}
-                  <div className="rv2-sec-hd"><span>Milestones</span><span>{doneCount} OF {milestones.length}</span></div>
-                  {milestones.map(milestone => (
-                    <div key={milestone.label} className={`rv2-ms${milestone.done ? ' done' : ''}`}>
-                      <span>{milestone.label}</span>
-                      <b>{milestone.done ? '✓' : '·'}</b>
+              <div className="rvd-sec">
+                <h3>{isSolo ? 'Your standing' : 'Against you'}</h3>
+                <div className="rvd-cmp">
+                  <div className="rvd-ch"><span>Measure</span><span>{isSolo ? 'You' : selectedRival.displayName}</span><span>You</span><span>Gap</span></div>
+                  {cmp.map(([k, them, mine, d]) => (
+                    <div key={k} className="rvd-cr">
+                      <span className="k">{k}</span>
+                      <span className="v th">{them}</span>
+                      <span className="v mine">{mine}</span>
+                      <span className={`d ${d.up ? 'up' : 'dn'}`}>{d.txt}</span>
                     </div>
                   ))}
                 </div>
-              );
-            })()
-          ) : (
-            /* Trades tab */
-            <div className="rv-trades-panel">
-              {selectedRival.isMe ? (
-                <p className="rv-trades-empty">Select a rival to see trades they've shared with you.</p>
-              ) : (
-                <>
-                  <div className="rv-trades-section-head">
-                    <span>Shared by {selectedRival.displayName}</span>
-                  </div>
+              </div>
 
-                  {sharesLoading ? (
-                    <p className="rv-trades-empty">Loading…</p>
-                  ) : sharedTrades.length === 0 ? (
-                    <p className="rv-trades-empty">No trades shared with you yet.</p>
-                  ) : (
-                    sharedTrades.map((record) => {
-                      const { shareId, sharedAt, trade } = record;
-                      return (<button key={shareId} type="button" className="rv-shared-trade" onClick={() => setViewingSharedTrade(record)}>
-                        <div className="rv-st-header">
-                          <span className="rv-st-symbol">{trade.symbol}</span>
-                          <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
-                          <span className="rv-st-date">{trade.trade_date}</span>
-                          <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
-                        </div>
-                        <div className="rv-st-meta">
-                          <span>Entry {trade.entry_price}</span>
-                          <span>Exit {trade.exit_price}</span>
-                          <span>{trade.exit_reason}</span>
-                          <span className="rv-st-shared-at">{new Date(sharedAt).toLocaleDateString()}</span>
-                        </div>
-                        {trade.screenshot_url && (
-                          <div className="rv-st-screenshot">
-                            <img src={trade.screenshot_url} alt="Trade screenshot" />
-                          </div>
-                        )}
-                        {(trade.pre_trade_notes || trade.post_trade_notes) && (
-                          <div className="rv-st-notes">
-                            {trade.pre_trade_notes && <p>{trade.pre_trade_notes}</p>}
-                            {trade.post_trade_notes && <p>{trade.post_trade_notes}</p>}
-                          </div>
-                        )}
-                      </button>
-                    );})
-                  )}
+              <div className="rvd-sec">
+                <h3>Cumulative R · {periodPhrase(period)}</h3>
+                <RivalCurve them={selectedStats.equityCurve} me={meStats.equityCurve} solo={isSolo} />
+                <div className="rvd-kx">
+                  <span><i style={{ background: LB.amber }} /><b>{isSolo ? 'You' : selectedRival.displayName} {signR(themR)}</b></span>
+                  {!isSolo && <span><i style={{ background: LB.muted }} />You {signR(meR)}</span>}
+                </div>
+              </div>
 
-                  {!selectedRival.isMe && selectedRival.userId && (
-                    <>
-                      <div className="rv-trades-section-head rv-trades-share-head">
-                        <span>Share a trade</span>
-                        <button
-                          type="button"
-                          className="rv-trades-share-toggle"
-                          onClick={() => setSharePickerOpen(p => !p)}
-                        >
-                          <Share2 size={11} />
-                          {sharePickerOpen ? 'Cancel' : `With ${selectedRival.displayName}`}
-                        </button>
-                      </div>
-
-                      {sharePickerOpen && (
-                        allMyTrades.length === 0 ? (
-                          <p className="rv-trades-empty">No trades found in your journal yet.</p>
-                        ) : (
-                          <div className="rv-share-picker">
-                            {allMyTrades.slice(0, 20).map(trade => {
-                              const alreadyShared = sharedSet.has(trade.id);
-                              const busy = sharingBusy === trade.id;
-                              return (
-                                <div key={trade.id} className={`rv-share-trade-row${alreadyShared ? ' shared' : ''}`}>
-                                  <span className="rv-st-symbol">{trade.symbol}</span>
-                                  <span className={`rv-st-dir ${trade.direction === 'Long' ? 'long' : 'short'}`}>{trade.direction.toUpperCase()}</span>
-                                  <span className="rv-st-date">{trade.trade_date}</span>
-                                  <span className={`rv-st-pnl ${trade.pnl >= 0 ? 'positive' : 'negative'}`}>{formatCurrency(trade.pnl)}</span>
-                                  <button
-                                    type="button"
-                                    className={`rv-share-btn${alreadyShared ? ' shared' : ''}`}
-                                    disabled={busy || alreadyShared}
-                                    onClick={() => void handleShareTrade(trade.id)}
-                                  >
-                                    {alreadyShared ? <><Check size={10} /> Shared</> : busy ? '…' : 'Share'}
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )
-                      )}
-                    </>
-                  )}
-                </>
+              {!isSolo && selectedRival.userId && (
+                <div className="rvd-act">
+                  <button type="button" className="rvd-btn pri" onClick={() => { setActiveChatRival(selectedRival); setChatOpen(true); }}>
+                    Challenge {selectedRival.displayName}
+                  </button>
+                </div>
               )}
+
+              <p className="rvd-priv">This league shares <b>metrics, cumulative R and rule adherence</b>. Trades, journal entries and account size stay private for everyone.</p>
             </div>
-          )}
+            );
+          })()}
           </aside>
         </div>
       )}
 
       <AddRivalModal open={isAddOpen} onClose={() => setIsAddOpen(false)} onSubmit={username => addRival(username)} />
       <RivalChatPanel open={chatOpen} rival={activeChatRival} myUserId={profile?.userId ?? null} onClose={() => setChatOpen(false)} />
-      {viewingSharedTrade && (
-        <ScreenshotImportModal
-          isOpen
-          readOnly
-          sharedByName={viewingSharedTrade.sharedByProfile?.display_name ?? selectedRival.displayName}
-          editTrade={viewingSharedTrade.trade}
-          onClose={() => setViewingSharedTrade(null)}
-          onSave={async () => {}}
-        />
-      )}
     </div>
   );
 }
