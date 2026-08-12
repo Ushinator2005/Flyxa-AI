@@ -4925,7 +4925,7 @@
 .rvt-av img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
 .rvt-who { min-width: 0; }
 .rvt-nm { display: flex; align-items: center; gap: 7px; }
-.rvt-nm b { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rvt-nm b { font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rvt-ck { flex: none; }
 .rvt-youtag { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 4px; padding: 1px 5px; }
 .rvt-share { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.07); margin-top: 9px; max-width: 280px; overflow: hidden; }
@@ -4995,8 +4995,8 @@
 .rvd-cr:first-of-type { border-top: 1px solid var(--app-border); }
 .rvd-cr .k { font-size: 12.5px; color: var(--app-text-muted); }
 .rvd-cr .v { font-family: var(--font-mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
-.rvd-cr .v.th { color: var(--app-text); }
-.rvd-cr .v.mine { color: var(--app-text-muted); }
+.rvd-cr .v.th { color: var(--app-text-muted); }
+.rvd-cr .v.mine { color: var(--app-text); }
 .rvd-cr .d { font-family: var(--font-mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
 .rvd-cr .d.up { color: var(--green); }
 .rvd-cr .d.dn { color: var(--red); }
@@ -5014,3 +5014,7 @@
 .rvd-btn.pri:hover { background: #fbbf24; border-color: #fbbf24; }
 .rvd-priv { margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.055); font-size: 11.5px; line-height: 1.65; color: var(--app-text-muted); }
 .rvd-priv b { color: var(--app-text); font-weight: 500; }
+/* Drawer scroll area: header stays fixed, this scrolls. min-height:0 lets a
+   flex child actually overflow-scroll instead of growing the column. */
+.rvd-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 24px 28px; }
+.rv2-me-hd { flex-shrink: 0; }

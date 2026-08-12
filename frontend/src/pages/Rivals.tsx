@@ -47,6 +47,11 @@ function h2hDelta(kind: 'money' | 'r' | 'pts', delta: number): { txt: string; up
   return { txt, up };
 }
 
+// Capitalise the first letter of a handle for display (curry -> Curry), so the
+// board reads professionally. Applied once to the rivals list, not the stored
+// username (which stays as-is for matching).
+const capName = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
 const ordinal = (n: number): string => {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
@@ -78,7 +83,7 @@ function RivalCurve({ them, me, solo }: { them: number[]; me: number[]; solo: bo
       {them.length >= 2 && (
         <polyline fill="none" stroke="var(--amber)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={pts(them)} />
       )}
-      <text x={X0} y={126} fontSize="10.5" fill="var(--app-text-muted)" letterSpacing="0.05em">0R</text>
+      <text x={X0} y={126} fontSize="10.5" fill="var(--app-text-muted)" letterSpacing="0.05em">$0</text>
     </svg>
   );
 }
@@ -207,7 +212,9 @@ function buildActivityFeed(
 
 /** The single hero stat for a metric — used big on the podium. */
 export default function Rivals() {
-  const { rivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
+  const { rivals: rawRivals, addRival, rivalRequests, respondToRequest, profile } = useRivals();
+  // Display handles capitalised (curry -> Curry) everywhere the board reads them.
+  const rivals = useMemo(() => rawRivals.map(r => ({ ...r, displayName: capName(r.displayName) })), [rawRivals]);
   const [period, setPeriod] = useState<LeaderboardPeriod>('month');
   const [metric, setMetric] = useState<LeaderboardMetric>('netPnl');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
@@ -379,7 +386,7 @@ export default function Rivals() {
                   onClick={() => { setSelectedRivalId(r.id); setInspectorOpen(true); }}>
                   <span className="rvt-rk">{i + 1}</span>
                   <span className="rvt-av" aria-hidden="true">
-                    {r.avatarUrl ? <img src={r.avatarUrl} alt="" /> : (r.displayName[0] ?? '?').toLowerCase()}
+                    {r.avatarUrl ? <img src={r.avatarUrl} alt="" /> : (r.displayName[0] ?? '?').toUpperCase()}
                   </span>
                   <div className="rvt-who">
                     <div className="rvt-nm">
@@ -397,12 +404,6 @@ export default function Rivals() {
                 </button>
               );
             })}
-            {ranked.length < 5 && (
-              <div className="rvt-inv">
-                <span>A league of <b>{ranked.length}</b> is a small sample. Five or more makes the ranking mean something.</span>
-                <button type="button" onClick={() => setIsAddOpen(true)}>Invite traders</button>
-              </div>
-            )}
           </div>
         );
       })()}
@@ -495,13 +496,12 @@ export default function Rivals() {
       {/* ── Inspector drawer (opens on row click / Show my place) ── */}
       {inspectorOpen && (
         <div onClick={() => setInspectorOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end' }}>
-          <aside className="rv2-me" data-tour-id="rivals-detail" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: 'min(460px, 92vw)', height: '100%', overflowY: 'auto', borderRadius: 0 }}>
+          <aside className="rv2-me" data-tour-id="rivals-detail" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: 'min(460px, 92vw)', height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 0 }}>
             <button type="button" onClick={() => setInspectorOpen(false)} aria-label="Close" style={{ position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: '50%', border: `1px solid ${LB.border}`, background: 'var(--app-panel-strong)', color: LB.muted, cursor: 'pointer', zIndex: 2 }}>✕</button>
           <div className="rv2-me-hd">
             <RivalAvatar rival={selectedRival} large />
             <div className="rv2-nm">
               <b>{selectedRival.displayName}</b>
-              <span>@{selectedRival.username}</span>
             </div>
             {!selectedRival.isMe && selectedRival.userId && (
               <button type="button" className="rv2-chat" aria-label={`Message ${selectedRival.displayName}`} onClick={() => { setActiveChatRival(selectedRival); setChatOpen(true); }}>
@@ -510,6 +510,7 @@ export default function Rivals() {
             )}
           </div>
 
+          <div className="rvd-scroll">
           {(() => {
             // The drawer opens as a comparison, not a profile: the four board
             // metrics, their value, your value, the signed gap. Own row goes
@@ -522,10 +523,6 @@ export default function Rivals() {
               ['Win rate', `${Math.round(selectedStats.winRate)}%`, `${Math.round(meStats.winRate)}%`, h2hDelta('pts', Math.round(meStats.winRate) - Math.round(selectedStats.winRate))],
               ['Rules held', `${Math.round(selectedStats.ruleAdherence)}%`, `${Math.round(meStats.ruleAdherence)}%`, h2hDelta('pts', Math.round(meStats.ruleAdherence) - Math.round(selectedStats.ruleAdherence))],
             ];
-            // Cumulative R endpoint = trades x avg R (reconciles with the table).
-            const themR = Math.round(selectedStats.tradeCount * (selectedStats.avgR ?? 0));
-            const meR = Math.round(meStats.tradeCount * (meStats.avgR ?? 0));
-            const signR = (n: number) => `${n >= 0 ? '+' : ''}${n}R`;
             return (
             <div className={`rvd${isSolo ? ' solo' : ''}`}>
               <div className="rvd-meta">{ordinal(selectedPosition)} of {ranked.length} · {selectedStats.tradeCount} trade{selectedStats.tradeCount === 1 ? '' : 's'} {periodPhrase(period)}</div>
@@ -546,11 +543,11 @@ export default function Rivals() {
               </div>
 
               <div className="rvd-sec">
-                <h3>Cumulative R · {periodPhrase(period)}</h3>
+                <h3>Cumulative P&amp;L · {periodPhrase(period)}</h3>
                 <RivalCurve them={selectedStats.equityCurve} me={meStats.equityCurve} solo={isSolo} />
                 <div className="rvd-kx">
-                  <span><i style={{ background: LB.amber }} /><b>{isSolo ? 'You' : selectedRival.displayName} {signR(themR)}</b></span>
-                  {!isSolo && <span><i style={{ background: LB.muted }} />You {signR(meR)}</span>}
+                  <span><i style={{ background: LB.amber }} /><b>{isSolo ? 'You' : selectedRival.displayName} {formatCurrency(selectedStats.netPnl)}</b></span>
+                  {!isSolo && <span><i style={{ background: LB.muted }} />You {formatCurrency(meStats.netPnl)}</span>}
                 </div>
               </div>
 
@@ -566,6 +563,7 @@ export default function Rivals() {
             </div>
             );
           })()}
+          </div>
           </aside>
         </div>
       )}
@@ -585,7 +583,7 @@ function RequestRow({ request, busy, onAction }: { request: RivalRequestResponse
   const incoming = request.direction === 'incoming';
   return <div className="rivals-request-row">
     <div className="rivals-request-avatar" style={{ color: rival?.avatarColor, borderColor: `${rival?.avatarColor ?? '#fff'}38`, background: `${rival?.avatarColor ?? '#fff'}14` }}>{rival?.avatarUrl ? <img src={rival.avatarUrl} alt="" /> : rival?.avatarInitials ?? '??'}</div>
-    <div className="rivals-request-copy"><strong>{rival?.displayName ?? 'Unknown trader'}</strong><span>{incoming ? 'Wants to join your leaderboard' : 'Invite sent'} · @{rival?.username ?? 'unknown'}</span></div>
+    <div className="rivals-request-copy"><strong>{capName(rival?.displayName ?? 'Unknown trader')}</strong><span>{incoming ? 'Wants to join your leaderboard' : 'Invite sent'} · @{rival?.username ?? 'unknown'}</span></div>
     <div className="rivals-request-actions">{incoming ? <><button className="request-accept" disabled={busy} onClick={() => onAction('accept')}><Check size={13} /> Accept</button><button className="request-decline" disabled={busy} onClick={() => onAction('decline')}><X size={13} /> Decline</button></> : <button className="request-decline" disabled={busy} onClick={() => onAction('cancel')}><Clock3 size={13} /> Cancel</button>}</div>
   </div>;
 }
