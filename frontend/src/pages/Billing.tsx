@@ -15,6 +15,7 @@ import {
 import { billingApi, type BillingLivePricesResponse } from '../services/api.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
+import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
 import type { TradingAccount } from '../types/index.js';
 import DatePicker from '../components/common/DatePicker.js';
@@ -575,15 +576,22 @@ export default function Billing() {
   useEffect(() => {
     if (storeBillingAccounts.length > 0 && !storeHydratedRef.current) {
       storeHydratedRef.current = true;
-      setAccounts(storeBillingAccounts.map(normalizeBillingAccount));
+      // Only adopt the cloud ledger if nothing has been added/imported locally
+      // this session, so a late cloud hydrate can never overwrite fresh imports.
+      setAccounts(prev => (prev.length === 0 ? storeBillingAccounts.map(normalizeBillingAccount) : prev));
     }
   }, [storeBillingAccounts]);
 
   // Persist local edits back to the store — but never the empty pre-hydration
   // snapshot, which would clobber the saved ledger before the cloud loads.
+  const firstBillingWriteRef = useRef(true);
   useEffect(() => {
     if (accounts.length === 0 && storeBillingAccounts.length > 0 && !storeHydratedRef.current) return;
     hydrateSharedData({ billingAccounts: accounts as unknown as StoreBillingAccount[] });
+    // Skip the initial mount echo, but flush every real change (import, add,
+    // edit, delete) to Supabase immediately rather than on the autosave debounce.
+    if (firstBillingWriteRef.current) { firstBillingWriteRef.current = false; return; }
+    void flushSupabaseStoreNow();
   }, [accounts, hydrateSharedData, storeBillingAccounts]);
 
   const getPreferredListPrice = (firm: string, size: string, currentListPrice: number): number => {
