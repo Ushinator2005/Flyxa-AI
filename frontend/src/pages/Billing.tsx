@@ -2133,7 +2133,7 @@ export default function Billing() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                 <thead>
                   <tr style={{ background: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                    {['Firm', 'Source Type', 'Imported As', 'Size', 'Current Status', 'Historical Outcome', 'Purchase Date', 'Price Paid', 'Payout', 'Notes', ''].map(h => (
+                    {['Firm', 'Source Type', 'Imported As', 'Size', 'Status', 'Purchase Date', 'Price Paid', 'Payout', 'Notes', ''].map(h => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--txt-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -2154,14 +2154,13 @@ export default function Billing() {
                         {getEntryKindLabel(row.entryKind)}
                       </td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.size}</td>
-                      <td style={{ padding: '9px 12px', color: row.entryKind === 'account' ? 'var(--red)' : 'var(--txt-2)' }}>
-                        {row.entryKind === 'account' ? 'Blown' : getEntryKindLabel(row.entryKind)}
-                      </td>
-                      <td
-                        title={`${row.outcomeEvidence} · ${row.outcomeConfidence} confidence`}
-                        style={{ padding: '9px 12px', color: row.evaluationOutcome === 'Funded' || row.evaluationOutcome === 'Passed' ? 'var(--green)' : 'var(--txt-2)', whiteSpace: 'nowrap' }}
-                      >
-                        {row.entryKind === 'account' ? row.evaluationOutcome : '—'}
+                      <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                        {(() => { const tag = normalizeStatus(row.status); return (
+                          <span style={{ ...getStatusBadgeStyle(tag), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: getStatusDotColor(tag), flexShrink: 0 }} />
+                            {tag}
+                          </span>
+                        ); })()}
                       </td>
                       <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.purchaseDate}</td>
                       <td style={{ padding: '9px 12px', color: displayPrice > 0 ? 'var(--txt-2)' : 'var(--txt-3)', fontFamily: 'var(--font-mono)' }}>
