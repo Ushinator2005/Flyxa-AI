@@ -477,7 +477,7 @@ function getStatusBadgeStyle(status: AccountStatus): CSSProperties {
     case 'Eval 1':
       return { background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber-border)' };
     case 'Activation fee':
-      return { background: 'var(--surface-2)', color: 'var(--txt-2)', border: '1px solid var(--border)' };
+      return { background: 'var(--cobalt-dim)', color: 'var(--cobalt)', border: '1px solid var(--cobalt-border)' };
     case 'Eval 2':
       return { background: 'var(--cobalt-dim)', color: 'var(--cobalt)', border: '1px solid var(--cobalt-border)' };
     case 'Funded':
@@ -497,7 +497,7 @@ function getStatusDotColor(status: AccountStatus): string {
   switch (status) {
     case 'Eval':
     case 'Eval 1': return 'var(--amber)';
-    case 'Activation fee': return 'var(--txt-2)';
+    case 'Activation fee': return 'var(--cobalt)';
     case 'Eval 2': return 'var(--cobalt)';
     case 'Funded': return '#818cf8';
     case 'Passed': return 'var(--green)';
@@ -1276,9 +1276,9 @@ export default function Billing() {
     const totalListPrice = accounts.reduce((sum, a) => sum + a.listPrice, 0);
     const totalSaved = Math.max(0, totalListPrice - totalSpent);
     const netPnL = totalPayouts - totalSpent;
-    const passedAccounts = accountEntries.filter(a => a.evaluationOutcome === 'Passed').length;
+    const passedAccounts = accountEntries.filter(a => a.status === 'Passed' || a.evaluationOutcome === 'Passed').length;
     const fundedAccounts = accountEntries.filter(a => a.evaluationOutcome === 'Funded').length;
-    const activeAccounts = accountEntries.filter(a => a.status === 'Eval 1' || a.status === 'Eval 2').length;
+    const activeAccounts = accountEntries.filter(a => a.status === 'Eval' || a.status === 'Eval 1' || a.status === 'Eval 2').length;
     const blownAccounts = accountEntries.filter(a => a.status === 'Blown').length;
     const passRate = totalAccounts > 0 ? ((passedAccounts + fundedAccounts) / totalAccounts) * 100 : 0;
     const avgFeePerAccount = totalAccounts > 0 ? totalSpent / totalAccounts : 0;
@@ -1307,7 +1307,7 @@ export default function Billing() {
       cur.payouts += Math.max(0, a.payoutReceived);
       if (
         (a.entryKind ?? 'account') === 'account'
-        && (a.evaluationOutcome === 'Passed' || a.evaluationOutcome === 'Funded')
+        && (a.status === 'Passed' || a.evaluationOutcome === 'Passed' || a.evaluationOutcome === 'Funded')
       ) cur.passed += 1;
       if ((a.entryKind ?? 'account') === 'account' && a.status === 'Blown') cur.blown += 1;
       byFirmMap.set(a.firm, cur);
@@ -1353,7 +1353,7 @@ export default function Billing() {
     const totalSaved = Math.max(0, totalListPrice - totalPaid);
     const passedCount = filteredAccounts.filter(a => (
       (a.entryKind ?? 'account') === 'account'
-      && (a.evaluationOutcome === 'Passed' || a.evaluationOutcome === 'Funded')
+      && (a.status === 'Passed' || a.evaluationOutcome === 'Passed' || a.evaluationOutcome === 'Funded')
     )).length;
     const accountCount = filteredAccounts.filter(account => (account.entryKind ?? 'account') === 'account').length;
     const chargeCount = filteredAccounts.length - accountCount;
@@ -2335,15 +2335,9 @@ export default function Billing() {
                       key={status}
                       type="button"
                       className={`billing-status-toggle${form.status === status ? ' is-active' : ''}`}
-                      onClick={() => setForm(current => ({
-                        ...current,
-                        status,
-                        // The tag also drives pass-rate reporting: a Passed tag
-                        // records a passed outcome, anything else clears it.
-                        evaluationOutcome: status === 'Passed' ? 'Passed' : 'Unknown',
-                        outcomeEvidence: status === 'Passed' ? 'Marked Passed' : 'No outcome recorded',
-                        outcomeConfidence: status === 'Passed' ? 'high' : 'low',
-                      }))}
+                      // Purely organisational: set the tag and nothing else — the
+                      // price paid and every other field are left exactly as they are.
+                      onClick={() => setFormField('status', status)}
                       style={form.status === status ? { ...getStatusBadgeStyle(status), height: 32, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none' } : undefined}
                     >
                       {status}
