@@ -24,7 +24,9 @@ import { getEvaluationTemplates, type EvaluationTemplate } from '../utils/evalua
 import { formatUsd } from '../utils/format.js';
 import * as XLSX from 'xlsx';
 
-type AccountStatus = 'Eval 1' | 'Eval 2' | 'Funded' | 'Passed' | 'Blown' | 'Reset';
+// The three simple tags a row can carry ('Eval' | 'Passed' | 'Activation fee'),
+// plus legacy values kept so older/imported data still normalises cleanly.
+type AccountStatus = 'Eval' | 'Passed' | 'Activation fee' | 'Eval 1' | 'Eval 2' | 'Funded' | 'Blown' | 'Reset';
 type EvaluationOutcome = 'Unknown' | 'Not passed' | 'Passed' | 'Funded';
 type OutcomeConfidence = 'low' | 'medium' | 'high';
 
@@ -114,12 +116,11 @@ interface ParsedCsvRow {
 
 type ViewMode = 'table' | 'pipeline';
 
-const STATUS_OPTIONS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 'Blown', 'Reset'];
+const STATUS_OPTIONS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee', 'Eval 1', 'Eval 2', 'Funded', 'Blown', 'Reset'];
 // 'Eval 2' stays valid for legacy/imported entries but is no longer selectable.
-const SELECTABLE_STATUS_OPTIONS: AccountStatus[] = ['Eval 1', 'Funded', 'Passed', 'Blown', 'Reset'];
-const OUTCOME_OPTIONS: EvaluationOutcome[] = ['Unknown', 'Not passed', 'Passed', 'Funded'];
+const SELECTABLE_STATUS_OPTIONS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee'];
 
-const PIPELINE_COLS: AccountStatus[] = ['Eval 1', 'Eval 2', 'Funded', 'Passed', 'Blown'];
+const PIPELINE_COLS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee'];
 
 const FIRM_OPTIONS = [
   'Apex Funded',
@@ -334,12 +335,6 @@ function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
   };
 }
 
-function clampPercentage(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  if (value < 0) return 0;
-  if (value > 100) return 100;
-  return value;
-}
 
 function toNumber(value: unknown, fallback = 0): number {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -363,11 +358,6 @@ function getTopstepTemplate(size: string, path: 'standard' | 'no_activation_fee'
   ));
 }
 
-function computeActualPrice(listPrice: number, discountPct: number): number {
-  const pct = clampPercentage(discountPct);
-  const actual = listPrice * (1 - pct / 100);
-  return Number(actual.toFixed(2));
-}
 
 const formatCurrency = formatUsd;
 
@@ -462,7 +452,7 @@ function getDefaultFormState(): BillingFormState {
     discountCode: '',
     discountPct: 0,
     purchaseDate: getTodayInputDate(),
-    status: 'Eval 1',
+    status: 'Eval',
     evaluationOutcome: 'Unknown',
     outcomeEvidence: 'No outcome recorded yet',
     outcomeConfidence: 'low',
@@ -483,8 +473,11 @@ function getDefaultFormState(): BillingFormState {
 
 function getStatusBadgeStyle(status: AccountStatus): CSSProperties {
   switch (status) {
+    case 'Eval':
     case 'Eval 1':
       return { background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid var(--amber-border)' };
+    case 'Activation fee':
+      return { background: 'var(--surface-2)', color: 'var(--txt-2)', border: '1px solid var(--border)' };
     case 'Eval 2':
       return { background: 'var(--cobalt-dim)', color: 'var(--cobalt)', border: '1px solid var(--cobalt-border)' };
     case 'Funded':
@@ -502,7 +495,9 @@ function getStatusBadgeStyle(status: AccountStatus): CSSProperties {
 
 function getStatusDotColor(status: AccountStatus): string {
   switch (status) {
+    case 'Eval':
     case 'Eval 1': return 'var(--amber)';
+    case 'Activation fee': return 'var(--txt-2)';
     case 'Eval 2': return 'var(--cobalt)';
     case 'Funded': return '#818cf8';
     case 'Passed': return 'var(--green)';
@@ -512,33 +507,12 @@ function getStatusDotColor(status: AccountStatus): string {
   }
 }
 
-function getOutcomeBadgeStyle(outcome: EvaluationOutcome): CSSProperties {
-  if (outcome === 'Funded') {
-    return { background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' };
-  }
-  if (outcome === 'Passed') {
-    return { background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green-border)' };
-  }
-  if (outcome === 'Not passed') {
-    return { background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid var(--red-border)' };
-  }
-  return { background: 'var(--surface-2)', color: 'var(--txt-3)', border: '1px solid var(--border)' };
-}
 
 function getEntryKindLabel(entryKind: NonNullable<BillingAccount['entryKind']>): string {
   if (entryKind === 'subscription') return 'Subscription';
   if (entryKind === 'reset') return 'Reset charge';
   if (entryKind === 'activation') return 'Activation fee';
   return 'Account';
-}
-
-/** The status column shows the account's evaluation status for account rows, and
- *  also for a charge row (reset / activation / subscription) once the trader has
- *  set a terminal outcome on it — a reset that later passed should read "Passed",
- *  not "Reset charge". Untouched charges keep their charge label. */
-function showsEvaluationStatus(account: BillingAccount): boolean {
-  if ((account.entryKind ?? 'account') === 'account') return true;
-  return account.status === 'Passed' || account.status === 'Funded' || account.status === 'Blown';
 }
 
 export default function Billing() {
@@ -558,8 +532,6 @@ export default function Billing() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<BillingFormState>(getDefaultFormState);
   const [livePricesByFirm, setLivePricesByFirm] = useState<Record<string, BillingLivePricesResponse>>({});
-  const [livePricingLoadingFirm, setLivePricingLoadingFirm] = useState<string | null>(null);
-  const [livePricingError, setLivePricingError] = useState<string | null>(null);
   const [isImportCsvModalOpen, setIsImportCsvModalOpen] = useState(false);
   const [csvParsedRows, setCsvParsedRows] = useState<ParsedCsvRow[]>([]);
   const [csvParseError, setCsvParseError] = useState('');
@@ -617,18 +589,12 @@ export default function Billing() {
   const fetchLivePricesForFirm = async (firm: string): Promise<BillingLivePricesResponse | null> => {
     if (!firm) return null;
     if (livePricesByFirm[firm]) return livePricesByFirm[firm];
-    setLivePricingLoadingFirm(firm);
-    setLivePricingError(null);
     try {
       const payload = await billingApi.getLivePrices(firm);
       setLivePricesByFirm(current => ({ ...current, [firm]: payload }));
       return payload;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to fetch live prices.';
-      setLivePricingError(message);
+    } catch {
       return null;
-    } finally {
-      setLivePricingLoadingFirm(current => (current === firm ? null : current));
     }
   };
 
@@ -1257,7 +1223,9 @@ export default function Billing() {
       firm: account.firm,
       accountType: account.accountType ?? getDefaultAccountType(account.firm),
       size: account.size,
-      listPrice: topstepTemplate?.monthlyPrice ?? account.listPrice,
+      // Load the price actually paid, never a template/live price, so opening a
+      // row to change its tag can't rewrite what was paid.
+      listPrice: account.actualPrice || account.listPrice,
       discountCode: account.discountCode,
       discountPct: account.discountPct,
       purchaseDate: account.purchaseDate,
@@ -1293,14 +1261,6 @@ export default function Billing() {
     ? form.responsibleTradingDiscount
     : 0;
   const priceAfterResponsibleDiscount = Math.max(0, toNumber(form.listPrice, 0) - responsibleDiscount);
-  const actualPricePreview = useMemo(
-    () => computeActualPrice(priceAfterResponsibleDiscount, clampPercentage(form.discountPct)),
-    [form.discountPct, priceAfterResponsibleDiscount]
-  );
-  const savingsPreview = useMemo(
-    () => Math.max(0, Math.max(0, toNumber(form.listPrice, 0)) - actualPricePreview),
-    [actualPricePreview, form.listPrice]
-  );
 
   // Derived payout total from payouts array (falls back to legacy payoutReceived)
   const formPayoutTotal = useMemo(
@@ -1402,7 +1362,8 @@ export default function Billing() {
 
   const pipelineByStatus = useMemo(() => {
     const map: Record<AccountStatus, BillingAccount[]> = {
-      'Eval 1': [], 'Eval 2': [], 'Funded': [], 'Passed': [], 'Blown': [], 'Reset': [],
+      'Eval': [], 'Passed': [], 'Activation fee': [],
+      'Eval 1': [], 'Eval 2': [], 'Funded': [], 'Blown': [], 'Reset': [],
     };
     accounts.filter(account => (account.entryKind ?? 'account') === 'account').forEach(a => { map[a.status].push(a); });
     return map;
@@ -1412,26 +1373,18 @@ export default function Billing() {
   const hasAccountTypeLookup = accountTypeOptions.length > 0;
   const knownSizes = useMemo(() => getSizesForFirm(form.firm, form.accountType), [form.accountType, form.firm]);
   const hasFirmLookup = knownSizes.length > 0;
-  const currentLivePricing = livePricesByFirm[form.firm];
-  const selectedSizeIsFallback = Boolean(currentLivePricing?.unavailableSizes?.includes(form.size));
-  const currentPricingSourceLabel = currentLivePricing?.source
-    ? (() => { try { return new URL(currentLivePricing.source).hostname.replace(/^www\./, ''); } catch { return currentLivePricing.source; } })()
-    : null;
 
-  const showPayoutSection = form.status === 'Funded'
-    || form.status === 'Passed'
-    || form.evaluationOutcome === 'Funded'
-    || form.evaluationOutcome === 'Passed';
+  const showPayoutSection = form.status === 'Passed';
 
   const saveAccount = () => {
-    const listPrice = Math.max(0, toNumber(form.listPrice, 0));
-    const discountPct = clampPercentage(form.discountPct);
-    const catalogDiscount = form.firm === 'Topstep'
-      && form.pricingPath === 'no_activation_fee'
-      && form.dailyLossMode === 'purchase_fixed'
-      ? form.responsibleTradingDiscount
-      : 0;
-    const actualPrice = computeActualPrice(Math.max(0, listPrice - catalogDiscount), discountPct);
+    // "Price paid" is the single source of truth (held in form.listPrice). Store
+    // it as both list and actual price so nothing — status changes, templates, or
+    // live pricing — can ever silently rewrite what the trader entered.
+    const pricePaid = Math.max(0, toNumber(form.listPrice, 0));
+    const listPrice = pricePaid;
+    const actualPrice = pricePaid;
+    const discountPct = 0;
+    const catalogDiscount = 0;
     const payouts = showPayoutSection ? form.payouts : [];
     const payoutReceived = payouts.reduce((sum, p) => sum + Math.max(0, p.amount), 0)
       || (showPayoutSection ? Math.max(0, toNumber(form.payoutReceived, 0)) : 0);
@@ -1926,7 +1879,7 @@ export default function Billing() {
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1200 }}>
                 <thead>
                   <tr>
-                    {['Firm', 'Type', 'Size', 'Purchased', 'Status', 'List Price', 'Discount', 'Actual Price', 'Payouts', 'ROI', 'Notes', 'Actions'].map(header => (
+                    {['Firm', 'Type', 'Size', 'Purchased', 'Status', 'Price paid', 'Payouts', 'ROI', 'Notes', 'Actions'].map(header => (
                       <th key={header} style={{ textAlign: 'left', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)', padding: '10px 14px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
                         {header}
                       </th>
@@ -1936,7 +1889,7 @@ export default function Billing() {
                 <tbody>
                   {filteredAccounts.length === 0 ? (
                     <tr>
-                      <td colSpan={12} style={{ padding: '26px 24px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)', borderBottom: '1px solid var(--border-sub)' }}>
+                      <td colSpan={10} style={{ padding: '26px 24px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)', borderBottom: '1px solid var(--border-sub)' }}>
                         <div style={{ display: 'grid', placeItems: 'center', gap: 10 }}>
                           <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)' }}>
                             <CreditCard size={16} />
@@ -1971,35 +1924,10 @@ export default function Billing() {
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt)', whiteSpace: 'nowrap' }}>{account.size}</td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>{formatDateLabel(account.purchaseDate)}</td>
                           <td style={cellStyle}>
-                            <span style={{ ...getStatusBadgeStyle(showsEvaluationStatus(account) ? account.status : 'Reset'), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: showsEvaluationStatus(account) ? getStatusDotColor(account.status) : 'var(--txt-3)', flexShrink: 0 }} />
-                              {showsEvaluationStatus(account) ? account.status : getEntryKindLabel(account.entryKind ?? 'account')}
+                            <span style={{ ...getStatusBadgeStyle(account.status), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: getStatusDotColor(account.status), flexShrink: 0 }} />
+                              {account.status}
                             </span>
-                            {(account.entryKind ?? 'account') === 'account' && (
-                              <span
-                                title={`${account.outcomeEvidence ?? 'No evidence recorded'} · ${account.outcomeConfidence ?? 'low'} confidence`}
-                                style={{ ...getOutcomeBadgeStyle(account.evaluationOutcome), borderRadius: 3, fontSize: 9, fontWeight: 600, padding: '2px 6px', display: 'table', marginTop: 5, whiteSpace: 'nowrap' }}
-                              >
-                                {account.evaluationOutcome === 'Funded'
-                                  ? 'Previously funded'
-                                  : account.evaluationOutcome === 'Passed'
-                                    ? 'Previously passed'
-                                    : account.evaluationOutcome}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt-2)', textDecoration: account.discountPct > 0 ? 'line-through' : 'none', whiteSpace: 'nowrap' }}>
-                            {formatCurrency(account.listPrice)}
-                          </td>
-                          <td style={cellStyle}>
-                            {account.discountPct > 0 ? (
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', background: 'var(--green-dim)', border: '1px solid var(--green-border)', borderRadius: 3, padding: '2px 6px', display: 'inline-flex' }}>
-                                {account.discountPct.toFixed(0)}% off
-                                {account.discountCode ? ` · ${account.discountCode}` : ''}
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>—</span>
-                            )}
                           </td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500, color: 'var(--txt)', whiteSpace: 'nowrap' }}>
                             {formatCurrency(account.actualPrice)}
@@ -2377,29 +2305,13 @@ export default function Billing() {
                 </div>
               )}
 
-              {/* List price */}
+              {/* Price paid — the single amount the trader actually paid. */}
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>List Price</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Price paid</label>
                 <div style={{ position: 'relative' }}>
                   <span aria-hidden="true" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>$</span>
                   <input className="billing-modal-field billing-number-sharp" type="number" min={0} step="0.01" value={Number.isFinite(form.listPrice) ? form.listPrice : 0} onChange={e => setFormField('listPrice', Math.max(0, toNumber(e.target.value, 0)))} style={{ textAlign: 'right', paddingLeft: 28 }} />
                 </div>
-                <p style={{ margin: '8px 0 0', fontSize: 11, color: livePricingLoadingFirm === form.firm ? 'var(--txt-2)' : livePricingError && !currentLivePricing ? 'var(--red)' : selectedSizeIsFallback ? 'var(--amber)' : currentLivePricing?.live ? 'var(--green)' : 'var(--txt-3)' }}>
-                  {livePricingLoadingFirm === form.firm ? 'Syncing live prices...'
-                    : livePricingError && !currentLivePricing ? `Live pricing unavailable. Using fallback values.`
-                    : selectedSizeIsFallback ? `Using fallback value${currentPricingSourceLabel ? ` · ${currentPricingSourceLabel}` : ''}.`
-                    : currentLivePricing?.live ? `Live price synced${currentPricingSourceLabel ? ` · ${currentPricingSourceLabel}` : ''}.`
-                    : form.firm === 'Topstep' ? 'Price supplied by the verified Topstep product catalog.'
-                    : currentLivePricing?.note ?? 'Using configured fallback values.'}
-                </p>
-              </div>
-
-              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Actual price paid</span>
-                <span className="billing-number-sharp" style={{ fontSize: 16, color: 'var(--txt)' }}>
-                  {formatCurrency(actualPricePreview)}
-                  {savingsPreview > 0 && <span style={{ fontSize: 11, color: 'var(--green)', marginLeft: 8 }}>({formatCurrency(savingsPreview)} saved)</span>}
-                </span>
               </div>
 
               {/* Purchase date */}
@@ -2426,17 +2338,11 @@ export default function Billing() {
                       onClick={() => setForm(current => ({
                         ...current,
                         status,
-                        evaluationOutcome: status === 'Funded'
-                          ? 'Funded'
-                          : status === 'Passed'
-                            ? 'Passed'
-                            : current.evaluationOutcome,
-                        outcomeEvidence: status === 'Funded' || status === 'Passed'
-                          ? `Outcome confirmed from ${status} status`
-                          : current.outcomeEvidence,
-                        outcomeConfidence: status === 'Funded' || status === 'Passed'
-                          ? 'high'
-                          : current.outcomeConfidence,
+                        // The tag also drives pass-rate reporting: a Passed tag
+                        // records a passed outcome, anything else clears it.
+                        evaluationOutcome: status === 'Passed' ? 'Passed' : 'Unknown',
+                        outcomeEvidence: status === 'Passed' ? 'Marked Passed' : 'No outcome recorded',
+                        outcomeConfidence: status === 'Passed' ? 'high' : 'low',
                       }))}
                       style={form.status === status ? { ...getStatusBadgeStyle(status), height: 32, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none' } : undefined}
                     >
@@ -2446,29 +2352,7 @@ export default function Billing() {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--txt-2)', marginBottom: 6 }}>Historical evaluation outcome</label>
-                <select
-                  className="billing-modal-field"
-                  value={form.evaluationOutcome}
-                  onChange={event => {
-                    const evaluationOutcome = event.target.value as EvaluationOutcome;
-                    setForm(current => ({
-                      ...current,
-                      evaluationOutcome,
-                      outcomeEvidence: 'Outcome confirmed manually',
-                      outcomeConfidence: 'high',
-                    }));
-                  }}
-                >
-                  {OUTCOME_OPTIONS.map(outcome => <option key={outcome} value={outcome}>{outcome}</option>)}
-                </select>
-                <p style={{ margin: '6px 0 0', color: 'var(--txt-3)', fontSize: 10, lineHeight: 1.45 }}>
-                  Current status can be Blown while this remains Passed or Funded. This field drives pass-rate reporting.
-                </p>
-              </div>
-
-              {/* Payouts (Funded / Passed only) */}
+              {/* Payouts (Passed only) */}
               {showPayoutSection && (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
