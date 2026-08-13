@@ -14,7 +14,7 @@ import {
   resolveMaxDrawdown,
   tradesForAccount,
 } from '../utils/evaluationCoach.js';
-import { getFirmPayoutPaths, getPathById, resolveBySize } from '../data/fundedPayoutPaths.js';
+import { getFirmPayoutPaths, getPathById, resolveBySize, computeWithdrawableAmount } from '../data/fundedPayoutPaths.js';
 import type { FundedPath } from '../data/fundedPayoutPaths.js';
 import { computePayoutReadiness } from '../utils/payoutReadiness.js';
 import './EvaluationCoach.css';
@@ -741,6 +741,11 @@ export default function EvaluationCoach() {
     : null;
 
   const payoutReady = payoutReadiness ? payoutReadiness.payoutReady : false;
+  // What the trader can actually take THIS payout: the split (e.g. 50% of profit)
+  // capped at the per-payout maximum, and $0 until every gate is met.
+  const withdrawableAmount = chosenPath
+    ? computeWithdrawableAmount(chosenPath, { cycleProfit, size: Number(selected.size) || 0, ready: payoutReady })
+    : 0;
   const heroPct = isFunded ? (payoutReadiness?.readyPct ?? 0) : progress.passProbability;
   const heroColor = heroPct >= 65 ? 'var(--green)' : heroPct >= 40 ? 'var(--amber)' : 'var(--red)';
 
@@ -1053,7 +1058,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               <span className="ec-metric-lbl ec-section-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
                 {money((isFunded ? balanceAfterPayouts : progress.currentBalance) - progress.drawdownFloor)} above MLL ·{' '}
-                <b>{isFunded ? `${money(withdrawable)} withdrawable` : (progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`)}</b>
+                <b>{isFunded ? `${money(withdrawableAmount)} withdrawable` : (progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`)}</b>
               </span>
             </div>
             {equityPoints.length < 2
@@ -1065,10 +1070,14 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
         {/* ── Ledger strip: the four numbers that decide the eval ────── */}
         <div className="ec-metric-grid">
           <div className="ec-metric-card ec-metric-card--primary">
-            <span className="ec-metric-lbl">{isFunded ? 'Withdrawable profit' : 'Profit needed'}</span>
-            <strong className="ec-metric-val">{money(isFunded ? withdrawable : progress.targetRemaining)}</strong>
+            <span className="ec-metric-lbl">{isFunded ? 'Withdrawable amount' : 'Profit needed'}</span>
+            <strong className="ec-metric-val">{money(isFunded ? withdrawableAmount : progress.targetRemaining)}</strong>
             {isFunded ? (
-              <span className="ec-metric-sub">{payoutReady ? 'Eligible to withdraw' : 'Profit above your starting balance'}</span>
+              <span className="ec-metric-sub">{payoutReady
+                ? (chosenPath?.payoutSplitPct
+                    ? `${chosenPath.payoutSplitPct}% of ${money(cycleProfit)} profit${chosenPath.payoutCap !== undefined ? `, cap ${money(resolveBySize(chosenPath.payoutCap, Number(selected.size) || 0))}` : ''}`
+                    : 'Cleared to withdraw')
+                : `Locked until you meet the ${(payoutReadiness?.blocking ?? 'requirements').toLowerCase()}`}</span>
             ) : (
               <>
                 <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${targetProgressPct}%` }} /></div>

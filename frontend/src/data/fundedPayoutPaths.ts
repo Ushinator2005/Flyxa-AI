@@ -30,6 +30,14 @@ export interface PayoutRequirementSpec {
   buffer?: { plus: number };
   /** Minimum net profit required in the cycle before a payout unlocks. */
   profitGoal?: number | BySize;
+  /** Share of cycle profit that may be withdrawn in one payout, as a percent
+   *  (e.g. 50 = you can take half of your profit). Omit = the full profit is
+   *  withdrawable. Below the cap this is what limits the amount. */
+  payoutSplitPct?: number;
+  /** Maximum dollars withdrawable in a single payout (flat or size-scaled).
+   *  Omit = uncapped. Once profit is large enough, this ceiling binds instead
+   *  of the split. */
+  payoutCap?: number | BySize;
 }
 
 export interface FundedPath extends PayoutRequirementSpec {
@@ -75,6 +83,8 @@ const FIRMS: FirmPayoutPaths[] = [
         winningDays: { count: 5, min: 150 },
         profitGoal: 0.01,
         profitSplit: 0.9,
+        payoutSplitPct: 50,
+        payoutCap: { 25000: 2000, 50000: 3000, 100000: 4000, 150000: 5000 },
         note: 'Payout up to 50% of balance, cap $2,000–$5,000 by size. Positive net profit since last payout.',
         sourceUrl: 'https://help.topstep.com/en/articles/8284233-topstep-payout-policy',
       },
@@ -85,6 +95,8 @@ const FIRMS: FirmPayoutPaths[] = [
         minTradingDays: 3,
         consistencyPct: 40,
         profitSplit: 0.9,
+        payoutSplitPct: 50,
+        payoutCap: { 25000: 3000, 50000: 4000, 100000: 5000, 150000: 6000 },
         note: 'Payout up to 50% of balance, cap $3,000–$6,000 by size. Largest day ≤ 40% of total profit.',
         sourceUrl: 'https://help.topstep.com/en/articles/8284208-consistency-at-topstep',
       },
@@ -119,6 +131,8 @@ const FIRMS: FirmPayoutPaths[] = [
         blurb: '5 winning days, no consistency rule.',
         winningDays: { count: 5, min: { 25000: 100, 50000: 150, 100000: 200, 150000: 250 } },
         profitSplit: 0.9,
+        payoutSplitPct: 50,
+        payoutCap: { 25000: 1250, 50000: 2500, 100000: 3750, 150000: 5000 },
         note: 'Payout up to 50% of profit, cap $1,250–$5,000. Positive net from the 2nd payout on.',
         sourceUrl: 'https://help.tradeify.co/en/articles/12853966-select-flex-and-select-daily-payout-policies',
       },
@@ -145,6 +159,8 @@ const FIRMS: FirmPayoutPaths[] = [
         winningDays: { count: 5, min: { 25000: 100, 50000: 150, 100000: 200, 150000: 250 } },
         profitGoal: 0.01,
         profitSplit: 0.9,
+        payoutSplitPct: 50,
+        payoutCap: { 25000: 1000, 50000: 2000, 100000: 3000 },
         note: 'Payout 50% of profit, cap $1,000–$3,000. No buffer. Up to 5 payouts, then live.',
         sourceUrl: 'https://support.lucidtrading.com/en/articles/12945796-lucidflex-payouts',
       },
@@ -212,6 +228,7 @@ const FIRMS: FirmPayoutPaths[] = [
         consistencyPct: 40,
         profitGoal: { 25000: 250, 50000: 250, 100000: 500 },
         profitSplit: 0.8,
+        payoutCap: { 25000: 800, 50000: 1500, 100000: 2500 },
         note: 'Daily profit ≤ 40% of total account profit. Cap $800–$2,500 until 5 rewards.',
         sourceUrl: 'https://helpfutures.fundednext.com/en/articles/14283389-what-are-the-performance-reward-eligibility-criteria-for-rapid-fundednext-account',
       },
@@ -242,6 +259,8 @@ const FIRMS: FirmPayoutPaths[] = [
         winningDays: { count: 5, min: { 50000: 200, 100000: 200, 150000: 250 } },
         profitGoal: 500,
         profitSplit: 0.95,
+        payoutSplitPct: 50,
+        payoutCap: { 50000: 1500, 100000: 2500, 150000: 4000 },
         note: 'Up to 95% split. 50% of profit, cap $1,500–$4,000. Consistency applies only in the challenge.',
         sourceUrl: 'https://helpfutures.fundednext.com/en/articles/14878865-what-are-the-performance-reward-eligibility-criteria-for-flex-fundednext-account',
       },
@@ -284,6 +303,8 @@ const FIRMS: FirmPayoutPaths[] = [
         winningDays: { count: 5, min: 200 },
         consistencyPct: 40,
         profitSplit: 0.9,
+        payoutSplitPct: 50,
+        payoutCap: { 25000: 3000, 50000: 4000, 100000: 5000 },
         note: '90% split, up to 4 payouts/month. Withdraw up to 50% of profit, cap $3,000–$5,000.',
         sourceUrl: 'https://help.alpha-futures.com/en/articles/9492051-payout-policy',
       },
@@ -293,6 +314,7 @@ const FIRMS: FirmPayoutPaths[] = [
         blurb: '5 winning days of $200+, no consistency rule.',
         winningDays: { count: 5, min: 200 },
         profitSplit: 0.9,
+        payoutCap: 15000,
         note: '90% split. No consistency rule. Up to $15,000 per request.',
         sourceUrl: 'https://help.alpha-futures.com/en/articles/11634907-advanced-account-overview',
       },
@@ -303,6 +325,7 @@ const FIRMS: FirmPayoutPaths[] = [
         winningDays: { count: 5, min: 200 },
         consistencyPct: 40,
         profitSplit: 0.9,
+        payoutCap: { 25000: 1000, 50000: 1500, 100000: 2500 },
         note: '90% split. Cap $1,000–$2,500 by size. Min withdrawal $200.',
         sourceUrl: 'https://help.alpha-futures.com/en/articles/9492051-payout-policy',
       },
@@ -351,6 +374,8 @@ const FIRMS: FirmPayoutPaths[] = [
         winningDays: { count: 5, min: { 25000: 100, 50000: 150 } },
         profitGoal: 500,
         profitSplit: 0.8,
+        payoutSplitPct: 50,
+        payoutCap: { 25000: 3000, 50000: 5000 },
         note: '80% split. $500 net between payouts. 50% of profit, cap $3,000–$5,000.',
         sourceUrl: 'https://help.myfundedfutures.com/en/articles/13521620-flex-plan-the-path-forward-legacy',
       },
@@ -446,4 +471,18 @@ export function resolveBySize(value: number | BySize, size: number): number {
   let pick = sizes[0];
   for (const s of sizes) { if (size >= s) pick = s; }
   return value[pick];
+}
+
+/** The dollars a trader can actually take in one payout under a path's rules.
+ *  Applies the split (e.g. 50% of profit) then the per-payout cap, and returns
+ *  0 until every gate is met — you cannot withdraw before you qualify. */
+export function computeWithdrawableAmount(
+  path: FundedPath,
+  opts: { cycleProfit: number; size: number; ready: boolean },
+): number {
+  if (!opts.ready || opts.cycleProfit <= 0) return 0;
+  const split = path.payoutSplitPct ? path.payoutSplitPct / 100 : 1;
+  let amount = opts.cycleProfit * split;
+  if (path.payoutCap !== undefined) amount = Math.min(amount, resolveBySize(path.payoutCap, opts.size));
+  return Math.max(0, Math.round(amount));
 }
