@@ -563,9 +563,28 @@ export default function Billing() {
     ));
   }, [accounts, tradingAccounts]);
 
+  // True once the store's billing list has been observed populated, so we can
+  // tell a genuine "empty" (user cleared everything) from the empty snapshot that
+  // exists only because the cloud hasn't hydrated yet.
+  const storeHydratedRef = useRef(storeBillingAccounts.length > 0);
+
+  // When the store hydrates AFTER mount (cloud loads a beat later), pull those
+  // accounts into the local ledger. Without this the table keeps its empty mount
+  // snapshot and the write-back below would push that empty list back, wiping
+  // every saved billing account.
   useEffect(() => {
+    if (storeBillingAccounts.length > 0 && !storeHydratedRef.current) {
+      storeHydratedRef.current = true;
+      setAccounts(storeBillingAccounts.map(normalizeBillingAccount));
+    }
+  }, [storeBillingAccounts]);
+
+  // Persist local edits back to the store — but never the empty pre-hydration
+  // snapshot, which would clobber the saved ledger before the cloud loads.
+  useEffect(() => {
+    if (accounts.length === 0 && storeBillingAccounts.length > 0 && !storeHydratedRef.current) return;
     hydrateSharedData({ billingAccounts: accounts as unknown as StoreBillingAccount[] });
-  }, [accounts, hydrateSharedData]);
+  }, [accounts, hydrateSharedData, storeBillingAccounts]);
 
   const getPreferredListPrice = (firm: string, size: string, currentListPrice: number): number => {
     const livePrice = livePricesByFirm[firm]?.prices?.[size];
