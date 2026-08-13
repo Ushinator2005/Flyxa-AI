@@ -532,6 +532,15 @@ function getEntryKindLabel(entryKind: NonNullable<BillingAccount['entryKind']>):
   return 'Account';
 }
 
+/** The status column shows the account's evaluation status for account rows, and
+ *  also for a charge row (reset / activation / subscription) once the trader has
+ *  set a terminal outcome on it — a reset that later passed should read "Passed",
+ *  not "Reset charge". Untouched charges keep their charge label. */
+function showsEvaluationStatus(account: BillingAccount): boolean {
+  if ((account.entryKind ?? 'account') === 'account') return true;
+  return account.status === 'Passed' || account.status === 'Funded' || account.status === 'Blown';
+}
+
 export default function Billing() {
   const { accounts: tradingAccounts } = useAppSettings();
   const storeBillingAccounts = useFlyxaStore(state => state.billingAccounts);
@@ -1962,9 +1971,9 @@ export default function Billing() {
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--txt)', whiteSpace: 'nowrap' }}>{account.size}</td>
                           <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>{formatDateLabel(account.purchaseDate)}</td>
                           <td style={cellStyle}>
-                            <span style={{ ...getStatusBadgeStyle((account.entryKind ?? 'account') === 'account' ? account.status : 'Reset'), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: (account.entryKind ?? 'account') === 'account' ? getStatusDotColor(account.status) : 'var(--txt-3)', flexShrink: 0 }} />
-                              {(account.entryKind ?? 'account') === 'account' ? account.status : getEntryKindLabel(account.entryKind ?? 'account')}
+                            <span style={{ ...getStatusBadgeStyle(showsEvaluationStatus(account) ? account.status : 'Reset'), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: showsEvaluationStatus(account) ? getStatusDotColor(account.status) : 'var(--txt-3)', flexShrink: 0 }} />
+                              {showsEvaluationStatus(account) ? account.status : getEntryKindLabel(account.entryKind ?? 'account')}
                             </span>
                             {(account.entryKind ?? 'account') === 'account' && (
                               <span
