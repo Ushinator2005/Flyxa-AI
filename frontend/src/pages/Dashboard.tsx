@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp, Minus, Camera,
+  Camera,
   ArrowUpRight, ArrowDownRight, Eye, Filter, ChevronLeft, ChevronRight, Trash2, X, ChevronDown,
   Landmark,
 } from 'lucide-react';
@@ -33,7 +33,6 @@ const AMBER       = '#f59e0b';
 const AMBER_DIM   = 'rgba(245,158,11,0.12)';
 const GREEN       = '#34d399';
 const RED         = '#f87171';
-const RED_DIM     = 'rgba(248,113,113,0.12)';
 const S1          = 'var(--app-panel)';
 const BORDER      = 'var(--app-border)';
 const BSUB        = 'rgba(255,255,255,0.04)';
@@ -1170,30 +1169,34 @@ export default function Dashboard() {
               {todayTrades.length === 0 ? (
                 <p style={{ fontSize: 12, color: T3, textAlign: 'center', padding: '16px 0' }}>No trades today.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {todayTrades.map(trade => {
-                    const open   = !trade.exit_price || trade.exit_price === 0;
-                    const net    = trade.pnl - (trade.commission ?? 0);
-                    const isWin  = !open && net > 0;
-                    const isBE   = !open && net === 0;
-                    const badgeBg    = open ? AMBER_DIM   : isWin ? 'rgba(34,197,94,0.10)'  : isBE ? AMBER_DIM : RED_DIM;
-                    const badgeColor = open ? AMBER        : isWin ? GREEN                    : isBE ? AMBER     : RED;
-                    const Icon       = open ? TrendingUp   : isWin ? ArrowUpRight             : isBE ? Minus     : ArrowDownRight;
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {todayTrades.map((trade, i) => {
+                    const open    = !trade.exit_price || trade.exit_price === 0;
+                    const net     = trade.pnl - (trade.commission ?? 0);
+                    const isWin   = !open && net > 0;
+                    const isBE    = !open && net === 0;
+                    const tone    = open ? AMBER : isWin ? GREEN : isBE ? AMBER : RED;
+                    const DirIcon = trade.direction === 'Long' ? ArrowUpRight : ArrowDownRight;
                     return (
-                      <div key={trade.id} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                        <span style={{ fontSize: 10, fontFamily: MONO, color: T3, flexShrink: 0, width: 36 }}>
-                          {(trade.trade_time ?? '--:--').slice(0, 5)}
-                        </span>
-                        <div style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: badgeBg, color: badgeColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Icon size={13} />
+                      <div key={trade.id} style={{ display: 'flex', alignItems: 'stretch', borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ width: 2, flexShrink: 0, borderRadius: 1, background: tone, opacity: isBE ? 0.4 : 0.85 }} />
+                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '38px minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: '11px 0 11px 13px' }}>
+                          <span style={{ fontSize: 11, fontFamily: MONO, color: T3 }}>
+                            {(trade.trade_time ?? '--:--').slice(0, 5)}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                              <DirIcon size={12} style={{ color: T3, flexShrink: 0 }} />
+                              <span style={{ fontSize: 13, fontWeight: 600, color: T1, letterSpacing: '-0.1px' }}>{trade.symbol}</span>
+                            </div>
+                            <div style={{ fontSize: 10.5, color: T3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {trade.direction} · {trade.session}{open ? ' · open' : ''}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 13.5, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontFeatureSettings: "'zero' 1", fontWeight: 600, color: tone }}>
+                            {fmtUSD(net)}
+                          </span>
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 450, color: T1, fontFamily: MONO }}>{trade.symbol}</div>
-                          <div style={{ fontSize: 10, color: T3 }}>{trade.direction} · {trade.session}</div>
-                        </div>
-                        <span style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: 'tabular-nums', fontFeatureSettings: "'zero' 1", fontWeight: 500, flexShrink: 0, color: open ? AMBER : isWin ? GREEN : isBE ? AMBER : RED }}>
-                          {fmtUSD(net)}
-                        </span>
                       </div>
                     );
                   })}

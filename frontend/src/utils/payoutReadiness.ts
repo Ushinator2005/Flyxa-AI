@@ -46,6 +46,10 @@ export interface PayoutContext {
   size: number;
   /** Biggest profitable day as a % of total net profit (null until profitable). */
   consistencyActualPct: number | null;
+  /** Net profit accrued in the current payout cycle (since the last payout).
+   *  Drives the per-cycle profit gate so a withdrawal resets it. Defaults to
+   *  `withdrawable` when omitted. */
+  cycleProfit?: number;
 }
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -117,26 +121,28 @@ export function computePayoutReadiness(path: FundedPath, ctx: PayoutContext): Pa
     });
   }
 
-  // Per-cycle profit goal. A goal of ~0 is just "be net positive".
+  // Per-cycle profit goal. A goal of ~0 is just "be net positive". Uses profit
+  // accrued since the last payout, so a withdrawal resets it.
   if (path.profitGoal !== undefined) {
     const goal = resolveBySize(path.profitGoal, ctx.size);
+    const cycleProfit = ctx.cycleProfit ?? ctx.withdrawable;
     if (goal <= 1) {
       rows.push({
         key: 'profitGoal',
         label: 'Net profit',
-        detail: ctx.withdrawable > 0 ? 'Positive this cycle' : 'Not positive yet',
-        met: ctx.withdrawable > 0,
-        progress: ctx.withdrawable > 0 ? 1 : 0,
-        big: money(Math.max(0, ctx.withdrawable)),
+        detail: cycleProfit > 0 ? 'Positive this cycle' : 'Not positive yet',
+        met: cycleProfit > 0,
+        progress: cycleProfit > 0 ? 1 : 0,
+        big: money(Math.max(0, cycleProfit)),
       });
     } else {
       rows.push({
         key: 'profitGoal',
         label: 'Profit goal',
-        detail: `${money(Math.max(0, ctx.withdrawable))} of ${money(goal)}`,
-        met: ctx.withdrawable >= goal,
-        progress: clamp01(ctx.withdrawable / goal),
-        big: money(Math.max(0, ctx.withdrawable)),
+        detail: `${money(Math.max(0, cycleProfit))} of ${money(goal)}`,
+        met: cycleProfit >= goal,
+        progress: clamp01(cycleProfit / goal),
+        big: money(Math.max(0, cycleProfit)),
       });
     }
   }

@@ -696,10 +696,23 @@ export default function EvaluationCoach() {
   const targetBalance = startBalance + Number(target);
 
   // ── Funded payout view (path-driven, real firm rules only) ──────
-  // Withdrawable = profit above the starting balance (the trailing MLL locks at
-  // start on funded accounts, so that profit is what's yours to take).
-  const withdrawable = Math.max(0, progress.currentBalance - startBalance);
-  // Biggest single profitable day: the number a consistency rule watches.
+  // Payouts reset the cycle: taking a withdrawal draws the balance down and
+  // restarts the winning-days / net-profit gates. Everything below is net of
+  // payouts already taken, and the readiness gates count only the current cycle
+  // (days after the last payout).
+  const payouts = selected.payouts ?? [];
+  const totalPayouts = payouts.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const lastPayoutDate = payouts.reduce((m, p) => (p.date > m ? p.date : m), '');
+  const balanceAfterPayouts = progress.currentBalance - totalPayouts;
+  const drawdownRemainingNet = Math.max(0, progress.drawdownRemaining - totalPayouts);
+  // Withdrawable = profit above the starting balance, minus payouts already taken.
+  const withdrawable = Math.max(0, progress.currentBalance - startBalance - totalPayouts);
+  const cycleEntries = [...byDayMap.entries()].filter(([date]) => !lastPayoutDate || date > lastPayoutDate);
+  const cycleDayPnls = cycleEntries.map(([, pnl]) => pnl);
+  const cycleProfit = cycleDayPnls.reduce((s, p) => s + p, 0);
+  const cycleBiggestDay = cycleDayPnls.reduce((m, p) => Math.max(m, p), 0);
+  const cycleConsistencyPct = cycleProfit > 0 ? Math.round((cycleBiggestDay / cycleProfit) * 100) : null;
+  // Biggest single profitable day (whole history): what the pace copy references.
   const biggestDay = [...byDayMap.entries()].reduce<{ date: string; pnl: number }>(
     (best, [date, pnl]) => (pnl > best.pnl ? { date, pnl } : best),
     { date: '', pnl: 0 },
@@ -713,15 +726,17 @@ export default function EvaluationCoach() {
   const chosenPath = getPathById(selected.firm, payoutPaths[selected.id])
     ?? (availablePaths.length === 1 ? availablePaths[0] : null);
 
-  // Readiness is computed only against the gates the chosen path actually has.
+  // Readiness is scoped to the current payout cycle: winning days and net profit
+  // reset after each withdrawal, so a fresh payout starts the count over.
   const payoutReadiness = isFunded && chosenPath
     ? computePayoutReadiness(chosenPath, {
-        dayPnls: [...byDayMap.values()],
-        tradingDays: progress.tradingDays,
+        dayPnls: cycleDayPnls,
+        tradingDays: cycleEntries.length,
         withdrawable,
-        drawdownRemaining: progress.drawdownRemaining,
+        cycleProfit,
+        drawdownRemaining: drawdownRemainingNet,
         size: Number(selected.size) || 0,
-        consistencyActualPct: progress.consistencyPct,
+        consistencyActualPct: cycleConsistencyPct,
       })
     : null;
 
@@ -947,7 +962,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             </div>
             <div className="ec-evhd-meta">
               {firmMeta && <><span>{firmMeta}</span><em>·</em></>}
-              <span>Balance <i>{money(progress.currentBalance)}</i></span>
+              <span>Balance <i>{money(isFunded ? balanceAfterPayouts : progress.currentBalance)}</i></span>
               <em>·</em>
               {showTarget && (<><span>Target <i>{money(targetBalance)}</i></span><em>·</em></>)}
               <span className="ec-evhd-mll" title={progress.floorLocked
@@ -1037,7 +1052,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             <div className="ec-hero-chart-head">
               <span className="ec-metric-lbl ec-section-lbl">Equity path</span>
               <span className="ec-hero-chart-meta">
-                {money(progress.currentBalance - progress.drawdownFloor)} above MLL ·{' '}
+                {money((isFunded ? balanceAfterPayouts : progress.currentBalance) - progress.drawdownFloor)} above MLL ·{' '}
                 <b>{isFunded ? `${money(withdrawable)} withdrawable` : (progress.targetRemaining <= 0 ? 'target reached' : `${money(progress.targetRemaining)} to target`)}</b>
               </span>
             </div>
@@ -1071,7 +1086,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
                 : `${ddTypeLabel === 'EOD trailing' ? 'Rises with end-of-day balance highs' : 'Rises with every new balance high'}.`}
           >
             <span className="ec-metric-lbl">Room above MLL</span>
-            <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(progress.drawdownRemaining)}</strong>
+            <strong className="ec-metric-val" style={drawdownRemainingPct < 20 ? { color: 'var(--red)' } : undefined}>{money(isFunded ? drawdownRemainingNet : progress.drawdownRemaining)}</strong>
             <div className="ec-metric-track"><div className="ec-metric-fill" style={{ width: `${drawdownRemainingPct}%` }} /></div>
             <span className="ec-metric-sub">
               {drawdownUsedPct}% of buffer used{isFunded && progress.floorLocked

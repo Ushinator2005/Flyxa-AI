@@ -1114,7 +1114,9 @@ const useFlyxaStore = create<FlyxaStore>()(
             scannerColors: payload.scannerColors ?? state.scannerColors,
             newsSources: payload.newsSources ?? state.newsSources,
             journalMoods: payload.journalMoods ?? state.journalMoods,
-            payoutPaths: payload.payoutPaths ?? state.payoutPaths,
+            // Merge, don't replace: a stale/empty cloud payload must never wipe a
+            // per-account payout path the trader just chose (?? only guards null).
+            payoutPaths: { ...state.payoutPaths, ...(payload.payoutPaths ?? {}) },
             journalTitles: payload.journalTitles ?? state.journalTitles,
             weeklyReflections: payload.weeklyReflections ?? state.weeklyReflections,
             confluenceCategoryOverrides: payload.confluenceCategoryOverrides ?? state.confluenceCategoryOverrides,
