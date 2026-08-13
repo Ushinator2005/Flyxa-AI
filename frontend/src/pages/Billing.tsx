@@ -325,9 +325,15 @@ function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
     discountPct: raw.discountPct,
     actualPrice: raw.actualPrice,
     purchaseDate: raw.purchaseDate,
-    // Always run through normalizeStatus, which collapses everything (including
-    // the old "imported accounts default to Blown" rule) to the three valid tags.
-    status: normalizeStatus((raw as unknown as { status: unknown }).status),
+    // Collapse to the three valid tags. A funded/passed account (its outcome
+    // says it cleared the evaluation) always reads as Passed — in this model a
+    // funded account IS a passed account, there is no separate Funded tag.
+    status: (() => {
+      const s = normalizeStatus((raw as unknown as { status: unknown }).status);
+      if (entryKind !== 'account') return s;
+      const outcome = (raw.evaluationOutcome ?? inferredOutcome.outcome);
+      return outcome === 'Funded' || outcome === 'Passed' ? 'Passed' : s;
+    })(),
     evaluationOutcome: raw.evaluationOutcome ?? inferredOutcome.outcome,
     outcomeEvidence: raw.outcomeEvidence ?? inferredOutcome.evidence,
     outcomeConfidence: raw.outcomeConfidence ?? inferredOutcome.confidence,
@@ -1284,8 +1290,6 @@ export default function Billing() {
     const netPnL = totalPayouts - totalSpent;
     const passedAccounts = accountEntries.filter(a => a.status === 'Passed').length;
     const activeAccounts = accountEntries.filter(a => a.status === 'Eval').length;
-    const fundedAccounts = accountEntries.filter(a => a.evaluationOutcome === 'Funded').length;
-    const blownAccounts = accountEntries.filter(a => a.status === 'Blown').length;
     // Pass rate = passed evaluations over every evaluation attempt (Eval + Passed).
     const attemptedAccounts = passedAccounts + activeAccounts;
     const passRate = attemptedAccounts > 0 ? (passedAccounts / attemptedAccounts) * 100 : 0;
@@ -1334,7 +1338,7 @@ export default function Billing() {
 
     return {
       totalAccounts, totalSpent, totalPayouts, netPnL, monthlyBurn,
-      avgFeePerAccount, passedAccounts, fundedAccounts, activeAccounts, blownAccounts,
+      avgFeePerAccount, passedAccounts, activeAccounts,
       passRate, costPerPass, attemptedAccounts, roiByFirm, bestFirm,
     };
   }, [accounts]);
@@ -1556,9 +1560,7 @@ export default function Billing() {
 
   const phaseRail = [
     { label: 'Eval', value: derived.activeAccounts, color: 'var(--amber)' },
-    { label: 'Funded', value: derived.fundedAccounts, color: '#818cf8' },
     { label: 'Passed', value: derived.passedAccounts, color: 'var(--green)' },
-    { label: 'Blown', value: derived.blownAccounts, color: 'var(--red)' },
   ];
   const netTone = derived.netPnL >= 0 ? 'positive' : 'negative';
 
@@ -1738,7 +1740,6 @@ export default function Billing() {
         <span style={{ width: 1, height: 12, background: 'var(--border)', flexShrink: 0 }} />
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)', fontWeight: 500 }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)', fontWeight: 500 }}>{derived.passedAccounts}</strong></span>
-        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)', fontWeight: 500 }}>{derived.blownAccounts}</strong></span>
         </div>
       </div>
 
