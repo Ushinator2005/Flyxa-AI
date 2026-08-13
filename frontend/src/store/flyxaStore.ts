@@ -909,9 +909,14 @@ const useFlyxaStore = create<FlyxaStore>()(
         journalMoods: { ...state.journalMoods, [entryId]: mood },
       })),
 
-      setPayoutPathFor: (accountId, pathId) => set((state) => ({
-        payoutPaths: { ...state.payoutPaths, [accountId]: pathId },
-      })),
+      setPayoutPathFor: (accountId, pathId) => {
+        set((state) => ({
+          payoutPaths: { ...state.payoutPaths, [accountId]: pathId },
+        }));
+        // Flush now instead of on the autosave debounce, so a Standard/Consistency
+        // choice can't be lost if the user navigates away right after picking it.
+        void flushSupabaseStoreNow();
+      },
 
       setJournalTitle: (entryId, title) => set((state) => ({
         journalTitles: { ...state.journalTitles, [entryId]: title },
