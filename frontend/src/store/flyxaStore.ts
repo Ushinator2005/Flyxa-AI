@@ -814,17 +814,25 @@ const useFlyxaStore = create<FlyxaStore>()(
         accounts: state.accounts.map((account) => (account.id === id ? { ...account, ...updates } : account)),
       })),
 
-      addPayout: (accountId, payout) => set((state) => ({
-        accounts: state.accounts.map((a) =>
-          a.id === accountId ? { ...a, payouts: [...(a.payouts ?? []), payout] } : a
-        ),
-      })),
+      addPayout: (accountId, payout) => {
+        set((state) => ({
+          accounts: state.accounts.map((a) =>
+            a.id === accountId ? { ...a, payouts: [...(a.payouts ?? []), payout] } : a
+          ),
+        }));
+        // Flush to Supabase now instead of waiting on the autosave debounce, so a
+        // withdrawal can't be lost if the user navigates away right after logging it.
+        void flushSupabaseStoreNow();
+      },
 
-      deletePayout: (accountId, payoutId) => set((state) => ({
-        accounts: state.accounts.map((a) =>
-          a.id === accountId ? { ...a, payouts: (a.payouts ?? []).filter((p) => p.id !== payoutId) } : a
-        ),
-      })),
+      deletePayout: (accountId, payoutId) => {
+        set((state) => ({
+          accounts: state.accounts.map((a) =>
+            a.id === accountId ? { ...a, payouts: (a.payouts ?? []).filter((p) => p.id !== payoutId) } : a
+          ),
+        }));
+        void flushSupabaseStoreNow();
+      },
 
       updateGoal: (id, updates) => set((state) => ({
         goals: state.goals.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal)),
