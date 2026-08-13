@@ -260,6 +260,19 @@ function inferStoredEntryKind(raw: StoreBillingAccount): NonNullable<BillingAcco
   return current;
 }
 
+/** Classify a billing entry from its account type when the user saves an edit.
+ *  The entry kind must follow the type the trader chose — changing a row's type
+ *  to "Trading Combine" makes it an account (so its status shows), while a type
+ *  that still reads as a reset / activation / subscription keeps that charge
+ *  classification. Anything not explicitly a charge is an account. */
+function deriveEntryKindFromType(accountType: string): NonNullable<BillingAccount['entryKind']> {
+  const type = accountType.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (/\b(account )?reset\b|\bfree reset\b/.test(type)) return 'reset';
+  if (/\bactivation fee\b|\bxfa activation\b/.test(type)) return 'activation';
+  if (/\bmonthly subscription\b|\bsubscription fee\b|\bmonthly fee\b|\brenewal\b|\brebill\b/.test(type)) return 'subscription';
+  return 'account';
+}
+
 function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
   const entryKind = inferStoredEntryKind(raw);
   const isLegacyFileImport = raw.importedFromFile === undefined
@@ -1326,6 +1339,12 @@ export default function Billing() {
       if (firmFilter !== 'All' && a.firm !== firmFilter) return false;
       if (statusFilter !== 'All' && a.status !== statusFilter) return false;
       return true;
+    }).sort((a, b) => {
+      // Newest purchase first; rows without a date sink to the bottom. Dates are
+      // ISO strings (YYYY-MM-DD), so a plain string compare orders them correctly.
+      if (!a.purchaseDate) return 1;
+      if (!b.purchaseDate) return -1;
+      return b.purchaseDate.localeCompare(a.purchaseDate);
     });
   }, [accounts, firmFilter, statusFilter]);
 
@@ -1381,7 +1400,9 @@ export default function Billing() {
     const next: BillingAccount = {
       id: editingId ?? createId(),
       sourceAccountId: editingId ? accounts.find(account => account.id === editingId)?.sourceAccountId : undefined,
-      entryKind: editingId ? accounts.find(account => account.id === editingId)?.entryKind ?? 'account' : 'account',
+      // Reclassify from the chosen account type so a row edited to a real combine
+      // stops showing a stale "Reset charge"/"Subscription" badge and shows its status.
+      entryKind: deriveEntryKindFromType(form.accountType),
       parentAccountId: editingId ? accounts.find(account => account.id === editingId)?.parentAccountId : undefined,
       importedFromFile: editingId ? accounts.find(account => account.id === editingId)?.importedFromFile : false,
       firm: form.firm.trim() || 'Other',
