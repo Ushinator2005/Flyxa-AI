@@ -1288,8 +1288,11 @@ export default function Billing() {
     const totalSpent = accounts.reduce((sum, a) => sum + a.actualPrice, 0);
     const totalPayouts = accounts.reduce((sum, a) => sum + Math.max(0, a.payoutReceived), 0);
     const netPnL = totalPayouts - totalSpent;
-    const passedAccounts = accountEntries.filter(a => a.status === 'Passed').length;
-    const activeAccounts = accountEntries.filter(a => a.status === 'Eval').length;
+    // Count by the tag, not the entry kind: a row tagged Passed/Eval counts even
+    // when its notes ("resets", "subscription", "XFA activation") made the entry
+    // classifier read it as a charge. The tag is the source of truth.
+    const passedAccounts = accounts.filter(a => a.status === 'Passed').length;
+    const activeAccounts = accounts.filter(a => a.status === 'Eval').length;
     // Pass rate = passed evaluations over every evaluation attempt (Eval + Passed).
     const attemptedAccounts = passedAccounts + activeAccounts;
     const passRate = attemptedAccounts > 0 ? (passedAccounts / attemptedAccounts) * 100 : 0;

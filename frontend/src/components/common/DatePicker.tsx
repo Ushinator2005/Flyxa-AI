@@ -162,10 +162,9 @@ export default function DatePicker({
             width: 286,
             borderRadius: 12,
             border: '1px solid rgba(255,255,255,0.10)',
-            background: 'linear-gradient(180deg, rgba(26,25,23,0.98), rgba(14,13,13,0.98))',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+            background: '#171614',
+            boxShadow: '0 10px 28px rgba(0,0,0,0.4)',
             padding: 12,
-            backdropFilter: 'blur(16px)',
           } as CSSProperties}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
