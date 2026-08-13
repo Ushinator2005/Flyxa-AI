@@ -1912,7 +1912,9 @@ export default function Billing() {
                     </tr>
                   ) : (
                     filteredAccounts.map((account, index) => {
-                      const roiValue = account.payoutReceived > 0 ? account.payoutReceived - account.actualPrice : null;
+                      // ROI mirrors the payouts taken — the cost is already shown
+                      // separately in the Price paid column, so it isn't netted here.
+                      const roiValue = account.payoutReceived > 0 ? account.payoutReceived : null;
                       const isLast = index === filteredAccounts.length - 1;
                       const cellStyle: CSSProperties = { padding: '12px 14px', borderBottom: isLast ? 'none' : '1px solid var(--border-sub)' };
                       return (
