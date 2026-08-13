@@ -1076,11 +1076,20 @@ const useFlyxaStore = create<FlyxaStore>()(
           let nextAccounts = payload.accounts && payload.accounts.length
             ? payload.accounts.map(incoming => {
                 const existing = state.accounts.find(a => a.id === incoming.id);
-                // Payouts live only on the store account, so carry them across the
-                // AppSettings-driven rebuild. The payout-path choice now travels on
-                // the incoming payload itself (from the TradingAccount), so it must
-                // NOT be preserved here or a fresh selection is reverted to the old.
-                return existing?.payouts?.length ? { ...incoming, payouts: existing.payouts } : incoming;
+                // Union payouts by id across the in-memory account and the incoming
+                // one: a payout logged on another device (incoming) and one logged
+                // on this device (existing) both survive. The payout-path choice
+                // travels on the payload itself, so it is NOT preserved here.
+                const localPayouts = existing?.payouts ?? [];
+                const incomingPayouts = incoming.payouts ?? [];
+                if (!localPayouts.length && !incomingPayouts.length) return incoming;
+                const byId = new Map<string, Payout>();
+                for (const p of [...incomingPayouts, ...localPayouts]) {
+                  if (!p) continue;
+                  const key = p.id || `${p.date}:${p.amount}`;
+                  if (!byId.has(key)) byId.set(key, p);
+                }
+                return { ...incoming, payouts: [...byId.values()] };
               })
             : state.accounts;
           billingAccounts.forEach((account) => {
@@ -1127,9 +1136,10 @@ const useFlyxaStore = create<FlyxaStore>()(
             scannerColors: payload.scannerColors ?? state.scannerColors,
             newsSources: payload.newsSources ?? state.newsSources,
             journalMoods: payload.journalMoods ?? state.journalMoods,
-            // Merge, don't replace: a stale/empty cloud payload must never wipe a
-            // per-account payout path the trader just chose (?? only guards null).
-            payoutPaths: { ...state.payoutPaths, ...(payload.payoutPaths ?? {}) },
+            // Union with the live session winning: a cloud choice loads for
+            // accounts this device hasn't set, but a path the trader just chose is
+            // never reverted by a staler cloud value (empty {} can't wipe either).
+            payoutPaths: { ...(payload.payoutPaths ?? {}), ...state.payoutPaths },
             journalTitles: payload.journalTitles ?? state.journalTitles,
             weeklyReflections: payload.weeklyReflections ?? state.weeklyReflections,
             confluenceCategoryOverrides: payload.confluenceCategoryOverrides ?? state.confluenceCategoryOverrides,

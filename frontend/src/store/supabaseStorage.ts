@@ -560,6 +560,60 @@ function recoverMissingStateFromRemote(
   return { ...mergedBlob, state: { ...mergedState, ...patch } };
 }
 
+/**
+ * Union per-account payouts and payout-path choices from the remote blob into
+ * the outgoing (local) blob, so a write from one device never clobbers a payout
+ * or a Standard/Consistency choice made on another. Payouts merge by id (a
+ * payout on either side is kept); path choices union with the writing device's
+ * selection winning a true conflict. Unlike recoverMissingStateFromRemote (which
+ * only fires when a field is wholly missing), this always reconciles the two
+ * sides field-by-field.
+ */
+function mergeFundedFieldsFromRemote(
+  mergedBlob: Record<string, unknown>,
+  remoteBlob: Record<string, unknown> | null,
+): Record<string, unknown> {
+  if (!remoteBlob) return mergedBlob;
+  const mergedState = (mergedBlob.state ?? {}) as Record<string, unknown>;
+  const remoteState = (remoteBlob.state ?? {}) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+
+  const mAccounts = mergedState.accounts as Array<Record<string, unknown>> | undefined;
+  const rAccounts = remoteState.accounts as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(mAccounts) && Array.isArray(rAccounts)) {
+    const remoteById = new Map<string, Record<string, unknown>>();
+    for (const a of rAccounts) {
+      if (a && typeof a === 'object' && typeof a.id === 'string') remoteById.set(a.id, a);
+    }
+    const payoutKey = (p: Record<string, unknown>) =>
+      typeof p.id === 'string' && p.id ? p.id : `${String(p.date)}:${String(p.amount)}`;
+    let changed = false;
+    const nextAccounts = mAccounts.map(a => {
+      if (!a || typeof a !== 'object' || typeof a.id !== 'string') return a;
+      const remote = remoteById.get(a.id);
+      const remotePayouts = Array.isArray(remote?.payouts) ? (remote!.payouts as Array<Record<string, unknown>>) : [];
+      if (remotePayouts.length === 0) return a;
+      const localPayouts = Array.isArray(a.payouts) ? (a.payouts as Array<Record<string, unknown>>) : [];
+      const seen = new Set(localPayouts.filter(Boolean).map(payoutKey));
+      const additions = remotePayouts.filter(p => p && typeof p === 'object' && !seen.has(payoutKey(p)));
+      if (additions.length === 0) return a;
+      changed = true;
+      return { ...a, payouts: [...localPayouts, ...additions] };
+    });
+    if (changed) patch.accounts = nextAccounts;
+  }
+
+  const mPaths = mergedState.payoutPaths as Record<string, unknown> | undefined;
+  const rPaths = remoteState.payoutPaths as Record<string, unknown> | undefined;
+  if (rPaths && typeof rPaths === 'object' && Object.keys(rPaths).length > 0) {
+    const union = { ...rPaths, ...(mPaths && typeof mPaths === 'object' ? mPaths : {}) };
+    if (JSON.stringify(union) !== JSON.stringify(mPaths ?? {})) patch.payoutPaths = union;
+  }
+
+  if (Object.keys(patch).length === 0) return mergedBlob;
+  return { ...mergedBlob, state: { ...mergedState, ...patch } };
+}
+
 function mergeRemoteEntriesIntoStoreBlob(
   localBlob: unknown,
   remoteBlob: unknown,
@@ -937,6 +991,9 @@ async function flushSave(userId: string, value: string): Promise<void> {
   parsed = mergeRemoteEntriesIntoStoreBlob(parsed, remoteBlob, deletedTradeIds, deletedEntryDates, preferRemotePlacement);
   // Ensure accounts, tradingPlan, etc. are never wiped by a blank incoming snapshot
   parsed = recoverMissingStateFromRemote(parsed, remoteBlob);
+  // Union payouts + payout-path choices so this write can't clobber a withdrawal
+  // or a Standard/Consistency selection made on another device.
+  parsed = mergeFundedFieldsFromRemote(parsed, remoteBlob);
   parsed = {
     ...parsed,
     state: {
