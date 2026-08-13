@@ -1989,100 +1989,73 @@ export default function Settings() {
 
 
                 {/* Payouts panel */}
-                {payoutTarget === account.id && (
-                  <div style={{
-                    margin: '8px 0 4px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--app-border)',
-                    borderLeft: `3px solid ${AMBER}`,
-                    background: 'var(--app-panel)',
-                    padding: '14px 16px',
-                  }}>
-                    {/* Add payout form */}
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--app-text-muted)' }}>Date</label>
-                        <DatePicker
-                          value={payoutDate}
-                          onChange={setPayoutDate}
-                          compact
-                          align="left"
-                          max={new Date().toISOString().slice(0, 10)}
-                        />
+                {payoutTarget === account.id && (() => {
+                  const payouts = getPayouts(account.id);
+                  const total = payouts.reduce((s, p) => s + p.amount, 0);
+                  const amt = parseFloat(payoutAmount);
+                  const canAdd = Boolean(payoutDate) && Number.isFinite(amt) && amt > 0;
+                  const usd = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                  const fmtDate = (d: string) => {
+                    const dt = new Date(`${d}T00:00:00`);
+                    return Number.isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+                  };
+                  const inputStyle: React.CSSProperties = { height: 34, borderRadius: 7, border: `1px solid ${BORDER}`, background: S2, color: T1, fontSize: 12.5, padding: '0 10px', outline: 'none' };
+                  const submit = () => {
+                    if (!canAdd) return;
+                    addPayout(account.id, { id: crypto.randomUUID(), date: payoutDate, amount: amt, note: payoutNote.trim() || undefined });
+                    setPayoutAmount('');
+                    setPayoutNote('');
+                  };
+                  return (
+                    <div style={{ marginTop: 12, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+                      {/* Header */}
+                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: T2 }}>Payouts</span>
+                        {payouts.length > 0 && (
+                          <span style={{ fontSize: 12, color: T2 }}>
+                            {payouts.length} logged&nbsp;·&nbsp;<b style={{ fontFamily: MONO, fontWeight: 600, color: '#34d399' }}>${usd(total)}</b> withdrawn
+                          </span>
+                        )}
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--app-text-muted)' }}>Amount ($)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="100"
-                          placeholder="e.g. 1500"
-                          value={payoutAmount}
-                          onChange={e => setPayoutAmount(e.target.value)}
-                          style={{ height: 30, width: 120, borderRadius: 6, border: '1px solid var(--app-border)', background: 'var(--app-panel-strong)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--app-text-muted)' }}>Note</label>
-                        <input
-                          type="text"
-                          placeholder="optional"
-                          value={payoutNote}
-                          onChange={e => setPayoutNote(e.target.value)}
-                          style={{ height: 30, width: 170, borderRadius: 6, border: '1px solid var(--app-border)', background: 'var(--app-panel-strong)', color: 'var(--app-text)', fontSize: 12, padding: '0 8px' }}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const amt = parseFloat(payoutAmount);
-                          if (!payoutDate || !Number.isFinite(amt) || amt <= 0) return;
-                          addPayout(account.id, { id: crypto.randomUUID(), date: payoutDate, amount: amt, note: payoutNote.trim() || undefined });
-                          setPayoutAmount('');
-                          setPayoutNote('');
-                        }}
-                        style={{ height: 30, borderRadius: 6, border: 'none', background: AMBER, color: '#111', fontSize: 12, fontWeight: 700, padding: '0 16px', cursor: 'pointer' }}
-                      >
-                        Add
-                      </button>
-                    </div>
 
-                    {/* Payout list */}
-                    {getPayouts(account.id).length > 0 ? (
-                      <>
+                      {/* Add form — one clean row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 128px minmax(0,1fr) auto', gap: 9, alignItems: 'center', marginBottom: payouts.length > 0 ? 16 : 0 }}>
+                        <DatePicker value={payoutDate} onChange={setPayoutDate} compact align="left" max={new Date().toISOString().slice(0, 10)} />
+                        <input type="number" min="0" step="100" placeholder="Amount $" value={payoutAmount}
+                          onChange={e => setPayoutAmount(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                          style={{ ...inputStyle, fontFamily: MONO }} />
+                        <input type="text" placeholder="Note (optional)" value={payoutNote}
+                          onChange={e => setPayoutNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                          style={{ ...inputStyle, fontFamily: SANS }} />
+                        <button type="button" disabled={!canAdd} onClick={submit}
+                          style={{ height: 34, borderRadius: 7, border: 'none', background: canAdd ? AMBER : 'rgba(245,158,11,0.22)', color: canAdd ? '#141311' : 'rgba(20,19,17,0.55)', fontSize: 12, fontWeight: 700, padding: '0 18px', cursor: canAdd ? 'pointer' : 'not-allowed', fontFamily: SANS }}>
+                          Add
+                        </button>
+                      </div>
+
+                      {/* List */}
+                      {payouts.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          {[...getPayouts(account.id)].sort((a, b) => b.date.localeCompare(a.date)).map(payout => (
-                            <div key={payout.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--app-border)' }}>
-                              <span style={{ fontSize: 11, color: 'var(--app-text-muted)', minWidth: 84, fontFamily: 'var(--font-mono)' }}>{payout.date}</span>
-                              <span style={{ fontSize: 12, fontWeight: 500, color: AMBER, fontFamily: 'var(--font-mono)', minWidth: 100 }}>
-                                +${payout.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                              <span style={{ fontSize: 11, color: 'var(--app-text-subtle)', flex: 1 }}>{payout.note ?? ''}</span>
-                              <button
-                                type="button"
-                                onClick={() => deletePayout(account.id, payout.id)}
-                                style={{ background: 'none', border: 'none', color: 'var(--app-text-subtle)', cursor: 'pointer', lineHeight: 0, padding: 2, opacity: 0.6 }}
-                                title="Remove"
-                              >
-                                <X size={12} />
+                          {[...payouts].sort((a, b) => b.date.localeCompare(a.date)).map((payout, i) => (
+                            <div key={payout.id} style={{ display: 'grid', gridTemplateColumns: '84px 128px minmax(0,1fr) 22px', gap: 12, alignItems: 'center', padding: '9px 0', borderTop: i === 0 ? 'none' : `1px solid ${BSUB}` }}>
+                              <span style={{ fontSize: 11.5, color: T2, fontFamily: MONO }}>{fmtDate(payout.date)}</span>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: '#34d399', fontFamily: MONO }}>+${usd(payout.amount)}</span>
+                              <span style={{ fontSize: 12, color: T3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{payout.note ?? ''}</span>
+                              <button type="button" onClick={() => deletePayout(account.id, payout.id)} title="Remove payout"
+                                style={{ background: 'none', border: 'none', color: T3, cursor: 'pointer', lineHeight: 0, padding: 2, opacity: 0.55, justifySelf: 'end' }}
+                                onMouseEnter={e => { const el = e.currentTarget; el.style.opacity = '1'; el.style.color = '#f87171'; }}
+                                onMouseLeave={e => { const el = e.currentTarget; el.style.opacity = '0.55'; el.style.color = T3; }}>
+                                <X size={13} />
                               </button>
                             </div>
                           ))}
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
-                          <span style={{ fontSize: 11, color: 'var(--app-text-muted)' }}>
-                            Total:{' '}
-                            <span style={{ fontWeight: 500, color: AMBER, fontFamily: 'var(--font-mono)' }}>
-                              ${getPayouts(account.id).reduce((s, p) => s + p.amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <p style={{ fontSize: 11, color: 'var(--app-text-subtle)', margin: 0 }}>No payouts logged yet.</p>
-                    )}
-                  </div>
-                )}
+                      ) : (
+                        <p style={{ fontSize: 12, color: T3, margin: '2px 0 0' }}>No payouts logged yet. Add your first withdrawal above.</p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Delete confirmation */}
                 {deleteTarget === account.id && (
