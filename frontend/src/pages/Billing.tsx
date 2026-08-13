@@ -206,6 +206,19 @@ function normalizeStatus(raw: unknown): AccountStatus {
   return 'Eval';
 }
 
+/** Map the simplified template's single "Type" column to a tag, entry kind, and
+ *  a sensible account-type label. Returns null when the cell is empty so the
+ *  legacy multi-column inference can take over for older templates. */
+function tagFromImportType(raw: string): { status: AccountStatus; entryKind: NonNullable<BillingAccount['entryKind']>; accountType: string } | null {
+  const t = raw.trim().toLowerCase();
+  if (!t) return null;
+  if (/passed|funded/.test(t)) return { status: 'Passed', entryKind: 'account', accountType: '' };
+  if (/activation/.test(t)) return { status: 'Activation fee', entryKind: 'activation', accountType: 'XFA activation fee' };
+  if (/reset/.test(t)) return { status: 'Eval', entryKind: 'reset', accountType: 'Account reset' };
+  if (/subscription|renewal|recurring/.test(t)) return { status: 'Eval', entryKind: 'subscription', accountType: 'Monthly subscription' };
+  return { status: 'Eval', entryKind: 'account', accountType: '' };
+}
+
 function inferHistoricalOutcome(
   rawStatus: unknown,
   rawAccountType: unknown,
@@ -688,19 +701,19 @@ export default function Billing() {
   };
 
   const downloadExcelTemplate = () => {
-    const headers = ['Firm', 'Account Size', 'Account Type', 'Entry Type', 'Status', 'Purchase Date', 'Price Paid', 'Discount Code', 'Payout Received', 'Notes'];
-    // Price Paid left blank — auto-filled from catalog on import
-    const example1 = ['Apex Funded', '$50,000', 'Evaluation', 'Account', 'Passed', '2024-03-15', '', 'SAVE10', 3200, ''];
-    const example2 = ['Topstep', '$50,000', 'Trading Combine', 'Account', 'Funded', '2024-06-01', 149, '', 0, 'Standard combine; price includes XFA activation'];
-    const example3 = ['Topstep', '$50,000', 'Monthly subscription', 'Subscription', '', '2024-07-01', 49, '', 0, 'Monthly renewal for existing combine'];
-    const example4 = ['Topstep', '$50,000', 'Account reset', 'Reset', '', '2024-07-10', 0, '', 0, 'Free reset used'];
-    const example5 = ['Topstep', '$50,000', 'XFA activation fee', 'Activation', 'Funded', '2024-07-18', 149, '', 0, 'Express Funded Account activation'];
+    // One "Type" column carries the tag (Eval / Passed / Reset / Activation fee).
+    // Discount and payouts are omitted — the trader adds those in the app.
+    const headers = ['Firm', 'Account Size', 'Type', 'Purchase Date', 'Price Paid', 'Notes'];
+    const example1 = ['Topstep', '$50,000', 'Eval', '2026-06-01', 85, 'Trading combine'];
+    const example2 = ['Apex', '$50,000', 'Passed', '2026-03-15', 137, 'Passed evaluation'];
+    const example3 = ['Topstep', '$50,000', 'Reset', '2026-07-10', 0, 'Account reset'];
+    const example4 = ['Topstep', '$50,000', 'Activation fee', '2026-07-18', 149, 'XFA activation'];
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3, example4, example5]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3, example4]);
 
     // Column widths
-    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 11 }, { wch: 15 }, { wch: 17 }, { wch: 42 }];
+    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 11 }, { wch: 42 }];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Accounts');
     XLSX.writeFile(wb, 'flyxa-accounts-template.xlsx');
@@ -737,6 +750,7 @@ export default function Billing() {
 
     const colFirm          = iCol;
     const colSize          = col('accountsize');
+    const colType          = col('type');
     const colAccountType   = col('accounttype');
     const colEntryType     = col('entrytype');
     const colStatus        = col('status');
@@ -773,10 +787,12 @@ export default function Billing() {
       ) ?? 'Other';
       if (firmMatch === 'Other' && rawFirm) warnings.push(`Unknown firm "${rawFirm}", set to Other`);
 
-      // Status normalisation
-      const meaning = inferImportMeaning(rawStatus, rawAccountType, rawNotes, rawEntryType);
-      const status: AccountStatus = meaning.status;
-      if (meaning.warning) warnings.push(meaning.warning);
+      // Status normalisation — a single "Type" cell wins when present.
+      const typeTag = colType >= 0 ? tagFromImportType(get(colType)) : null;
+      const meaning = inferImportMeaning(typeTag ? '' : rawStatus, rawAccountType, rawNotes, rawEntryType);
+      const status: AccountStatus = typeTag ? typeTag.status : meaning.status;
+      const entryKind = typeTag ? typeTag.entryKind : meaning.entryKind;
+      if (!typeTag && meaning.warning) warnings.push(meaning.warning);
 
       // Date validation
       const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
@@ -788,10 +804,10 @@ export default function Billing() {
       const parsedPrice    = parseOptionalMoney(rawPrice);
       const payoutReceived = parseFloat(rawPayout.replace(/[^0-9.-]/g, '')) || 0;
 
-      // Account type — explicit column first, then infer from notes
+      // Account type — Type column's label first, then explicit column, then notes.
       const inferHint = `${rawAccountType} ${rawNotes}`.trim();
       const inferred = inferAccountTypeFromText(firmMatch, inferHint);
-      const accountType = rawAccountType.trim() || inferred.accountType;
+      const accountType = rawAccountType.trim() || (typeTag?.accountType || inferred.accountType);
 
       // Size — keep raw but strip leading/trailing spaces
       const size = rawSize || '';
@@ -802,14 +818,14 @@ export default function Billing() {
         accountType,
         pricingPath: inferred.pricingPath,
         status,
-        evaluationOutcome: meaning.evaluationOutcome,
+        evaluationOutcome: typeTag?.status === 'Passed' ? 'Passed' : meaning.evaluationOutcome,
         outcomeEvidence: meaning.outcomeEvidence,
         outcomeConfidence: meaning.outcomeConfidence,
         purchaseDate,
         pricePaid: parsedPrice.value,
         priceProvided: parsedPrice.provided,
-        entryKind: meaning.entryKind,
-        classificationReason: meaning.classificationReason,
+        entryKind,
+        classificationReason: typeTag ? 'Set from the Type column' : meaning.classificationReason,
         discountCode: rawDisc,
         payoutReceived,
         notes: rawNotes,
@@ -1032,7 +1048,9 @@ export default function Billing() {
       discountPct: 0,
       actualPrice: autoPricePaid,
       purchaseDate: row.purchaseDate,
-      status: row.entryKind === 'account' ? 'Blown' : row.status,
+      // Respect the imported tag — normalizeStatus already collapsed it to one of
+      // the three (Eval / Passed / Activation fee); no more defaulting to Blown.
+      status: normalizeStatus(row.status),
       evaluationOutcome: row.entryKind === 'account' ? row.evaluationOutcome : 'Unknown',
       outcomeEvidence: row.outcomeEvidence,
       outcomeConfidence: row.outcomeConfidence,
@@ -1055,6 +1073,7 @@ export default function Billing() {
 
     const colFirm        = col('firm');
     const colSize        = col('accountsize');
+    const colType        = col('type');
     const colAccountType = col('accounttype');
     const colEntryType   = col('entrytype');
     const colStatus      = col('status');
@@ -1092,9 +1111,13 @@ export default function Billing() {
 
       const rawStatus = get(colStatus);
       const rawNotes = get(colNotes);
-      const meaning = inferImportMeaning(rawStatus, rawAccountType, rawNotes, rawEntryType);
-      const status: AccountStatus = meaning.status;
-      if (meaning.warning) warnings.push(meaning.warning);
+      // New simplified template: a single "Type" cell decides the tag + kind.
+      // Older templates (no Type column) fall back to the multi-column inference.
+      const typeTag = colType >= 0 ? tagFromImportType(get(colType)) : null;
+      const meaning = inferImportMeaning(typeTag ? '' : rawStatus, rawAccountType, rawNotes, rawEntryType);
+      const status: AccountStatus = typeTag ? typeTag.status : meaning.status;
+      const entryKind = typeTag ? typeTag.entryKind : meaning.entryKind;
+      if (!typeTag && meaning.warning) warnings.push(meaning.warning);
 
       const rawDate = get(colDate);
       const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
@@ -1106,10 +1129,10 @@ export default function Billing() {
       const rawPayout      = get(colPayout);
       const payoutReceived = parseFloat(rawPayout.replace(/[^0-9.-]/g, '')) || 0;
 
-      // Account type — explicit column first, then infer from notes
+      // Account type — Type column's label first, then explicit column, then notes.
       const inferHint = `${rawAccountType} ${rawNotes}`.trim();
       const inferred = inferAccountTypeFromText(firmMatch, inferHint);
-      const accountType = rawAccountType.trim() || inferred.accountType;
+      const accountType = rawAccountType.trim() || (typeTag?.accountType || inferred.accountType);
 
       rows.push({
         firm: firmMatch,
@@ -1117,14 +1140,14 @@ export default function Billing() {
         accountType,
         pricingPath: inferred.pricingPath,
         status,
-        evaluationOutcome: meaning.evaluationOutcome,
+        evaluationOutcome: typeTag?.status === 'Passed' ? 'Passed' : meaning.evaluationOutcome,
         outcomeEvidence: meaning.outcomeEvidence,
         outcomeConfidence: meaning.outcomeConfidence,
         purchaseDate,
         pricePaid: parsedPrice.value,
         priceProvided: parsedPrice.provided,
-        entryKind: meaning.entryKind,
-        classificationReason: meaning.classificationReason,
+        entryKind,
+        classificationReason: typeTag ? 'Set from the Type column' : meaning.classificationReason,
         discountCode: get(colDiscount),
         payoutReceived,
         notes: rawNotes,
