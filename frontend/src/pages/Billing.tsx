@@ -1987,12 +1987,6 @@ export default function Billing() {
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                  List: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt-2)', textDecoration: 'line-through' }}>{formatCurrency(footerTotals.totalListPrice)}</span>
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                  Saved: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>{formatCurrency(footerTotals.totalSaved)}</span>
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
                   Paid: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--txt)' }}>{formatCurrency(footerTotals.totalPaid)}</span>
                 </span>
               </span>
