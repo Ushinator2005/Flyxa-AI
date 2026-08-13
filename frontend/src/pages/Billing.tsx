@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   CreditCard,
   Download,
@@ -534,9 +534,19 @@ export default function Billing() {
   const { accounts: tradingAccounts } = useAppSettings();
   const storeBillingAccounts = useFlyxaStore(state => state.billingAccounts);
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
-  const [accounts, setAccounts] = useState<BillingAccount[]>(
-    () => storeBillingAccounts.map(normalizeBillingAccount)
+  // The ledger is derived STRAIGHT from the store — the single source of truth.
+  // There is no local copy and no write-back effect, so nothing can race the
+  // cloud hydrate and wipe billing. The store only changes via commitAccounts.
+  const accounts = useMemo(
+    () => storeBillingAccounts.map(normalizeBillingAccount),
+    [storeBillingAccounts]
   );
+  // The ONLY writer of billingAccounts on this page. Runs solely from explicit
+  // user actions (add / edit / delete / import), never on mount.
+  const commitAccounts = useCallback((next: BillingAccount[]) => {
+    hydrateSharedData({ billingAccounts: next as unknown as StoreBillingAccount[] });
+    void flushSupabaseStoreNow();
+  }, [hydrateSharedData]);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [firmFilter, setFirmFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -560,38 +570,6 @@ export default function Billing() {
     ));
   }, [accounts, tradingAccounts]);
 
-  // True once the store's billing list has been observed populated, so we can
-  // tell a genuine "empty" (user cleared everything) from the empty snapshot that
-  // exists only because the cloud hasn't hydrated yet.
-  const storeHydratedRef = useRef(storeBillingAccounts.length > 0);
-
-  // When the store hydrates AFTER mount (cloud loads a beat later), pull those
-  // accounts into the local ledger. Without this the table keeps its empty mount
-  // snapshot and the write-back below would push that empty list back, wiping
-  // every saved billing account.
-  useEffect(() => {
-    if (storeBillingAccounts.length > 0 && !storeHydratedRef.current) {
-      storeHydratedRef.current = true;
-      // Only adopt the cloud ledger if nothing has been added/imported locally
-      // this session, so a late cloud hydrate can never overwrite fresh imports.
-      setAccounts(prev => (prev.length === 0 ? storeBillingAccounts.map(normalizeBillingAccount) : prev));
-    }
-  }, [storeBillingAccounts]);
-
-  // Persist local edits back to the store — but never the empty pre-hydration
-  // snapshot, which would clobber the saved ledger before the cloud loads. The
-  // store's current billing count is read non-reactively (getState) so this
-  // effect does not re-fire when hydrateSharedData mutates it (which would loop).
-  const firstBillingWriteRef = useRef(true);
-  useEffect(() => {
-    const storeHasBilling = useFlyxaStore.getState().billingAccounts.length > 0;
-    if (accounts.length === 0 && storeHasBilling && !storeHydratedRef.current) return;
-    hydrateSharedData({ billingAccounts: accounts as unknown as StoreBillingAccount[] });
-    // Skip the initial mount echo, but flush every real change (import, add,
-    // edit, delete) to Supabase immediately rather than on the autosave debounce.
-    if (firstBillingWriteRef.current) { firstBillingWriteRef.current = false; return; }
-    void flushSupabaseStoreNow();
-  }, [accounts, hydrateSharedData]);
 
   const getPreferredListPrice = (firm: string, size: string, currentListPrice: number): number => {
     const livePrice = livePricesByFirm[firm]?.prices?.[size];
@@ -694,7 +672,7 @@ export default function Billing() {
       };
     });
 
-    setAccounts(current => [...imported, ...current]);
+    commitAccounts([...imported, ...accounts]);
     setIsImportModalOpen(false);
     setSelectedImportIds([]);
     setImportFeedback(`${imported.length} account${imported.length === 1 ? '' : 's'} imported.`);
@@ -1220,7 +1198,7 @@ export default function Billing() {
       }
       newAccounts.push(imported);
     }
-    setAccounts(current => [...newAccounts, ...current].map(account => (
+    commitAccounts([...newAccounts, ...accounts].map(account => (
       fundedParentIds.has(account.id)
         ? {
             ...account,
@@ -1448,9 +1426,9 @@ export default function Billing() {
       responsibleTradingBenefit: form.firm === 'Topstep' ? form.responsibleTradingBenefit : undefined,
     };
 
-    setAccounts(current => editingId
-      ? current.map(row => (row.id === editingId ? next : row))
-      : [next, ...current]);
+    commitAccounts(editingId
+      ? accounts.map(row => (row.id === editingId ? next : row))
+      : [next, ...accounts]);
     closeModal();
   };
 
@@ -1459,7 +1437,7 @@ export default function Billing() {
     if (!target) return;
     const confirmed = window.confirm(`Delete billing entry for ${target.firm} ${target.size}?`);
     if (!confirmed) return;
-    setAccounts(current => current.filter(a => a.id !== id));
+    commitAccounts(accounts.filter(a => a.id !== id));
   };
 
   const setFormField = <K extends keyof BillingFormState>(key: K, value: BillingFormState[K]) => {
