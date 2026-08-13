@@ -99,6 +99,15 @@ export interface Payout {
   note?: string;
 }
 
+/** A saved payout-proof image in the billing payout gallery. Stored in the
+ *  cloud store: the image lives in Supabase Storage and `src` is its URL. */
+export interface PayoutProof {
+  id: string;
+  src: string;       // Supabase Storage public URL (or base64 fallback)
+  name: string;
+  createdAt: string; // ISO timestamp
+}
+
 export interface Account {
   id: string;
   name: string;

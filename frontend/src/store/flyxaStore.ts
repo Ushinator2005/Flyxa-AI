@@ -13,6 +13,7 @@ import type {
   Account,
   Achievement,
   Payout,
+  PayoutProof,
   BacktestSession,
   BillingAccount,
   ChartHistoryRecord,
@@ -74,6 +75,7 @@ interface FlyxaStateData {
   planBlocks: PlanBlock[];
   propFirms: PropFirm[];
   billingAccounts: BillingAccount[];
+  payoutGallery: PayoutProof[];
   scannerColors: ScannerColors;
   newsSources: Record<string, boolean>;
   journalMoods: Record<string, string>;
@@ -133,6 +135,8 @@ export interface FlyxaStore extends FlyxaStateData {
   updateAccount: (id: string, updates: Partial<Account>) => void;
   addPayout: (accountId: string, payout: Payout) => void;
   deletePayout: (accountId: string, payoutId: string) => void;
+  addPayoutProof: (proof: PayoutProof) => void;
+  deletePayoutProof: (proofId: string) => void;
   updateGoal: (id: string, updates: Partial<Goal>) => void;
   addGoal: (goal: Goal) => void;
   deleteGoal: (id: string) => void;
@@ -503,6 +507,7 @@ export function getInitialState(): FlyxaStateData {
     planBlocks: DEFAULT_PLAN_BLOCKS,
     propFirms: [],
     billingAccounts: [],
+    payoutGallery: [],
     scannerColors: DEFAULT_SCANNER_COLORS,
     newsSources: DEFAULT_NEWS_SOURCES,
     journalMoods: {},
@@ -834,6 +839,17 @@ const useFlyxaStore = create<FlyxaStore>()(
         void flushSupabaseStoreNow();
       },
 
+      addPayoutProof: (proof) => {
+        set((state) => ({ payoutGallery: [proof, ...state.payoutGallery] }));
+        // Flush now so a saved proof can't be lost to the autosave debounce.
+        void flushSupabaseStoreNow();
+      },
+
+      deletePayoutProof: (proofId) => {
+        set((state) => ({ payoutGallery: state.payoutGallery.filter((p) => p.id !== proofId) }));
+        void flushSupabaseStoreNow();
+      },
+
       updateGoal: (id, updates) => set((state) => ({
         goals: state.goals.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal)),
       })),
@@ -1133,6 +1149,7 @@ const useFlyxaStore = create<FlyxaStore>()(
             planBlocks: payload.planBlocks ?? state.planBlocks,
             propFirms: payload.propFirms ?? state.propFirms,
             billingAccounts,
+            payoutGallery: payload.payoutGallery ?? state.payoutGallery,
             scannerColors: payload.scannerColors ?? state.scannerColors,
             newsSources: payload.newsSources ?? state.newsSources,
             journalMoods: payload.journalMoods ?? state.journalMoods,
@@ -1303,6 +1320,7 @@ const useFlyxaStore = create<FlyxaStore>()(
         planBlocks: state.planBlocks,
         propFirms: state.propFirms,
         billingAccounts: state.billingAccounts,
+        payoutGallery: state.payoutGallery,
         scannerColors: state.scannerColors,
         newsSources: state.newsSources,
         journalMoods: state.journalMoods,
