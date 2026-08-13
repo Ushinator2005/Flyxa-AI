@@ -325,9 +325,9 @@ function normalizeBillingAccount(raw: StoreBillingAccount): BillingAccount {
     discountPct: raw.discountPct,
     actualPrice: raw.actualPrice,
     purchaseDate: raw.purchaseDate,
-    status: importedFromFile && entryKind === 'account'
-      ? 'Blown'
-      : normalizeStatus((raw as unknown as { status: unknown }).status),
+    // Always run through normalizeStatus, which collapses everything (including
+    // the old "imported accounts default to Blown" rule) to the three valid tags.
+    status: normalizeStatus((raw as unknown as { status: unknown }).status),
     evaluationOutcome: raw.evaluationOutcome ?? inferredOutcome.outcome,
     outcomeEvidence: raw.outcomeEvidence ?? inferredOutcome.evidence,
     outcomeConfidence: raw.outcomeConfidence ?? inferredOutcome.confidence,
@@ -945,19 +945,17 @@ export default function Billing() {
       return result('Eval 1');
     }
     if (!statusText && entryKind === 'account') {
-      return result('Blown');
+      return result('Eval');
     }
 
     return {
-      status: entryKind === 'account' ? 'Blown' : 'Eval 1',
+      status: 'Eval',
       entryKind,
       classificationReason,
       evaluationOutcome: historical.outcome,
       outcomeEvidence: historical.evidence,
       outcomeConfidence: historical.confidence,
-      warning: entryKind === 'account'
-        ? `Unknown status "${rawStatus}", treated as a historical Blown account`
-        : `Unknown status "${rawStatus}", kept as In Progress`,
+      warning: rawStatus ? `Unknown status "${rawStatus}", tagged as Eval` : undefined,
     };
   };
 
