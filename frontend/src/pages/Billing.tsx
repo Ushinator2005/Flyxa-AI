@@ -1416,7 +1416,10 @@ export default function Billing() {
       actualPrice,
       purchaseDate: form.purchaseDate || getTodayInputDate(),
       status: form.status,
-      evaluationOutcome: form.evaluationOutcome,
+      // The chosen tag is authoritative: sync the outcome to it so the load-time
+      // "funded/passed -> Passed" promotion can't override a manual re-tag. Only a
+      // Passed tag records a passed outcome; anything else clears it.
+      evaluationOutcome: form.status === 'Passed' ? 'Passed' : 'Unknown',
       outcomeEvidence: form.outcomeEvidence.trim() || 'Outcome set manually',
       outcomeConfidence: form.outcomeConfidence,
       payoutReceived,
