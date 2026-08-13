@@ -838,11 +838,22 @@ export default function EvaluationCoach() {
     ?? (planAdherencePct !== null && planAdherencePct < 70 ? 'Plan adherence is holding back probability' : weakestDriver?.label);
 
   // ── AI mission (loaded async) ───────────────────────────────────
-  const missionCacheKey = `${selected.id}-${new Date().toISOString().slice(0, 10)}-${progress.tradingDays}`;
+  const missionCacheKey = `${selected.id}-${new Date().toISOString().slice(0, 10)}-${progress.tradingDays}-${chosenPath?.id ?? 'none'}-${payoutReadiness?.blocking ?? 'ready'}`;
 
   // Fallback static insight text (shown while mission loads or on error)
   const insightFallback = (() => {
     if (progress.tradingDays === 0) return 'No trades recorded yet. Add your first session to see coaching insights.';
+    // Funded accounts have no pass/target — coach toward the payout gates the
+    // chosen path actually has, never the eval template's consistency figure.
+    if (isFunded) {
+      const blk = payoutReadiness?.blocking;
+      if (!blk) return withdrawableAmount > 0
+        ? `All payout requirements met. ${money(withdrawableAmount)} is withdrawable this cycle.`
+        : 'All payout requirements met. Keep the account above its safety net to withdraw.';
+      const wd = payoutReadiness?.rows.find(r => r.key === 'winningDays');
+      if (wd && !wd.met) return `Blocked on winning days: ${wd.detail}. Bank steady green days above the minimum to unlock a payout.`;
+      return `Blocked on ${blk.toLowerCase()}. Build the cycle steadily to qualify for a payout, staying clear of the MLL.`;
+    }
     if (paceNegative && drawdownRemainingPct <= 30) {
       return `Buffer critical at ${drawdownRemainingPct}%. At current pace, the evaluation expires before target. Reduce risk to preserve the remaining buffer.`;
     }
@@ -901,7 +912,35 @@ export default function EvaluationCoach() {
       ? `Recent journal post-sessions:\n${recentJournalReflections.map(r => `${r.date}: "${r.post}"`).join('\n')}`
       : '';
 
-    const prompt = `You are Flyxa's evaluation coaching system. Give this trader ONE pass-focused directive for the next session.
+    // Funded accounts are coached toward a payout, not a pass. The gates come
+    // from the trader's chosen path (winning days / consistency / buffer / profit
+    // goal) — only whichever exist — so the model can never invent a rule the path
+    // doesn't have (e.g. a consistency rule on Topstep's Standard path).
+    const fundedPrompt = () => {
+      const gateLines = (payoutReadiness?.rows ?? [])
+        .map(r => `- ${r.label}: ${r.detail} ${r.met ? '(met)' : '(NOT met)'}`)
+        .join('\n');
+      return `You are Flyxa's funded-account payout coaching system. Give this trader ONE payout-focused directive for the next session.
+
+Account: ${selected.name} (${selected.firm}) — FUNDED on the ${chosenPath?.name ?? 'default'} payout path.
+This is a funded account: there is NO pass and NO profit target. The only goal is qualifying for the next payout under the rules below, without breaching the MLL.
+Payout requirements for this path (these are the ONLY rules — do not invent others):
+${gateLines || '- Withdraw any profit above the safety net.'}
+Blocking requirement: ${payoutReadiness?.blocking ?? 'none — eligible to withdraw'}
+Withdrawable this cycle: ${money(withdrawableAmount)} | Cycle profit so far: ${money(cycleProfit)}
+MLL: balance must stay above ${money(progress.drawdownFloor)}${progress.floorLocked ? ' (locked)' : ''} — ${money(drawdownRemainingNet)} of room left
+Sessions traded this cycle: ${cycleEntries.length} | Avg P&L/session: ${money(avgDailyPnl)}
+Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'}
+Main leak: ${primaryLeak ?? 'none detected'}
+Last 3 sessions: ${last3 || 'none yet'}
+${behavioralWarnings.length ? `Behavioral patterns: ${behavioralWarnings.map(w => w.title).join('; ')}` : ''}
+${journalContext}
+${debriefNote}
+
+Only reference requirements that appear in the list above. If the path has no consistency rule, do NOT mention consistency. Do NOT mention passing or a target — there is none. Write exactly ONE coaching directive sentence toward the next payout. Start with an action verb (Focus on..., Bank..., Limit entries to..., Avoid..., Cut size to..., Target...). Be specific to this account's numbers. No greeting, no explanation, just the directive.`;
+    };
+
+    const evalPrompt = () => `You are Flyxa's evaluation coaching system. Give this trader ONE pass-focused directive for the next session.
 
 Account: ${selected.name} (${selected.firm})
 Eval status: ${progress.status}, ${drawdownRemainingPct}% drawdown buffer remaining, ${targetProgressPct}% profit progress
@@ -918,6 +957,8 @@ ${journalContext}
 ${debriefNote}
 
 Write exactly ONE coaching directive sentence. Optimize for passing the evaluation without violating drawdown or daily loss rules. Start with an action verb (Focus on..., Limit entries to..., Avoid..., Cut size to..., Target..., etc.). Be specific to this account's current numbers. No greeting, no explanation, just the directive.`;
+
+    const prompt = isFunded ? fundedPrompt() : evalPrompt();
 
     setMissionLoading(true);
     aiApi.flyxaChat(prompt, [])
