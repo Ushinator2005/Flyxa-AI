@@ -559,6 +559,9 @@ export default function Billing() {
   const [livePricesByFirm, setLivePricesByFirm] = useState<Record<string, BillingLivePricesResponse>>({});
   const [isImportCsvModalOpen, setIsImportCsvModalOpen] = useState(false);
   const [csvParsedRows, setCsvParsedRows] = useState<ParsedCsvRow[]>([]);
+  // Indices the trader has unchecked (excluded from import). Everything is
+  // checked by default, so a row imports unless its index is in this set.
+  const [csvExcluded, setCsvExcluded] = useState<Set<number>>(new Set());
   const [csvParseError, setCsvParseError] = useState('');
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1150,6 +1153,7 @@ export default function Billing() {
         try {
           const rows = parseExcelWorkbook(e.target?.result as ArrayBuffer);
           setCsvParsedRows(rows);
+          setCsvExcluded(new Set());
           setIsImportCsvModalOpen(true);
         } catch (err) {
           setCsvParseError(err instanceof Error ? err.message : 'Failed to parse spreadsheet.');
@@ -1163,6 +1167,7 @@ export default function Billing() {
         try {
           const rows = parseBillingCsv(e.target?.result as string);
           setCsvParsedRows(rows);
+          setCsvExcluded(new Set());
           setIsImportCsvModalOpen(true);
         } catch (err) {
           setCsvParseError(err instanceof Error ? err.message : 'Failed to parse CSV.');
@@ -1177,7 +1182,9 @@ export default function Billing() {
     const knownAccounts = accounts.filter(account => (account.entryKind ?? 'account') === 'account');
     const newAccounts: BillingAccount[] = [];
     const fundedParentIds = new Set<string>();
-    for (const row of csvParsedRows) {
+    for (let idx = 0; idx < csvParsedRows.length; idx++) {
+      if (csvExcluded.has(idx)) continue; // trader unchecked this row
+      const row = csvParsedRows[idx];
       const candidates = [...knownAccounts, ...newAccounts.filter(account => (account.entryKind ?? 'account') === 'account')];
       const parent = row.entryKind === 'account'
         ? undefined
@@ -2129,12 +2136,29 @@ export default function Billing() {
               </button>
             </header>
 
-            <div style={{ overflowX: 'auto', maxHeight: '55vh' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <div style={{ overflowX: 'hidden', overflowY: 'auto', maxHeight: '55vh' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 34 }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col />
+                  <col style={{ width: 30 }} />
+                </colgroup>
                 <thead>
                   <tr style={{ background: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                    {['Firm', 'Source Type', 'Imported As', 'Size', 'Status', 'Purchase Date', 'Price Paid', 'Payout', 'Notes', ''].map(h => (
-                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--txt-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                      <input type="checkbox" checked={csvExcluded.size === 0}
+                        onChange={() => setCsvExcluded(csvExcluded.size === 0 ? new Set(csvParsedRows.map((_, i) => i)) : new Set())}
+                        style={{ cursor: 'pointer', accentColor: 'var(--amber)' }} aria-label="Select all rows" />
+                    </th>
+                    {['Firm', 'Source Type', 'Imported As', 'Size', 'Status', 'Purchase Date', 'Price Paid', 'Notes', ''].map(h => (
+                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--txt-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -2146,14 +2170,20 @@ export default function Billing() {
                       : row.entryKind === 'account'
                         ? catalogPrice + activationFee
                         : 0;
+                    const checked = !csvExcluded.has(idx);
                     return (
-                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: row.warning ? 'rgba(var(--amber-rgb, 255, 180, 0), 0.05)' : undefined }}>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt)', fontWeight: 500 }}>{row.firm}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)' }}>{row.accountType || <span style={{ color: 'var(--txt-3)' }}>—</span>}</td>
-                      <td title={row.classificationReason} style={{ padding: '9px 12px', color: row.entryKind === 'account' ? 'var(--green)' : 'var(--amber)', whiteSpace: 'nowrap' }}>
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)', opacity: checked ? 1 : 0.4, background: row.warning ? 'rgba(var(--amber-rgb, 255, 180, 0), 0.05)' : undefined }}>
+                      <td style={{ padding: '9px 6px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={checked}
+                          onChange={() => setCsvExcluded(prev => { const n = new Set(prev); if (n.has(idx)) n.delete(idx); else n.add(idx); return n; })}
+                          style={{ cursor: 'pointer', accentColor: 'var(--amber)' }} aria-label={`Include ${row.firm} ${row.size}`} />
+                      </td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.firm}>{row.firm}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.accountType}>{row.accountType || <span style={{ color: 'var(--txt-3)' }}>—</span>}</td>
+                      <td title={row.classificationReason} style={{ padding: '9px 12px', color: row.entryKind === 'account' ? 'var(--green)' : 'var(--amber)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {getEntryKindLabel(row.entryKind)}
                       </td>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.size}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{row.size}</td>
                       <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                         {(() => { const tag = normalizeStatus(row.status); return (
                           <span style={{ ...getStatusBadgeStyle(tag), borderRadius: 3, fontSize: 10, fontWeight: 600, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -2162,14 +2192,12 @@ export default function Billing() {
                           </span>
                         ); })()}
                       </td>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.purchaseDate}</td>
-                      <td style={{ padding: '9px 12px', color: displayPrice > 0 ? 'var(--txt-2)' : 'var(--txt-3)', fontFamily: 'var(--font-mono)' }}>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{row.purchaseDate}</td>
+                      <td style={{ padding: '9px 12px', color: displayPrice > 0 ? 'var(--txt-2)' : 'var(--txt-3)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {displayPrice > 0 ? `$${displayPrice.toFixed(2)}` : '—'}
-                        {!row.priceProvided && displayPrice > 0 && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--txt-3)' }}>(auto)</span>}
                       </td>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt-2)', fontFamily: 'var(--font-mono)' }}>{row.payoutReceived > 0 ? `$${row.payoutReceived.toFixed(2)}` : '—'}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--txt-3)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.notes || '—'}</td>
-                      <td style={{ padding: '9px 12px' }}>
+                      <td style={{ padding: '9px 12px', color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.notes}>{row.notes || '—'}</td>
+                      <td style={{ padding: '9px 6px', textAlign: 'center' }}>
                         {row.warning && (
                           <span title={row.warning} style={{ color: 'var(--amber)', cursor: 'help', fontSize: 13 }}>⚠</span>
                         )}
@@ -2189,10 +2217,12 @@ export default function Billing() {
 
             <footer style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
               <button type="button" onClick={() => setIsImportCsvModalOpen(false)} className="billing-command-btn">Cancel</button>
-              <button type="button" onClick={confirmCsvImport} className="billing-command-btn primary">
-                <Download size={13} />
-                Import {csvParsedRows.length} account{csvParsedRows.length === 1 ? '' : 's'}
-              </button>
+              {(() => { const selected = csvParsedRows.length - csvExcluded.size; return (
+                <button type="button" onClick={confirmCsvImport} className="billing-command-btn primary" disabled={selected === 0} style={selected === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>
+                  <Download size={13} />
+                  Import {selected} account{selected === 1 ? '' : 's'}
+                </button>
+              ); })()}
             </footer>
           </div>
         </div>
