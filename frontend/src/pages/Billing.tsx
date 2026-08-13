@@ -116,8 +116,6 @@ interface ParsedCsvRow {
 
 type ViewMode = 'table' | 'pipeline';
 
-const STATUS_OPTIONS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee', 'Eval 1', 'Eval 2', 'Funded', 'Blown', 'Reset'];
-// 'Eval 2' stays valid for legacy/imported entries but is no longer selectable.
 const SELECTABLE_STATUS_OPTIONS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee'];
 
 const PIPELINE_COLS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee'];
@@ -198,10 +196,14 @@ const FIRM_PRICES: Record<string, Record<string, number>> = {
 };
 
 /** Normalise legacy 'Active' status from old data to 'Eval 1'. */
+// Collapse any stored/imported/legacy status to one of the three valid tags, so
+// no account can sit under a status that is no longer an option (e.g. Blown) and
+// 'Eval 1'/'Eval 2' all read simply as 'Eval'.
 function normalizeStatus(raw: unknown): AccountStatus {
-  if (raw === 'Active') return 'Eval 1';
-  if (STATUS_OPTIONS.includes(raw as AccountStatus)) return raw as AccountStatus;
-  return 'Eval 1';
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (s === 'passed' || s === 'funded' || s === 'live') return 'Passed';
+  if (s === 'activation fee' || s === 'activation') return 'Activation fee';
+  return 'Eval';
 }
 
 function inferHistoricalOutcome(
