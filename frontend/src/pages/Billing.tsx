@@ -1281,18 +1281,16 @@ export default function Billing() {
     const totalAccounts = accountEntries.length;
     const totalSpent = accounts.reduce((sum, a) => sum + a.actualPrice, 0);
     const totalPayouts = accounts.reduce((sum, a) => sum + Math.max(0, a.payoutReceived), 0);
-    const totalListPrice = accounts.reduce((sum, a) => sum + a.listPrice, 0);
-    const totalSaved = Math.max(0, totalListPrice - totalSpent);
     const netPnL = totalPayouts - totalSpent;
-    const passedAccounts = accountEntries.filter(a => a.status === 'Passed' || a.evaluationOutcome === 'Passed').length;
+    const passedAccounts = accountEntries.filter(a => a.status === 'Passed').length;
+    const activeAccounts = accountEntries.filter(a => a.status === 'Eval').length;
     const fundedAccounts = accountEntries.filter(a => a.evaluationOutcome === 'Funded').length;
-    const activeAccounts = accountEntries.filter(a => a.status === 'Eval' || a.status === 'Eval 1' || a.status === 'Eval 2').length;
     const blownAccounts = accountEntries.filter(a => a.status === 'Blown').length;
-    const passRate = totalAccounts > 0 ? ((passedAccounts + fundedAccounts) / totalAccounts) * 100 : 0;
+    // Pass rate = passed evaluations over every evaluation attempt (Eval + Passed).
+    const attemptedAccounts = passedAccounts + activeAccounts;
+    const passRate = attemptedAccounts > 0 ? (passedAccounts / attemptedAccounts) * 100 : 0;
     const avgFeePerAccount = totalAccounts > 0 ? totalSpent / totalAccounts : 0;
-    const costPerPass = (passedAccounts + fundedAccounts) > 0
-      ? totalSpent / (passedAccounts + fundedAccounts)
-      : null;
+    const costPerPass = passedAccounts > 0 ? totalSpent / passedAccounts : null;
 
     let monthsActive = 1;
     if (accounts.length > 0) {
@@ -1337,7 +1335,7 @@ export default function Billing() {
     return {
       totalAccounts, totalSpent, totalPayouts, netPnL, monthlyBurn,
       avgFeePerAccount, passedAccounts, fundedAccounts, activeAccounts, blownAccounts,
-      passRate, costPerPass, totalListPrice, totalSaved, roiByFirm, bestFirm,
+      passRate, costPerPass, attemptedAccounts, roiByFirm, bestFirm,
     };
   }, [accounts]);
 
@@ -1679,10 +1677,6 @@ export default function Billing() {
             <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--green)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalPayouts)}</p>
           </div>
           <div>
-            <p className="billing-stat-label">Saved</p>
-            <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.totalSaved)}</p>
-          </div>
-          <div>
             <p className="billing-stat-label">Monthly Burn</p>
             <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(derived.monthlyBurn)}</p>
           </div>
@@ -1700,10 +1694,10 @@ export default function Billing() {
           <div>
             <p className="billing-stat-label">Pass Rate</p>
             <p style={{ margin: '6px 0 2px', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
-              {derived.totalAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}
+              {derived.attemptedAccounts > 0 ? `${derived.passRate.toFixed(1)}%` : '0.0%'}
             </p>
             <p style={{ margin: 0, fontSize: 10, color: 'var(--txt-3)' }}>
-              {derived.passedAccounts + derived.fundedAccounts} of {derived.totalAccounts} passed
+              {derived.passedAccounts} of {derived.attemptedAccounts} passed
             </p>
           </div>
           <div>
@@ -1743,7 +1737,7 @@ export default function Billing() {
         </span>
         <span style={{ width: 1, height: 12, background: 'var(--border)', flexShrink: 0 }} />
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Avg fee <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--txt)', fontWeight: 500 }}>{formatCurrency(derived.avgFeePerAccount)}</strong></span>
-        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)', fontWeight: 500 }}>{derived.passedAccounts + derived.fundedAccounts}</strong></span>
+        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Ever passed <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)', fontWeight: 500 }}>{derived.passedAccounts}</strong></span>
         <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>Blown <strong style={{ fontFamily: 'var(--font-mono)', color: derived.blownAccounts > 0 ? 'var(--red)' : 'var(--txt)', fontWeight: 500 }}>{derived.blownAccounts}</strong></span>
         </div>
       </div>
