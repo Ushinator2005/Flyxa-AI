@@ -583,16 +583,19 @@ export default function Billing() {
   }, [storeBillingAccounts]);
 
   // Persist local edits back to the store — but never the empty pre-hydration
-  // snapshot, which would clobber the saved ledger before the cloud loads.
+  // snapshot, which would clobber the saved ledger before the cloud loads. The
+  // store's current billing count is read non-reactively (getState) so this
+  // effect does not re-fire when hydrateSharedData mutates it (which would loop).
   const firstBillingWriteRef = useRef(true);
   useEffect(() => {
-    if (accounts.length === 0 && storeBillingAccounts.length > 0 && !storeHydratedRef.current) return;
+    const storeHasBilling = useFlyxaStore.getState().billingAccounts.length > 0;
+    if (accounts.length === 0 && storeHasBilling && !storeHydratedRef.current) return;
     hydrateSharedData({ billingAccounts: accounts as unknown as StoreBillingAccount[] });
     // Skip the initial mount echo, but flush every real change (import, add,
     // edit, delete) to Supabase immediately rather than on the autosave debounce.
     if (firstBillingWriteRef.current) { firstBillingWriteRef.current = false; return; }
     void flushSupabaseStoreNow();
-  }, [accounts, hydrateSharedData, storeBillingAccounts]);
+  }, [accounts, hydrateSharedData]);
 
   const getPreferredListPrice = (firm: string, size: string, currentListPrice: number): number => {
     const livePrice = livePricesByFirm[firm]?.prices?.[size];
