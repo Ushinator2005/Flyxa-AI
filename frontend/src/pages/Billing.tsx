@@ -643,6 +643,15 @@ export default function Billing() {
         ? createdDate.toISOString().slice(0, 10)
         : getTodayInputDate();
 
+      // Carry payout history over from the linked trading account so ROI is
+      // right on import, previously these were dropped, zeroing recovered ROI.
+      const maybePayouts = (account as unknown as { payouts?: Array<{ id?: string; amount?: number; date?: string }> }).payouts;
+      const srcPayouts = Array.isArray(maybePayouts) ? maybePayouts : [];
+      const importedPayouts = srcPayouts
+        .filter(p => Number.isFinite(p?.amount))
+        .map(p => ({ id: typeof p.id === 'string' && p.id ? p.id : createId(), amount: Math.max(0, Number(p.amount)), date: typeof p.date === 'string' && p.date ? p.date : purchaseDate }));
+      const importedPayoutTotal = importedPayouts.reduce((sum, p) => sum + p.amount, 0);
+
       return {
         id: createId(),
         sourceAccountId: account.id,
@@ -664,8 +673,8 @@ export default function Billing() {
               : 'Unknown',
         outcomeEvidence: `Imported from linked account status: ${account.status}`,
         outcomeConfidence: 'high',
-        payoutReceived: 0,
-        payouts: [],
+        payoutReceived: importedPayoutTotal,
+        payouts: importedPayouts,
         notes: `Imported from account: ${account.name}${listPrice === 0 ? '. Add the purchase price to complete billing.' : ''}`,
         pricingPath,
         activationFee: template?.activationFee,
