@@ -299,8 +299,8 @@ export default function Rivals() {
     <div className="rv2-page" style={{ color: LB.text }}>
 
       {/* ── Header ── */}
-      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, padding: '2px 2px 20px' }}>
-        <h1 style={{ margin: 0, minWidth: 0, fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', color: LB.text, lineHeight: 1.1 }}>
+      <header data-tour-id="rivals-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, padding: '22px 2px 14px' }}>
+        <h1 style={{ margin: 0, minWidth: 0, fontFamily: 'var(--font-sans)', fontSize: 34, fontWeight: 600, letterSpacing: '-0.03em', color: LB.text, lineHeight: 1.1 }}>
           {activeLeague?.name ?? 'Rivals'}
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
