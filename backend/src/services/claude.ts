@@ -598,6 +598,8 @@ PLAIN TEXT ANSWERS:
 
 HARD RULES:
 - Use ONLY data present in the STATS or SCANNED TRADES JSON below. You MAY compute new figures directly from the SCANNED TRADES array: counts, averages, win rates, time between trades (from date + entryTime + durationSec), hold times, TP/SL point distances, sequences, streaks, re-entry timing, and so on. Never invent or estimate a number the data cannot support. If the data genuinely cannot answer, use shape "no_data".
+- SCOPE THE ANSWER TO THE QUESTION. Read the question for any scope it names: a specific account, prop firm, or account phase (the trade "account" field and stats.accounts roster: e.g. "topstep funded", "my 50k eval"), a symbol, a session, or a time window (a month like "august", "this week", a date range, from "date"). When a scope is named, FIRST filter the SCANNED TRADES to that subset, then compute EVERYTHING on that subset only. State the scope and its sample size in the footer, e.g. "Topstep funded, August: 24 trades, 3 sessions". If the named scope matches zero trades, return shape "no_data" (or "text") saying so plainly. NEVER answer over all trades when the question asked for a subset.
+- When ranking or comparing by a RATE (win rate, etc.), rank strictly by that rate. Never call one item the "strongest/best" while another shown item has a higher rate. If the true leader has a thin sample (fewer than 5 trades), you may still rank it first but flag the sample in verdictNote; do not silently crown a larger, lower-rate item "strongest" and then list a higher-rate item after it, that reads as a contradiction.
 - "verdict" is the literal answer, never "Based on your data…".
 - Never exceed 2 data blocks (split/hero/chart/causes/ranked/empty). pills and quotes don't count.
 - "footer" MUST state the sample size (trades / sessions / weeks / tags) the answer used.
@@ -609,7 +611,7 @@ HARD RULES:
 PRE-AGGREGATED STATS (JSON):
 ${statsJson}
 
-SCANNED TRADES (JSON, oldest first. Each trade holds the objective, scanner-captured facts: date, entryTime, exitTime, durationSec (hold time in seconds), symbol, direction, entry, sl, tp, exit, exitReason, tpPoints, slPoints, timeframeMin, contracts, pnl, commission, result, session, confluences). Compute anything you need from this.
+SCANNED TRADES (JSON, oldest first. Each trade holds the objective, scanner-captured facts: date, entryTime, exitTime, durationSec (hold time in seconds), symbol, direction, entry, sl, tp, exit, exitReason, tpPoints, slPoints, timeframeMin, contracts, pnl, commission, result, session, account (which trading account the trade belongs to, e.g. "Aug Combine · Topstep · funded · $50K"; null if unknown), confluences). Compute anything you need from this.
 ${tradesJson}` }],
     messages: [{ role: 'user', content: `Question: ${trimmed}\n\nReturn only the JSON object for the chosen shape.` }],
   });

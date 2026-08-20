@@ -456,6 +456,7 @@ export default function FlyxaAIAsk() {
 
   const storeEntries = useFlyxaStore(state => state.entries);
   const preSessionHistory = useFlyxaStore(state => state.preSessionHistory);
+  const accounts = useFlyxaStore(state => state.accounts);
   const activeAccount = useFlyxaStore(state => state.accounts.find(account => account.id === state.activeAccountId) ?? state.accounts[0]);
 
   const focusedTradeId = searchParams.get('tradeId');
@@ -550,6 +551,16 @@ export default function FlyxaAIAsk() {
     const activeRule = activeAccount && (activeAccount.type === 'eval' || activeAccount.phase === 'eval')
       ? inferEvaluationTemplate(activeAccount)
       : null;
+    // Human-readable account descriptor per account id, so the model can scope
+    // the answer when the question names an account, firm, or phase.
+    const accountsById = new Map(accounts.map(a => [a.id, a]));
+    const accountLabel = (id?: string): string | null => {
+      const a = id ? accountsById.get(id) : undefined;
+      if (!a) return null;
+      const size = a.size ? `$${Math.round(a.size / 1000)}K` : '';
+      return [a.name, a.firm, a.phase, size].filter(Boolean).join(' · ');
+    };
+
     const stats = {
       ...computeAllStats(trades),
       activeAccount: activeAccount ? {
@@ -559,6 +570,9 @@ export default function FlyxaAIAsk() {
         size: activeAccount.size,
         phase: activeAccount.phase,
       } : null,
+      // Full account roster so the model can resolve a named account/firm/phase
+      // ("topstep funded", "my 50k eval") to the trades that belong to it.
+      accounts: accounts.map(a => ({ name: a.name, firm: a.firm, phase: a.phase, type: a.type, size: a.size })),
       activePropFirmRule: activeRule,
       availableTopstepRules: getEvaluationTemplates().filter(template => template.firm === 'Topstep'),
     };
@@ -589,6 +603,7 @@ export default function FlyxaAIAsk() {
       commission: t.commission,
       result: (t.pnl ?? 0) > 0 ? 'win' : (t.pnl ?? 0) < 0 ? 'loss' : 'be',
       session: t.session,
+      account: accountLabel(t.accountId ?? t.account_id),
       confluences: t.confluences,
     }));
 
