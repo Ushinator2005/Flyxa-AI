@@ -8,7 +8,7 @@ import { computeAllStats, QUICK_QUESTIONS } from '../utils/askFlyxa.js';
 import { api, aiApi } from '../services/api.js';
 import type { Trade } from '../types/index.js';
 import useFlyxaStore from '../store/flyxaStore.js';
-import { useAppSettings } from '../contexts/AppSettingsContext.js';
+import { useAppSettings, ALL_ACCOUNTS_ID } from '../contexts/AppSettingsContext.js';
 import { deriveTradeSessionLabel } from '../utils/sessionTimes.js';
 import { normalizeConfluenceTags } from '../utils/confluenceTags.js';
 import { getEvaluationTemplates, inferEvaluationTemplate } from '../utils/evaluationCoach.js';
@@ -437,8 +437,16 @@ const themeVars = {
 export default function FlyxaAIAsk() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { trades } = useTrades();
-  const { preferences } = useAppSettings();
+  const { trades: allTrades } = useTrades();
+  const { preferences, filterTradesBySelectedAccount, selectedAccountId } = useAppSettings();
+  // Scope to the account chosen in the top-bar picker, exactly like the
+  // Dashboard/Patterns/Analytics pages. "All Accounts" returns everything;
+  // a specific account returns only its trades. This is the reliable filter,
+  // the model is only trusted for finer scoping (period, session, symbol).
+  const trades = useMemo(
+    () => filterTradesBySelectedAccount(allTrades) as Trade[],
+    [filterTradesBySelectedAccount, allTrades],
+  );
   const [input, setInput] = useState('');
   // Chat history is persisted in the store (and synced to Supabase), so past
   // questions and answers survive navigation and reloads.
@@ -466,8 +474,9 @@ export default function FlyxaAIAsk() {
   }, [focusedTradeId, storeEntries]);
   const focusedTrade = useMemo<Trade | null>(() => {
     if (!focusedTradeId) return null;
-    // Primary: search ApiTrade list (already converted)
-    const byApiId = (trades as Trade[]).find(t => t.id === focusedTradeId);
+    // Primary: search the full ApiTrade list (a deep-linked trade may sit on an
+    // account other than the one currently selected, so use allTrades here).
+    const byApiId = (allTrades as Trade[]).find(t => t.id === focusedTradeId);
     if (byApiId) return byApiId;
     // Fallback: search raw store entries in case of async hydration or ID edge cases
     for (const entry of storeEntries) {
@@ -478,7 +487,7 @@ export default function FlyxaAIAsk() {
       }
     }
     return null;
-  }, [focusedTradeId, trades, storeEntries]);
+  }, [focusedTradeId, allTrades, storeEntries]);
   const focusedTradeWithSessionContext = useMemo<Trade | null>(() => {
     if (!focusedTrade) return null;
     const tradeDate = focusedTrade.trade_date;
@@ -522,12 +531,12 @@ export default function FlyxaAIAsk() {
     if (!focusedTradeId || !focusedTradeWithSessionContext || tradeAnalysisById[focusedTradeId]) return;
     setTradeAnalysisLoadingId(focusedTradeId);
     setTradeAnalysisError(null);
-    aiApi.analyzeTradeById(focusedTradeId, focusedTradeWithSessionContext, trades)
+    aiApi.analyzeTradeById(focusedTradeId, focusedTradeWithSessionContext, allTrades)
       .then(({ analysis }) => { if (!cancelled) setTradeAnalysisById(prev => ({ ...prev, [focusedTradeId]: analysis })); })
       .catch(err => { if (!cancelled) setTradeAnalysisError(err instanceof Error ? err.message : 'Unable to analyse this trade.'); })
       .finally(() => { if (!cancelled) setTradeAnalysisLoadingId(cur => cur === focusedTradeId ? null : cur); });
     return () => { cancelled = true; };
-  }, [focusedTradeId, focusedTradeWithSessionContext, tradeAnalysisById, trades]);
+  }, [focusedTradeId, focusedTradeWithSessionContext, tradeAnalysisById, allTrades]);
 
   const clearFocus = () => {
     const next = new URLSearchParams(searchParams);
@@ -573,6 +582,12 @@ export default function FlyxaAIAsk() {
       // Full account roster so the model can resolve a named account/firm/phase
       // ("topstep funded", "my 50k eval") to the trades that belong to it.
       accounts: accounts.map(a => ({ name: a.name, firm: a.firm, phase: a.phase, type: a.type, size: a.size })),
+      // Whether the SCANNED TRADES are already narrowed to one account by the
+      // app's account picker. When scoped, the model must NOT filter by account
+      // again, every trade already belongs to it; it only scopes by period/session/symbol.
+      scope: (selectedAccountId && selectedAccountId !== ALL_ACCOUNTS_ID)
+        ? { accountScoped: true, account: accountLabel(selectedAccountId) ?? activeAccount?.name ?? 'selected account' }
+        : { accountScoped: false },
       activePropFirmRule: activeRule,
       availableTopstepRules: getEvaluationTemplates().filter(template => template.firm === 'Topstep'),
     };
