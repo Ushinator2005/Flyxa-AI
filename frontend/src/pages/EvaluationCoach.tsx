@@ -148,15 +148,16 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 // profit-target line; a funded account has none. Uniform-scale SVG (no
 // preserveAspectRatio="none", which distorts text and stroke widths), so labels
 // can live inside the SVG.
-function EquityChart({ points, floors, dates, start, target, locked, biggest, payoutDates }: {
+function EquityChart({ points, floors, dates, start, target, locked, biggest, payoutMarkers }: {
   points: number[]; floors: number[]; dates: string[]; start: number; target?: number;
   locked: boolean; biggest: { date: string; pnl: number; pct: number | null };
-  payoutDates?: string[];
+  payoutMarkers?: Array<{ date: string; amount: number; newBalance: number }>;
 }) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   if (points.length < 2 || points.some(v => !Number.isFinite(v))) return null;
-  // Dates on which a payout was taken get a green dot instead of the amber one.
-  const payoutSet = new Set(payoutDates ?? []);
+  // Dates on which a payout was taken get a green dot instead of the amber one,
+  // and a hover tooltip showing the withdrawal amount and the resulting balance.
+  const payoutByDate = new Map((payoutMarkers ?? []).map(m => [m.date, m]));
   const W = 1000, H = 300, X0 = 74, X1 = 944, Y0 = 34, Y1 = 246;
   const floorsSafe = floors.length === points.length && floors.every(v => Number.isFinite(v))
     ? floors : points.map(() => start);
@@ -235,9 +236,9 @@ function EquityChart({ points, floors, dates, start, target, locked, biggest, pa
         )}
 
         {points.map((v, i) => (i < points.length - 1
-          ? <circle key={i} className={`ec-fc-dot${i >= 1 && payoutSet.has(dates[i - 1]) ? ' payout' : ''}`} cx={x(i)} cy={y(v)} r={i >= 1 && payoutSet.has(dates[i - 1]) ? '4.2' : '3.4'} />
+          ? <circle key={i} className={`ec-fc-dot${i >= 1 && payoutByDate.has(dates[i - 1]) ? ' payout' : ''}`} cx={x(i)} cy={y(v)} r={i >= 1 && payoutByDate.has(dates[i - 1]) ? '4.2' : '3.4'} />
           : null))}
-        <circle className={`ec-fc-end${payoutSet.has(dates[points.length - 2]) ? ' payout' : ''}`} cx={x(points.length - 1)} cy={y(last)} r="4" />
+        <circle className={`ec-fc-end${payoutByDate.has(dates[points.length - 2]) ? ' payout' : ''}`} cx={x(points.length - 1)} cy={y(last)} r="4" />
         <text className="ec-fc-val" x={X1 - 6} y={y(last) - 12} textAnchor="end">{money(endValue)}</text>
 
         {points.map((_, i) => (
@@ -257,10 +258,11 @@ function EquityChart({ points, floors, dates, start, target, locked, biggest, pa
         {hoverIdx !== null && (() => {
           const i = hoverIdx;
           const cx = x(i), cy = y(points[i]);
+          const po = i >= 1 ? payoutByDate.get(dates[i - 1]) : undefined;
           const eq = points[i] - start;
           const fl = floorsSafe[i] - start;
           const sign = (n: number) => (n > 0 ? '+' : '') + money(n);
-          const boxW = 168, boxH = 54;
+          const boxW = 172, boxH = 54;
           const bx = Math.min(Math.max(cx - boxW / 2, X0), X1 - boxW);
           const by = Math.max(cy - boxH - 16, 4);
           return (
@@ -268,8 +270,13 @@ function EquityChart({ points, floors, dates, start, target, locked, biggest, pa
               <circle className="ec-fc-hoverdot" cx={cx} cy={cy} r="5.5" />
               <rect className="ec-fc-tipbox" x={bx} y={by} width={boxW} height={boxH} rx="7" />
               <text className="ec-fc-tipdate" x={bx + 13} y={by + 18}>{i === 0 ? 'OPEN' : fmtDate(dates[i - 1])}</text>
-              <text className="ec-fc-tipeq" x={bx + 13} y={by + 35}>Equity {sign(eq)}</text>
-              <text className="ec-fc-tipmll" x={bx + 13} y={by + 48}>MLL {sign(fl)}</text>
+              {po ? (<>
+                <text className="ec-fc-tippayout" x={bx + 13} y={by + 35}>Payout taken &minus;{money(po.amount)}</text>
+                <text className="ec-fc-tipmll" x={bx + 13} y={by + 48}>New balance {money(po.newBalance)}</text>
+              </>) : (<>
+                <text className="ec-fc-tipeq" x={bx + 13} y={by + 35}>Equity {sign(eq)}</text>
+                <text className="ec-fc-tipmll" x={bx + 13} y={by + 48}>MLL {sign(fl)}</text>
+              </>)}
             </g>
           );
         })()}
@@ -706,6 +713,19 @@ export default function EvaluationCoach() {
   const payouts = selected.payouts ?? [];
   const totalPayouts = payouts.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const lastPayoutDate = payouts.reduce((m, p) => (p.date > m ? p.date : m), '');
+  // Equity-chart payout markers: amount taken on each date and the balance that
+  // remained after it (trading balance at that date, net of payouts through it).
+  const payoutMarkers = (() => {
+    const out: Array<{ date: string; amount: number; newBalance: number }> = [];
+    let cum = 0;
+    for (let i = 0; i < equityDates.length; i++) {
+      const d = equityDates[i];
+      const amt = payouts.filter(p => p.date === d).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      cum += amt;
+      if (amt > 0) out.push({ date: d, amount: amt, newBalance: equityPoints[i + 1] - cum });
+    }
+    return out;
+  })();
   const balanceAfterPayouts = progress.currentBalance - totalPayouts;
   const drawdownRemainingNet = Math.max(0, progress.drawdownRemaining - totalPayouts);
   // Withdrawable = profit above the starting balance, minus payouts already taken.
@@ -931,6 +951,9 @@ Payout requirements for this path (these are the ONLY rules — do not invent ot
 ${gateLines || '- Withdraw any profit above the safety net.'}
 Blocking requirement: ${payoutReadiness?.blocking ?? 'none — eligible to withdraw'}
 Withdrawable this cycle: ${money(withdrawableAmount)} | Cycle profit so far: ${money(cycleProfit)}
+Payout history: ${payouts.length > 0
+  ? `${payouts.length} payout${payouts.length === 1 ? '' : 's'} ALREADY taken on this account, ${money(totalPayouts)} withdrawn in total${lastPayoutDate ? `, most recent on ${lastPayoutDate}` : ''}. The upcoming payout is NOT their first — never call it "first".`
+  : 'no payouts taken yet — the next one would genuinely be their first.'}
 MLL: balance must stay above ${money(progress.drawdownFloor)}${progress.floorLocked ? ' (locked)' : ''} — ${money(drawdownRemainingNet)} of room left
 Sessions traded this cycle: ${cycleEntries.length} | Avg P&L/session: ${money(avgDailyPnl)}
 Suggested risk cap: ${suggestedRiskCap > 0 ? money(suggestedRiskCap) : 'stand down'}
@@ -1107,7 +1130,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             </div>
             {equityPoints.length < 2
               ? <p className="ec-no-data">No sessions recorded yet, the balance line starts with your first trade.</p>
-              : <EquityChart points={equityPoints} floors={mllSeries} dates={equityDates} start={startBalance} target={showTarget ? targetBalance : undefined} locked={progress.floorLocked} biggest={{ date: biggestDay.date, pnl: biggestDay.pnl, pct: progress.consistencyPct }} payoutDates={payouts.map(p => p.date)} />}
+              : <EquityChart points={equityPoints} floors={mllSeries} dates={equityDates} start={startBalance} target={showTarget ? targetBalance : undefined} locked={progress.floorLocked} biggest={{ date: biggestDay.date, pnl: biggestDay.pnl, pct: progress.consistencyPct }} payoutMarkers={payoutMarkers} />}
           </div>
         </div>
 

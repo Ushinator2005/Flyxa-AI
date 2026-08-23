@@ -1463,6 +1463,7 @@
 .ec-fc-tipbox { fill: var(--app-bg); stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }
 .ec-fc-tipdate { font-size: 9.5px; fill: var(--txt-3); letter-spacing: 0.08em; }
 .ec-fc-tipeq { font-size: 12px; fill: var(--amber); font-weight: 500; }
+.ec-fc-tippayout { font-size: 12px; fill: var(--green); font-weight: 600; }
 .ec-fc-tipmll { font-size: 10.5px; fill: var(--red); fill-opacity: .85; }
 @media (prefers-reduced-motion: reduce) {
   .ec-fc svg, .ec-fc-band { animation: none !important; opacity: 1 !important; }
