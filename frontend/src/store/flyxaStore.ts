@@ -10,6 +10,7 @@ import { pushToast } from './toastStore.js';
 import { scaleContractAmount } from '../utils/contractSizing.js';
 import { DEFAULT_STRUCTURED_RULES } from '../utils/tradingRules.js';
 import { mergeAccountsPreservingPayouts } from '../utils/accountPayouts.js';
+import { chooseBillingLedger } from '../utils/billingPersistence.js';
 import type {
   Account,
   Achievement,
@@ -1211,10 +1212,13 @@ const useFlyxaStore = create<FlyxaStore>()(
         );
         // Never replace existing entries with fewer — protects against rehydrate wiping data
         const sanitizedEntries = incomingEntries.length >= baseEntries.length ? incomingEntries : baseEntries;
-        const sanitizedBilling = (persisted.billingAccounts ?? base.billingAccounts).map((account) => ({
-          ...account,
-          roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
-        }));
+        // Never let a rehydrate shrink the billing ledger below what memory holds:
+        // a stale or empty persisted blob was silently wiping billing accounts.
+        const sanitizedBilling = chooseBillingLedger(base.billingAccounts, persisted.billingAccounts)
+          .map((account) => ({
+            ...account,
+            roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
+          }));
         // Union payouts from the in-memory (base) accounts into the persisted
         // ones so a rehydrate from a stale blob can never drop a withdrawal that
         // was just logged and flushed. Mirrors the entries "never fewer" guard above.

@@ -484,11 +484,13 @@ function recoverMissingStateFromRemote(
     patch.accounts = rAccounts;
   }
 
-  // Arrays: recover when local is empty but remote is not. (billingAccounts is
-  // NOT included: the Billing page now derives its ledger straight from the store
-  // and only writes on explicit user action, so an empty billing list is always
-  // intentional — recovering it would resurrect a deliberately deleted account.)
-  for (const key of ['tradingPlanRules', 'rivals', 'privateLeagues', 'goals']) {
+  // Arrays: recover when local is empty but remote is not. billingAccounts IS
+  // included: an empty local ledger at write time is almost always a pre-hydration
+  // or rehydrate-race artifact, not a real "delete everything", and this exact
+  // gap was wiping the billing ledger repeatedly. Erring toward keeping the ledger
+  // means a rare delete-to-empty can be undone by a stale remote copy; that is far
+  // better than losing the whole ledger. (Reliable clearing would need tombstones.)
+  for (const key of ['tradingPlanRules', 'rivals', 'privateLeagues', 'goals', 'billingAccounts']) {
     const mArr = mergedState[key];
     const rArr = remoteState[key];
     if (Array.isArray(rArr) && rArr.length > 0 && !(Array.isArray(mArr) && mArr.length > 0)) {
