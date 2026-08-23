@@ -1274,6 +1274,11 @@ const useFlyxaStore = create<FlyxaStore>()(
           privateLeagues: (persisted.privateLeagues && persisted.privateLeagues.length > 0)
             ? persisted.privateLeagues
             : base.privateLeagues,
+          // Payout proof photos: an empty persisted list must never wipe saved
+          // proofs (the images live in storage; this keeps the gallery entries).
+          payoutGallery: (persisted.payoutGallery && persisted.payoutGallery.length > 0)
+            ? persisted.payoutGallery
+            : base.payoutGallery,
           deletedTradeIds,
           deletedEntryDates,
           restoredEntryDates,

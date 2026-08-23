@@ -1451,7 +1451,10 @@
 .ec-fc-eq { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .ec-fc-band { opacity: 0; animation: ecFcFade .8s ease-out .35s forwards; }
 .ec-fc-dot { fill: var(--app-panel); stroke: var(--amber); stroke-width: 2; }
+/* A payout was taken on this date: solid green dot instead of the amber ring. */
+.ec-fc-dot.payout { fill: var(--green); stroke: var(--green); }
 .ec-fc-end { fill: var(--amber); }
+.ec-fc-end.payout { fill: var(--green); }
 .ec-fc-spike { stroke: rgba(245, 158, 11, 0.35); stroke-width: 1; stroke-dasharray: 2 3; }
 .ec-fc-note { font-size: 11px; fill: var(--amber); }
 .ec-fc-note.lock { font-size: 10px; fill: var(--red); fill-opacity: .85; letter-spacing: 0.08em; }

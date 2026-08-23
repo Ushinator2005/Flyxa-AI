@@ -512,7 +512,7 @@ function recoverMissingStateFromRemote(
   // gap was wiping the billing ledger repeatedly. Erring toward keeping the ledger
   // means a rare delete-to-empty can be undone by a stale remote copy; that is far
   // better than losing the whole ledger. (Reliable clearing would need tombstones.)
-  for (const key of ['tradingPlanRules', 'rivals', 'privateLeagues', 'goals', 'billingAccounts']) {
+  for (const key of ['tradingPlanRules', 'rivals', 'privateLeagues', 'goals', 'billingAccounts', 'payoutGallery']) {
     const mArr = mergedState[key];
     const rArr = remoteState[key];
     if (Array.isArray(rArr) && rArr.length > 0 && !(Array.isArray(mArr) && mArr.length > 0)) {

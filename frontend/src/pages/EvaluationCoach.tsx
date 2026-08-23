@@ -148,12 +148,15 @@ function computeBehavioralWarnings(trades: Trade[]): EvaluationAgentAlert[] {
 // profit-target line; a funded account has none. Uniform-scale SVG (no
 // preserveAspectRatio="none", which distorts text and stroke widths), so labels
 // can live inside the SVG.
-function EquityChart({ points, floors, dates, start, target, locked, biggest }: {
+function EquityChart({ points, floors, dates, start, target, locked, biggest, payoutDates }: {
   points: number[]; floors: number[]; dates: string[]; start: number; target?: number;
   locked: boolean; biggest: { date: string; pnl: number; pct: number | null };
+  payoutDates?: string[];
 }) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   if (points.length < 2 || points.some(v => !Number.isFinite(v))) return null;
+  // Dates on which a payout was taken get a green dot instead of the amber one.
+  const payoutSet = new Set(payoutDates ?? []);
   const W = 1000, H = 300, X0 = 74, X1 = 944, Y0 = 34, Y1 = 246;
   const floorsSafe = floors.length === points.length && floors.every(v => Number.isFinite(v))
     ? floors : points.map(() => start);
@@ -232,9 +235,9 @@ function EquityChart({ points, floors, dates, start, target, locked, biggest }: 
         )}
 
         {points.map((v, i) => (i < points.length - 1
-          ? <circle key={i} className="ec-fc-dot" cx={x(i)} cy={y(v)} r="3.4" />
+          ? <circle key={i} className={`ec-fc-dot${i >= 1 && payoutSet.has(dates[i - 1]) ? ' payout' : ''}`} cx={x(i)} cy={y(v)} r={i >= 1 && payoutSet.has(dates[i - 1]) ? '4.2' : '3.4'} />
           : null))}
-        <circle className="ec-fc-end" cx={x(points.length - 1)} cy={y(last)} r="4" />
+        <circle className={`ec-fc-end${payoutSet.has(dates[points.length - 2]) ? ' payout' : ''}`} cx={x(points.length - 1)} cy={y(last)} r="4" />
         <text className="ec-fc-val" x={X1 - 6} y={y(last) - 12} textAnchor="end">{money(endValue)}</text>
 
         {points.map((_, i) => (
@@ -1104,7 +1107,7 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
             </div>
             {equityPoints.length < 2
               ? <p className="ec-no-data">No sessions recorded yet, the balance line starts with your first trade.</p>
-              : <EquityChart points={equityPoints} floors={mllSeries} dates={equityDates} start={startBalance} target={showTarget ? targetBalance : undefined} locked={progress.floorLocked} biggest={{ date: biggestDay.date, pnl: biggestDay.pnl, pct: progress.consistencyPct }} />}
+              : <EquityChart points={equityPoints} floors={mllSeries} dates={equityDates} start={startBalance} target={showTarget ? targetBalance : undefined} locked={progress.floorLocked} biggest={{ date: biggestDay.date, pnl: biggestDay.pnl, pct: progress.consistencyPct }} payoutDates={payouts.map(p => p.date)} />}
           </div>
         </div>
 
