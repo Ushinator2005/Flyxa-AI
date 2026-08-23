@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { pushToast } from '../store/toastStore.js';
-import { recoverMissingTradesFromLocalBackup } from '../utils/browserRecovery.js';
+import { recoverMissingTradesFromLocalBackup, recoverMissingBillingFromLocalBackup } from '../utils/browserRecovery.js';
 
 /**
  * Runs browser-backup recovery automatically once per session, after the
@@ -24,6 +24,16 @@ export function useAutoBrowserRecovery(): void {
       if (cancelled || ranForUser.current === userId) return;
       ranForUser.current = userId;
       try {
+        // Repair a wiped/partial billing ledger from this browser's safe backup.
+        const billingRecovered = await recoverMissingBillingFromLocalBackup(userId);
+        if (!cancelled && billingRecovered > 0) {
+          pushToast({
+            message: `Restored ${billingRecovered} billing account${billingRecovered !== 1 ? 's' : ''} from this browser's backup.`,
+            tone: 'green',
+            durationMs: 6000,
+          });
+        }
+
         const { tradesRecovered, daysRecovered } = await recoverMissingTradesFromLocalBackup(userId);
         if (cancelled || (tradesRecovered === 0 && daysRecovered === 0)) return;
         const parts: string[] = [];

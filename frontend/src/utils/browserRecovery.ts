@@ -1,6 +1,6 @@
 import useFlyxaStore from '../store/flyxaStore.js';
-import { flushSupabaseStoreNow, readLocalSafeBackupEntries } from '../store/supabaseStorage.js';
-import type { JournalEntry } from '../store/types.js';
+import { flushSupabaseStoreNow, readLocalSafeBackupEntries, readLocalBillingSafe } from '../store/supabaseStorage.js';
+import type { BillingAccount, JournalEntry } from '../store/types.js';
 
 export interface RecoveryResult {
   tradesRecovered: number;
@@ -68,4 +68,27 @@ export async function recoverMissingTradesFromLocalBackup(userId: string): Promi
   state.setEntries(merged, { notifyAchievements: false });
   await flushSupabaseStoreNow();
   return result;
+}
+
+/**
+ * Restores billing accounts from this browser's append-only safe backup when the
+ * store is missing them. Additive-only (never removes), so it repairs a wiped or
+ * partially-lost ledger without fighting a legitimate edit. Safe to run on load.
+ */
+export async function recoverMissingBillingFromLocalBackup(userId: string): Promise<number> {
+  const safe = readLocalBillingSafe(userId);
+  if (safe.length === 0) return 0;
+
+  const state = useFlyxaStore.getState();
+  const current = (state.billingAccounts ?? []) as BillingAccount[];
+  const haveIds = new Set(current.map(account => account?.id).filter(Boolean));
+  const missing = safe.filter(
+    (account): account is Record<string, unknown> & { id: string } =>
+      !!account && typeof account.id === 'string' && !haveIds.has(account.id)
+  );
+  if (missing.length === 0) return 0;
+
+  state.hydrateSharedData({ billingAccounts: [...current, ...(missing as unknown as BillingAccount[])] });
+  await flushSupabaseStoreNow();
+  return missing.length;
 }

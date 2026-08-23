@@ -26,6 +26,28 @@ function emitSaveStatus(status: 'saving' | 'saved' | 'error'): void {
 function localStoreKey(userId: string)       { return `flyxa-store-${userId}`; }
 function localSavedAtKey(userId: string)     { return `flyxa-store-saved-at-${userId}`; }
 function localEntriesSafeKey(userId: string) { return `flyxa-entries-safe-${userId}`; }
+function localBillingSafeKey(userId: string) { return `flyxa-billing-safe-${userId}`; }
+
+// Append-only safe backup of the billing ledger. It is ONLY ever written when
+// the ledger is non-empty, so no wipe can clear it — recovery restores from here
+// when the store comes up empty. Independent of the main store blob on purpose.
+function mirrorLocalBillingSafe(userId: string, billing: unknown): void {
+  try {
+    if (!Array.isArray(billing) || billing.length === 0) return; // never overwrite with empty
+    localStorage.setItem(localBillingSafeKey(userId), JSON.stringify(billing));
+  } catch { /* quota — non-fatal */ }
+}
+
+export function readLocalBillingSafe(userId: string): Record<string, unknown>[] {
+  try {
+    const raw = localStorage.getItem(localBillingSafeKey(userId));
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? (arr as Record<string, unknown>[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 // Legacy shared keys — read-only, used only for one-time migration of existing users.
 const LEGACY_STORE_KEY            = 'flyxa-store';
@@ -1019,6 +1041,7 @@ async function flushSave(userId: string, value: string): Promise<void> {
   // Write localStorage backup BEFORE the network call so local recovery data
   // is always current, even when Supabase is temporarily unreachable.
   mirrorLocalEntriesSafe(entries, userId, deletedTradeIds, deletedEntryDates);
+  mirrorLocalBillingSafe(userId, (parsed.state as Record<string, unknown> | undefined)?.billingAccounts);
 
   // Fire the per-entry Supabase backup table concurrently with the main save.
   // This means store_entries_backup is updated even if user_store fails, giving

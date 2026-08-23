@@ -298,7 +298,12 @@ export default function App() {
 
     try {
       const billingRaw = window.localStorage.getItem('flyxa_billing_accounts');
-      if (billingRaw) payload.billingAccounts = JSON.parse(billingRaw) as typeof payload.billingAccounts;
+      if (billingRaw) {
+        const parsed = JSON.parse(billingRaw) as typeof payload.billingAccounts;
+        // Only migrate a NON-empty legacy ledger. An empty "[]" here would flow
+        // into hydrateSharedData and wipe the current billing accounts.
+        if (Array.isArray(parsed) && parsed.length > 0) payload.billingAccounts = parsed;
+      }
     } catch {
       // Ignore malformed legacy data.
     }
