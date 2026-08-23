@@ -813,9 +813,15 @@ const useFlyxaStore = create<FlyxaStore>()(
 
       setActiveAccount: (id) => set(() => ({ activeAccountId: id })),
 
-      addAccount: (account) => set((state) => ({
-        accounts: [...state.accounts.filter((item) => item.id !== account.id), account],
-      })),
+      addAccount: (account) => set((state) => {
+        // Upsert by id, but never drop payouts already logged on an account with
+        // the same id (the incoming object may not carry them).
+        const existing = state.accounts.find((item) => item.id === account.id);
+        const merged = existing?.payouts?.length && !account.payouts?.length
+          ? { ...account, payouts: existing.payouts }
+          : account;
+        return { accounts: [...state.accounts.filter((item) => item.id !== account.id), merged] };
+      }),
 
       updateAccount: (id, updates) => set((state) => ({
         accounts: state.accounts.map((account) => (account.id === id ? { ...account, ...updates } : account)),
