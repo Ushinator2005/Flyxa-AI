@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronDown, FileJson, FileSpreadsheet, Monitor, Palette, RotateCcw, Scan, Tag, Trash2, Upload, User, Wallet, X, DollarSign, Clock, Database, Code } from 'lucide-react';
@@ -821,6 +821,27 @@ export default function Settings() {
   const deletedSet = new Set(deletedTradeIds);
   const loadedTradeCount = journalEntries.reduce((sum, entry) => sum + entry.trades.filter(t => !deletedSet.has(t.id)).length, 0);
   const backupStamp = new Date().toISOString().slice(0, 10);
+
+  // Net P&L per account (pnl minus commission), so the row can show the SAME
+  // live balance the dashboard shows: startingBalance + netPnL − payouts.
+  const netPnlByAccount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of journalEntries) {
+      const acctId = (entry as { account?: string }).account ?? DEFAULT_ACCOUNT_ID;
+      for (const trade of entry.trades) {
+        if (deletedSet.has(trade.id)) continue;
+        map.set(acctId, (map.get(acctId) ?? 0) + Number(trade.pnl ?? 0) - Number(trade.commission ?? 0));
+      }
+    }
+    return map;
+  }, [journalEntries, deletedTradeIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  const liveBalanceFor = (account: { id: string; startingBalance?: number | null }): number | null => {
+    const sb = account.startingBalance;
+    const pnl = netPnlByAccount.get(account.id) ?? 0;
+    const payouts = (storeAccounts.find(a => a.id === account.id)?.payouts ?? []).reduce((s, p) => s + p.amount, 0);
+    if (sb == null && pnl === 0 && payouts === 0) return null;
+    return (sb ?? 0) + pnl - payouts;
+  };
 
   function downloadTextFile(filename: string, contents: string, type: string) {
     const blob = new Blob([contents], { type });
@@ -1948,7 +1969,7 @@ export default function Settings() {
                   <div style={{ gridColumn: 2, gridRow: 2, display: 'flex', flexWrap: 'wrap', gap: '4px 20px', marginTop: 3, fontSize: 12, color: T2 }}>
                     <span><i style={metaLabel}>Firm</i><em style={metaVal}>{account.broker || '—'}</em></span>
                     <span><i style={metaLabel}>Type</i><em style={metaVal}>{account.type}</em></span>
-                    <span><i style={metaLabel}>Balance</i><em style={metaVal}>{account.startingBalance != null ? moneyValue(account.startingBalance) : '—'}</em>{account.targetBalance != null && <> to <em style={metaVal}>{moneyValue(account.targetBalance)}</em> target</>}</span>
+                    <span><i style={metaLabel}>Balance</i><em style={metaVal}>{(() => { const b = liveBalanceFor(account); return b != null ? moneyValue(b) : '—'; })()}</em>{account.targetBalance != null && <> to <em style={metaVal}>{moneyValue(account.targetBalance)}</em> target</>}</span>
                   </div>
                   <div style={{ gridColumn: 3, gridRow: '1 / span 2', alignSelf: 'center', justifySelf: 'end' }}>
                     <button type="button" onClick={() => setEditingAccountId(editing ? null : account.id)} style={STG_BTN}>{editing ? 'Done' : 'Edit'}</button>
