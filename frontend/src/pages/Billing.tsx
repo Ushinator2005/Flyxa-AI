@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   CreditCard,
   Download,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { billingApi, type BillingLivePricesResponse } from '../services/api.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
+import { useAuth } from '../contexts/AuthContext.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import { flushSupabaseStoreNow } from '../store/supabaseStorage.js';
 import type { BillingAccount as StoreBillingAccount } from '../store/types.js';
@@ -116,9 +117,9 @@ interface ParsedCsvRow {
 
 type ViewMode = 'table' | 'pipeline';
 
-const SELECTABLE_STATUS_OPTIONS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee'];
+const SELECTABLE_STATUS_OPTIONS: AccountStatus[] = ['Eval', 'Passed', 'Blown', 'Activation fee'];
 
-const PIPELINE_COLS: AccountStatus[] = ['Eval', 'Passed', 'Activation fee'];
+const PIPELINE_COLS: AccountStatus[] = ['Eval', 'Passed', 'Blown', 'Activation fee'];
 
 const FIRM_OPTIONS = [
   'Apex Funded',
@@ -196,13 +197,14 @@ const FIRM_PRICES: Record<string, Record<string, number>> = {
 };
 
 /** Normalise legacy 'Active' status from old data to 'Eval 1'. */
-// Collapse any stored/imported/legacy status to one of the three valid tags, so
-// no account can sit under a status that is no longer an option (e.g. Blown) and
-// 'Eval 1'/'Eval 2' all read simply as 'Eval'.
+// Collapse any stored/imported/legacy status to one of the valid tags. Blown is
+// preserved (a failed evaluation is a real, kept state); 'Eval 1'/'Eval 2' all
+// read simply as 'Eval'.
 function normalizeStatus(raw: unknown): AccountStatus {
   const s = String(raw ?? '').trim().toLowerCase();
   if (s === 'passed' || s === 'funded' || s === 'live') return 'Passed';
   if (s === 'activation fee' || s === 'activation') return 'Activation fee';
+  if (s === 'blown' || s === 'failed' || s === 'breached' || s === 'closed') return 'Blown';
   return 'Eval';
 }
 
@@ -216,7 +218,10 @@ function tagFromImportType(raw: string): { status: AccountStatus; entryKind: Non
   if (/activation/.test(t)) return { status: 'Activation fee', entryKind: 'activation', accountType: 'XFA activation fee' };
   if (/reset/.test(t)) return { status: 'Eval', entryKind: 'reset', accountType: 'Account reset' };
   if (/subscription|renewal|recurring/.test(t)) return { status: 'Eval', entryKind: 'subscription', accountType: 'Monthly subscription' };
-  return { status: 'Eval', entryKind: 'account', accountType: '' };
+  // An explicit in-evaluation label is honoured; everything else that is not
+  // passed defaults to Blown (per "assume accounts that aren't passed are blown").
+  if (/\beval\b|evaluation|in[ -]?progress|ongoing|active/.test(t)) return { status: 'Eval', entryKind: 'account', accountType: '' };
+  return { status: 'Blown', entryKind: 'account', accountType: '' };
 }
 
 function inferHistoricalOutcome(
@@ -436,8 +441,8 @@ function formatAccountSize(size?: number): string {
 function billingStatusFromTradingAccount(status: TradingAccount['status']): AccountStatus {
   if (status === 'Funded' || status === 'Live') return 'Funded';
   if (status === 'Passed') return 'Passed';
-  if (status === 'Blown') return 'Blown';
-  return 'Eval 1';
+  // Anything that isn't passed/funded is treated as Blown on import.
+  return 'Blown';
 }
 
 function normalizeFirmName(account: TradingAccount): string {
@@ -553,6 +558,38 @@ export default function Billing() {
     hydrateSharedData({ billingAccounts: next as unknown as StoreBillingAccount[] });
     void flushSupabaseStoreNow();
   }, [hydrateSharedData]);
+
+  // One-time migration: mark EVERY account currently under the 'Eval' status as
+  // 'Blown', regardless of entry kind. Runs once per browser (localStorage flag),
+  // only after the ledger has hydrated (accounts non-empty), and only writes when
+  // something actually changes. This is status re-labelling ONLY — the full
+  // account list is passed through commitAccounts, so no account is ever removed.
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user?.id || accounts.length === 0) return;
+    const flagKey = `flyxa_billing_eval_to_blown_v3_${user.id}`;
+    try { if (localStorage.getItem(flagKey)) return; } catch { return; }
+
+    const flipped = accounts.map(account =>
+      account.status === 'Eval'
+        ? {
+            ...account,
+            status: 'Blown' as AccountStatus,
+            evaluationOutcome: 'Not passed' as EvaluationOutcome,
+            outcomeEvidence: 'Marked blown: evaluation not passed',
+            outcomeConfidence: 'high' as OutcomeConfidence,
+          }
+        : account
+    );
+    // Safety: only ever write when the account COUNT is unchanged (pure relabel),
+    // so a migration can never drop rows even if something upstream went wrong.
+    const changed = flipped.some((account, i) => account.status !== accounts[i].status);
+    if (changed && flipped.length === accounts.length) {
+      commitAccounts(flipped);
+    }
+    try { localStorage.setItem(flagKey, new Date().toISOString()); } catch { /* quota */ }
+  }, [user?.id, accounts, commitAccounts]);
+
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [firmFilter, setFirmFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -664,13 +701,12 @@ export default function Billing() {
         actualPrice: Math.max(0, listPrice - responsibleDiscount),
         purchaseDate,
         status: billingStatusFromTradingAccount(account.status),
+        // Non-passed imports are treated as Blown, so the outcome reads "Not passed".
         evaluationOutcome: account.status === 'Funded' || account.status === 'Live'
           ? 'Funded'
           : account.status === 'Passed'
             ? 'Passed'
-            : account.status === 'Blown'
-              ? 'Not passed'
-              : 'Unknown',
+            : 'Not passed',
         outcomeEvidence: `Imported from linked account status: ${account.status}`,
         outcomeConfidence: 'high',
         payoutReceived: importedPayoutTotal,
@@ -960,17 +996,18 @@ export default function Billing() {
       return result('Eval 1');
     }
     if (!statusText && entryKind === 'account') {
-      return result('Eval');
+      // No status on an account row: assume a non-passed account is Blown.
+      return result('Blown');
     }
 
     return {
-      status: 'Eval',
+      status: 'Blown',
       entryKind,
       classificationReason,
       evaluationOutcome: historical.outcome,
       outcomeEvidence: historical.evidence,
       outcomeConfidence: historical.confidence,
-      warning: rawStatus ? `Unknown status "${rawStatus}", tagged as Eval` : undefined,
+      warning: rawStatus ? `Unknown status "${rawStatus}", tagged as Blown` : undefined,
     };
   };
 
@@ -1302,8 +1339,9 @@ export default function Billing() {
     // classifier read it as a charge. The tag is the source of truth.
     const passedAccounts = accounts.filter(a => a.status === 'Passed').length;
     const activeAccounts = accounts.filter(a => a.status === 'Eval').length;
-    // Pass rate = passed evaluations over every evaluation attempt (Eval + Passed).
-    const attemptedAccounts = passedAccounts + activeAccounts;
+    const blownAccounts = accounts.filter(a => a.status === 'Blown').length;
+    // Pass rate = passed evaluations over every evaluation attempt (Eval + Passed + Blown).
+    const attemptedAccounts = passedAccounts + activeAccounts + blownAccounts;
     const passRate = attemptedAccounts > 0 ? (passedAccounts / attemptedAccounts) * 100 : 0;
     const avgFeePerAccount = totalAccounts > 0 ? totalSpent / totalAccounts : 0;
     const costPerPass = passedAccounts > 0 ? totalSpent / passedAccounts : null;
@@ -1350,7 +1388,7 @@ export default function Billing() {
 
     return {
       totalAccounts, totalSpent, totalPayouts, netPnL, monthlyBurn,
-      avgFeePerAccount, passedAccounts, activeAccounts,
+      avgFeePerAccount, passedAccounts, activeAccounts, blownAccounts,
       passRate, costPerPass, attemptedAccounts, roiByFirm, bestFirm,
     };
   }, [accounts]);
@@ -1431,7 +1469,7 @@ export default function Billing() {
       // The chosen tag is authoritative: sync the outcome to it so the load-time
       // "funded/passed -> Passed" promotion can't override a manual re-tag. Only a
       // Passed tag records a passed outcome; anything else clears it.
-      evaluationOutcome: form.status === 'Passed' ? 'Passed' : 'Unknown',
+      evaluationOutcome: form.status === 'Passed' ? 'Passed' : form.status === 'Blown' ? 'Not passed' : 'Unknown',
       outcomeEvidence: form.outcomeEvidence.trim() || 'Outcome set manually',
       outcomeConfidence: form.outcomeConfidence,
       payoutReceived,
@@ -1576,6 +1614,7 @@ export default function Billing() {
   const phaseRail = [
     { label: 'Eval', value: derived.activeAccounts, color: 'var(--amber)' },
     { label: 'Passed', value: derived.passedAccounts, color: 'var(--green)' },
+    { label: 'Blown', value: derived.blownAccounts, color: 'var(--red)' },
   ];
   const netTone = derived.netPnL >= 0 ? 'positive' : 'negative';
 
