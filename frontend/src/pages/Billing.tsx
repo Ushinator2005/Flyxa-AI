@@ -751,6 +751,28 @@ export default function Billing() {
     XLSX.writeFile(wb, 'flyxa-accounts-template.xlsx');
   };
 
+  // Complete, owned backup of the ledger: a JSON file the trader keeps outside
+  // the app. Survives anything (cleared browser, cloud issue, bug) and can be
+  // restored via the same Import from Excel button (it accepts .json too).
+  const exportLedgerBackup = () => {
+    const payload = {
+      kind: 'flyxa-billing-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: storeBillingAccounts.length,
+      billingAccounts: storeBillingAccounts,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flyxa-billing-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const parseBillingCsv = (text: string): ParsedCsvRow[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
     if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
@@ -1195,7 +1217,39 @@ export default function Billing() {
     if (!file) return;
     event.target.value = '';
     const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    const isJson = /\.json$/i.test(file.name);
     setCsvParseError('');
+
+    if (isJson) {
+      // Restore from a flyxa-billing-backup JSON. Non-destructive: union by id,
+      // keep every existing account and add back only the ones that are missing.
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const parsed = JSON.parse(e.target?.result as string) as unknown;
+          const raw = Array.isArray(parsed)
+            ? parsed
+            : (parsed as { billingAccounts?: unknown })?.billingAccounts;
+          if (!Array.isArray(raw) || raw.length === 0) {
+            setCsvParseError('No billing accounts found in that backup file.');
+            return;
+          }
+          const restored = (raw as StoreBillingAccount[]).map(normalizeBillingAccount);
+          const haveIds = new Set(accounts.map(account => account.id));
+          const missing = restored.filter(account => account.id && !haveIds.has(account.id));
+          if (missing.length === 0) {
+            setImportFeedback('Backup matches your ledger — nothing to restore.');
+            return;
+          }
+          commitAccounts([...accounts, ...missing]);
+          setImportFeedback(`Restored ${missing.length} account${missing.length !== 1 ? 's' : ''} from backup.`);
+        } catch (err) {
+          setCsvParseError(err instanceof Error ? err.message : 'Failed to read backup file.');
+        }
+      };
+      reader.readAsText(file);
+      return;
+    }
 
     if (isExcel) {
       const reader = new FileReader();
@@ -1674,14 +1728,18 @@ export default function Billing() {
             <Download size={14} />
             Download Template
           </button>
+          <button type="button" className="billing-command-btn" onClick={exportLedgerBackup} title="Download a complete backup of your ledger (JSON). Restore it any time via Import from Excel.">
+            <Download size={14} />
+            Backup ledger
+          </button>
           <button type="button" className="billing-command-btn" onClick={() => { setCsvParseError(''); csvFileInputRef.current?.click(); }}>
             <Plus size={14} />
-            Import from Excel
+            Import / Restore
           </button>
           <input
             ref={csvFileInputRef}
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls,.csv,.json"
             style={{ display: 'none' }}
             onChange={handleFileImport}
           />
