@@ -409,9 +409,20 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   useEffect(() => { scheduleSave(); }, [scheduleSave]);
 
   useEffect(() => {
+    // This sync REPLACES the store's accounts slice, so it must carry over the
+    // fields the store owns that AppSettings does not track, above all `payouts`
+    // (written by addPayout), plus evaluationStartedAt / coachingNotes. Spread
+    // the existing store account first so those survive; the mapped fields below
+    // (which AppSettings is authoritative for) then override.
+    const prevById = new Map(
+      (useFlyxaStore.getState().accounts ?? []).map(existing => [existing.id, existing])
+    );
     const mapped: Account[] = accounts.map(account => {
+      const prev = prevById.get(account.id);
       const sb = account.startingBalance ?? 0;
       return {
+        ...prev,
+        payouts: prev?.payouts ?? [],
         id: account.id,
         name: account.name,
         firm: account.broker || 'Flyxa',

@@ -9,6 +9,7 @@ import { DEFAULT_ACHIEVEMENTS, mergeAchievementCatalog, refreshAchievements } fr
 import { pushToast } from './toastStore.js';
 import { scaleContractAmount } from '../utils/contractSizing.js';
 import { DEFAULT_STRUCTURED_RULES } from '../utils/tradingRules.js';
+import { mergeAccountsPreservingPayouts } from '../utils/accountPayouts.js';
 import type {
   Account,
   Achievement,
@@ -1089,24 +1090,12 @@ const useFlyxaStore = create<FlyxaStore>()(
             ...account,
             roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
           }));
+          // Union payouts by id across the in-memory account and the incoming one:
+          // a payout logged on another device (incoming) and one logged on this
+          // device (existing) both survive. The payout-path choice travels on the
+          // payload itself, so it is NOT preserved here.
           let nextAccounts = payload.accounts && payload.accounts.length
-            ? payload.accounts.map(incoming => {
-                const existing = state.accounts.find(a => a.id === incoming.id);
-                // Union payouts by id across the in-memory account and the incoming
-                // one: a payout logged on another device (incoming) and one logged
-                // on this device (existing) both survive. The payout-path choice
-                // travels on the payload itself, so it is NOT preserved here.
-                const localPayouts = existing?.payouts ?? [];
-                const incomingPayouts = incoming.payouts ?? [];
-                if (!localPayouts.length && !incomingPayouts.length) return incoming;
-                const byId = new Map<string, Payout>();
-                for (const p of [...incomingPayouts, ...localPayouts]) {
-                  if (!p) continue;
-                  const key = p.id || `${p.date}:${p.amount}`;
-                  if (!byId.has(key)) byId.set(key, p);
-                }
-                return { ...incoming, payouts: [...byId.values()] };
-              })
+            ? mergeAccountsPreservingPayouts(state.accounts, payload.accounts)
             : state.accounts;
           billingAccounts.forEach((account) => {
             nextAccounts = maybeCreateFundedAccount(nextAccounts, account);
@@ -1226,7 +1215,12 @@ const useFlyxaStore = create<FlyxaStore>()(
           ...account,
           roi: asNumber(account.payoutReceived, 0) - asNumber(account.actualPrice, 0),
         }));
-        let accounts = persisted.accounts && persisted.accounts.length ? persisted.accounts : base.accounts;
+        // Union payouts from the in-memory (base) accounts into the persisted
+        // ones so a rehydrate from a stale blob can never drop a withdrawal that
+        // was just logged and flushed. Mirrors the entries "never fewer" guard above.
+        let accounts = persisted.accounts && persisted.accounts.length
+          ? mergeAccountsPreservingPayouts(base.accounts, persisted.accounts)
+          : base.accounts;
         sanitizedBilling.forEach((account) => {
           accounts = maybeCreateFundedAccount(accounts, account);
         });
