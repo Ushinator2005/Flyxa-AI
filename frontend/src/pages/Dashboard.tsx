@@ -234,7 +234,15 @@ export default function Dashboard() {
     () => filterTradesBySelectedAccount(trades),
     [filterTradesBySelectedAccount, trades],
   );
-  const summary      = useMemo(() => buildAnalyticsSummary(filteredTrades), [filteredTrades]);
+  // Aggregation view: a trade mirrored on N accounts counts once per account, so
+  // "All Accounts" P&L, calendar totals and stats reflect the real total across
+  // accounts. Lists (recent trades, today's trades) use filteredTrades so each
+  // trade stays a single clickable row.
+  const statsTrades = useMemo(
+    () => filterTradesBySelectedAccount(trades, { expandMirrors: true }),
+    [filterTradesBySelectedAccount, trades],
+  );
+  const summary      = useMemo(() => buildAnalyticsSummary(statsTrades), [statsTrades]);
   const recentTrades = useMemo(() => buildRecentTrades(filteredTrades).slice(0, 25), [filteredTrades]);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -248,9 +256,9 @@ export default function Dashboard() {
 
   const tradesByDate = useMemo(() => {
     const m: Record<string, Trade[]> = {};
-    filteredTrades.forEach(t => { (m[t.trade_date] ??= []).push(t); });
+    statsTrades.forEach(t => { (m[t.trade_date] ??= []).push(t); });
     return m;
-  }, [filteredTrades]);
+  }, [statsTrades]);
 
   // Calendar week Mon–Sun
   const weekDays = useMemo(() => {
@@ -269,8 +277,8 @@ export default function Dashboard() {
   // the calendar to June recomputes it for June, July for July, and so on.
   const { wins, losses, breakevens, winRingData, winRate: monthWinRate } = useMemo(() => {
     const prefix = `${calendarMonth.year}-${String(calendarMonth.month).padStart(2, '0')}`;
-    const scoped = filteredTrades.filter(t => t.trade_date?.startsWith(prefix));
-    const ep = (t: typeof filteredTrades[0]) => t.pnl - (t.commission ?? 0);
+    const scoped = statsTrades.filter(t => t.trade_date?.startsWith(prefix));
+    const ep = (t: typeof statsTrades[0]) => t.pnl - (t.commission ?? 0);
     const w = scoped.filter(t => ep(t) > 0).length;
     const l = scoped.filter(t => ep(t) < 0).length;
     const b = scoped.filter(t => ep(t) === 0 && (t.exit_price ?? 0) > 0).length;
@@ -288,7 +296,7 @@ export default function Dashboard() {
           ]
         : [{ v: 1, c: 'rgba(255,255,255,0.06)' }],
     };
-  }, [filteredTrades, calendarMonth]);
+  }, [statsTrades, calendarMonth]);
 
   // Center % counts up in step with the ring's sweep, restarting on month change.
   const animatedWinRate = useCountUp(monthWinRate, 750, `${calendarMonth.year}-${calendarMonth.month}`);

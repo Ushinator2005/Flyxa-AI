@@ -175,7 +175,7 @@ interface AppSettingsContextValue {
   resolveTradeAccountIds: (trade: TradeAccountSource) => string[];
   isTradeAccountAllocatable: (accountId: string) => boolean;
   decorateTrades: <T extends TradeAccountSource>(trades: T[]) => DecoratedTrade<T>[];
-  filterTradesBySelectedAccount: <T extends TradeAccountSource>(trades: T[]) => DecoratedTrade<T>[];
+  filterTradesBySelectedAccount: <T extends TradeAccountSource>(trades: T[], options?: { expandMirrors?: boolean }) => DecoratedTrade<T>[];
   persistTradeAccount: (tradeId: string, accountId?: string | string[]) => void;
   removeTradeAccount: (tradeId: string) => void;
 }
@@ -523,13 +523,26 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     session: deriveTradeSessionLabel(trade, preferences.sessionTimes),
   })), [preferences.sessionTimes, resolveTradeAccountId, resolveTradeAccountIds]);
 
-  const filterTradesBySelectedAccount = useCallback(<T extends TradeAccountSource>(trades: T[]): DecoratedTrade<T>[] => {
+  const filterTradesBySelectedAccount = useCallback(<T extends TradeAccountSource>(
+    trades: T[],
+    options?: { expandMirrors?: boolean },
+  ): DecoratedTrade<T>[] => {
     const decorated = decorateTrades(trades);
-    if (selectedAccountId === ALL_ACCOUNTS_ID) {
-      return decorated;
-    }
+    const scoped = selectedAccountId === ALL_ACCOUNTS_ID
+      ? decorated
+      : decorated.filter(trade => trade.accountIds.includes(selectedAccountId) || trade.accountId === selectedAccountId);
 
-    return decorated.filter(trade => trade.accountIds.includes(selectedAccountId) || trade.accountId === selectedAccountId);
+    // A trade mirrored on N accounts is N real executions. For AGGREGATION only
+    // (expandMirrors), the "All Accounts" view counts it once per account so P&L,
+    // calendar totals and analytics multiply. Single-account views already show it
+    // once, and lists/navigation keep the single row (default, no expansion) so
+    // trade ids stay unique and clickable.
+    if (!options?.expandMirrors || selectedAccountId !== ALL_ACCOUNTS_ID) return scoped;
+    return scoped.flatMap(trade => (
+      trade.accountIds.length > 1
+        ? trade.accountIds.map(accountId => ({ ...trade, accountId, accountIds: [accountId], id: `${trade.id}#${accountId}` }))
+        : [trade]
+    ));
   }, [decorateTrades, selectedAccountId]);
 
   const setSelectedAccountId = useCallback((accountId: string) => {

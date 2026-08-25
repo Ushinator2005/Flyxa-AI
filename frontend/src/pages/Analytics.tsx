@@ -379,8 +379,10 @@ export default function Analytics() {
   const sourceTrades = trades;
   const isLoading = loading;
 
+  // Analytics is all aggregation, so a trade mirrored on N accounts counts once
+  // per account here (real executions) — "All Accounts" P&L and stats multiply.
   const accountTrades = useMemo(
-    () => filterTradesBySelectedAccount(sourceTrades),
+    () => filterTradesBySelectedAccount(sourceTrades, { expandMirrors: true }),
     [filterTradesBySelectedAccount, sourceTrades]
   );
 
