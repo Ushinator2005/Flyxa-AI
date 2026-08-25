@@ -8,6 +8,7 @@ import DatePicker from '../components/common/DatePicker.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTheme } from '../contexts/ThemeContext.js';
 import { DEFAULT_ACCOUNT_ID, useAppSettings } from '../contexts/AppSettingsContext.js';
+import { useTrades } from '../hooks/useTrades.js';
 import { useRivals } from '../hooks/useRivals.js';
 import { useSubscription } from '../hooks/useSubscription.js';
 import { accountApi, supabase } from '../services/api.js';
@@ -713,6 +714,7 @@ export default function Settings() {
   const addPayout = useFlyxaStore(state => state.addPayout);
   const deletePayout = useFlyxaStore(state => state.deletePayout);
   const storeAccounts = useFlyxaStore(state => state.accounts);
+  const { trades } = useTrades();
   const resetAllData = useFlyxaStore(state => state.resetAllData);
   const getPayouts = (accountId: string) => storeAccounts.find(a => a.id === accountId)?.payouts ?? [];
   const {
@@ -728,6 +730,7 @@ export default function Settings() {
     addConfluenceOption,
     updateConfluenceOption,
     deleteConfluenceOption,
+    decorateTrades,
   } = useAppSettings();
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
@@ -822,19 +825,20 @@ export default function Settings() {
   const loadedTradeCount = journalEntries.reduce((sum, entry) => sum + entry.trades.filter(t => !deletedSet.has(t.id)).length, 0);
   const backupStamp = new Date().toISOString().slice(0, 10);
 
-  // Net P&L per account (pnl minus commission), so the row can show the SAME
-  // live balance the dashboard shows: startingBalance + netPnL − payouts.
+  // Net P&L per account, computed exactly like the dashboard: decorate trades to
+  // resolve their account ids (the same account association the dashboard filter
+  // uses), and sum pnl − commission per account. Balance then = startingBalance +
+  // netPnL − payouts, matching the dashboard's live balance everywhere.
   const netPnlByAccount = useMemo(() => {
     const map = new Map<string, number>();
-    for (const entry of journalEntries) {
-      const acctId = (entry as { account?: string }).account ?? DEFAULT_ACCOUNT_ID;
-      for (const trade of entry.trades) {
-        if (deletedSet.has(trade.id)) continue;
-        map.set(acctId, (map.get(acctId) ?? 0) + Number(trade.pnl ?? 0) - Number(trade.commission ?? 0));
+    for (const trade of decorateTrades(trades)) {
+      const net = Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
+      for (const acctId of (trade.accountIds.length ? trade.accountIds : [trade.accountId])) {
+        map.set(acctId, (map.get(acctId) ?? 0) + net);
       }
     }
     return map;
-  }, [journalEntries, deletedTradeIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [decorateTrades, trades]);
   const liveBalanceFor = (account: { id: string; startingBalance?: number | null }): number | null => {
     const sb = account.startingBalance;
     const pnl = netPnlByAccount.get(account.id) ?? 0;
