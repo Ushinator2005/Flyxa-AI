@@ -669,16 +669,22 @@ export default function Billing() {
       const size = formatAccountSize(account.startingBalance);
       const pricingPath = firm === 'Topstep' ? account.evaluationPath ?? 'no_activation_fee' : undefined;
       const template = firm === 'Topstep' && pricingPath ? getTopstepTemplate(size, pricingPath) : undefined;
-      const listPrice = catalogPriceForTradingAccount(account, firm, size);
+      const catalogList = catalogPriceForTradingAccount(account, firm, size);
       const responsibleDiscount = firm === 'Topstep'
         && pricingPath === 'no_activation_fee'
         && account.dailyLossMode === 'purchase_fixed'
         ? template?.responsibleTradingDiscount ?? 0
         : 0;
+      // Prefer the price the trader entered on the account in Settings; fall back
+      // to the firm's catalog price (minus responsible-trading discount) otherwise.
+      const enteredPrice = typeof account.pricePaid === 'number' ? account.pricePaid : null;
+      const actualPrice = enteredPrice != null ? enteredPrice : Math.max(0, catalogList - responsibleDiscount);
+      const listPrice = catalogList || actualPrice;
       const createdDate = account.createdAt ? new Date(account.createdAt) : null;
-      const purchaseDate = createdDate && !Number.isNaN(createdDate.getTime())
-        ? createdDate.toISOString().slice(0, 10)
-        : getTodayInputDate();
+      const purchaseDate = account.purchaseDate
+        || (createdDate && !Number.isNaN(createdDate.getTime())
+          ? createdDate.toISOString().slice(0, 10)
+          : getTodayInputDate());
 
       // Carry payout history over from the linked trading account so ROI is
       // right on import, previously these were dropped, zeroing recovered ROI.
@@ -698,7 +704,7 @@ export default function Billing() {
         listPrice,
         discountCode: '',
         discountPct: 0,
-        actualPrice: Math.max(0, listPrice - responsibleDiscount),
+        actualPrice,
         purchaseDate,
         status: billingStatusFromTradingAccount(account.status),
         // Non-passed imports are treated as Blown, so the outcome reads "Not passed".
@@ -711,7 +717,7 @@ export default function Billing() {
         outcomeConfidence: 'high',
         payoutReceived: importedPayoutTotal,
         payouts: importedPayouts,
-        notes: `Imported from account: ${account.name}${listPrice === 0 ? '. Add the purchase price to complete billing.' : ''}`,
+        notes: `Imported from account: ${account.name}${actualPrice === 0 ? '. Add the purchase price to complete billing.' : ''}`,
         pricingPath,
         activationFee: template?.activationFee,
         dailyLossMode: firm === 'Topstep'

@@ -742,6 +742,8 @@ export default function Settings() {
     sizeLabel: string;
     status: TradingAccountStatus;
     template?: EvaluationTemplate;
+    pricePaid?: number;
+    purchaseDate?: string;
   } | null>(null);
   const storeBillingAccounts = useFlyxaStore(state => state.billingAccounts) as StoreBillingAccount[];
   const hydrateSharedData = useFlyxaStore(state => state.hydrateSharedData);
@@ -757,6 +759,8 @@ export default function Settings() {
     status: 'Eval' as TradingAccountStatus,
     startingBalance: '' as string,
     targetBalance: '' as string,
+    pricePaid: '' as string,
+    purchaseDate: '' as string,
     evaluationProgram: 'Trading Combine',
     evaluationPath: 'no_activation_fee' as 'standard' | 'no_activation_fee',
     dailyLossMode: 'none' as 'none' | 'purchase_fixed',
@@ -1128,6 +1132,8 @@ export default function Settings() {
       status: 'Eval',
       startingBalance: '',
       targetBalance: '',
+      pricePaid: '',
+      purchaseDate: '',
       evaluationProgram: 'Trading Combine',
       evaluationPath: 'no_activation_fee',
       dailyLossMode: 'none',
@@ -1143,6 +1149,7 @@ export default function Settings() {
     if (!newAccount.name.trim()) return;
     const parsedBalance = parseFloat(newAccount.startingBalance);
     const parsedTarget = parseFloat(newAccount.targetBalance);
+    const parsedPrice = parseFloat(newAccount.pricePaid);
     const selectedTemplate = isTemplateEval(newAccount)
       ? resolveEvaluationTemplate(newAccount.broker, newAccount.evaluationProgram, parsedBalance, newAccount.evaluationPath)
       : undefined;
@@ -1159,6 +1166,8 @@ export default function Settings() {
       targetBalance: Number.isFinite(parsedTarget) && parsedTarget > 0
         ? parsedTarget
         : selectedTemplate ? selectedTemplate.accountSize + selectedTemplate.profitTarget : undefined,
+      pricePaid: Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : undefined,
+      purchaseDate: newAccount.purchaseDate.trim() || undefined,
       firmRuleVersionId: selectedTemplate?.id,
       evaluationProgram: selectedTemplate?.program,
       evaluationPath: selectedTemplate?.path === 'no_activation_fee'
@@ -1186,6 +1195,8 @@ export default function Settings() {
         sizeLabel: Number.isFinite(parsedBalance) && parsedBalance > 0 ? `${parsedBalance / 1000}K` : 'Custom',
         status: newAccount.status,
         template: selectedTemplate,
+        pricePaid: Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : undefined,
+        purchaseDate: newAccount.purchaseDate.trim() || undefined,
       });
     }
     closeAddAccountModal();
@@ -1194,7 +1205,12 @@ export default function Settings() {
   function addOfferToBilling() {
     if (!billingOffer) return;
     const template = billingOffer.template;
-    const listPrice = template?.priceAmount ?? template?.monthlyPrice ?? 0;
+    const catalogPrice = template?.priceAmount ?? template?.monthlyPrice ?? 0;
+    // Prefer the price the trader actually entered in Settings; fall back to the
+    // firm's catalog price only when none was provided.
+    const hasEnteredPrice = typeof billingOffer.pricePaid === 'number';
+    const actualPrice = hasEnteredPrice ? billingOffer.pricePaid! : catalogPrice;
+    const listPrice = catalogPrice || actualPrice;
     const cadenceNote = template?.priceCadence === 'monthly'
       ? 'Monthly subscription; add renewal months as separate entries.'
       : '';
@@ -1208,8 +1224,8 @@ export default function Settings() {
       listPrice,
       discountCode: '',
       discountPct: 0,
-      actualPrice: listPrice,
-      purchaseDate: new Date().toISOString().slice(0, 10),
+      actualPrice,
+      purchaseDate: billingOffer.purchaseDate || new Date().toISOString().slice(0, 10),
       status: billingOffer.status === 'Funded' || billingOffer.status === 'Live'
         ? 'Funded'
         : billingOffer.status === 'Passed' ? 'Passed'
@@ -1219,7 +1235,7 @@ export default function Settings() {
       payouts: [],
       notes: [
         `Added from Settings account: ${billingOffer.accountName}`,
-        listPrice === 0 ? 'Add the purchase price to complete billing.' : '',
+        actualPrice === 0 ? 'Add the purchase price to complete billing.' : '',
         cadenceNote,
       ].filter(Boolean).join(' '),
       pricingPath: billingOffer.firm === 'Topstep' ? (template?.path === 'no_activation_fee' ? 'no_activation_fee' : 'standard') : undefined,
@@ -2667,6 +2683,41 @@ export default function Settings() {
                   placeholder="e.g. 110000"
                   value={newAccount.targetBalance}
                   onChange={e => setNewAccount(current => ({ ...current, targetBalance: e.target.value }))}
+                />
+              </label>
+
+              <label>
+                <FieldLabel>Price paid ($) — optional, flows to Billing</FieldLabel>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  style={{
+                    ...tableInputStyle,
+                    background: S2,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                  }}
+                  placeholder="e.g. 149"
+                  value={newAccount.pricePaid}
+                  onChange={e => setNewAccount(current => ({ ...current, pricePaid: e.target.value }))}
+                />
+              </label>
+
+              <label>
+                <FieldLabel>Purchase date — optional</FieldLabel>
+                <input
+                  type="date"
+                  style={{
+                    ...tableInputStyle,
+                    background: S2,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                  }}
+                  value={newAccount.purchaseDate}
+                  onChange={e => setNewAccount(current => ({ ...current, purchaseDate: e.target.value }))}
                 />
               </label>
             </div>

@@ -245,6 +245,10 @@ export interface TradingAccount {
   createdAt: string;
   startingBalance?: number;
   targetBalance?: number;
+  // Optional billing info captured at account creation, so it flows into the
+  // Billing ledger on import instead of a catalog-price guess.
+  pricePaid?: number;
+  purchaseDate?: string;
   archived?: boolean;
   isDefault?: boolean;
   firmRuleVersionId?: string;
