@@ -540,7 +540,16 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     if (!options?.expandMirrors || selectedAccountId !== ALL_ACCOUNTS_ID) return scoped;
     return scoped.flatMap(trade => (
       trade.accountIds.length > 1
-        ? trade.accountIds.map(accountId => ({ ...trade, accountId, accountIds: [accountId], id: `${trade.id}#${accountId}` }))
+        ? trade.accountIds.map(accountId => ({
+            ...trade,
+            // Pin EVERY account field to this one account so any downstream
+            // per-account filter attributes the expanded row to exactly it.
+            accountId,
+            accountIds: [accountId],
+            account_id: accountId,
+            account: accountId,
+            id: `${trade.id}#${accountId}`,
+          } as DecoratedTrade<T>))
         : [trade]
     ));
   }, [decorateTrades, selectedAccountId]);

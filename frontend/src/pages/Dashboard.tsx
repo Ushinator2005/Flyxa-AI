@@ -248,10 +248,10 @@ export default function Dashboard() {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
 
   const todayTrades = useMemo(
-    () => filteredTrades
+    () => statsTrades
       .filter(t => t.trade_date === todayStr)
       .sort((a, b) => (a.trade_time ?? '').localeCompare(b.trade_time ?? '')),
-    [filteredTrades, todayStr],
+    [statsTrades, todayStr],
   );
 
   const tradesByDate = useMemo(() => {

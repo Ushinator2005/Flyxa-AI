@@ -220,7 +220,7 @@ export default function FlyxaAIPreSession() {
   }, []);
 
   const accountTrades = useMemo(
-    () => filterTradesBySelectedAccount(trades),
+    () => filterTradesBySelectedAccount(trades, { expandMirrors: true }),
     [filterTradesBySelectedAccount, trades]
   );
 

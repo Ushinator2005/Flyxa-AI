@@ -167,7 +167,7 @@ export default function PsychologyTracker() {
   const entries = useFlyxaStore(state => state.entries) as JournalEntry[];
 
   const accountTrades = useMemo(
-    () => filterTradesBySelectedAccount(trades),
+    () => filterTradesBySelectedAccount(trades, { expandMirrors: true }),
     [filterTradesBySelectedAccount, trades]
   );
   const selectedIds = useMemo(() => new Set(accountTrades.map(trade => trade.id)), [accountTrades]);

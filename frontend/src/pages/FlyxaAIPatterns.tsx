@@ -934,7 +934,7 @@ export default function FlyxaAIPatterns() {
   const selectedAcctLabel = selectedAcct?.name ?? 'All Accounts';
 
   const accountTrades = useMemo(() => {
-    const allDecorated = (filterTradesBySelectedAccount(trades) as Trade[]).filter(Boolean);
+    const allDecorated = (filterTradesBySelectedAccount(trades, { expandMirrors: true }) as Trade[]).filter(Boolean);
     if (localAccountId === ALL_ACCOUNTS_ID) return allDecorated;
     return allDecorated.filter(t =>
       (t as Trade & { accountIds?: string[] }).accountIds?.includes(localAccountId) ||
