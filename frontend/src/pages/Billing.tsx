@@ -1505,9 +1505,14 @@ export default function Billing() {
     const actualPrice = pricePaid;
     const discountPct = 0;
     const catalogDiscount = 0;
-    const payouts = showPayoutSection ? form.payouts : [];
+    // Payouts are real withdrawals: they must survive any status change. The
+    // payout section is only SHOWN for Passed accounts, but hiding it (e.g. on a
+    // Passed -> Blown re-tag) must never delete money already taken — fall back to
+    // the payouts already stored on the account being edited.
+    const existingForPayouts = editingId ? accounts.find(account => account.id === editingId) : undefined;
+    const payouts = showPayoutSection ? form.payouts : (existingForPayouts?.payouts ?? form.payouts ?? []);
     const payoutReceived = payouts.reduce((sum, p) => sum + Math.max(0, p.amount), 0)
-      || (showPayoutSection ? Math.max(0, toNumber(form.payoutReceived, 0)) : 0);
+      || (showPayoutSection ? Math.max(0, toNumber(form.payoutReceived, 0)) : (existingForPayouts?.payoutReceived ?? 0));
 
     const next: BillingAccount = {
       id: editingId ?? createId(),
