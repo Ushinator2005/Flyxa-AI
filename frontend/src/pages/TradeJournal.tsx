@@ -3227,10 +3227,11 @@ function TradeListSection({
                                 ))}
                               </div>
                             </div>
-                            {/* Entry time, exit time and duration are one fact
-                                (exit = entry + duration), editing any one of
-                                them reconciles the other two so cooldown rules
-                                and re-entry flags never read a stale exit. */}
+                            {/* Entry and exit time are the source of truth;
+                                duration derives from them. Editing entry OR exit
+                                recomputes the duration (keeping the other time
+                                fixed). Editing duration instead shifts the exit,
+                                so cooldown rules never read a stale exit. */}
                             <div>
                               <div style={{ fontSize: 9, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Entry time</div>
                               <input
@@ -3240,11 +3241,12 @@ function TradeListSection({
                                 onBlur={e => {
                                   const v = e.target.value;
                                   if (!v || v === trade.entryTime) return;
-                                  const mins = resolveTradeDurationMinutes(trade);
                                   mutateTradeFields(trade.id, {
                                     entryTime: v,
                                     timeConfidence: 'high',
-                                    ...(mins != null && mins > 0 ? { exitTime: addSecondsToTime(v, mins * 60) ?? trade.exitTime } : {}),
+                                    // Recompute duration from the fixed exit, so the
+                                    // Duration (min) field updates automatically.
+                                    ...(trade.exitTime ? { durationMinutes: minutesBetweenTimes(v, trade.exitTime) } : {}),
                                   });
                                 }}
                                 style={{ padding: '3px 6px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--app-panel-strong)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--txt)', outline: 'none' }}
