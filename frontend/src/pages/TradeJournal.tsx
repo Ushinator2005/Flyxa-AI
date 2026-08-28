@@ -132,6 +132,13 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
       ...(getTradeAccountOverride(trade.id) ?? []),
     ].filter((id): id is string => typeof id === 'string' && id.length > 0)
   ));
+  // Accounts disconnected from THIS trade during this session. An inactive account
+  // drops out of the list the moment it is disconnected, which makes a misclick
+  // unrecoverable — keeping it around until the user moves on makes the toggle
+  // reversible without listing every archived account they have ever owned.
+  const [restorable, setRestorable] = useState<string[]>([]);
+  useEffect(() => { setRestorable([]); }, [trade.id]);
+
   const toggleAccount = (accountId: string, checked: boolean) => {
     const nextIds = checked
       ? Array.from(new Set([...selectedAccountIds, accountId]))
@@ -141,18 +148,25 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
     // account the user just disconnected, and the trade snaps back to it.
     if (nextIds.length > 0) persistTradeAccount(trade.id, nextIds);
     else removeTradeAccount(trade.id);
+    setRestorable(current => checked
+      ? current.filter(id => id !== accountId)
+      : Array.from(new Set([...current, accountId])));
   };
 
   return (
     <div className="tj-sizing-row">
       <span className="tj-size-label">Accounts</span>
       <div className="tj-account-check-list">
-        {/* Every account stays listed and clickable, including Passed/Blown/Archived
-            ones. Hiding a disconnected inactive account made mis-links a one-way
-            door: disconnect it once and there was no way to put it back. They are
-            styled as inactive instead — visibly not a routine choice, still usable
-            for correcting where a trade belongs. */}
-        {accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID).map(account => {
+        {/* Accounts worth offering on this trade: the ones you can actually trade on,
+            plus whatever this trade is already connected to (however inactive — a
+            wrong link has to be removable), plus anything just disconnected here so
+            the click is reversible. Everything else — old archived accounts — stays
+            out of the way. */}
+        {accounts.filter(account => {
+          if (account.id === DEFAULT_ACCOUNT_ID) return false;
+          const inactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
+          return !inactive || selectedAccountIds.includes(account.id) || restorable.includes(account.id);
+        }).map(account => {
           const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
           const isConnected = selectedAccountIds.includes(account.id);
           const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
