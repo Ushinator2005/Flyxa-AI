@@ -1024,7 +1024,15 @@ const useFlyxaStore = create<FlyxaStore>()(
               // the existing stored entry's account so that mutations from TradeJournal
               // (whose local type omits `account`) never clobber the stored account.
               const existingEntry = existingEntryMap.get(entryId);
+              // An explicit `accountIds` array means the caller is authoritative about
+              // accounts — including an empty one, which is a deliberate disconnect.
+              // Without this the "preserve the stored account" fallbacks below silently
+              // restore the account the user just removed, and nothing can be unlinked.
+              const entryAccountIds = Array.isArray(e.accountIds)
+                ? (e.accountIds as unknown[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
+                : null;
               const entryAccount = (typeof e.account === 'string' && e.account) ? e.account
+                : entryAccountIds ? (entryAccountIds[0] ?? DEFAULT_ACCOUNT_ID)
                 : existingEntry?.account || accountId;
               return {
                 ...e,
@@ -1039,8 +1047,16 @@ const useFlyxaStore = create<FlyxaStore>()(
                       // never lose the account — fall back to the existing stored trade's
                       // account before using the entry account.
                       const existingTrade = existingEntry?.trades.find(et => et.id === tr.id);
+                      // Same rule as the entry above: an explicit accountIds array is the
+                      // caller's final word. DEFAULT_ACCOUNT_ID is the app's "unassigned"
+                      // marker, so a fully disconnected trade falls through to the user's
+                      // primary account instead of snapping back to the removed one.
+                      const tradeAccountIds = Array.isArray(tr.accountIds)
+                        ? (tr.accountIds as unknown[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
+                        : null;
                       const tradeAccount = (typeof tr.account === 'string' && tr.account) ? tr.account
                         : (typeof tr.accountId === 'string' && tr.accountId) ? tr.accountId
+                        : tradeAccountIds ? (tradeAccountIds[0] ?? DEFAULT_ACCOUNT_ID)
                         : existingTrade?.account || entryAccount;
                       // Ensure Trade-required fields that JournalTrade lacks are populated
                       const tradeTime = typeof tr.time === 'string' ? tr.time
