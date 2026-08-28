@@ -2067,7 +2067,7 @@ export default function Settings() {
 
                       {/* Add form — one clean row */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'auto 128px minmax(0,1fr) auto', gap: 9, alignItems: 'center', marginBottom: payouts.length > 0 ? 16 : 0 }}>
-                        <DatePicker value={payoutDate} onChange={setPayoutDate} compact align="left" max={new Date().toISOString().slice(0, 10)} />
+                        <DatePicker value={payoutDate} onChange={setPayoutDate} compact align="left" />
                         <input type="number" min="0" step="100" placeholder="Amount $" value={payoutAmount}
                           onChange={e => setPayoutAmount(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
                           style={{ ...inputStyle, fontFamily: MONO }} />

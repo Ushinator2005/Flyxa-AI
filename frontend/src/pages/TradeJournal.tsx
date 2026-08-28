@@ -119,7 +119,13 @@ const ACCOUNT_STATUS_DOT: Record<string, string> = {
 
 function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
   const { accounts } = useAppSettings();
-  const selectedAccountIds = Array.from(new Set([...(trade.accountIds ?? []), trade.accountId].filter((id): id is string => typeof id === 'string' && id.length > 0)));
+  // Read every account field a connection could live in (accountIds / accountId /
+  // the raw store `account`) so a mis-linked account always shows as connected
+  // and can be unchecked — even if it was linked through a different code path.
+  const selectedAccountIds = Array.from(new Set(
+    [...(trade.accountIds ?? []), trade.accountId, (trade as { account?: string }).account]
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  ));
   const toggleAccount = (accountId: string, checked: boolean) => {
     const nextIds = checked
       ? Array.from(new Set([...selectedAccountIds, accountId]))
