@@ -1481,6 +1481,29 @@
   color: var(--txt);
 }
 
+/* Passed / Blown / Archived. Not a routine choice — a dashed outline and muted
+   text say so — but still clickable, so a trade filed to the wrong account can
+   always be moved back. */
+.tj-account-check.inactive {
+  border-style: dashed;
+  border-color: var(--color-border-sub, rgba(255, 255, 255, 0.14));
+  background: transparent;
+  color: var(--txt-3);
+}
+
+.tj-account-check.inactive:hover {
+  border-color: var(--border);
+  color: var(--txt-2);
+}
+
+/* A connected inactive account still reads as connected — the dashed outline
+   stays so the account's state is never lost. */
+.tj-account-check.inactive.selected {
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+  color: var(--txt-2);
+}
+
 .tj-account-check[disabled] {
   cursor: not-allowed;
 }

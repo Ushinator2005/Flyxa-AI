@@ -115,6 +115,7 @@ const ACCOUNT_STATUS_DOT: Record<string, string> = {
   Funded: '#fbbf24',
   Live: '#34d399',
   Blown: '#fca5a5',
+  Passed: '#4ade80',
 };
 
 function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
@@ -146,37 +147,33 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
     <div className="tj-sizing-row">
       <span className="tj-size-label">Accounts</span>
       <div className="tj-account-check-list">
-        {accounts.filter(account =>
-          account.id !== DEFAULT_ACCOUNT_ID &&
-          (!account.archived || selectedAccountIds.includes(account.id)) &&
-          (account.status !== 'Blown'   || selectedAccountIds.includes(account.id)) &&
-          (account.status !== 'Passed'  || selectedAccountIds.includes(account.id))
-        ).map(account => {
+        {/* Every account stays listed and clickable, including Passed/Blown/Archived
+            ones. Hiding a disconnected inactive account made mis-links a one-way
+            door: disconnect it once and there was no way to put it back. They are
+            styled as inactive instead — visibly not a routine choice, still usable
+            for correcting where a trade belongs. */}
+        {accounts.filter(account => account.id !== DEFAULT_ACCOUNT_ID).map(account => {
           const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
           const isConnected = selectedAccountIds.includes(account.id);
-          // Inactive accounts (Passed/Blown/Archived) can't be allocated to a
-          // trade, but a wrong connection must always be removable — so only
-          // disable the chip when the inactive account is NOT already connected.
-          const locked = isInactive && !isConnected;
           const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
           const dotColor = ACCOUNT_STATUS_DOT[account.status] ?? 'rgba(255,255,255,0.25)';
-          // A real button, not a <label> wrapping a display:none checkbox — the
-          // hidden-input pattern gave no way to tell a swallowed click from a
-          // rejected one, and a mis-linked account has to be removable.
+          const inactiveWord = account.archived ? 'archived' : account.status === 'Blown' ? 'blown' : 'passed';
+          // A real button, not a <label> wrapping a display:none checkbox — that
+          // pattern silently swallowed the click and gave no way to tell a lost
+          // click from a rejected one.
           return (
             <button
               key={account.id}
               type="button"
               role="checkbox"
               aria-checked={isConnected}
-              disabled={locked}
               onClick={() => toggleAccount(account.id, !isConnected)}
-              className={`tj-account-check ${isConnected ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
+              className={`tj-account-check ${isConnected ? 'selected' : ''} ${isInactive ? 'inactive' : ''}`}
               title={
-                locked
-                  ? (account.archived ? 'Archived account cannot be allocated to new trades' : `${account.status} accounts cannot be allocated to new trades`)
-                  : isConnected
-                    ? `Connected — click to disconnect this trade from ${account.name}`
+                isConnected
+                  ? `Connected — click to disconnect this trade from ${account.name}`
+                  : isInactive
+                    ? `${account.name} is ${inactiveWord} — click to connect this trade to it anyway`
                     : `Click to connect this trade to ${account.name}`
               }
             >
