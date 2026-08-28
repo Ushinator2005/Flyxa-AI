@@ -12,6 +12,7 @@ import {
 import { format } from 'date-fns';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings, ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID } from '../contexts/AppSettingsContext.js';
+import { resolveAutoPassStatus } from '../utils/tradingAccounts.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import {
   buildAnalyticsSummary,
@@ -345,17 +346,13 @@ export default function Dashboard() {
 
   const targetBalForEffect = selectedAcct?.targetBalance ?? null;
 
-  // Auto-switch Eval account to Passed when live balance meets/exceeds target
+  // Keep the account's Passed status in step with the balance that earns it —
+  // see resolveAutoPassStatus. Runs for the selected account, the same scope the
+  // auto-pass has always had.
   useEffect(() => {
-    if (
-      selectedAcct &&
-      selectedAcct.status === 'Eval' &&
-      targetBalForEffect !== null &&
-      liveBalForEffect !== null &&
-      liveBalForEffect >= targetBalForEffect
-    ) {
-      updateAccount(selectedAcct.id, { status: 'Passed' });
-    }
+    if (!selectedAcct) return;
+    const next = resolveAutoPassStatus(selectedAcct, liveBalForEffect, targetBalForEffect);
+    if (next) updateAccount(selectedAcct.id, next);
   }, [selectedAcct, liveBalForEffect, targetBalForEffect, updateAccount]);
 
   const displayTrades = recentTrades;

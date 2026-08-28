@@ -59,6 +59,7 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
     ...(account.trailingStopsAt !== undefined ? { trailingStopsAt: account.trailingStopsAt } : {}),
     ...(account.ruleVerifiedAt !== undefined ? { ruleVerifiedAt: account.ruleVerifiedAt } : {}),
     ...(account.ruleSourceUrl !== undefined ? { ruleSourceUrl: account.ruleSourceUrl } : {}),
+    ...(account.autoPassed === true ? { autoPassed: true } : {}),
   }));
 
   const withoutDuplicates = normalizedAccounts.filter((account, index, collection) => (
@@ -70,6 +71,37 @@ export function ensureDefaultAccount(accounts: TradingAccount[]): TradingAccount
   }
 
   return [DEFAULT_TRADING_ACCOUNT, ...withoutDuplicates];
+}
+
+/**
+ * Whether an account's Passed status still holds, given its live balance.
+ *
+ * A pass is only real while the balance that earned it is still there. The app
+ * promotes an Eval account when the balance reaches the target, and reverses
+ * that if the balance later falls back under it — which is what happens when a
+ * trade logged to the wrong account is moved off it. A status the user picked by
+ * hand (autoPassed === false) is never touched.
+ *
+ * Returns the update to apply, or null when the status is already right.
+ */
+export function resolveAutoPassStatus(
+  account: Pick<TradingAccount, 'status' | 'autoPassed'>,
+  liveBalance: number | null,
+  targetBalance: number | null,
+): { status: TradingAccountStatus; autoPassed: boolean } | null {
+  if (liveBalance === null || targetBalance === null) return null;
+
+  if (account.status === 'Eval' && liveBalance >= targetBalance) {
+    return { status: 'Passed', autoPassed: true };
+  }
+
+  // `!== false` rather than `=== true`: accounts passed before this flag existed
+  // carry undefined, and those are exactly the ones stuck at Passed today.
+  if (account.status === 'Passed' && account.autoPassed !== false && liveBalance < targetBalance) {
+    return { status: 'Eval', autoPassed: false };
+  }
+
+  return null;
 }
 
 export function getAccountCreatedAtMs(account: TradingAccount): number {

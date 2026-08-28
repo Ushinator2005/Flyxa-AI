@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ACCOUNT_ID,
   ensureDefaultAccount,
+  resolveAutoPassStatus,
   resolveDefaultTradeAccountId,
 } from './tradingAccounts.js';
 import type { TradingAccount } from '../types/index.js';
@@ -57,5 +58,49 @@ describe('tradingAccounts', () => {
     ]);
 
     expect(accounts.find(item => item.id === 'archived-account')?.archived).toBe(true);
+  });
+});
+
+describe('resolveAutoPassStatus', () => {
+  const target = 53_000;
+
+  it('passes an Eval account once the balance reaches the target', () => {
+    expect(resolveAutoPassStatus({ status: 'Eval' }, 53_695, target))
+      .toEqual({ status: 'Passed', autoPassed: true });
+  });
+
+  it('leaves an Eval account alone below target', () => {
+    expect(resolveAutoPassStatus({ status: 'Eval' }, 52_380, target)).toBeNull();
+  });
+
+  it('keeps a pass that still holds', () => {
+    expect(resolveAutoPassStatus({ status: 'Passed', autoPassed: true }, 53_695, target)).toBeNull();
+  });
+
+  // The case that started this: a trade logged to the wrong account pushed the
+  // balance over target, and unlinking it pulled the balance back under.
+  it('reverts an auto-pass once the balance falls back under target', () => {
+    expect(resolveAutoPassStatus({ status: 'Passed', autoPassed: true }, 52_380, target))
+      .toEqual({ status: 'Eval', autoPassed: false });
+  });
+
+  it('reverts a pass from before the flag existed', () => {
+    expect(resolveAutoPassStatus({ status: 'Passed' }, 52_380, target))
+      .toEqual({ status: 'Eval', autoPassed: false });
+  });
+
+  it('never touches a status the user set by hand', () => {
+    expect(resolveAutoPassStatus({ status: 'Passed', autoPassed: false }, 52_380, target)).toBeNull();
+  });
+
+  it('does nothing without a balance or a target', () => {
+    expect(resolveAutoPassStatus({ status: 'Eval' }, null, target)).toBeNull();
+    expect(resolveAutoPassStatus({ status: 'Passed' }, 52_380, null)).toBeNull();
+  });
+
+  it('leaves Funded, Live and Blown accounts out of it', () => {
+    expect(resolveAutoPassStatus({ status: 'Funded' }, 53_695, target)).toBeNull();
+    expect(resolveAutoPassStatus({ status: 'Live' }, 10, target)).toBeNull();
+    expect(resolveAutoPassStatus({ status: 'Blown' }, 53_695, target)).toBeNull();
   });
 });

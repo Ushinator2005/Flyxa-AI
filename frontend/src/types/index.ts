@@ -266,6 +266,16 @@ export interface TradingAccount {
   trailingStopsAt?: number | null;
   ruleVerifiedAt?: string;
   ruleSourceUrl?: string;
+  /**
+   * Whether this account's Passed status is the app's call or the user's.
+   * The app promotes an Eval account to Passed when its balance reaches the
+   * target (autoPassed: true), and reverses that if the balance later falls back
+   * under — a mis-logged trade corrected, a trade moved to another account — so
+   * a pass only stands while it is still true. Picking a status by hand in
+   * Settings stamps false, which makes it stick regardless of balance.
+   * Undefined means "passed before this flag existed": treated as reversible.
+   */
+  autoPassed?: boolean;
 }
 
 export interface AppPreferences {
