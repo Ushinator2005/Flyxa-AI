@@ -349,10 +349,22 @@ export default function Dashboard() {
   // Keep the account's Passed status in step with the balance that earns it —
   // see resolveAutoPassStatus. Runs for the selected account, the same scope the
   // auto-pass has always had.
+  //
+  // At most one status write per account per mount. The balance is not
+  // independent of the status: an account's status decides whether it can be
+  // defaultTradeAccountId (resolveDefaultTradeAccountId skips Passed/Blown), and
+  // trades with no valid account of their own fall back to whichever account that
+  // is. So flipping the status can move trades on or off the account and change
+  // the very balance that decided the flip — left unguarded the two chase each
+  // other and the dashboard flickers. One write settles it; the next page load
+  // re-evaluates from a stable state.
+  const autoStatusWrittenRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!selectedAcct) return;
+    if (!selectedAcct || autoStatusWrittenRef.current.has(selectedAcct.id)) return;
     const next = resolveAutoPassStatus(selectedAcct, liveBalForEffect, targetBalForEffect);
-    if (next) updateAccount(selectedAcct.id, next);
+    if (!next) return;
+    autoStatusWrittenRef.current.add(selectedAcct.id);
+    updateAccount(selectedAcct.id, next);
   }, [selectedAcct, liveBalForEffect, targetBalForEffect, updateAccount]);
 
   const displayTrades = recentTrades;
