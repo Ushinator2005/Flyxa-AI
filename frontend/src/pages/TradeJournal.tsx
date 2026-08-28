@@ -118,19 +118,28 @@ const ACCOUNT_STATUS_DOT: Record<string, string> = {
 };
 
 function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
-  const { accounts } = useAppSettings();
-  // Read every account field a connection could live in (accountIds / accountId /
-  // the raw store `account`) so a mis-linked account always shows as connected
-  // and can be unchecked — even if it was linked through a different code path.
+  const { accounts, getTradeAccountOverride, persistTradeAccount, removeTradeAccount } = useAppSettings();
+  // Read every place a connection can live — the trade's own fields (accountIds /
+  // accountId / the raw store `account`) AND the app-settings override map, which
+  // legacy paths wrote to without touching the trade. A mis-linked account must
+  // show as connected wherever the link came from, otherwise it can't be unchecked.
   const selectedAccountIds = Array.from(new Set(
-    [...(trade.accountIds ?? []), trade.accountId, (trade as { account?: string }).account]
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    [
+      ...(trade.accountIds ?? []),
+      trade.accountId,
+      (trade as { account?: string }).account,
+      ...(getTradeAccountOverride(trade.id) ?? []),
+    ].filter((id): id is string => typeof id === 'string' && id.length > 0)
   ));
   const toggleAccount = (accountId: string, checked: boolean) => {
     const nextIds = checked
       ? Array.from(new Set([...selectedAccountIds, accountId]))
       : selectedAccountIds.filter(id => id !== accountId);
     onMutate({ accountIds: nextIds, accountId: nextIds[0], account: nextIds[0] } as Partial<JournalTrade>);
+    // Clear the override map too. Without this the map keeps re-supplying the
+    // account the user just disconnected, and the trade snaps back to it.
+    if (nextIds.length > 0) persistTradeAccount(trade.id, nextIds);
+    else removeTradeAccount(trade.id);
   };
 
   return (
@@ -1548,29 +1557,50 @@ export default function TradeJournal() {
     if (!selectedEntryId) return;
     mutateEntries(prev => prev.map(entry => {
       if (entry.id !== selectedEntryId) return entry;
+      const nextTrades = entry.trades.map(trade => {
+        if (trade.id !== tradeId) return trade;
+        // Dev eval flywheel: the first manual correction of an AI-scanned
+        // trade's price levels is ground truth the scanner got wrong.
+        if (trade.priceLevelsSource === 'ai' && !trade.priceLevelsEdited && fields.priceLevelsEdited === true) {
+          maybeCaptureCorrection({
+            tradeId: trade.id,
+            symbol: trade.symbol,
+            date: trade.date ?? '',
+            screenshotUrl: trade.screenshotUrl,
+            before: { entry: trade.entry, sl: trade.sl, tp: trade.tp, exit: trade.exit, direction: trade.direction, entryTime: trade.entryTime },
+            after: { entry: fields.entry, sl: fields.sl, tp: fields.tp, exit: fields.exit },
+          });
+        }
+        const nextFields = { ...fields };
+        if (typeof fields.contracts === 'number' && fields.contracts !== trade.contracts) {
+          nextFields.pnlOverride = scaleContractAmount(trade.pnlOverride, trade.contracts, fields.contracts);
+          nextFields.commission = scaleContractAmount(trade.commission, trade.contracts, fields.contracts);
+        }
+        return withTradeDerivedValues({ ...trade, ...nextFields });
+      });
+
+      // The day itself carries an account link too. Leaving it pointing at an
+      // account none of its trades use keeps the day filed under that account
+      // everywhere else (dashboard cells, stats, evaluation coach) — so a
+      // disconnect on the trade would look like it never happened. Re-derive the
+      // day's accounts from its trades whenever a trade's accounts change.
+      if (!('accountIds' in fields || 'accountId' in fields || 'account' in fields)) {
+        return { ...entry, trades: nextTrades };
+      }
+      const tradeAccountIds = Array.from(new Set(
+        nextTrades
+          .flatMap(t => [
+            ...(t.accountIds ?? []),
+            t.accountId,
+            (t as { account?: string }).account,
+          ])
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      ));
       return {
         ...entry,
-        trades: entry.trades.map(trade => {
-          if (trade.id !== tradeId) return trade;
-          // Dev eval flywheel: the first manual correction of an AI-scanned
-          // trade's price levels is ground truth the scanner got wrong.
-          if (trade.priceLevelsSource === 'ai' && !trade.priceLevelsEdited && fields.priceLevelsEdited === true) {
-            maybeCaptureCorrection({
-              tradeId: trade.id,
-              symbol: trade.symbol,
-              date: trade.date ?? '',
-              screenshotUrl: trade.screenshotUrl,
-              before: { entry: trade.entry, sl: trade.sl, tp: trade.tp, exit: trade.exit, direction: trade.direction, entryTime: trade.entryTime },
-              after: { entry: fields.entry, sl: fields.sl, tp: fields.tp, exit: fields.exit },
-            });
-          }
-          const nextFields = { ...fields };
-          if (typeof fields.contracts === 'number' && fields.contracts !== trade.contracts) {
-            nextFields.pnlOverride = scaleContractAmount(trade.pnlOverride, trade.contracts, fields.contracts);
-            nextFields.commission = scaleContractAmount(trade.commission, trade.contracts, fields.contracts);
-          }
-          return withTradeDerivedValues({ ...trade, ...nextFields });
-        }),
+        trades: nextTrades,
+        accountIds: tradeAccountIds,
+        account: tradeAccountIds[0],
       };
     }));
   }, [mutateEntries, selectedEntryId]);
@@ -1605,6 +1635,10 @@ export default function TradeJournal() {
   useEffect(() => {
     const prevId = prevSelectedEntryIdRef.current;
     prevSelectedEntryIdRef.current = selectedEntryId;
+    // Once the user moves to a different day, the deep link's date stops being
+    // the day to fall back to.
+    const selectedDate = entries.find(entry => entry.id === selectedEntryId)?.date;
+    if (selectedDate && selectedDate !== deepLinkDateRef.current) deepLinkDateRef.current = null;
     if (!prevId || prevId === selectedEntryId) return;
     mutateEntries(prev => {
       const entry = prev.find(e => e.id === prevId);
@@ -1613,7 +1647,23 @@ export default function TradeJournal() {
       if (cleanedTrades.length === entry.trades.length) return prev;
       return prev.map(e => e.id === prevId ? { ...e, trades: cleanedTrades } : e);
     });
-  }, [selectedEntryId, mutateEntries, isPhantomTrade]);
+  }, [selectedEntryId, entries, mutateEntries, isPhantomTrade]);
+
+  // The store hydrates from Supabase asynchronously, so `entries` is empty for
+  // the first render or two. Deep links must wait for it — acting on the empty
+  // list makes them conclude the linked day doesn't exist.
+  const [storeHydrated, setStoreHydrated] = useState(() => useFlyxaStore.persist.hasHydrated());
+  useEffect(() => {
+    if (storeHydrated) return;
+    const unsubscribe = useFlyxaStore.persist.onFinishHydration(() => setStoreHydrated(true));
+    if (useFlyxaStore.persist.hasHydrated()) setStoreHydrated(true);
+    return unsubscribe;
+  }, [storeHydrated]);
+
+  // The day a deep link asked for. Entries are consolidated by date on load, so
+  // the id we selected can be replaced by a merged one — falling straight back
+  // to "most recent day" would silently drop the user on the wrong date.
+  const deepLinkDateRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!entries.length) {
@@ -1621,8 +1671,12 @@ export default function TradeJournal() {
       return;
     }
     if (!selectedEntryId || !entries.some(entry => entry.id === selectedEntryId)) {
+      const linkedForDate = deepLinkDateRef.current
+        ? entries.filter(entry => entry.date === deepLinkDateRef.current)
+        : [];
+      const linked = linkedForDate.find(entry => entry.trades.length > 0) ?? linkedForDate[0];
       const mostRecent = [...entries].sort((a, b) => b.date.localeCompare(a.date))[0];
-      setSelectedEntryId(mostRecent.id);
+      setSelectedEntryId((linked ?? mostRecent).id);
     }
   }, [entries, selectedEntryId]);
 
@@ -1634,16 +1688,25 @@ export default function TradeJournal() {
   useEffect(() => {
     const date = params.get('date');
     const tradeId = params.get('tradeId');
+    const accountId = params.get('accountId');
     if (!date) return;
-    const paramKey = `${date}|${tradeId ?? ''}`;
+    if (!storeHydrated) return;
+    const paramKey = `${date}|${tradeId ?? ''}|${accountId ?? ''}`;
     if (appliedDateParamRef.current === paramKey) return;
+    deepLinkDateRef.current = date;
     // A date can have several entries (one per account, especially with mirror
-    // trades). Prefer the entry that actually holds the linked trade; otherwise
-    // the one with trades, so a blank/other-account entry never shadows the real
-    // day the user clicked.
+    // trades). Prefer the entry that actually holds the linked trade, then the
+    // one on the account the link came from, then any entry with trades — so a
+    // blank/other-account entry never shadows the real day the user clicked.
     const entriesForDate = entries.filter(entry => entry.date === date);
+    const onAccount = (entry: JournalEntry) => entry.trades.some(t => (
+      (t.accountIds ?? []).includes(accountId as string)
+      || t.accountId === accountId
+      || (t as { account?: string }).account === accountId
+    ));
     const targetEntry =
       (tradeId ? entriesForDate.find(entry => entry.trades.some(t => t.id === tradeId)) : undefined)
+      ?? (accountId ? entriesForDate.find(onAccount) : undefined)
       ?? entriesForDate.find(entry => entry.trades.length > 0)
       ?? entriesForDate[0];
     if (!targetEntry) {
@@ -1666,7 +1729,7 @@ export default function TradeJournal() {
     setShowScanner(false);
     const parsedDate = parseDate(date);
     setMonthCursor(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
-  }, [entries, params, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setMonthCursor]);
+  }, [entries, params, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setMonthCursor, storeHydrated]);
 
   useEffect(() => {
     const currentSelected = entries.find(entry => entry.id === selectedEntryId) ?? null;
@@ -1797,7 +1860,7 @@ export default function TradeJournal() {
   }, [entries, getDefaultTradeAccountId, mutateEntries, preferences.timezone, rulesTemplate, setMonthCursor]);
 
   const saveTradeDate = useCallback(() => {
-    performSaveTradeDate({ selectedEntry, activeTrade, tradeDateDraft, preferences, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setSelectedEntryId, setActiveTradeId, setMonthCursor, setIsTradeDateEditorOpen });
+    performSaveTradeDate({ selectedEntry, activeTrade, tradeDateDraft, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setSelectedEntryId, setActiveTradeId, setMonthCursor, setIsTradeDateEditorOpen });
   }, [activeTrade, getDefaultTradeAccountId, mutateEntries, rulesTemplate, selectedEntry, tradeDateDraft]);
 
   const saveEntryDate = useCallback(() => {
@@ -2688,7 +2751,7 @@ function EntryHeaderSection({
   goToScanner,
   onShare,
 }: EntryHeaderSectionProps) {
-  const { preferences, accounts } = useAppSettings();
+  const { accounts } = useAppSettings();
   return (
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
@@ -2761,7 +2824,6 @@ function EntryHeaderSection({
                       onChange={setTradeDateDraft}
                       compact
                       align="left"
-                      max={getTodayIso(preferences.timezone)}
                     />
                     <button type="button" className="tj-mini-btn" onClick={saveTradeDate}>Save</button>
                     <button type="button" className="tj-mini-btn" onClick={() => {
@@ -2788,7 +2850,6 @@ function EntryHeaderSection({
                       onChange={setEntryDateDraft}
                       compact
                       align="left"
-                      max={getTodayIso(preferences.timezone)}
                     />
                     <button type="button" className="tj-mini-btn" onClick={saveEntryDate}>Save</button>
                     <button type="button" className="tj-mini-btn" onClick={() => { setEntryDateDraft(selectedEntry.date); setIsEntryDateEditorOpen(false); }}>Cancel</button>
@@ -3652,7 +3713,6 @@ interface SaveTradeDateCtx {
   selectedEntry: JournalEntry | null;
   activeTrade: JournalTrade | null;
   tradeDateDraft: string;
-  preferences: ReturnType<typeof useAppSettings>['preferences'];
   rulesTemplate: string[];
   getDefaultTradeAccountId: ReturnType<typeof useAppSettings>['getDefaultTradeAccountId'];
   mutateEntries: (updater: (prev: JournalEntry[]) => JournalEntry[]) => void;
@@ -3663,18 +3723,13 @@ interface SaveTradeDateCtx {
 }
 
 function performSaveTradeDate(ctx: SaveTradeDateCtx) {
-  const { selectedEntry, activeTrade, tradeDateDraft, preferences, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setSelectedEntryId, setActiveTradeId, setMonthCursor, setIsTradeDateEditorOpen } = ctx;
+  const { selectedEntry, activeTrade, tradeDateDraft, rulesTemplate, getDefaultTradeAccountId, mutateEntries, setSelectedEntryId, setActiveTradeId, setMonthCursor, setIsTradeDateEditorOpen } = ctx;
     if (!selectedEntry || !activeTrade) return;
     const nextDate = tradeDateDraft.trim();
     if (!isValidIsoDate(nextDate)) {
       pushToast({ tone: 'red', durationMs: 3000, message: 'Enter a valid date (YYYY-MM-DD).' });
       return;
     }
-    if (nextDate > getTodayIso(preferences.timezone)) {
-      pushToast({ tone: 'red', durationMs: 3000, message: 'Trade date cannot be in the future.' });
-      return;
-    }
-
     const currentTradeDate = getTradeDateValue(activeTrade, selectedEntry.date);
     // Only skip the move if the date hasn't changed AND the trade is already in the right entry
     if (nextDate === currentTradeDate && selectedEntry.date === nextDate) {

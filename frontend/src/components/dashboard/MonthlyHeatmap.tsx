@@ -1396,7 +1396,13 @@ export default function MonthlyHeatmap({ trades = [], onVisibleMonthChange }: Mo
           onSave={handleSaveTab}
           onViewTrades={() => {
             closeJournalModal();
-            navigate(`/scanner?date=${activeJournalDate}`);
+            // Carry the account the modal was scoped to. A date can hold one entry
+            // per account, so without it the journal picks whichever entry has
+            // trades — often a different account than the one on screen.
+            const accountParam = selectedAccountId && selectedAccountId !== ALL_ACCOUNTS_ID
+              ? `&accountId=${encodeURIComponent(selectedAccountId)}`
+              : '';
+            navigate(`/scanner?date=${activeJournalDate}${accountParam}`);
           }}
         />
       )}

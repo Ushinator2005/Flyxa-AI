@@ -178,6 +178,13 @@ interface AppSettingsContextValue {
   filterTradesBySelectedAccount: <T extends TradeAccountSource>(trades: T[], options?: { expandMirrors?: boolean }) => DecoratedTrade<T>[];
   persistTradeAccount: (tradeId: string, accountId?: string | string[]) => void;
   removeTradeAccount: (tradeId: string) => void;
+  /**
+   * Raw per-trade account override, straight out of the stored map. Account
+   * pickers need this so a connection that lives ONLY in the override map
+   * (legacy migrations wrote there, not onto the trade) still renders as
+   * connected — and can therefore be unchecked.
+   */
+  getTradeAccountOverride: (tradeId: string) => string[] | undefined;
 }
 
 const AppSettingsContext = createContext<AppSettingsContextValue | undefined>(undefined);
@@ -705,6 +712,12 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     }));
   }, [defaultTradeAccountId, validAccountIds]);
 
+  const getTradeAccountOverride = useCallback((tradeId: string): string[] | undefined => {
+    const mapped = tradeId ? tradeAccounts[tradeId] : undefined;
+    if (!mapped) return undefined;
+    return Array.isArray(mapped) ? mapped : [mapped];
+  }, [tradeAccounts]);
+
   const removeTradeAccount = useCallback((tradeId: string) => {
     setTradeAccounts(current => {
       const next = { ...current };
@@ -736,6 +749,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     filterTradesBySelectedAccount,
     persistTradeAccount,
     removeTradeAccount,
+    getTradeAccountOverride,
   }), [
     accounts,
     preferences,
@@ -758,6 +772,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     filterTradesBySelectedAccount,
     persistTradeAccount,
     removeTradeAccount,
+    getTradeAccountOverride,
   ]);
 
   return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;
