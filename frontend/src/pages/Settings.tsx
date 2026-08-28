@@ -1542,6 +1542,12 @@ export default function Settings() {
         gridTemplateColumns: '216px minmax(0, 1fr)',
         gap: '32px',
         alignItems: 'start',
+        // Lift the page off the bare app background so it doesn't read as a stark
+        // black block next to the panelled rest of the site.
+        background: 'var(--app-panel-soft)',
+        border: `1px solid ${BORDER}`,
+        borderRadius: 16,
+        padding: '22px 26px',
       }}
     >
       {/* Fixed rail — grouped nav that never scrolls away */}
