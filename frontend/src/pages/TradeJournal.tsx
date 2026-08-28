@@ -1637,7 +1637,15 @@ export default function TradeJournal() {
     if (!date) return;
     const paramKey = `${date}|${tradeId ?? ''}`;
     if (appliedDateParamRef.current === paramKey) return;
-    const targetEntry = entries.find(entry => entry.date === date);
+    // A date can have several entries (one per account, especially with mirror
+    // trades). Prefer the entry that actually holds the linked trade; otherwise
+    // the one with trades, so a blank/other-account entry never shadows the real
+    // day the user clicked.
+    const entriesForDate = entries.filter(entry => entry.date === date);
+    const targetEntry =
+      (tradeId ? entriesForDate.find(entry => entry.trades.some(t => t.id === tradeId)) : undefined)
+      ?? entriesForDate.find(entry => entry.trades.length > 0)
+      ?? entriesForDate[0];
     if (!targetEntry) {
       // No entry for the linked day (empty days are pruned) — materialize a
       // blank day so "View trades" from the journal always lands on the
