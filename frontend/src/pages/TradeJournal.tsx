@@ -138,19 +138,30 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
           (account.status !== 'Passed'  || selectedAccountIds.includes(account.id))
         ).map(account => {
           const isInactive = account.archived || account.status === 'Blown' || account.status === 'Passed';
+          const isConnected = selectedAccountIds.includes(account.id);
+          // Inactive accounts (Passed/Blown/Archived) can't be allocated to a
+          // trade, but a wrong connection must always be removable — so only
+          // disable the checkbox when the inactive account is NOT already connected.
+          const locked = isInactive && !isConnected;
           const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
           const dotColor = ACCOUNT_STATUS_DOT[account.status] ?? 'rgba(255,255,255,0.25)';
           return (
             <label
               key={account.id}
-              className={`tj-account-check ${selectedAccountIds.includes(account.id) ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
-              title={account.archived ? 'Archived account' : account.status === 'Passed' ? 'Passed accounts cannot be allocated to new trades' : undefined}
+              className={`tj-account-check ${isConnected ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
+              title={
+                locked
+                  ? (account.archived ? 'Archived account cannot be allocated to new trades' : `${account.status} accounts cannot be allocated to new trades`)
+                  : isInactive && isConnected
+                    ? `Connected to a ${account.status === 'Passed' ? 'passed' : account.archived ? 'archived' : 'blown'} account — uncheck to disconnect`
+                    : undefined
+              }
             >
               <input
                 type="checkbox"
-                checked={selectedAccountIds.includes(account.id)}
+                checked={isConnected}
                 onChange={event => toggleAccount(account.id, event.target.checked)}
-                disabled={isInactive}
+                disabled={locked}
               />
               <span
                 className="tj-account-status-dot"
