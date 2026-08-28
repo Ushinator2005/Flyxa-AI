@@ -1458,6 +1458,9 @@
 }
 
 .tj-account-check {
+  appearance: none;
+  font-family: inherit;
+  text-align: left;
   min-height: 28px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1478,9 +1481,23 @@
   color: var(--txt);
 }
 
-.tj-account-check input {
-  display: none;
+.tj-account-check[disabled] {
+  cursor: not-allowed;
 }
+
+/* The "disconnect" affordance on a connected chip. */
+.tj-account-check-x {
+  margin-left: 2px;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.tj-account-check:hover .tj-account-check-x {
+  opacity: 1;
+}
+
+
 
 .tj-account-status-dot {
   width: 6px;

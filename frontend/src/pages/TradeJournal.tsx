@@ -156,35 +156,38 @@ function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMuta
           const isConnected = selectedAccountIds.includes(account.id);
           // Inactive accounts (Passed/Blown/Archived) can't be allocated to a
           // trade, but a wrong connection must always be removable — so only
-          // disable the checkbox when the inactive account is NOT already connected.
+          // disable the chip when the inactive account is NOT already connected.
           const locked = isInactive && !isConnected;
           const statusLabel = account.archived ? ' (Archived)' : account.status === 'Blown' ? ' (Blown)' : account.status === 'Passed' ? ' (Passed)' : '';
           const dotColor = ACCOUNT_STATUS_DOT[account.status] ?? 'rgba(255,255,255,0.25)';
+          // A real button, not a <label> wrapping a display:none checkbox — the
+          // hidden-input pattern gave no way to tell a swallowed click from a
+          // rejected one, and a mis-linked account has to be removable.
           return (
-            <label
+            <button
               key={account.id}
+              type="button"
+              role="checkbox"
+              aria-checked={isConnected}
+              disabled={locked}
+              onClick={() => toggleAccount(account.id, !isConnected)}
               className={`tj-account-check ${isConnected ? 'selected' : ''} ${isInactive ? 'opacity-50' : ''}`}
               title={
                 locked
                   ? (account.archived ? 'Archived account cannot be allocated to new trades' : `${account.status} accounts cannot be allocated to new trades`)
-                  : isInactive && isConnected
-                    ? `Connected to a ${account.status === 'Passed' ? 'passed' : account.archived ? 'archived' : 'blown'} account — uncheck to disconnect`
-                    : undefined
+                  : isConnected
+                    ? `Connected — click to disconnect this trade from ${account.name}`
+                    : `Click to connect this trade to ${account.name}`
               }
             >
-              <input
-                type="checkbox"
-                checked={isConnected}
-                onChange={event => toggleAccount(account.id, event.target.checked)}
-                disabled={locked}
-              />
               <span
                 className="tj-account-status-dot"
                 style={{ background: dotColor }}
                 title={account.status}
               />
               <span>{account.name}{statusLabel}</span>
-            </label>
+              {isConnected && <span className="tj-account-check-x" aria-hidden="true">×</span>}
+            </button>
           );
         })}
       </div>
