@@ -237,8 +237,10 @@ export default function Dashboard() {
   );
   // Aggregation view: a trade mirrored on N accounts counts once per account, so
   // "All Accounts" P&L, calendar totals and stats reflect the real total across
-  // accounts. Lists (recent trades, today's trades) use filteredTrades so each
-  // trade stays a single clickable row.
+  // accounts. Every total on this page reads from statsTrades — mixing the two
+  // bases is what made the calendar cell disagree with the Today tile above it.
+  // Lists (recent trades, today's trades) use filteredTrades so each trade stays
+  // a single clickable row.
   const statsTrades = useMemo(
     () => filterTradesBySelectedAccount(trades, { expandMirrors: true }),
     [filterTradesBySelectedAccount, trades],
@@ -309,7 +311,10 @@ export default function Dashboard() {
 
   const avgComparison = useMemo(() => {
     if (todayTrades.length === 0) return null;
-    const historicalTrades = filteredTrades.filter(t => t.trade_date !== todayStr);
+    // statsTrades on both sides: today already counts mirrored trades once per
+    // account, so the historical average has to as well or "vs avg" compares
+    // two different things.
+    const historicalTrades = statsTrades.filter(t => t.trade_date !== todayStr);
     const historicalDays = new Set(historicalTrades.map(t => t.trade_date)).size;
     if (historicalDays === 0) return null;
     const histPnL       = historicalTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
@@ -325,7 +330,7 @@ export default function Dashboard() {
       today: { pnl: todayPnL, winRate: todayWinRate, tradeCount: todayTrades.length },
       avg:   { pnl: avgDailyPnL, winRate: avgWinRate, tradeCount: avgTradesPerDay },
     };
-  }, [filteredTrades, todayTrades, todayStr, todayPnL]);
+  }, [statsTrades, todayTrades, todayStr, todayPnL]);
   // TradingAccount (from context) has no balance; use store Account which does.
   const selectedStoreAcct = selectedAccountId !== ALL_ACCOUNTS_ID
     ? storeAccounts.find(a => a.id === selectedAccountId)
@@ -531,7 +536,10 @@ export default function Dashboard() {
           const todayL  = todayTrades.filter(t => t.pnl - (t.commission ?? 0) < 0).length;
           const monthDate   = new Date(calendarMonth.year, calendarMonth.month - 1, 1);
           const monthStr    = format(monthDate, 'yyyy-MM');
-          const monthTrades = filteredTrades.filter(t => t.trade_date?.startsWith(monthStr));
+          // statsTrades, not filteredTrades: a month total is an aggregation, so a
+          // trade mirrored on two accounts is two real executions under "All
+          // Accounts" — same basis as the Today tile beside it.
+          const monthTrades = statsTrades.filter(t => t.trade_date?.startsWith(monthStr));
           const monthPnL    = monthTrades.reduce((s, t) => s + t.pnl - (t.commission ?? 0), 0);
           const monthLabel  = format(monthDate, 'MMM yyyy');
           const nextEv  = todayHighImpact.find(ev => {
@@ -799,7 +807,7 @@ export default function Dashboard() {
             {/* P&L Calendar */}
             <SectionPanel flush style={{ flexShrink: 0 }} data-tour-id="dashboard-calendar">
               <div style={{ padding: isMobile ? '10px 8px' : '14px 18px' }}>
-                <MonthlyHeatmap trades={filteredTrades} onVisibleMonthChange={setCalendarMonth} />
+                <MonthlyHeatmap trades={statsTrades} onVisibleMonthChange={setCalendarMonth} />
               </div>
             </SectionPanel>
 
