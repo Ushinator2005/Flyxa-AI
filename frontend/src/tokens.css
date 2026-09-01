@@ -88,6 +88,14 @@
 
   /* ── Semantic: Red — loss, negative ─────────────────────────── */
   --color-red:          #f87171;
+
+  /* Chart series — money in / money out on the Billing monthly flow.
+     Validated as a diverging pair (dataviz six checks) against the panel
+     surface in each theme, so they are NOT the --color-green/--color-red
+     status tokens: those two sit at ΔE 6.5 under deuteranopia, which is inside
+     the floor band. Re-step both here if either surface changes. */
+  --chart-flow-in:      #34d399;
+  --chart-flow-out:     #dc2626;
   --color-red-dim:      rgba(248, 113, 113, 0.14);
   --color-red-border:   rgba(248, 113, 113, 0.30);
 
@@ -145,6 +153,11 @@ html[data-theme='light'] {
   --color-red:          #ff1744;
   --color-red-dim:      rgba(255, 23, 68, 0.15);
   --color-red-border:   rgba(255, 23, 68, 0.40);
+
+  /* Light mode takes its own steps, not a flip of the dark ones: the dark green
+     only reaches 1.9:1 on a white panel. Re-validated on #ffffff. */
+  --chart-flow-in:      #0d9668;
+  --chart-flow-out:     #dc2626;
   --color-blue:         #2979ff;
   --color-blue-dim:     rgba(41, 121, 255, 0.14);
   --color-blue-border:  rgba(41, 121, 255, 0.36);

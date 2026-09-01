@@ -31,6 +31,9 @@ type AccountStatus = 'Eval' | 'Passed' | 'Activation fee' | 'Eval 1' | 'Eval 2' 
 type EvaluationOutcome = 'Unknown' | 'Not passed' | 'Passed' | 'Funded';
 type OutcomeConfidence = 'low' | 'medium' | 'high';
 
+import MonthlyFlowChart from '../components/billing/MonthlyFlowChart.js';
+import { buildMonthlyFlow } from '../utils/billingMonthlyFlow.js';
+
 interface PayoutEntry {
   id: string;
   amount: number;
@@ -1388,6 +1391,10 @@ export default function Billing() {
     [form.payouts, form.payoutReceived]
   );
 
+  // Fees out vs payouts in, per month. Separate from `derived` because it keys
+  // off dates rather than totals — see buildMonthlyFlow for the bucketing rules.
+  const monthlyFlow = useMemo(() => buildMonthlyFlow(accounts, 6), [accounts]);
+
   const derived = useMemo(() => {
     const accountEntries = accounts.filter(account => (account.entryKind ?? 'account') === 'account');
     const totalAccounts = accountEntries.length;
@@ -1831,6 +1838,12 @@ export default function Billing() {
               {derived.costPerPass !== null ? formatCurrency(derived.costPerPass) : '—'}
             </p>
           </div>
+        </div>
+
+        {/* Monthly flow — the shape behind Net Position: which months paid for
+            themselves and which were pure spend. */}
+        <div style={{ paddingLeft: 28, marginLeft: 28, borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
+          <MonthlyFlowChart months={monthlyFlow} />
         </div>
         </div>
       </section>
