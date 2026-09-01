@@ -16,6 +16,7 @@ import Modal from '../components/common/Modal.js';
 import {
   DEFAULT_CALENDAR_TIME_ZONE,
   FEED_CALENDAR_TIME_ZONE,
+  calendarTimeZoneLabel,
   convertCalendarWallTime,
   getTimeZoneParts,
   normalizeCalendarTimeZone,
@@ -1240,6 +1241,10 @@ function CalendarPanel({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, padding: '0 14px' }}>
         <span style={{ fontSize: 9.5, letterSpacing: '.06em', color: T3, fontFamily: MONO, textTransform: 'uppercase' }}>
           {formatWeekRange(weekStart)} · {currencies.length <= 3 ? currencies.join(' ') : `${currencies.length} currencies`}
+          {' · '}
+          <span title={`Event times are shown in ${safeDisplayTimezone}`}>
+            {calendarTimeZoneLabel(safeDisplayTimezone)}
+          </span>
         </span>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
           {[

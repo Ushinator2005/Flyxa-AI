@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { pushToast, dismissToast } from '../store/toastStore.js';
 import { CALENDAR_CACHE_KEY } from '../utils/calendarCache.js';
+import { zonedWallTimeToDate } from '../utils/calendarTime.js';
 /** Fire a notification when an event is within 30 minutes. */
 const LOOKAHEAD_MS = 30 * 60 * 1000;
 /** Also notify if the event just fired within the last 2 minutes. */
@@ -26,41 +27,6 @@ function readHighImpactEvents(): CachedEvent[] {
     );
   } catch {
     return [];
-  }
-}
-
-/**
- * Converts a wall-time string (YYYY-MM-DD + HH:MM in a given timezone) to a
- * UTC millisecond timestamp. Uses Intl to resolve the UTC offset correctly.
- */
-function wallTimeToUtcMs(dateSlice: string, timeHHMM: string, tz: string): number | null {
-  const local = new Date(`${dateSlice}T${timeHHMM}:00`);
-  if (Number.isNaN(local.getTime())) return null;
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(local);
-    const get = (t: string) =>
-      Number(parts.find((p) => p.type === t)?.value ?? 0);
-    const zonedAsUtc = Date.UTC(
-      get('year'),
-      get('month') - 1,
-      get('day'),
-      get('hour'),
-      get('minute'),
-      get('second'),
-    );
-    const offsetMs = zonedAsUtc - local.getTime();
-    return local.getTime() - offsetMs;
-  } catch {
-    return null;
   }
 }
 
@@ -92,8 +58,15 @@ export function useHighImpactAlerts(displayTimezone: string) {
         const key = `${ev.date}|${ev.time}|${ev.event}`;
         if (notifiedRef.current.has(key)) continue;
 
-        const utcMs = wallTimeToUtcMs(ev.date, ev.time, displayTimezone);
-        if (utcMs === null) continue;
+        // zonedWallTimeToDate anchors the wall time on Date.UTC before applying
+        // the target zone's offset. The local implementation this replaced built
+        // the Date by parsing "YYYY-MM-DDTHH:MM", which the runtime reads in the
+        // BROWSER's zone — so every alert drifted by the viewer's own UTC offset
+        // and only came out right on a machine set to UTC. A São Paulo viewer was
+        // told an event was "in 30 min" three hours after it had been released.
+        const eventInstant = zonedWallTimeToDate(ev.date, ev.time, displayTimezone);
+        if (!eventInstant) continue;
+        const utcMs = eventInstant.getTime();
 
         const delta = utcMs - now; // positive = future, negative = past
         if (delta < -LOOKBACK_MS || delta > LOOKAHEAD_MS) continue;

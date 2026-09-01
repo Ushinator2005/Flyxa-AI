@@ -110,3 +110,33 @@ export function convertCalendarWallTime(
   const instant = zonedWallTimeToDate(dateSlice, time, sourceTimeZone);
   return instant ? getTimeZoneParts(instant, targetTimeZone) : null;
 }
+
+/**
+ * Short label for the zone a calendar is displayed in, e.g. "GMT-3" or "EDT".
+ *
+ * Event times mean nothing without it: a 10:00 New York release reads as 11:00
+ * to a GMT-3 viewer, and against another site showing 10:00 that looks like the
+ * app is simply wrong.
+ */
+export function calendarTimeZoneLabel(timeZone: string, at = new Date()): string {
+  const safeTimeZone = normalizeCalendarTimeZone(timeZone);
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: safeTimeZone,
+      timeZoneName: 'shortGeneric',
+    }).formatToParts(at);
+    const name = parts.find(part => part.type === 'timeZoneName')?.value;
+    // shortGeneric gives "ET"/"PT" for US zones but falls back to the whole city
+    // name elsewhere ("Sao Paulo time"), which is too long for a header. Its own
+    // GMT forms are skipped so every offset label comes out of one formatter
+    // below — otherwise UTC reads "GMT+0" while GMT-3 reads "GMT-3".
+    if (name && name.length <= 5 && !/^(GMT|UTC)/i.test(name)) return name;
+  } catch { /* fall through to the offset form */ }
+
+  const offsetMinutes = Math.round(getTimeZoneOffsetMs(at, safeTimeZone) / 60_000);
+  if (offsetMinutes === 0) return 'UTC';
+  const sign = offsetMinutes > 0 ? '+' : '-';
+  const hours = Math.floor(Math.abs(offsetMinutes) / 60);
+  const minutes = Math.abs(offsetMinutes) % 60;
+  return `GMT${sign}${hours}${minutes ? `:${String(minutes).padStart(2, '0')}` : ''}`;
+}
