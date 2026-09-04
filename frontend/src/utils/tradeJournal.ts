@@ -392,8 +392,29 @@ export function gradeCssKey(letter: string): string {
   return letter.replace('+', 'plus').replace('—', 'dash');
 }
 
-export function computeEntryStats(entry: JournalEntry, riskRules: RiskRule[] = []) {
-  const pnl = entry.trades.reduce((sum, trade) => sum + trade.pnl - (trade.commission ?? 0), 0);
+/**
+ * How many accounts a trade was allocated to. A trade mirrored on two accounts
+ * is two real executions, so it is two lots of money — the resolver comes from
+ * AppSettings so the answer matches what the rest of the app believes.
+ */
+export type TradeAccountIdsResolver = (trade: JournalTrade) => string[];
+
+export function computeEntryStats(
+  entry: JournalEntry,
+  riskRules: RiskRule[] = [],
+  accountIdsFor?: TradeAccountIdsResolver,
+) {
+  const accountIdsOf = (trade: JournalTrade) => (accountIdsFor ? accountIdsFor(trade) : []);
+
+  // Money counts once per account the trade was mirrored onto; the counts below
+  // stay one-per-row, because a row is what the journal lets you open and edit.
+  // Without the multiplier a day mirrored across two accounts reads half what
+  // the dashboard calendar reports for the same day.
+  const pnl = entry.trades.reduce((sum, trade) => {
+    const perAccount = trade.pnl - (trade.commission ?? 0);
+    return sum + perAccount * Math.max(1, accountIdsOf(trade).length);
+  }, 0);
+  const accountCount = new Set(entry.trades.flatMap(accountIdsOf)).size;
   const wins = entry.trades.filter(trade => trade.result === 'win').length;
   const losses = entry.trades.filter(trade => trade.result === 'loss').length;
   const tradeCount = entry.trades.length;
@@ -428,14 +449,14 @@ export function computeEntryStats(entry: JournalEntry, riskRules: RiskRule[] = [
   else if (effectiveDiscipline >= 3 && rulePassPct >= 60) grade = 'B+';
   else if (effectiveDiscipline >= 2.5 && rulePassPct >= 50) grade = 'B';
   else if (effectiveDiscipline >= 2) grade = 'C+';
-  return { pnl, wins, losses, tradeCount, winRate, avgRR, grade };
+  return { pnl, wins, losses, tradeCount, winRate, avgRR, grade, accountCount };
 }
 
-export function findBestDay(entries: JournalEntry[]) {
+export function findBestDay(entries: JournalEntry[], accountIdsFor?: TradeAccountIdsResolver) {
   if (!entries.length) return null;
   let best = -Infinity;
   entries.forEach(entry => {
-    const pnl = computeEntryStats(entry).pnl;
+    const pnl = computeEntryStats(entry, [], accountIdsFor).pnl;
     if (pnl > best) best = pnl;
   });
   return Number.isFinite(best) ? best : null;

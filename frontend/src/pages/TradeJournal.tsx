@@ -118,6 +118,20 @@ const ACCOUNT_STATUS_DOT: Record<string, string> = {
   Passed: '#4ade80',
 };
 
+/**
+ * Resolves how many accounts a trade was allocated to, for the journal's money
+ * totals. A trade mirrored on two accounts is two real executions, so it is two
+ * lots of money — without this a mirrored day reads half of what the dashboard
+ * calendar reports for the same date. Counts of trades stay per-row.
+ */
+function useTradeAccountIds() {
+  const { resolveTradeAccountIds } = useAppSettings();
+  return useCallback(
+    (trade: JournalTrade) => resolveTradeAccountIds(trade as Parameters<typeof resolveTradeAccountIds>[0]),
+    [resolveTradeAccountIds],
+  );
+}
+
 function AccountSelectorBlock({ trade, onMutate }: { trade: JournalTrade; onMutate: (fields: Partial<JournalTrade>) => void }) {
   const { accounts, getTradeAccountOverride, persistTradeAccount, removeTradeAccount } = useAppSettings();
   // Read every place a connection can live — the trade's own fields (accountIds /
@@ -1510,6 +1524,8 @@ export default function TradeJournal() {
     const today = parseDate(getTodayIso(preferences.timezone));
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
+  const accountIdsForTrade = useTradeAccountIds();
+
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<DayFilter>('all');
   const [query, setQuery] = useState('');
@@ -1770,7 +1786,7 @@ export default function TradeJournal() {
     const needle = query.trim().toLowerCase();
     return entriesInMonth
       .filter(entry => {
-        const stats = computeEntryStats(entry);
+        const stats = computeEntryStats(entry, [], accountIdsForTrade);
         // Win/loss/untagged filters only apply to days with trades
         if (entry.trades.length > 0) {
           if (dayFilter === 'win' && stats.pnl <= 0) return false;
@@ -1786,7 +1802,7 @@ export default function TradeJournal() {
         return symbolMatch || noteMatch;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [dayFilter, entriesInMonth, query]);
+  }, [dayFilter, entriesInMonth, query, accountIdsForTrade]);
 
   const selectedEntry = useMemo(() => {
     const fromStore = entries.find(entry => entry.id === selectedEntryId) ?? null;
@@ -1820,20 +1836,20 @@ export default function TradeJournal() {
   }, [selectedEntry?.id]);
 
   const monthSummary = useMemo(() => {
-    const dayPnL = tradedEntriesInMonth.map(entry => computeEntryStats(entry).pnl);
+    const dayPnL = tradedEntriesInMonth.map(entry => computeEntryStats(entry, [], accountIdsForTrade).pnl);
     const monthPnl = dayPnL.reduce((sum, pnl) => sum + pnl, 0);
     const daysTraded = tradedEntriesInMonth.length;
     let wins = 0;
     let losses = 0;
     tradedEntriesInMonth.forEach(entry => {
-      const stats = computeEntryStats(entry);
+      const stats = computeEntryStats(entry, [], accountIdsForTrade);
       wins += stats.wins;
       losses += stats.losses;
     });
     const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
-    const bestDay = findBestDay(tradedEntriesInMonth);
+    const bestDay = findBestDay(tradedEntriesInMonth, accountIdsForTrade);
     return { monthPnl, daysTraded, winRate, bestDay };
-  }, [tradedEntriesInMonth]);
+  }, [tradedEntriesInMonth, accountIdsForTrade]);
 
   // Pre-compute per-entry adherence for the visible list so the render stays O(1) per card.
   const entryAdherenceMap = useMemo(() => {
@@ -2299,7 +2315,7 @@ export default function TradeJournal() {
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           data={(() => {
-            const stats = computeEntryStats(selectedEntry, riskRules);
+            const stats = computeEntryStats(selectedEntry, riskRules, accountIdsForTrade);
             // Third stat by social currency: best trade if there's more than
             // one, otherwise the day's instrument.
             const nets = selectedEntry.trades.map(t => t.pnl - (t.commission ?? 0));
@@ -2448,6 +2464,7 @@ function DayPanelSection({
   setShowCSVImport,
   goToScanner,
 }: DayPanelSectionProps) {
+  const accountIdsForTrade = useTradeAccountIds();
   return (
       <aside
         className="tj-day-panel"
@@ -2610,7 +2627,7 @@ function DayPanelSection({
         <div className="tj-day-list">
           {visibleEntries.length ? (
             visibleEntries.map(entry => {
-              const stats = computeEntryStats(entry);
+              const stats = computeEntryStats(entry, [], accountIdsForTrade);
               const day = parseDate(entry.date).getDate();
               return (
                 <button
@@ -2627,7 +2644,13 @@ function DayPanelSection({
                     {entry.trades.length > 0 ? (
                       <>
                         <div className={`tj-day-pnl ${stats.pnl > 0 ? 'pos' : stats.pnl < 0 ? 'neg' : ''}`}>{formatSignedCurrency(stats.pnl)}</div>
-                        <div className="tj-day-meta">{`${stats.wins}W | ${stats.losses}L | ${stats.tradeCount} trades`}</div>
+                        <div className="tj-day-meta">
+                          {`${stats.wins}W | ${stats.losses}L | ${stats.tradeCount} trades`}
+                          {/* The P&L above counts each mirrored trade once per
+                              account, so say when a day spans more than one —
+                              otherwise the money looks inflated next to the rows. */}
+                          {stats.accountCount > 1 && ` · ${stats.accountCount} accounts`}
+                        </div>
                         {(() => {
                           const pct = entryAdherenceMap.get(entry.id) ?? null;
                           if (pct === null) return null;
@@ -2766,6 +2789,7 @@ function EntryHeaderSection({
   onShare,
 }: EntryHeaderSectionProps) {
   const { accounts } = useAppSettings();
+  const accountIdsForTrade = useTradeAccountIds();
   return (
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
@@ -2778,7 +2802,7 @@ function EntryHeaderSection({
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   {(() => {
-                    const stats = computeEntryStats(selectedEntry, riskRules);
+                    const stats = computeEntryStats(selectedEntry, riskRules, accountIdsForTrade);
                     const pnl = stats.pnl;
                     const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--txt-2)';
                     const pctColor = adherencePct !== null
@@ -2922,10 +2946,11 @@ function EntryStatBarSection({ selectedEntry, activeTrade, riskRules, adherenceP
   riskRules: RiskRule[];
   adherencePct: number | null;
 }) {
+  const accountIdsForTrade = useTradeAccountIds();
   return (
     <>
               {(() => {
-                const stats = computeEntryStats(selectedEntry, riskRules);
+                const stats = computeEntryStats(selectedEntry, riskRules, accountIdsForTrade);
                 const pnlColor = stats.pnl > 0 ? 'var(--green)' : stats.pnl < 0 ? 'var(--red)' : 'var(--txt)';
                 return (
                   <div style={{ display: 'flex', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 12, overflow: 'hidden' }} data-tour-id="scanner-trade-stats">
