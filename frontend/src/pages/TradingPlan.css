@@ -224,6 +224,16 @@
   padding: 18px 24px 40px;
 }
 
+/* This is both a flex column and the page's scroll container. Flex items shrink
+   to fit by default, so when the cards were taller than the viewport they were
+   squeezed instead of overflowing — the container never grew past its height, so
+   it never scrolled, and the tallest card (the rulebook) had its last rule
+   sliced off by its own overflow:hidden. Holding the cards at their natural
+   height is what lets the scroll engage. */
+.tp-content > * {
+  flex-shrink: 0;
+}
+
 .tp-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 356px);
