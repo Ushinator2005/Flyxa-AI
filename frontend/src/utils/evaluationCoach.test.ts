@@ -6,6 +6,7 @@ import {
   computeMllSeries,
   getEvaluationTemplates,
   inferEvaluationTemplate,
+  inferFundedAt,
   tradesForAccount,
   tradesForAccountPhase,
 } from './evaluationCoach.js';
@@ -285,5 +286,41 @@ describe('the funded boundary', () => {
     expect(tradesForAccountPhase(history, funded).map(t => t.id)).toEqual(['f1']);
     const stillEval: Account = { ...account, fundedAt: undefined };
     expect(tradesForAccountPhase(history, stillEval)).toHaveLength(3);
+  });
+});
+
+// Accounts funded before `fundedAt` existed carry no boundary, and they are
+// exactly the ones that need one — without it they keep reporting the
+// evaluation's profit as funded profit.
+describe('inferFundedAt', () => {
+  const passed = [
+    trade('e1', '2026-09-01', '10:00', 1_500),
+    trade('e2', '2026-09-02', '10:00', 1_600),   // cumulative 3,100 >= 3,000 target
+    trade('f1', '2026-09-03', '10:00', 400),
+  ];
+
+  it('finds the trade that cleared the target', () => {
+    const at = inferFundedAt(account, passed);
+    expect(at).not.toBeNull();
+    expect(at!.slice(0, 10)).toBe('2026-09-02');
+  });
+
+  it('puts the clearing trade in the evaluation and everything after in the funded account', () => {
+    const funded: Account = { ...account, phase: 'funded', fundedAt: inferFundedAt(account, passed)! };
+    expect(tradesForAccountPhase(passed, funded, 'evaluation').map(t => t.id)).toEqual(['e1', 'e2']);
+    expect(tradesForAccountPhase(passed, funded, 'funded').map(t => t.id)).toEqual(['f1']);
+  });
+
+  it('infers nothing when the target was never reached', () => {
+    expect(inferFundedAt(account, [trade('a', '2026-09-01', '10:00', 200)])).toBeNull();
+  });
+
+  it('infers nothing without a target to clear', () => {
+    expect(inferFundedAt({ ...account, profitTarget: 0 }, passed)).toBeNull();
+  });
+
+  it('ignores other accounts trades', () => {
+    const others = [trade('x', '2026-09-01', '10:00', 5_000, 'other-account')];
+    expect(inferFundedAt(account, others)).toBeNull();
   });
 });

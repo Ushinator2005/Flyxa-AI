@@ -1025,6 +1025,35 @@ export function tradesForAccount(trades: Trade[], accountId: string): Trade[] {
   return trades.filter(trade => trade.account === accountId || trade.accountIds?.includes(accountId));
 }
 
+/**
+ * When an already-funded account most likely became funded, inferred from its
+ * own equity curve: the first trade at which the balance reached the profit
+ * target is the moment it passed.
+ *
+ * Needed because accounts funded before `fundedAt` existed carry no boundary,
+ * and they are exactly the accounts that need one — without it they keep showing
+ * the evaluation's profit as funded profit. Returns null when the target was
+ * never reached, in which case there is nothing to infer and the account keeps
+ * counting its whole history.
+ */
+export function inferFundedAt(account: Account, allTrades: Trade[]): string | null {
+  const target = account.profitTarget ?? inferEvaluationTemplate(account).profitTarget;
+  if (!(target > 0)) return null;
+
+  const trades = tradesForAccount(allTrades, account.id).sort((a, b) => dateTime(a) - dateTime(b));
+  let running = 0;
+  for (const trade of trades) {
+    running += net(trade);
+    if (running >= target) {
+      // The account passed as that trade closed, so the funded phase starts
+      // after it — anything later that day is already funded trading.
+      const at = dateTime(trade);
+      return Number.isFinite(at) && at > 0 ? new Date(at + 1000).toISOString() : null;
+    }
+  }
+  return null;
+}
+
 /** Which chapter of an account's life a calculation is about. */
 export type AccountPhase = 'evaluation' | 'funded';
 

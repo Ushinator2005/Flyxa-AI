@@ -341,25 +341,29 @@ export default function Dashboard() {
   const hasSelectedAccount = selectedAccountId !== ALL_ACCOUNTS_ID && Boolean(selectedAcct);
   const acctName    = selectedAcct?.name ?? 'All Accounts';
 
-  // Compute live balance and target at component level for auto-pass detection
-  const liveBalForEffect = useMemo(() => {
+  // The selected account's balance, derived once. The tile below and the
+  // auto-pass effect both read this — they each used to compute it, and the two
+  // copies drifted the moment one of them learned about funded accounts.
+  //
+  // A funded account's balance starts fresh at the funding date: counting the
+  // evaluation that earned it shows the Combine's profit as money already made
+  // while funded, and drags the trailing drawdown up with it.
+  const accountBalance = useMemo(() => {
     if (!selectedAcct) return null;
-    const sb = selectedAcct.startingBalance ?? selectedStoreAcct?.startingBalance ?? 0;
+    const startingBalance = selectedAcct.startingBalance ?? selectedStoreAcct?.startingBalance ?? 0;
     const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s: number, p: { amount: number }) => s + p.amount, 0);
-
-    // A funded account's balance starts fresh at the funding date. Counting the
-    // evaluation that earned it would show the Combine's profit as money already
-    // made while funded — and would move the trailing drawdown with it.
     const fundedSince = selectedStoreAcct?.fundedAt ? Date.parse(selectedStoreAcct.fundedAt) : NaN;
-    const netPnl = Number.isFinite(fundedSince)
+    const isFunded = Number.isFinite(fundedSince);
+    const netPnl = isFunded
       ? statsTrades.reduce((sum, t) => {
           const at = Date.parse(`${t.trade_date}T${(t.trade_time ?? '00:00').slice(0, 5)}:00`);
           return Number.isFinite(at) && at >= fundedSince ? sum + t.pnl - (t.commission ?? 0) : sum;
         }, 0)
       : summary.netPnL;
-
-    return sb + netPnl - payouts;
+    return { startingBalance, payouts, netPnl, isFunded, live: startingBalance + netPnl - payouts };
   }, [selectedAcct, selectedStoreAcct, summary.netPnL, statsTrades]);
+
+  const liveBalForEffect = accountBalance?.live ?? null;
 
   const targetBalForEffect = selectedAcct?.targetBalance ?? null;
 
@@ -565,11 +569,13 @@ export default function Dashboard() {
             : secsLeft >= 60   ? `${Math.floor(secsLeft / 60)}m ${secsLeft % 60}s`
             : `${secsLeft}s`
             : null;
-          const sbRaw   = selectedAcct?.startingBalance ?? selectedStoreAcct?.startingBalance;
-          const sb      = sbRaw ?? 0;
-          const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s, p) => s + p.amount, 0);
-          const liveBal = sb + summary.netPnL - payouts;
-          const targetBal = selectedAcct?.targetBalance ?? null;
+          const sb      = accountBalance?.startingBalance ?? 0;
+          const liveBal = accountBalance?.live ?? 0;
+          const netSincePhase = accountBalance?.netPnl ?? summary.netPnL;
+          // A funded account has no profit target — it passed one. Showing the
+          // evaluation's target beside a re-based balance reads as progress
+          // toward something already achieved.
+          const targetBal = accountBalance?.isFunded ? null : (selectedAcct?.targetBalance ?? null);
           const progressPct = targetBal !== null && hasSelectedAccount && targetBal > sb
             ? Math.min(100, Math.max(0, ((liveBal - sb) / (targetBal - sb)) * 100))
             : null;
@@ -581,8 +587,13 @@ export default function Dashboard() {
           const refTone  = hasSelectedAccount
             ? (liveBal >= sb ? GREEN : RED)
             : summary.netPnL > 0 ? GREEN : summary.netPnL < 0 ? RED : T2;
+          const fundedSinceLabel = accountBalance?.isFunded && selectedStoreAcct?.fundedAt
+            ? new Date(selectedStoreAcct.fundedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : null;
           const refSub   = hasSelectedAccount
-            ? `Net P&L ${fmtSignedCompactUSD(summary.netPnL)}`
+            ? fundedSinceLabel
+              ? `Net P&L ${fmtSignedCompactUSD(netSincePhase)} · funded since ${fundedSinceLabel}`
+              : `Net P&L ${fmtSignedCompactUSD(netSincePhase)}`
             : `${summary.totalTrades} total trades`;
           const D  = 'rgba(255,255,255,0.05)';
           const cs = { padding: isMobile ? '14px 14px' : '16px 20px', borderRight: `1px solid ${D}`, borderBottom: `1px solid ${D}` };

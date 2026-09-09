@@ -9,6 +9,7 @@ import type { EvaluationProgress, EvaluationAgentAlert } from '../utils/evaluati
 import {
   buildEvaluationAgentAlerts,
   computeEvaluationProgress,
+  inferFundedAt,
   computeMllSeries,
   inferEvaluationTemplate,
   resolveMaxDrawdown,
@@ -579,6 +580,20 @@ export default function EvaluationCoach() {
       }
     }
   }, [comparisons, updateAccount, updateTradingAccount]);
+
+  // ── Backfill the boundary on accounts funded before it existed ──
+  // Those accounts are the ones that most need it: with no boundary they keep
+  // reporting the evaluation's profit as funded profit. Infer the moment the
+  // balance first reached the target and stamp it, so they behave like any
+  // account funded from now on. Self-terminating once stamped.
+  useEffect(() => {
+    for (const { account, status } of comparisons) {
+      if ((status === 'Funded' || status === 'Live') && !account.fundedAt) {
+        const inferred = inferFundedAt(account, allTrades);
+        if (inferred) updateAccount(account.id, { fundedAt: inferred });
+      }
+    }
+  }, [comparisons, allTrades, updateAccount]);
 
   // ── Behavioral warnings ─────────────────────────────────────────
   const behavioralWarnings = useMemo(() => computeBehavioralWarnings(accountTrades), [accountTrades]);
