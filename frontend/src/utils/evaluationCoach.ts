@@ -1025,6 +1025,33 @@ export function tradesForAccount(trades: Trade[], accountId: string): Trade[] {
   return trades.filter(trade => trade.account === accountId || trade.accountIds?.includes(accountId));
 }
 
+/** Which chapter of an account's life a calculation is about. */
+export type AccountPhase = 'evaluation' | 'funded';
+
+/**
+ * The account's trades belonging to one phase, split on `fundedAt`.
+ *
+ * A funded account is a new account that happens to share a row with the
+ * evaluation that earned it: its balance starts fresh and its trailing drawdown
+ * knows nothing about the Combine. Counting the evaluation's trades in it shows
+ * profit as already banked and anchors the drawdown to the wrong equity curve.
+ *
+ * With no `fundedAt` there is no boundary to split on, so every trade belongs to
+ * the requested phase and behaviour is exactly what it was before.
+ */
+export function tradesForAccountPhase(
+  trades: Trade[],
+  account: Account,
+  phase: AccountPhase = account.phase === 'funded' ? 'funded' : 'evaluation',
+): Trade[] {
+  const mine = tradesForAccount(trades, account.id);
+  const boundary = account.fundedAt ? Date.parse(account.fundedAt) : NaN;
+  if (!Number.isFinite(boundary)) return mine;
+  return phase === 'funded'
+    ? mine.filter(trade => dateTime(trade) >= boundary)
+    : mine.filter(trade => dateTime(trade) < boundary);
+}
+
 function net(trade: Trade): number {
   return Number(trade.pnl ?? 0) - Number(trade.commission ?? 0);
 }
@@ -1075,8 +1102,13 @@ export function resolveMaxDrawdown(account: Account, template: EvaluationTemplat
  * EOD-trailing floors ignore the current (unsettled) day's balance, so the
  * last value always equals the live drawdownFloor in EvaluationProgress.
  */
-export function computeMllSeries(account: Account, allTrades: Trade[], now = new Date()): number[] {
-  const trades = tradesForAccount(allTrades, account.id).sort((a, b) => dateTime(a) - dateTime(b));
+export function computeMllSeries(
+  account: Account,
+  allTrades: Trade[],
+  now = new Date(),
+  phase?: AccountPhase,
+): number[] {
+  const trades = tradesForAccountPhase(allTrades, account, phase).sort((a, b) => dateTime(a) - dateTime(b));
   const template = inferEvaluationTemplate(account);
   const maxDrawdown = resolveMaxDrawdown(account, template);
   const drawdownType = resolveDrawdownType(account, template);
@@ -1114,8 +1146,9 @@ export function computeEvaluationProgress(
   account: Account,
   allTrades: Trade[],
   now = new Date(),
+  phase?: AccountPhase,
 ): EvaluationProgress {
-  const trades = tradesForAccount(allTrades, account.id).sort((a, b) => dateTime(a) - dateTime(b));
+  const trades = tradesForAccountPhase(allTrades, account, phase).sort((a, b) => dateTime(a) - dateTime(b));
   const template = inferEvaluationTemplate(account);
   const profitTarget = account.profitTarget ?? template.profitTarget;
   const dailyLimit = account.dailyLossLimit || template.dailyLossLimit;
@@ -1130,7 +1163,7 @@ export function computeEvaluationProgress(
   const tradingDays = new Set(trades.map(trade => trade.date)).size;
 
   const targetProgressPct = profitTarget > 0 ? clamp((netPnl / profitTarget) * 100) : 0;
-  const mllSeries = computeMllSeries(account, allTrades, now);
+  const mllSeries = computeMllSeries(account, allTrades, now, phase);
   const drawdownFloor = mllSeries[mllSeries.length - 1];
   const floorLocked = trailingStopsAt !== null && drawdownFloor >= trailingStopsAt;
   const drawdownRemaining = Math.max(0, currentBalance - drawdownFloor);

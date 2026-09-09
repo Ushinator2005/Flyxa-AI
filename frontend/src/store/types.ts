@@ -130,6 +130,18 @@ export interface Account {
   drawdownType?: 'static' | 'trailing' | 'eod_trailing' | 'intraday_trailing';
   trailingStopsAt?: number | null;
   evaluationStartedAt?: string;
+  /**
+   * When this account became funded, as an ISO timestamp. It is the boundary
+   * between the two phases of an account's life: trades before it belong to the
+   * evaluation, trades from it on belong to the funded account. Without it every
+   * funded figure — balance, trailing drawdown, payout readiness — is computed
+   * over the evaluation's history too, so a freshly funded account shows the
+   * profit it made passing as though it had already earned it while funded.
+   *
+   * Absent on accounts funded before this existed; those keep counting their
+   * whole history, which is the behaviour they already had.
+   */
+  fundedAt?: string;
   firmRuleVersionId?: string;
   evaluationPath?: 'standard' | 'no_activation_fee';
   dailyLossMode?: 'none' | 'purchase_fixed' | 'personal';

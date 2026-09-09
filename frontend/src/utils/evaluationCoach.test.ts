@@ -7,6 +7,7 @@ import {
   getEvaluationTemplates,
   inferEvaluationTemplate,
   tradesForAccount,
+  tradesForAccountPhase,
 } from './evaluationCoach.js';
 
 const account: Account = {
@@ -221,5 +222,68 @@ describe('evaluation coach', () => {
     const progress = computeEvaluationProgress(account, trades, new Date('2026-06-21T12:00:00'));
     const alerts = buildEvaluationAgentAlerts(account, trades, progress);
     expect(alerts.some(alert => alert.id === 'post-loss-cost')).toBe(true);
+  });
+});
+
+// A funded account is a new account that happens to share a row with the
+// evaluation that earned it. Before `fundedAt` existed, passing only relabelled
+// the account: the Combine's profit carried in as funded profit and the trailing
+// drawdown trailed an equity curve that included the evaluation.
+describe('the funded boundary', () => {
+  const funded: Account = {
+    ...account,
+    phase: 'funded',
+    type: 'live',
+    fundedAt: '2026-09-09T00:00:00.000Z',
+  };
+
+  // Passed the Combine on +$3,200, then one funded day of +$400.
+  const history = [
+    trade('e1', '2026-09-01', '10:00', 1_500),
+    trade('e2', '2026-09-02', '10:00', 1_700),
+    trade('f1', '2026-09-10', '10:00', 400),
+  ];
+
+  it('splits an account\'s trades on the funding date', () => {
+    expect(tradesForAccountPhase(history, funded, 'funded').map(t => t.id)).toEqual(['f1']);
+    expect(tradesForAccountPhase(history, funded, 'evaluation').map(t => t.id)).toEqual(['e1', 'e2']);
+  });
+
+  it('counts only funded trades in the funded account', () => {
+    const progress = computeEvaluationProgress(funded, history, new Date('2026-09-10T20:00:00Z'), 'funded');
+    expect(progress.netPnl).toBe(400);          // not 3,600
+    expect(progress.tradingDays).toBe(1);       // not 3
+  });
+
+  it('still reports the evaluation it passed', () => {
+    const evaluation = computeEvaluationProgress(funded, history, new Date('2026-09-10T20:00:00Z'), 'evaluation');
+    expect(evaluation.netPnl).toBe(3_200);
+    expect(evaluation.tradingDays).toBe(2);
+  });
+
+  it('anchors the funded drawdown to the funded balance, not the evaluation peak', () => {
+    // Funded MLL floors: start 50,000 − 2,000 = 48,000, trailing the funded
+    // equity only. Carrying the eval in would put the peak at 53,600 and drag
+    // the floor up with it.
+    const floors = computeMllSeries(funded, history, new Date('2026-09-10T20:00:00Z'), 'funded');
+    expect(floors[0]).toBe(48_000);
+    expect(Math.max(...floors)).toBeLessThanOrEqual(50_000);
+  });
+
+  it('leaves an account with no boundary exactly as it was', () => {
+    const legacy: Account = { ...account, phase: 'funded', type: 'live' };
+    expect(tradesForAccountPhase(history, legacy, 'funded')).toHaveLength(3);
+    expect(computeEvaluationProgress(legacy, history, new Date('2026-09-10T20:00:00Z')).netPnl).toBe(3_600);
+  });
+
+  it('puts a trade taken on the funding day itself into the funded account', () => {
+    const sameDay = trade('f0', '2026-09-09', '14:00', 250);
+    expect(tradesForAccountPhase([sameDay], funded, 'funded').map(t => t.id)).toEqual(['f0']);
+  });
+
+  it('defaults to the phase the account is actually in', () => {
+    expect(tradesForAccountPhase(history, funded).map(t => t.id)).toEqual(['f1']);
+    const stillEval: Account = { ...account, fundedAt: undefined };
+    expect(tradesForAccountPhase(history, stillEval)).toHaveLength(3);
   });
 });

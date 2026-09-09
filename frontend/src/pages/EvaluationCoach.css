@@ -1649,3 +1649,13 @@
   .ec-dir { flex-wrap: wrap; }
   .ec-dir-ask { margin-left: 0; }
 }
+/* The passed evaluation, carried in the funded header. Recessive: it is the
+   account's history, not what it is doing now. */
+.ec-evhd-passed {
+  color: var(--txt-3);
+}
+
+.ec-evhd-passed i {
+  font-style: normal;
+  color: var(--green);
+}

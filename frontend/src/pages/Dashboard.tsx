@@ -346,8 +346,20 @@ export default function Dashboard() {
     if (!selectedAcct) return null;
     const sb = selectedAcct.startingBalance ?? selectedStoreAcct?.startingBalance ?? 0;
     const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s: number, p: { amount: number }) => s + p.amount, 0);
-    return sb + summary.netPnL - payouts;
-  }, [selectedAcct, selectedStoreAcct, summary.netPnL]);
+
+    // A funded account's balance starts fresh at the funding date. Counting the
+    // evaluation that earned it would show the Combine's profit as money already
+    // made while funded — and would move the trailing drawdown with it.
+    const fundedSince = selectedStoreAcct?.fundedAt ? Date.parse(selectedStoreAcct.fundedAt) : NaN;
+    const netPnl = Number.isFinite(fundedSince)
+      ? statsTrades.reduce((sum, t) => {
+          const at = Date.parse(`${t.trade_date}T${(t.trade_time ?? '00:00').slice(0, 5)}:00`);
+          return Number.isFinite(at) && at >= fundedSince ? sum + t.pnl - (t.commission ?? 0) : sum;
+        }, 0)
+      : summary.netPnL;
+
+    return sb + netPnl - payouts;
+  }, [selectedAcct, selectedStoreAcct, summary.netPnL, statsTrades]);
 
   const targetBalForEffect = selectedAcct?.targetBalance ?? null;
 

@@ -12,7 +12,7 @@ import {
   computeMllSeries,
   inferEvaluationTemplate,
   resolveMaxDrawdown,
-  tradesForAccount,
+  tradesForAccountPhase,
 } from '../utils/evaluationCoach.js';
 import { getFirmPayoutPaths, getPathById, resolveBySize, computeWithdrawableAmount } from '../data/fundedPayoutPaths.js';
 import type { FundedPath } from '../data/fundedPayoutPaths.js';
@@ -494,10 +494,26 @@ export default function EvaluationCoach() {
     [allTrades, progress, selected, preferences.sessionTimes],
   );
 
+  // Scoped to the phase the account is in, so a funded account's equity path,
+  // day map and behavioural warnings are about its funded trading rather than
+  // the evaluation that earned it.
   const accountTrades = useMemo(
-    () => selected ? tradesForAccount(allTrades, selected.id) : [],
+    () => selected ? tradesForAccountPhase(allTrades, selected) : [],
     [allTrades, selected],
   );
+
+  // The evaluation this funded account passed, kept as a record. Null while the
+  // account is still in evaluation (the whole page is already that), and for
+  // accounts funded before the boundary existed, which have no split to make.
+  const evaluationRecord = useMemo(() => {
+    if (!selected || selected.phase !== 'funded' || !selected.fundedAt) return null;
+    const evalTrades = tradesForAccountPhase(allTrades, selected, 'evaluation');
+    if (evalTrades.length === 0) return null;
+    return {
+      progress: computeEvaluationProgress(selected, allTrades, new Date(), 'evaluation'),
+      passedOn: selected.fundedAt,
+    };
+  }, [allTrades, selected]);
 
   // ── Day map (used in multiple places) ──────────────────────────
   const byDayMap = useMemo(() => {
@@ -536,15 +552,29 @@ export default function EvaluationCoach() {
 
   // ── Auto-fund on pass ───────────────────────────────────────────
   // When an eval account meets its pass criteria, move it to funded in place:
-  // status Funded, balance re-based to 0 (funded profit tracks from zero), and
-  // the eval's MLL dollar amount carried onto the account so the drawdown stays
-  // the same. Guarded on the store phase so it can't loop while the status model
-  // catches up; self-terminating once the account is funded.
+  // status Funded, the eval's MLL dollar amount carried onto the account so the
+  // drawdown stays the same, and — the part that makes it a NEW account rather
+  // than a relabelled one — fundedAt, the boundary every funded figure counts
+  // from. Without it the Combine's own profit is carried in as funded profit and
+  // the trailing drawdown trails an equity curve that includes the evaluation.
+  //
+  // startingBalance is deliberately not touched. AppSettings owns it and its
+  // account-sync effect re-projects it onto the store, so writing it here is
+  // reverted within a render; the funded account keeps the account size, which
+  // is what the funded trailing MLL locks at.
+  //
+  // Guarded on the store phase so it can't loop while the status model catches
+  // up; self-terminating once the account is funded.
   useEffect(() => {
     for (const { account, progress: p, status } of comparisons) {
       if (status === 'Eval' && account.phase !== 'funded' && p.status === 'passed') {
         const mll = resolveMaxDrawdown(account, inferEvaluationTemplate(account));
-        updateAccount(account.id, { phase: 'funded', type: 'live', startingBalance: 0, maxDrawdown: mll });
+        updateAccount(account.id, {
+          phase: 'funded',
+          type: 'live',
+          maxDrawdown: mll,
+          fundedAt: account.fundedAt ?? new Date().toISOString(),
+        });
         updateTradingAccount(account.id, { status: 'Funded' });
       }
     }
@@ -651,7 +681,14 @@ export default function EvaluationCoach() {
         equity={{ points: passPoints, floors: mllSeries, target: passTarget, start: passStart, dates: passDates }}
         quote={passQuoteSrc ? { date: passQuoteSrc.date, text: passQuoteSrc.post } : null}
         onDismiss={() => setDismissPass(true)}
-        onMarkFunded={() => { updateAccount(selected.id, { phase: 'funded', type: 'live' }); setDismissPass(true); }}
+        onMarkFunded={() => {
+          updateAccount(selected.id, {
+            phase: 'funded',
+            type: 'live',
+            fundedAt: selected.fundedAt ?? new Date().toISOString(),
+          });
+          setDismissPass(true);
+        }}
       />
     );
   }
@@ -1045,6 +1082,19 @@ Write exactly ONE coaching directive sentence. Optimize for passing the evaluati
               </span>
               <em>·</em>
               <span>Day {progress.tradingDays}</span>
+              {/* The evaluation is history now, but it is this account's history —
+                  keep it reachable rather than replacing it with the funded view. */}
+              {evaluationRecord && (
+                <>
+                  <em>·</em>
+                  <span
+                    className="ec-evhd-passed"
+                    title={`Passed the evaluation on ${new Date(evaluationRecord.passedOn).toLocaleDateString()} with ${money(evaluationRecord.progress.netPnl)} net over ${evaluationRecord.progress.tradingDays} trading day${evaluationRecord.progress.tradingDays === 1 ? '' : 's'}. Funded figures count from that date.`}
+                  >
+                    Eval passed <i>{money(evaluationRecord.progress.netPnl)}</i> in {evaluationRecord.progress.tradingDays}d
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <span className="ec-phase" style={{ ['--phase-dot' as never]: probColor, color: probColor }}>
