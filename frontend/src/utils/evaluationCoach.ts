@@ -1054,6 +1054,22 @@ export function inferFundedAt(account: Account, allTrades: Trade[]): string | nu
   return null;
 }
 
+/**
+ * When this account became funded: the stamped moment if it has one, otherwise
+ * inferred from its equity curve.
+ *
+ * Deriving it at read time rather than migrating it once means an account funded
+ * before the field existed behaves correctly everywhere immediately, instead of
+ * only after the user happens to open whichever page ran the migration. A
+ * stamped date always wins — it is the real transition; the inference is a
+ * reconstruction of one.
+ */
+export function resolveFundedAt(account: Account, allTrades: Trade[]): string | null {
+  if (account.fundedAt) return account.fundedAt;
+  if (account.phase !== 'funded') return null;
+  return inferFundedAt(account, allTrades);
+}
+
 /** Which chapter of an account's life a calculation is about. */
 export type AccountPhase = 'evaluation' | 'funded';
 
@@ -1074,7 +1090,8 @@ export function tradesForAccountPhase(
   phase: AccountPhase = account.phase === 'funded' ? 'funded' : 'evaluation',
 ): Trade[] {
   const mine = tradesForAccount(trades, account.id);
-  const boundary = account.fundedAt ? Date.parse(account.fundedAt) : NaN;
+  const fundedAt = resolveFundedAt(account, trades);
+  const boundary = fundedAt ? Date.parse(fundedAt) : NaN;
   if (!Number.isFinite(boundary)) return mine;
   return phase === 'funded'
     ? mine.filter(trade => dateTime(trade) >= boundary)

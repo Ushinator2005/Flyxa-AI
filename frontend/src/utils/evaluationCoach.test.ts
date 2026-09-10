@@ -7,6 +7,7 @@ import {
   getEvaluationTemplates,
   inferEvaluationTemplate,
   inferFundedAt,
+  resolveFundedAt,
   tradesForAccount,
   tradesForAccountPhase,
 } from './evaluationCoach.js';
@@ -271,10 +272,13 @@ describe('the funded boundary', () => {
     expect(Math.max(...floors)).toBeLessThanOrEqual(50_000);
   });
 
-  it('leaves an account with no boundary exactly as it was', () => {
+  // A funded account with no stamped date gets one reconstructed rather than
+  // falling back to counting its whole history. Keeping the old fallback is what
+  // left an already-funded account still reporting its evaluation's profit.
+  it('reconstructs a boundary for a funded account that was never stamped', () => {
     const legacy: Account = { ...account, phase: 'funded', type: 'live' };
-    expect(tradesForAccountPhase(history, legacy, 'funded')).toHaveLength(3);
-    expect(computeEvaluationProgress(legacy, history, new Date('2026-09-10T20:00:00Z')).netPnl).toBe(3_600);
+    expect(tradesForAccountPhase(history, legacy, 'funded').map(t => t.id)).toEqual(['f1']);
+    expect(computeEvaluationProgress(legacy, history, new Date('2026-09-10T20:00:00Z'), 'funded').netPnl).toBe(400);
   });
 
   it('puts a trade taken on the funding day itself into the funded account', () => {
@@ -322,5 +326,40 @@ describe('inferFundedAt', () => {
   it('ignores other accounts trades', () => {
     const others = [trade('x', '2026-09-01', '10:00', 5_000, 'other-account')];
     expect(inferFundedAt(account, others)).toBeNull();
+  });
+});
+
+// The boundary is resolved on read, not migrated once: an account funded before
+// the field existed has to behave correctly everywhere immediately, rather than
+// only after the user happens to open whichever page ran a migration.
+describe('resolveFundedAt', () => {
+  const history = [
+    trade('e1', '2026-09-01', '10:00', 1_500),
+    trade('e2', '2026-09-02', '10:00', 1_600),   // clears the 3,000 target
+    trade('f1', '2026-09-03', '10:00', 400),
+  ];
+
+  it('reconstructs the boundary for a funded account that was never stamped', () => {
+    const legacy: Account = { ...account, phase: 'funded', type: 'live' };
+    expect(resolveFundedAt(legacy, history)?.slice(0, 10)).toBe('2026-09-02');
+    // and so the funded account counts only what came after
+    expect(computeEvaluationProgress(legacy, history, new Date('2026-09-03T20:00:00Z'), 'funded').netPnl).toBe(400);
+  });
+
+  it('prefers a stamped date over the reconstruction', () => {
+    const stamped: Account = { ...account, phase: 'funded', fundedAt: '2026-09-03T00:00:00.000Z' };
+    expect(resolveFundedAt(stamped, history)).toBe('2026-09-03T00:00:00.000Z');
+  });
+
+  it('gives an account still in evaluation no boundary at all', () => {
+    expect(resolveFundedAt(account, history)).toBeNull();
+    expect(computeEvaluationProgress(account, history, new Date('2026-09-03T20:00:00Z')).netPnl).toBe(3_500);
+  });
+
+  it('leaves a funded account that never cleared a target counting everything', () => {
+    const small = [trade('a', '2026-09-01', '10:00', 100)];
+    const legacy: Account = { ...account, phase: 'funded', type: 'live' };
+    expect(resolveFundedAt(legacy, small)).toBeNull();
+    expect(tradesForAccountPhase(small, legacy, 'funded')).toHaveLength(1);
   });
 });

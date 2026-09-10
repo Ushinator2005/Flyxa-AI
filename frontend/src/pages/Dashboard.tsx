@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { useTrades } from '../hooks/useTrades.js';
 import { useAppSettings, ALL_ACCOUNTS_ID, DEFAULT_ACCOUNT_ID } from '../contexts/AppSettingsContext.js';
 import { resolveAutoPassStatus } from '../utils/tradingAccounts.js';
+import { resolveFundedAt } from '../utils/evaluationCoach.js';
 import useFlyxaStore from '../store/flyxaStore.js';
 import {
   buildAnalyticsSummary,
@@ -169,6 +170,7 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
   const storeAccounts = useFlyxaStore(state => state.accounts);
+  const storeEntries = useFlyxaStore(state => state.entries);
 
   // High-impact event toasts are mounted app-wide in Layout.
 
@@ -352,7 +354,13 @@ export default function Dashboard() {
     if (!selectedAcct) return null;
     const startingBalance = selectedAcct.startingBalance ?? selectedStoreAcct?.startingBalance ?? 0;
     const payouts = (selectedStoreAcct?.payouts ?? []).reduce((s: number, p: { amount: number }) => s + p.amount, 0);
-    const fundedSince = selectedStoreAcct?.fundedAt ? Date.parse(selectedStoreAcct.fundedAt) : NaN;
+    // resolveFundedAt, not the raw field: an account funded before the field
+    // existed has no stamped date, and reconstructing it here means it re-bases
+    // now rather than after visiting whichever page would have migrated it.
+    const fundedAt = selectedStoreAcct
+      ? resolveFundedAt(selectedStoreAcct, storeEntries.flatMap(e => e.trades))
+      : null;
+    const fundedSince = fundedAt ? Date.parse(fundedAt) : NaN;
     const isFunded = Number.isFinite(fundedSince);
     const netPnl = isFunded
       ? statsTrades.reduce((sum, t) => {
@@ -360,8 +368,8 @@ export default function Dashboard() {
           return Number.isFinite(at) && at >= fundedSince ? sum + t.pnl - (t.commission ?? 0) : sum;
         }, 0)
       : summary.netPnL;
-    return { startingBalance, payouts, netPnl, isFunded, live: startingBalance + netPnl - payouts };
-  }, [selectedAcct, selectedStoreAcct, summary.netPnL, statsTrades]);
+    return { startingBalance, payouts, netPnl, isFunded, fundedAt, live: startingBalance + netPnl - payouts };
+  }, [selectedAcct, selectedStoreAcct, summary.netPnL, statsTrades, storeEntries]);
 
   const liveBalForEffect = accountBalance?.live ?? null;
 
@@ -587,8 +595,8 @@ export default function Dashboard() {
           const refTone  = hasSelectedAccount
             ? (liveBal >= sb ? GREEN : RED)
             : summary.netPnL > 0 ? GREEN : summary.netPnL < 0 ? RED : T2;
-          const fundedSinceLabel = accountBalance?.isFunded && selectedStoreAcct?.fundedAt
-            ? new Date(selectedStoreAcct.fundedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          const fundedSinceLabel = accountBalance?.isFunded && accountBalance.fundedAt
+            ? new Date(accountBalance.fundedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
             : null;
           const refSub   = hasSelectedAccount
             ? fundedSinceLabel
