@@ -362,4 +362,21 @@ describe('resolveFundedAt', () => {
     expect(resolveFundedAt(legacy, small)).toBeNull();
     expect(tradesForAccountPhase(small, legacy, 'funded')).toHaveLength(1);
   });
+
+  // A trade reaches an account by more routes than its own `account` field: the
+  // per-trade override map and the default-account fallback both attach it, and
+  // both surface as `accountIds` once the trade is decorated. Callers must hand
+  // the decorated trades over, because a reconstruction that walks a short
+  // equity curve never reaches the target and reports no boundary at all —
+  // which reads as a funded account still carrying its evaluation's profit.
+  it('reconstructs from trades attached by accountIds, not just the account field', () => {
+    const attached = [
+      { ...trade('e1', '2026-09-01', '10:00', 1_500, 'other-account'), accountIds: ['other-account', account.id] },
+      { ...trade('e2', '2026-09-02', '10:00', 1_600, 'other-account'), accountIds: ['other-account', account.id] },
+      { ...trade('f1', '2026-09-03', '10:00', 400, 'other-account'), accountIds: ['other-account', account.id] },
+    ];
+    const legacy: Account = { ...account, phase: 'funded', type: 'live' };
+    expect(resolveFundedAt(legacy, attached)?.slice(0, 10)).toBe('2026-09-02');
+    expect(computeEvaluationProgress(legacy, attached, new Date('2026-09-03T20:00:00Z'), 'funded').netPnl).toBe(400);
+  });
 });

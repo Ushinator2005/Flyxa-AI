@@ -691,6 +691,12 @@ export default function EvaluationCoach() {
             type: 'live',
             fundedAt: selected.fundedAt ?? new Date().toISOString(),
           });
+          // The status write is what makes the phase stick. AppSettings owns the
+          // status -> phase projection and replays it onto the store on every
+          // account change, so a phase written here alone is reverted to 'eval'
+          // on the next sync and the funded account starts reporting its
+          // evaluation again. Same pairing as the auto-fund effect above.
+          updateTradingAccount(selected.id, { status: 'Funded' });
           setDismissPass(true);
         }}
       />

@@ -151,7 +151,7 @@ export default function Dashboard() {
     year: initialCalendarDate.getFullYear(),
     month: initialCalendarDate.getMonth() + 1,
   }));
-  const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, preferences, updateAccount } = useAppSettings();
+  const { accounts, selectedAccountId, setSelectedAccountId, filterTradesBySelectedAccount, decorateTrades, preferences, updateAccount } = useAppSettings();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -357,8 +357,17 @@ export default function Dashboard() {
     // resolveFundedAt, not the raw field: an account funded before the field
     // existed has no stamped date, and reconstructing it here means it re-bases
     // now rather than after visiting whichever page would have migrated it.
+    //
+    // Decorated, not raw: the reconstruction walks the account's equity curve
+    // looking for the trade that cleared the target, so it has to see the same
+    // trades the balance above is built from. A raw store trade carries only
+    // `account`/`accountIds`, while a trade can reach an account through the
+    // per-trade override map or the default-account fallback — both of which
+    // live in decorateTrades. Fed raw trades the walk comes up short of the
+    // target, finds no boundary, and the funded account silently keeps
+    // reporting its evaluation.
     const fundedAt = selectedStoreAcct
-      ? resolveFundedAt(selectedStoreAcct, storeEntries.flatMap(e => e.trades))
+      ? resolveFundedAt(selectedStoreAcct, decorateTrades(storeEntries.flatMap(e => e.trades)))
       : null;
     const fundedSince = fundedAt ? Date.parse(fundedAt) : NaN;
     const isFunded = Number.isFinite(fundedSince);
@@ -369,7 +378,7 @@ export default function Dashboard() {
         }, 0)
       : summary.netPnL;
     return { startingBalance, payouts, netPnl, isFunded, fundedAt, live: startingBalance + netPnl - payouts };
-  }, [selectedAcct, selectedStoreAcct, summary.netPnL, statsTrades, storeEntries]);
+  }, [selectedAcct, selectedStoreAcct, summary.netPnL, statsTrades, storeEntries, decorateTrades]);
 
   const liveBalForEffect = accountBalance?.live ?? null;
 
