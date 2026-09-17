@@ -1353,6 +1353,10 @@
 .tj-empty-actions {
   display: inline-flex;
   gap: 8px;
+  /* Three actions now (upload, manual trade, blank day) — wrap rather than
+     push the card wider or clip the last one on a narrow viewport. */
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .tj-empty-meta {

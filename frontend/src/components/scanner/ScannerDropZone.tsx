@@ -8,6 +8,8 @@ interface ScannerDropZoneProps {
   scanPreviewUrl: string;
   onScanFile: (file: File) => void;
   onAddBlankDay: () => void;
+  /** Log a trade with no chart to read — opens today's day on a blank trade. */
+  onAddTradeWithoutScreenshot: () => void;
   isMobile?: boolean;
 }
 
@@ -17,6 +19,7 @@ export default function ScannerDropZone({
   scanPreviewUrl,
   onScanFile,
   onAddBlankDay,
+  onAddTradeWithoutScreenshot,
   isMobile = false,
 }: ScannerDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -61,7 +64,8 @@ export default function ScannerDropZone({
               Flyxa reads your <span style={{ color: 'var(--amber)' }}>entry</span>,{' '}
               <span style={{ color: 'var(--amber)' }}>stop</span>,{' '}
               <span style={{ color: 'var(--amber)' }}>target</span>, and{' '}
-              <span style={{ color: 'var(--amber)' }}>exit</span> automatically.
+              <span style={{ color: 'var(--amber)' }}>exit</span> automatically —
+              or enter them yourself if you have no chart.
             </p>
 
             {scanError && <p className="tj-empty-text tj-empty-error">{scanError}</p>}
@@ -109,6 +113,15 @@ export default function ScannerDropZone({
               <button
                 type="button"
                 className="tj-btn-ghost"
+                onClick={onAddTradeWithoutScreenshot}
+                disabled={isScanning}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                Enter Trade Manually
+              </button>
+              <button
+                type="button"
+                className="tj-btn-ghost"
                 onClick={onAddBlankDay}
                 disabled={isScanning}
                 style={{ width: '100%', justifyContent: 'center' }}
@@ -117,7 +130,7 @@ export default function ScannerDropZone({
               </button>
             </div>
           </div>
-          <div className="tj-empty-meta">PNG, JPG, WEBP · Max 10 MB</div>
+          <div className="tj-empty-meta">PNG, JPG, WEBP · Max 10 MB · No screenshot needed</div>
         </div>
       </div>
     );
@@ -148,7 +161,7 @@ export default function ScannerDropZone({
             <span style={{ color: 'var(--amber)' }}>take profit</span>, and{' '}
             <span style={{ color: 'var(--amber)' }}>exit</span>
             <br />
-            automatically in seconds.
+            automatically in seconds — or enter them yourself if you have no chart.
           </p>
           {scanError && <p className="tj-empty-text tj-empty-error">{scanError}</p>}
           {isScanning && (
@@ -181,6 +194,14 @@ export default function ScannerDropZone({
             <button
               type="button"
               className="tj-btn-ghost"
+              onClick={onAddTradeWithoutScreenshot}
+              disabled={isScanning}
+            >
+              Enter Trade Manually
+            </button>
+            <button
+              type="button"
+              className="tj-btn-ghost"
               onClick={onAddBlankDay}
               disabled={isScanning}
             >
@@ -188,7 +209,7 @@ export default function ScannerDropZone({
             </button>
           </div>
         </div>
-        <div className="tj-empty-meta">PNG, JPG, or WEBP · Max 10 MB</div>
+        <div className="tj-empty-meta">PNG, JPG, or WEBP · Max 10 MB · No screenshot needed</div>
       </div>
     </div>
   );

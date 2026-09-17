@@ -1912,14 +1912,15 @@ export default function TradeJournal() {
     navigate('/scanner');
   }, [navigate]);
 
-  const addManualTrade = useCallback(() => {
-    if (!selectedEntry) return;
-    const entryAccount = accounts.find(a => a.id === selectedEntry.account);
-    if (entryAccount?.status === 'Passed') return;
+  // A trade with nothing filled in yet, priced at zero and marked `manual` so
+  // the scanner's price levels are never attributed to it. Shared by "Add trade"
+  // on an open day and by the no-screenshot path below, so both produce exactly
+  // the same row — the form is the only way to fill either of them in.
+  const makeBlankTrade = useCallback((date: string): JournalTrade => {
     const basePrice = 0;
-    const newTrade: JournalTrade = {
+    return {
       id: crypto.randomUUID(),
-      date: selectedEntry.date,
+      date,
       symbol: 'NQ',
       direction: 'LONG',
       entryTime: getNowTime(),
@@ -1937,9 +1938,57 @@ export default function TradeJournal() {
       result: 'open',
       confluences: [],
     };
+  }, []);
+
+  const addManualTrade = useCallback(() => {
+    if (!selectedEntry) return;
+    const entryAccount = accounts.find(a => a.id === selectedEntry.account);
+    if (entryAccount?.status === 'Passed') return;
+    const newTrade = makeBlankTrade(selectedEntry.date);
     mutateEntries(prev => prev.map(entry => entry.id === selectedEntry.id ? { ...entry, trades: [withTradeDerivedValues(newTrade), ...entry.trades] } : entry));
     setActiveTradeId(newTrade.id);
-  }, [accounts, mutateEntries, selectedEntry]);
+  }, [accounts, makeBlankTrade, mutateEntries, selectedEntry]);
+
+  // Log a trade with no screenshot to read: open today's day and drop a blank
+  // trade straight into the form.
+  //
+  // The manual route already existed as "Start Blank Day" followed by "Add
+  // trade", but it read as a way to journal a day rather than a way to log a
+  // trade, and it left you on an empty day with no obvious next step. This is
+  // the same two writes in one action, so the screenshot is genuinely optional
+  // rather than merely avoidable.
+  const addTradeWithoutScreenshot = useCallback(() => {
+    const date = getTodayIso(preferences.timezone);
+    const parsedDate = parseDate(date);
+    const targetMonth = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1);
+    const existing = entries.find(entry => entry.date === date);
+
+    // A Passed account takes no new trades (the same guard addManualTrade uses),
+    // so open the day and stop rather than writing a row that can't be kept.
+    const blocked = existing && accounts.find(a => a.id === existing.account)?.status === 'Passed';
+
+    if (existing) {
+      const trade = blocked ? null : withTradeDerivedValues(makeBlankTrade(date));
+      optimisticEntryRef.current = trade ? { ...existing, trades: [trade, ...existing.trades] } : existing;
+      if (trade) {
+        mutateEntries(prev => prev.map(entry => (
+          entry.id === existing.id ? { ...entry, trades: [trade, ...entry.trades] } : entry
+        )));
+      }
+      setSelectedEntryId(existing.id);
+      setActiveTradeId(trade?.id ?? null);
+    } else {
+      const trade = withTradeDerivedValues(makeBlankTrade(date));
+      const seeded = { ...createEmptyEntry(date, rulesTemplate, getDefaultTradeAccountId(), true), trades: [trade] };
+      optimisticEntryRef.current = seeded;
+      mutateEntries(prev => [seeded, ...prev]);
+      setSelectedEntryId(seeded.id);
+      setActiveTradeId(trade.id);
+    }
+
+    setMonthCursor(targetMonth);
+    setShowScanner(false);
+  }, [accounts, entries, getDefaultTradeAccountId, makeBlankTrade, mutateEntries, preferences.timezone, rulesTemplate, setMonthCursor]);
 
   const applyScannedTrade = useCallback((fileDataUrl: string, trade: JournalTrade, date: string) => {
     performApplyScannedTrade(fileDataUrl, trade, date, { mutateEntries, selectedEntryId, rulesTemplate, getDefaultTradeAccountId, setSelectedEntryId, setMonthCursor, setActiveTradeId });
@@ -2299,6 +2348,7 @@ export default function TradeJournal() {
             scanPreviewUrl={scanPreviewUrl}
             onScanFile={(file) => { void handleScanFile(file); }}
             onAddBlankDay={addBlankDay}
+            onAddTradeWithoutScreenshot={addTradeWithoutScreenshot}
             isMobile={isMobile}
           />
         )}
